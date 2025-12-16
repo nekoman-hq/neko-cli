@@ -2,3 +2,5 @@ neko
 .env
 .envrc
 .idea
+# Added by goreleaser init:
+dist/
