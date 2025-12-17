@@ -23,7 +23,7 @@ type CLIError struct {
 	Level   ErrorLevel
 	Title   string
 	Message string
-	Code    int
+	Code    string
 }
 
 // ANSI color codes
@@ -60,14 +60,14 @@ func PrintError(err CLIError) {
 
 	fmt.Fprintf(os.Stderr, "%s%s%s\n", color, err.Message, colorReset)
 
-	if err.Code != 0 {
+	if err.Code != "" {
 		fmt.Fprintf(os.Stderr, "%sError Code: %d%s\n", color, err.Code, colorReset)
 	}
 
 	fmt.Fprintln(os.Stderr)
 
 	if err.Level == ErrorLevelFatal {
-		os.Exit(err.Code)
+		os.Exit(1)
 	}
 }
 
@@ -80,7 +80,7 @@ func Warning(title, message string) {
 	})
 }
 
-func Error(title, message string, code int) {
+func Error(title, message string, code string) {
 	PrintError(CLIError{
 		Level:   ErrorLevelError,
 		Title:   title,
@@ -89,7 +89,7 @@ func Error(title, message string, code int) {
 	})
 }
 
-func Fatal(title, message string, code int) {
+func Fatal(title, message string, code string) {
 	PrintError(CLIError{
 		Level:   ErrorLevelFatal,
 		Title:   title,

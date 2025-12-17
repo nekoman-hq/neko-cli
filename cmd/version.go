@@ -3,22 +3,27 @@ package cmd
 /*
 @Author     Benjamin Senekowitsch
 @Contact    senekowitsch@nekoman.at
-@Since     17.12.2025
+@Since      17.12.2025
 */
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/nekoman-hq/neko-cli/internal/errors"
+	"github.com/nekoman-hq/neko-cli/internal/repository"
+	"github.com/nekoman-hq/neko-cli/internal/version"
 	"github.com/spf13/cobra"
 )
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
-	Short: "Show current version of this repo",
+	Short: "Show current version of this repository",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if _, ok := os.LookupEnv("GITHUB_TOKEN"); !ok {
+
+		repoInfo, _ := repository.Current()
+
+		token, ok := os.LookupEnv("GITHUB_TOKEN")
+		if !ok {
 			errors.Fatal(
 				"Environment Variable Missing",
 				"A Github Access Token (GITHUB_TOKEN) is required.\nSet it with: export GITHUB_TOKEN=your_token_here",
@@ -26,7 +31,7 @@ var versionCmd = &cobra.Command{
 			)
 		}
 
-		fmt.Println("version called")
+		version.Latest(repoInfo, token)
 		return nil
 	},
 }
