@@ -61,7 +61,7 @@ func PrintError(err CLIError) {
 	fmt.Fprintf(os.Stderr, "%s%s%s\n", color, err.Message, colorReset)
 
 	if err.Code != "" {
-		fmt.Fprintf(os.Stderr, "%sError Code: %d%s\n", color, err.Code, colorReset)
+		fmt.Fprintf(os.Stderr, "%sError Code: %s%s\n", color, err.Code, colorReset)
 	}
 
 	fmt.Fprintln(os.Stderr)

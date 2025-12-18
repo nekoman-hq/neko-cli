@@ -22,6 +22,7 @@ func ValidateConfig(cfg *config.NekoConfig) {
 			"ProjectType is missing in .neko.json",
 			errors.ErrConfigMarshal,
 		)
+		return
 	}
 
 	if cfg.ReleaseSystem == "" {
@@ -30,6 +31,7 @@ func ValidateConfig(cfg *config.NekoConfig) {
 			"ReleaseSystem is missing in .neko.json",
 			errors.ErrConfigMarshal,
 		)
+		return
 	}
 
 	if cfg.Version == "" {
@@ -38,12 +40,14 @@ func ValidateConfig(cfg *config.NekoConfig) {
 			"Version is missing in .neko.json",
 			errors.ErrConfigMarshal,
 		)
+		return
 	} else if !semverRegex.MatchString(cfg.Version) {
 		errors.Error(
 			"Invalid configuration",
 			"Version is not a valid semantic version (SemVer)",
 			errors.ErrInvalidVersion,
 		)
+		return
 	}
 
 	println("\n✓ Configuration appears valid")
