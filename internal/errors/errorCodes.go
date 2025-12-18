@@ -23,4 +23,5 @@ const (
 	ErrConfigMarshal   = "NEKO_3004"
 	ErrConfigWrite     = "NEKO_3005"
 	ErrConfigRead      = "NEKO_3006"
+	ErrInvalidVersion  = "NEKO_3007"
 )

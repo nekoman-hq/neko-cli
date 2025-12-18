@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"github.com/AlecAivazis/survey/v2"
+	"github.com/nekoman-hq/neko-cli/internal/check"
 	"github.com/nekoman-hq/neko-cli/internal/config"
 	"github.com/nekoman-hq/neko-cli/internal/errors"
 )
@@ -90,6 +91,8 @@ func Run() {
 		)
 		return
 	}
+
+	check.ValidateConfig(&configFile)
 
 	printSetupInstructions(configFile)
 }
