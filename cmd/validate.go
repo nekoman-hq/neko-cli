@@ -1,16 +1,15 @@
 package cmd
 
 import (
-	"github.com/nekoman-hq/neko-cli/internal/check"
 	"github.com/nekoman-hq/neko-cli/internal/config"
 	"github.com/spf13/cobra"
 )
 
 var showConfig bool
 
-// checkCmd represents the check command
+// checkCmd represents the validate command
 var checkCmd = &cobra.Command{
-	Use:   "check",
+	Use:   "validate",
 	Short: "Validate or show the Neko configuration",
 	Long: `Show or validate the Neko configuration.
 You can inspect your current .neko.json or run validations to ensure it is correct.`,
@@ -24,7 +23,7 @@ You can inspect your current .neko.json or run validations to ensure it is corre
 			println("  • Version:        " + cfg.Version)
 		}
 
-		check.ValidateConfig(cfg)
+		config.Validate(cfg)
 	},
 }
 
