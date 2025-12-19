@@ -7,7 +7,7 @@ package cmd
 */
 
 import (
-	"strings"
+	"fmt"
 
 	"github.com/nekoman-hq/neko-cli/internal/config"
 	"github.com/nekoman-hq/neko-cli/internal/errors"
@@ -17,19 +17,12 @@ import (
 
 // releaseCmd represents the release command
 var releaseCmd = &cobra.Command{
-	Use:   "release [type]",
-	Short: "Create a new release for your project",
-	Long: `The release command helps you publish new versions of your project.
-You can run it interactively or directly specify the type of release.
-
-Examples:
-  neko release          # starts an interactive survey to select release type
-  neko release minor    # creates a minor release directly
-  neko release major    # creates a major release directly
-  neko release patch    # creates a patch release directly`,
+	Use:       "release [type]",
+	Short:     "Create a new release for your project",
 	ValidArgs: []string{"major", "minor", "patch"},
 	Args:      cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+
 		cfg := config.LoadConfig()
 		config.Validate(cfg)
 		_ = config.GetPAT()
@@ -44,41 +37,47 @@ Examples:
 			return
 		}
 
-		rt := release.ReleasePatch
+		var rt release.Type
 
 		if len(args) > 0 {
-			releaseType := strings.ToLower(args[0])
-
-			switch releaseType {
-			case "major":
-				rt = release.ReleaseMajor
-			case "minor":
-				rt = release.ReleaseMinor
-			case "patch":
-				rt = release.ReleasePatch
-			default:
+			rt, err = release.ParseReleaseType(args[0])
+			if err != nil {
 				errors.Fatal(
 					"Invalid Release Type",
-					"Valid options are: major, minor, patch",
+					err.Error(),
 					errors.ErrInvalidReleaseType,
 				)
 				return
 			}
 		} else {
-			// start Survey
-			println("Start survey (no args found)")
-			// TODO: Implement survey logic here
-			// rt = startReleaseSurvey()
+			if !tool.SupportsSurvey() {
+				errors.Fatal(
+					"Interactive mode not supported",
+					fmt.Sprintf("%s requires an explicit release type", tool.Name()),
+					errors.ErrSurveyFailed,
+				)
+				return
+			}
+
+			fmt.Printf("Found Release System: %s\n", tool.Name())
+
+			rt, err = tool.Survey()
+			if err != nil {
+				errors.Fatal(
+					"Survey cancelled",
+					err.Error(),
+					errors.ErrSurveyFailed,
+				)
+				return
+			}
 		}
 
-		err = tool.Release(rt)
-		if err != nil {
+		if err := tool.Release(rt); err != nil {
 			errors.Fatal(
 				"Release Failed",
 				err.Error(),
 				errors.ErrReleaseFailed,
 			)
-			return
 		}
 	},
 }

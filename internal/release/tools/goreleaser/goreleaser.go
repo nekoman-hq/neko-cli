@@ -9,26 +9,48 @@ package goreleaser
 import (
 	"fmt"
 
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/nekoman-hq/neko-cli/internal/release"
 )
 
-type Tool struct{}
+type GoReleaser struct{}
 
-func (t *Tool) Name() string {
+func (g *GoReleaser) Name() string {
 	return "goreleaser"
 }
 
-func (t *Tool) Release(rt release.ReleaseType) error {
+func (g *GoReleaser) SupportsSurvey() bool {
+	return true
+}
+
+func (g *GoReleaser) Release(rt release.Type) error {
 	fmt.Println("Goreleaser release:", rt)
 
-	// 1. Version berechnen
-	// 2. Git Tag erstellen
-	// 3. Git Push
-	// 4. goreleaser release ausführen
+	// Detect Version - if no version - default 0.1.0 or from config
+	// Select or execute increment
+	// Commit chore(release): version
+	// Tag - version
+	// Create release
 
 	return nil
 }
 
+func (g *GoReleaser) Survey() (release.Type, error) {
+	var choice string
+
+	prompt := &survey.Select{
+		Message: "Which type of release do you want to create?",
+		Options: []string{"Patch", "Minor", "Major"},
+		Default: "Patch",
+	}
+
+	if err := survey.AskOne(prompt, &choice); err != nil {
+		return release.Patch, err
+	}
+
+	return release.ParseReleaseType(choice)
+}
+
 func init() {
-	release.Register(&Tool{})
+	release.Register(&GoReleaser{})
 }
