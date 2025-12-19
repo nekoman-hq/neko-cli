@@ -11,7 +11,6 @@ import "fmt"
 var tools = make(map[string]Tool)
 
 func Register(t Tool) {
-	fmt.Printf("Detected Release Tool: %s", t.Name())
 	tools[t.Name()] = t
 }
 

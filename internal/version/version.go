@@ -11,6 +11,14 @@ import (
 	"github.com/nekoman-hq/neko-cli/internal/repository"
 )
 
+var (
+	// These variables are set via ldflags during build
+	Version = "dev"
+	Commit  = "none"
+	Date    = "unknown"
+	BuiltBy = "unknown"
+)
+
 func Latest(repoInfo *repository.RepoInfo, token string) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", repoInfo.Owner, repoInfo.Repo)
 
@@ -77,7 +85,19 @@ func Latest(repoInfo *repository.RepoInfo, token string) {
 		)
 	}
 
+	displayCLIVersion()
 	displayRelease(repoInfo, &release)
+}
+
+func displayCLIVersion() {
+	fmt.Println()
+	fmt.Printf("┌─ neko-cli\n")
+	fmt.Printf("│\n")
+	fmt.Printf("├─ Version:   %s\n", Version)
+	fmt.Printf("├─ Commit:    %s\n", Commit)
+	fmt.Printf("├─ Built:     %s\n", Date)
+	fmt.Printf("└─ Built by:  %s\n", BuiltBy)
+	fmt.Println()
 }
 
 func displayRelease(repoInfo *repository.RepoInfo, release *GithubRelease) {
