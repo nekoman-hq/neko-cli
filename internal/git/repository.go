@@ -22,9 +22,8 @@ type RepoInfo struct {
 }
 
 func Fetch() {
-	log.V(fmt.Sprintf("%sV$%s %s%s%s (Updating repository information)",
-		log.ColorYellow, log.ColorReset,
-		log.ColorGreen, "git fetch", log.ColorReset,
+	log.V(fmt.Sprintf("%s (Updating repository information)",
+		log.ColorText(log.ColorGreen, "git fetch"),
 	))
 
 	exec.Command("git", "fetch")
