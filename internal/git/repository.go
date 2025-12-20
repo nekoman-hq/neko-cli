@@ -40,7 +40,6 @@ func Current() (*RepoInfo, error) {
 			errors.ErrNoRemote,
 		)
 	}
-
 	return parseRemote(outputStr)
 }
 
@@ -48,7 +47,7 @@ func Current() (*RepoInfo, error) {
 func parseRemote(remoteOutput string) (*RepoInfo, error) {
 	// Regex patterns for both SSH and HTTPS URLs
 	// SSH: git@git.com:owner/repo.git
-	sshPattern := regexp.MustCompile(`git@git\.com:([^/]+)/([^/\s]+?)(?:\.git)?(?:\s|$)`)
+	sshPattern := regexp.MustCompile(`git@github\.com:([^/]+)/([^/\s]+?)(?:\.git)?(?:\s|$)`)
 	// HTTPS: https://github.com/owner/repo.git
 	httpsPattern := regexp.MustCompile(`https://github\.com/([^/]+)/([^/\s]+?)(?:\.git)?(?:\s|$)`)
 

@@ -25,7 +25,7 @@ func LatestRelease(repoInfo *RepoInfo) github.Release {
 	}
 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	req.Header.Set("Accept", "application/vnd.git.v3+json")
+	req.Header.Set("Accept", "application/json")
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
