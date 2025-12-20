@@ -84,7 +84,7 @@ func Validate(cfg *NekoConfig) {
 		errors.Error(
 			"Invalid configuration",
 			"Version is not a valid semantic version (SemVer)",
-			errors.ErrInvalidVersion,
+			errors.ErrVersionViolation,
 		)
 		return
 	}
