@@ -24,6 +24,7 @@ func (rs *Service) Run(args []string) error {
 	_, _ = git.Current()
 
 	Preflight()
+	VersionGuard()
 
 	releaser, err := Get(string(rs.cfg.ReleaseSystem))
 	if err != nil {

@@ -13,11 +13,17 @@ import (
 	"strings"
 
 	"github.com/nekoman-hq/neko-cli/internal/errors"
+	"github.com/nekoman-hq/neko-cli/internal/log"
 )
 
 type RepoInfo struct {
 	Owner string
 	Repo  string
+}
+
+func Fetch() {
+	log.V("V$ git fetch (Updating repository information)")
+	exec.Command("git", "fetch")
 }
 
 // Current checks if a git repository exists and returns owner and repo name
