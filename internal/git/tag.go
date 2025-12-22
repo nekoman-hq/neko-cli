@@ -36,6 +36,6 @@ func LatestTag() string {
 		return "0.1.0"
 	}
 
-	log.V(log.VersionGuard, fmt.Sprintf("Latest tag: %s", log.ColorText(log.ColorGreen, outputStr)))
+	log.V(log.VersionGuard, fmt.Sprintf("Latest tag: %s", outputStr))
 	return outputStr
 }

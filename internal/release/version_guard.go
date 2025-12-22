@@ -44,7 +44,7 @@ func EnsureVersionIsValid(cfg *config.NekoConfig, latestTag string) string {
 
 		log.V(log.VersionGuard,
 			fmt.Sprintf("Using local version %s",
-				log.ColorText(log.ColorGreen, localVer.String()),
+				localVer.String(),
 			),
 		)
 
@@ -66,8 +66,8 @@ func EnsureVersionIsValid(cfg *config.NekoConfig, latestTag string) string {
 	log.V(log.VersionGuard,
 		fmt.Sprintf(
 			"Local version %s is >= latest tag %s, proceeding.",
-			log.ColorText(log.ColorGreen, localVer.String()),
-			log.ColorText(log.ColorCyan, remoteVer.String()),
+			localVer.String(),
+			remoteVer.String(),
 		),
 	)
 

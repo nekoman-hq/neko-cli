@@ -17,9 +17,9 @@ const (
 )
 
 var categoryColors = map[Category]string{
-	Init:         ColorCyan,
-	Config:       ColorCyan,
-	Preflight:    ColorYellow,
-	VersionGuard: ColorBlue,
-	Release:      ColorGreen,
+	Init:         ColorBrightCyan,
+	Config:       ColorBrightCyan,
+	Preflight:    ColorBrightYellow,
+	VersionGuard: ColorBrightBlue,
+	Release:      ColorBrightGreen,
 }
