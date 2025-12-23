@@ -19,7 +19,7 @@ const configFileName = ".neko.json"
 
 func LoadConfig() *NekoConfig {
 
-	log.V(log.Config, "\uE615 Loading config from file...")
+	log.V(log.Config, "Loading config from file...")
 
 	data, err := os.ReadFile(configFileName)
 	if err != nil {
