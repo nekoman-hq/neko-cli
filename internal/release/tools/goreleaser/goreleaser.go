@@ -64,7 +64,7 @@ func (g *GoReleaser) createReleaseCommit(version *semver.Version) error {
 	log.V(log.Release, fmt.Sprintf("Creating release commit: %s",
 		log.ColorText(log.ColorGreen, fmt.Sprintf("git commit --allow-empty -m \"%s\"", commitMsg))))
 
-	cmd := exec.Command("git", "commit", "--allow-empty", "-m", commitMsg)
+	cmd := exec.Command("git", "commit", "--allow-empty", "-a", "-m", commitMsg)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		errors.Fatal(
