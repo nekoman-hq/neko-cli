@@ -38,6 +38,10 @@ func (g *GoReleaser) Release(version *semver.Version, rt release.Type) error {
 		return err
 	}
 
+	if err := g.pushCommits(); err != nil {
+		return err
+	}
+
 	if err := g.pushGitTag(version); err != nil {
 		return err
 	}
@@ -94,6 +98,26 @@ func (g *GoReleaser) createGitTag(version *semver.Version) error {
 
 	log.Print(log.Release, fmt.Sprintf("\uF00C Created git tag: %s",
 		log.ColorText(log.ColorGreen, tag)))
+	return nil
+}
+
+// pushCommit pushes the release commit to remote
+func (g *GoReleaser) pushCommits() error {
+	log.V(log.Release, fmt.Sprintf("Pushing release commit: %s",
+		log.ColorText(log.ColorGreen, "git push origin HEAD")))
+
+	cmd := exec.Command("git", "push", "origin", "HEAD")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		errors.Fatal(
+			"Failed to push release commits",
+			fmt.Sprintf("git push failed: %s", strings.TrimSpace(string(output))),
+			errors.ErrReleasePush,
+		)
+	}
+
+	log.Print(log.Release, fmt.Sprintf("\uF00C Pushed release commit to %s",
+		log.ColorText(log.ColorGreen, "origin")))
 	return nil
 }
 
