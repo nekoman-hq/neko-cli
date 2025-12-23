@@ -95,7 +95,7 @@ func Validate(cfg *NekoConfig) {
 		return
 	}
 
-	log.Print(log.Config, "\uF00C Config appears valid")
+	log.V(log.Config, "\uF00C Config appears valid")
 }
 
 func SaveConfig(config NekoConfig) error {

@@ -26,7 +26,7 @@ func NewReleaseService(cfg *config.NekoConfig) *Service {
 func (rs *Service) Run(args []string) error {
 	_, _ = git.Current()
 
-	// Preflight()
+	Preflight()
 	version := VersionGuard(rs.cfg)
 
 	releaser, err := Get(string(rs.cfg.ReleaseSystem))
