@@ -54,5 +54,5 @@ func Preflight() {
 		)
 	}
 
-	log.Print(log.Preflight, "\uF00C Preflight checks succeeded!")
+	log.V(log.Preflight, "\uF00C Preflight checks succeeded!")
 }
