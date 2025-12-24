@@ -14,9 +14,7 @@ import (
 )
 
 func printSetupInstructions(cfg config.NekoConfig) {
-	log.Print(log.Init, fmt.Sprintf("%s .neko.json created successfully!\n",
-		log.ColorText(log.ColorGreen, "\uF00C")))
-
+	log.Print(log.Init, fmt.Sprintf("\uF00C .neko.json created successfully!\n"))
 	println(log.ColorText(log.ColorBold, "\nNext steps:"))
 	println(fmt.Sprintf("  %s Use %s to create a release",
 		log.ColorText(log.ColorCyan, "\uF101"),
