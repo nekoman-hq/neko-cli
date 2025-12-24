@@ -79,7 +79,7 @@ func (rs *Service) Run(args []string) error {
 	}
 
 	log.Print(log.Release, fmt.Sprintf("\uF00C Successfully released version %s",
-		log.ColorText(log.ColorGreen, newVersion.String())))
+		log.ColorText(log.ColorCyan, newVersion.String())))
 
 	return nil
 }
