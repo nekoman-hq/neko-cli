@@ -22,9 +22,13 @@ const (
 )
 
 type NekoConfig struct {
-	ProjectType   ProjectType   `json:"projectType"`
-	ReleaseSystem ReleaseSystem `json:"releaseSystem"`
+	ProjectName   string        `json:"project-name"`
+	ProjectOwner  string        `json:"project-owner"`
+	ProjectType   ProjectType   `json:"project-type"`
+	ReleaseSystem ReleaseSystem `json:"release-system"`
 	Version       string        `json:"version"`
+	//TagName 	  string 		`json:"tag-name"`   (No implementation yet)
+	//TokenName	  string		`json:"token-name"`	(No implementation yet)
 }
 
 func (p ProjectType) IsValid() bool {

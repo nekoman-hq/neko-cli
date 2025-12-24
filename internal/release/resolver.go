@@ -8,11 +8,20 @@ package release
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/Masterminds/semver/v3"
 	"github.com/nekoman-hq/neko-cli/internal/errors"
 	"github.com/nekoman-hq/neko-cli/internal/log"
+)
+
+type Type string
+
+const (
+	Major Type = "major"
+	Minor Type = "minor"
+	Patch Type = "patch"
 )
 
 func ResolveReleaseType(version *semver.Version, args []string, t Tool) (Type, error) {
@@ -82,5 +91,19 @@ func NextVersion(current *semver.Version, t Type) semver.Version {
 		return current.IncPatch()
 	default:
 		return *current
+	}
+}
+
+func ParseReleaseType(input string) (Type, error) {
+	switch strings.ToLower(input) {
+	case "major":
+		return Major, nil
+	case "minor":
+		return Minor, nil
+	case "patch":
+		return Patch, nil
+	default:
+		// TODO - Handle Fatal Error
+		return Patch, fmt.Errorf("valid options: major, minor, patch")
 	}
 }

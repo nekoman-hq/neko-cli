@@ -12,23 +12,26 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/nekoman-hq/neko-cli/internal/config"
 	"github.com/nekoman-hq/neko-cli/internal/errors"
 	"github.com/nekoman-hq/neko-cli/internal/log"
 	"github.com/nekoman-hq/neko-cli/internal/release"
 )
 
-type GoReleaser struct{}
+type GoReleaser struct {
+	release.ToolBase
+}
 
 func (g *GoReleaser) Name() string {
 	return "goreleaser"
 }
 
-func (g *GoReleaser) Init(_ *semver.Version) error {
+func (g *GoReleaser) Init(_ *semver.Version, _ *config.NekoConfig) error {
 
-	requireBinary(g.Name())
+	g.RequireBinary(g.Name())
+
 	runGoreleaserInit()
 	runGoreleaserCheck()
-
 	return nil
 }
 
@@ -63,36 +66,6 @@ func (g *GoReleaser) Release(v *semver.Version) error {
 	}
 
 	return nil
-}
-
-func requireBinary(name string) {
-	log.V(log.Init,
-		fmt.Sprintf("Searching for %s executable: %s",
-			name,
-			log.ColorText(log.ColorGreen, fmt.Sprintf("which %s", name)),
-		),
-	)
-
-	path, err := exec.LookPath(name)
-	if err != nil {
-		errors.Fatal(
-			"Required dependency missing",
-			fmt.Sprintf(
-				"%s is not installed or not available in PATH (More info here: https://goreleaser.com/install/)",
-				name,
-			),
-			errors.ErrDependencyMissing,
-		)
-	}
-
-	log.Print(
-		log.Init,
-		fmt.Sprintf(
-			"Found %s at %s",
-			log.ColorText(log.ColorCyan, name),
-			log.ColorText(log.ColorGreen, path),
-		),
-	)
 }
 
 func runGoreleaserInit() {
@@ -150,8 +123,8 @@ func runGoreleaserCheck() {
 }
 
 // createReleaseCommit creates the chore commit for the release
-func (g *GoReleaser) createReleaseCommit(version *semver.Version) error {
-	commitMsg := fmt.Sprintf("chore(neko-release): %s", version)
+func (g *GoReleaser) createReleaseCommit(v *semver.Version) error {
+	commitMsg := fmt.Sprintf("chore(neko-release): %s", v)
 
 	log.V(log.Release, fmt.Sprintf("Creating release commit: %s",
 		log.ColorText(log.ColorGreen, fmt.Sprintf("git commit --allow-empty -m \"%s\"", commitMsg))))
@@ -172,8 +145,8 @@ func (g *GoReleaser) createReleaseCommit(version *semver.Version) error {
 }
 
 // createGitTag creates a git tag for the version
-func (g *GoReleaser) createGitTag(version *semver.Version) error {
-	tag := fmt.Sprintf("v%s", version)
+func (g *GoReleaser) createGitTag(v *semver.Version) error {
+	tag := fmt.Sprintf("v%s", v)
 
 	log.V(log.Release, fmt.Sprintf("Creating git tag: %s",
 		log.ColorText(log.ColorGreen, fmt.Sprintf("git tag %s", tag))))
@@ -214,8 +187,8 @@ func (g *GoReleaser) pushCommits() error {
 }
 
 // pushGitTag pushes the git tag to remote
-func (g *GoReleaser) pushGitTag(version *semver.Version) error {
-	tag := fmt.Sprintf("v%s", version)
+func (g *GoReleaser) pushGitTag(v *semver.Version) error {
+	tag := fmt.Sprintf("v%s", v)
 
 	log.V(log.Release, fmt.Sprintf("Pushing git tag: %s",
 		log.ColorText(log.ColorGreen, fmt.Sprintf("git push origin %s", tag))))

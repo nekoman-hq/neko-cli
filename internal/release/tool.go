@@ -2,9 +2,12 @@ package release
 
 import (
 	"fmt"
-	"strings"
+	"os/exec"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/nekoman-hq/neko-cli/internal/config"
+	"github.com/nekoman-hq/neko-cli/internal/errors"
+	"github.com/nekoman-hq/neko-cli/internal/log"
 )
 
 /*
@@ -15,30 +18,40 @@ import (
 
 type Tool interface {
 	Name() string
-	Init(v *semver.Version) error
+	Init(v *semver.Version, cfg *config.NekoConfig) error
 	Release(v *semver.Version) error
 	Survey(v *semver.Version) (Type, error)
 	SupportsSurvey() bool
 }
 
-type Type string
+type ToolBase struct{}
 
-const (
-	Major Type = "major"
-	Minor Type = "minor"
-	Patch Type = "patch"
-)
+func (tb *ToolBase) RequireBinary(name string) {
+	log.V(log.Init,
+		fmt.Sprintf("Searching for %s executable: %s",
+			name,
+			log.ColorText(log.ColorGreen, fmt.Sprintf("which %s", name)),
+		),
+	)
 
-func ParseReleaseType(input string) (Type, error) {
-	switch strings.ToLower(input) {
-	case "major":
-		return Major, nil
-	case "minor":
-		return Minor, nil
-	case "patch":
-		return Patch, nil
-	default:
-		// TODO - Handle Fatal Error
-		return Patch, fmt.Errorf("valid options: major, minor, patch")
+	path, err := exec.LookPath(name)
+	if err != nil {
+		errors.Fatal(
+			"Required dependency missing",
+			fmt.Sprintf(
+				"%s is not installed or not available in PATH",
+				name,
+			),
+			errors.ErrDependencyMissing,
+		)
 	}
+
+	log.Print(
+		log.Init,
+		fmt.Sprintf(
+			"Found %s at %s",
+			log.ColorText(log.ColorCyan, name),
+			log.ColorText(log.ColorGreen, path),
+		),
+	)
 }

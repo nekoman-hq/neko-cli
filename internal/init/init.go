@@ -12,15 +12,21 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/nekoman-hq/neko-cli/internal/config"
 	"github.com/nekoman-hq/neko-cli/internal/errors"
+	"github.com/nekoman-hq/neko-cli/internal/git"
 	"github.com/nekoman-hq/neko-cli/internal/release"
 )
 
-func Run() {
+func Run(info *git.RepoInfo) {
 	if !confirmOverwriteIfExists() {
 		return
 	}
 
 	cfg := runWizard()
+
+	if info != nil {
+		cfg.ProjectOwner = info.Owner
+		cfg.ProjectName = info.Repo
+	}
 
 	if err := config.SaveConfig(cfg); err != nil {
 		errors.Fatal(
@@ -40,7 +46,7 @@ func Run() {
 		)
 	}
 
-	version, err := semver.NewVersion(cfg.Version)
+	v, err := semver.NewVersion(cfg.Version)
 	if err != nil {
 		errors.Fatal(
 			"Invalid local version",
@@ -49,7 +55,7 @@ func Run() {
 		)
 	}
 
-	err = releaser.Init(version)
+	err = releaser.Init(v, &cfg)
 	if err != nil {
 		errors.Fatal(
 			"Release system initialization failed",

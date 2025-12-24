@@ -1,5 +1,7 @@
 {
-  "projectType": "other",
-  "releaseSystem": "goreleaser",
+  "project-name": "neko-cli",
+  "project-owner": "nekoman-hq",
+  "project-type": "other",
+  "release-system": "goreleaser",
   "version": "0.3.0"
 }
