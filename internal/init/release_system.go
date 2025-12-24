@@ -1,5 +1,11 @@
 package init
 
+/*
+@Author     Benjamin Senekowitsch
+@Contact    senekowitsch@nekoman.at
+@Since      23.12.2025
+*/
+
 import (
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/nekoman-hq/neko-cli/internal/config"

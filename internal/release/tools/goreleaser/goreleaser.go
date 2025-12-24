@@ -24,17 +24,26 @@ func (g *GoReleaser) Name() string {
 	return "goreleaser"
 }
 
+func (g *GoReleaser) Init(v *semver.Version) error {
+
+	requireBinary(g.Name())
+	runGoreleaserInit()
+	runGoreleaserCheck()
+	
+	return nil
+}
+
 func (g *GoReleaser) SupportsSurvey() bool {
 	return true
 }
 
-func (g *GoReleaser) Release(version *semver.Version, rt release.Type) error {
+func (g *GoReleaser) Release(v *semver.Version) error {
 
-	if err := g.createReleaseCommit(version); err != nil {
+	if err := g.createReleaseCommit(v); err != nil {
 		return err
 	}
 
-	if err := g.createGitTag(version); err != nil {
+	if err := g.createGitTag(v); err != nil {
 		return err
 	}
 
@@ -42,7 +51,7 @@ func (g *GoReleaser) Release(version *semver.Version, rt release.Type) error {
 		return err
 	}
 
-	if err := g.pushGitTag(version); err != nil {
+	if err := g.pushGitTag(v); err != nil {
 		return err
 	}
 
@@ -55,6 +64,90 @@ func (g *GoReleaser) Release(version *semver.Version, rt release.Type) error {
 	}
 
 	return nil
+}
+
+func requireBinary(name string) {
+	log.V(log.Init,
+		fmt.Sprintf("Searching for %s executable: %s",
+			name,
+			log.ColorText(log.ColorGreen, fmt.Sprintf("which %s", name)),
+		),
+	)
+
+	path, err := exec.LookPath(name)
+	if err != nil {
+		errors.Fatal(
+			"Required dependency missing",
+			fmt.Sprintf(
+				"%s is not installed or not available in PATH",
+				name,
+			),
+			errors.ErrDependencyMissing,
+		)
+	}
+
+	log.Print(
+		log.Init,
+		fmt.Sprintf(
+			"Found %s at %s",
+			log.ColorText(log.ColorCyan, name),
+			log.ColorText(log.ColorGreen, path),
+		),
+	)
+}
+
+func runGoreleaserInit() {
+	log.V(log.Init,
+		fmt.Sprintf("Initializing goreleaser: %s",
+			log.ColorText(log.ColorGreen, "goreleaser init"),
+		),
+	)
+
+	cmd := exec.Command("goreleaser", "init")
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		errors.Fatal(
+			"Failed to initialize goreleaser",
+			fmt.Sprintf("Command failed: %s\nOutput: %s", err.Error(), string(output)),
+			errors.ErrDependencyMissing,
+		)
+	}
+
+	log.Print(
+		log.Init,
+		fmt.Sprintf(
+			"Successfully initialized %s",
+			log.ColorText(log.ColorCyan, "goreleaser"),
+		),
+	)
+}
+
+func runGoreleaserCheck() {
+	log.V(log.Init,
+		fmt.Sprintf("Checking goreleaser configuration: %s",
+			log.ColorText(log.ColorGreen, "goreleaser check"),
+		),
+	)
+
+	cmd := exec.Command("goreleaser", "check")
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		errors.Fatal(
+			"Goreleaser configuration check failed",
+			fmt.Sprintf("Command failed: %s\nOutput: %s", err.Error(), string(output)),
+			errors.ErrDependencyMissing,
+		)
+	}
+
+	log.Print(
+		log.Init,
+		fmt.Sprintf(
+			"Configuration check passed for %s",
+			log.ColorText(log.ColorCyan, "goreleaser"),
+		),
+	)
 }
 
 // createReleaseCommit creates the chore commit for the release

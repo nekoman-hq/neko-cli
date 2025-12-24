@@ -37,4 +37,6 @@ const (
 	ErrReleaseTag           = "NEKO_4004"
 	ErrReleasePush          = "NEKO_4005"
 	ErrGoReleaserExecution  = "NEKO_4006"
+	ErrDependencyMissing    = "NEKO_4007"
+	ErrReleaseSystemInit    = "NEKO_4008"
 )

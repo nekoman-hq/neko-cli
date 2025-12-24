@@ -1,5 +1,11 @@
 package init
 
+/*
+@Author     Benjamin Senekowitsch
+@Contact    senekowitsch@nekoman.at
+@Since      23.12.2025
+*/
+
 import (
 	"fmt"
 

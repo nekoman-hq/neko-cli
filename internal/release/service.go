@@ -70,7 +70,7 @@ func (rs *Service) Run(args []string) error {
 			fmt.Sprintf("Updating version in .neko.json failed. Attempting to proceed with release: %s", err.Error()))
 	}
 
-	if err := releaser.Release(&newVersion, rt); err != nil {
+	if err := releaser.Release(&newVersion); err != nil {
 		errors.Fatal(
 			"Release failed",
 			err.Error(),
