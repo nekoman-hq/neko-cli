@@ -8,6 +8,7 @@ package goreleaser
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -69,6 +70,25 @@ func (g *GoReleaser) Release(v *semver.Version) error {
 }
 
 func runGoreleaserInit() {
+
+	if _, err := os.Stat(".goreleaser.yaml"); err == nil {
+		log.Print(
+			log.Init,
+			fmt.Sprintf(
+				"Skipping goreleaser init, %s already exists",
+				log.ColorText(log.ColorCyan, "goreleaser.yml"),
+			),
+		)
+		return
+	} else if !os.IsNotExist(err) {
+		errors.Fatal(
+			"Failed to check goreleaser.yml",
+			err.Error(),
+			errors.ErrFileAccess,
+		)
+		return
+	}
+
 	log.V(log.Init,
 		fmt.Sprintf("Initializing goreleaser: %s",
 			log.ColorText(log.ColorGreen, "goreleaser init"),

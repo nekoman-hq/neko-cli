@@ -20,6 +20,7 @@ const (
 	ErrAPIRequest  = "NEKO_2000"
 	ErrAPIResponse = "NEKO_2001"
 	ErrNoReleases  = "NEKO_2002"
+	ErrFileAccess  = "NEKO_2003"
 
 	ErrConfigExists     = "NEKO_3000"
 	ErrConfigNotExists  = "NEKO_3001"
