@@ -24,10 +24,10 @@ builds:
       - darwin
     ldflags:
       - -s -w
-      - -X git.com/nekoman-hq/neko-cli/internal/version.Version={{.Version}}
-      - -X git.com/nekoman-hq/neko-cli/internal/version.Commit={{.Commit}}
-      - -X git.com/nekoman-hq/neko-cli/internal/version.Date={{.Date}}
-      - -X git.com/nekoman-hq/neko-cli/internal/version.BuiltBy=goreleaser
+      - -X github.com/nekoman-hq/neko-cli/internal/version.Version={{.Version}}
+      - -X github.com/nekoman-hq/neko-cli/internal/version.Commit={{.Commit}}
+      - -X github.com/nekoman-hq/neko-cli/internal/version.Date={{.Date}}
+      - -X github.com/nekoman-hq/neko-cli/internal/version.BuiltBy=goreleaser
 
 archives:
   - formats: [tar.gz]
