@@ -8,12 +8,15 @@ package jreleaser
 
 import (
 	"fmt"
+	"os/exec"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/nekoman-hq/neko-cli/internal/config"
 	"github.com/nekoman-hq/neko-cli/internal/errors"
+	"github.com/nekoman-hq/neko-cli/internal/log"
 	"github.com/nekoman-hq/neko-cli/internal/release"
 )
 
@@ -27,8 +30,17 @@ func (j *Jreleaser) Name() string {
 
 func (j *Jreleaser) Init(v *semver.Version, cfg *config.NekoConfig) error {
 
+	log.V(log.Init, fmt.Sprintf("Initializing %s for project %s@%s",
+		log.ColorText(log.ColorGreen, j.Name()),
+		cfg.ProjectName,
+		cfg.Version,
+	))
+
 	j.RequireBinary(j.Name())
 	runJreleaserInit(cfg)
+	runJreleaserCheck()
+
+	log.Print(log.Init, fmt.Sprintf("\uF00C Initialization complete for %s", log.ColorText(log.ColorCyan, j.Name())))
 	return nil
 }
 
@@ -45,6 +57,7 @@ func (j *Jreleaser) SupportsSurvey() bool {
 }
 
 func runJreleaserInit(cfg *config.NekoConfig) {
+	log.V(log.Init, "Generating JReleaser configuration...")
 	jcfg := &Config{
 		Project: Project{
 			Name:    cfg.ProjectName,
@@ -115,8 +128,53 @@ func runJreleaserInit(cfg *config.NekoConfig) {
 			err.Error(),
 			errors.ErrConfigWrite,
 		)
-		return
 	}
+	log.Print(log.Init, fmt.Sprintf("\uF00C JReleaser configuration generated for %s", log.ColorText(log.ColorCyan, cfg.ProjectName)))
+}
+
+func runJreleaserCheck() {
+	log.V(log.Init,
+		fmt.Sprintf("Checking jreleaser configuration: %s",
+			log.ColorText(log.ColorGreen, "jreleaser config"),
+		),
+	)
+
+	output, err := executeJreleaserCommand("config")
+	if err != nil {
+		errors.Fatal(
+			"Jreleaser configuration check failed",
+			fmt.Sprintf("Command failed: %s\nOutput: %s", err.Error(), string(output)),
+			errors.ErrDependencyMissing,
+		)
+	}
+
+	log.Print(
+		log.Init,
+		fmt.Sprintf(
+			"\uF00C Configuration check passed for %s",
+			log.ColorText(log.ColorCyan, "jreleaser"),
+		),
+	)
+}
+
+func executeJreleaserCommand(action string) ([]byte, error) {
+	pat := config.GetPAT()
+	if pat == "" {
+		return nil, fmt.Errorf("personal access token is empty")
+	}
+
+	cmdStr := fmt.Sprintf("JRELEASER_GITHUB_TOKEN=%s jreleaser %s", pat, action)
+
+	maskedPat := strings.Repeat("*", 5)
+	log.V(log.Init, fmt.Sprintf("Executing command: JRELEASER_GITHUB_TOKEN=%s jreleaser %s", maskedPat, action))
+
+	cmd := exec.Command("sh", "-c", cmdStr)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return output, fmt.Errorf("failed to execute command: %w", err)
+	}
+
+	return output, nil
 }
 
 func init() {

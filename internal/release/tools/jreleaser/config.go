@@ -7,9 +7,9 @@ package jreleaser
 */
 
 import (
+	"fmt"
 	"os"
 
-	"github.com/nekoman-hq/neko-cli/internal/errors"
 	"gopkg.in/yaml.v3"
 )
 
@@ -93,24 +93,29 @@ type Category struct {
 	Order  int      `yaml:"order"`
 }
 
-func SaveConfig(cfg *Config) error {
-	data, err := yaml.Marshal(cfg)
+func SaveConfig(cfg *Config) (err error) {
+	file, err := os.Create("jreleaser.yml")
 	if err != nil {
-		errors.Fatal(
-			"Configuration serialization failed",
-			"Could not marshal jreleaser.yml: "+err.Error(),
-			errors.ErrConfigMarshal,
-		)
-		return err
+		return fmt.Errorf("create jreleaser.yml: %w", err)
+	}
+	defer func() {
+		if cerr := file.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("close file: %w", cerr)
+		}
+	}()
+
+	encoder := yaml.NewEncoder(file)
+	defer func() {
+		if cerr := encoder.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("close encoder: %w", cerr)
+		}
+	}()
+
+	encoder.SetIndent(2)
+
+	if err = encoder.Encode(cfg); err != nil {
+		return fmt.Errorf("encode config: %w", err)
 	}
 
-	if err := os.WriteFile("jreleaser.yml", data, 0644); err != nil {
-		errors.Fatal(
-			"Configuration write failed",
-			"Could not write jreleaser.yml: "+err.Error(),
-			errors.ErrConfigWrite,
-		)
-		return err
-	}
 	return nil
 }

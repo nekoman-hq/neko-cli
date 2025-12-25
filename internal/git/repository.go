@@ -35,8 +35,8 @@ func Current() (*RepoInfo, error) {
 		log.ColorText(log.ColorGreen, "git remote -v"),
 	))
 
-	command := exec.Command("git", "remote", "-v")
-	output, err := command.CombinedOutput()
+	cmd := exec.Command("git", "remote", "-v")
+	output, err := cmd.CombinedOutput()
 
 	if err != nil {
 		errors.Fatal(

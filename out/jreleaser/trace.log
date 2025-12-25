@@ -1,0 +1,1327 @@
+[INFO]  JReleaser 1.20.0
+------------------------------------------------------------
+jreleaser 1.20.0
+------------------------------------------------------------
+Build time:   2025-08-31 16:01:32Z
+Revision:     16e3b060b85b214167e502e95c2ea9ece8c3f661
+JVM:          25 (Homebrew 25)
+------------------------------------------------------------
+[INFO]  Configuring with jreleaser.yml
+[INFO]    - basedir set to /Users/benjamin/Developer/Projects/nekoman/neko-cli
+[INFO]    - outputdir set to /Users/benjamin/Developer/Projects/nekoman/neko-cli/out/jreleaser
+[INFO]  Reading configuration
+[DEBUG]   - basedir set to /Users/benjamin/Developer/Projects/nekoman/neko-cli
+[DEBUG]   - baseOutputDirectory set to /Users/benjamin/Developer/Projects/nekoman/neko-cli/out
+[DEBUG]   - outputDirectory set to /Users/benjamin/Developer/Projects/nekoman/neko-cli/out/jreleaser
+[DEBUG]   - checksumDirectory set to /Users/benjamin/Developer/Projects/nekoman/neko-cli/out/jreleaser/checksums
+[DEBUG]   - catalogsDirectory set to /Users/benjamin/Developer/Projects/nekoman/neko-cli/out/jreleaser/catalogs
+[DEBUG]   - signaturesDirectory set to /Users/benjamin/Developer/Projects/nekoman/neko-cli/out/jreleaser/signatures
+[DEBUG]   - prepareDirectory set to /Users/benjamin/Developer/Projects/nekoman/neko-cli/out/jreleaser/prepare
+[DEBUG]   - packageDirectory set to /Users/benjamin/Developer/Projects/nekoman/neko-cli/out/jreleaser/package
+[DEBUG]   - publishDirectory set to /Users/benjamin/Developer/Projects/nekoman/neko-cli/out/jreleaser/publish
+[DEBUG]   - downloadDirectory set to /Users/benjamin/Developer/Projects/nekoman/neko-cli/out/jreleaser/download
+[DEBUG]   - assembleDirectory set to /Users/benjamin/Developer/Projects/nekoman/neko-cli/out/jreleaser/assemble
+[DEBUG]   - artifactsDirectory set to /Users/benjamin/Developer/Projects/nekoman/neko-cli/out/jreleaser/artifacts
+[DEBUG]   - deployDirectory set to /Users/benjamin/Developer/Projects/nekoman/neko-cli/out/jreleaser/deploy
+[INFO]  git-root-search set to false
+[INFO]  Loading variables from /Users/benjamin/.jreleaser/config.properties
+[WARN]  Variables source /Users/benjamin/.jreleaser/config.properties does not exist
+[DEBUG] The following variables are defined in the current environment:
+[DEBUG]   JRELEASER_GITHUB_TOKEN
+[INFO]  Validating configuration
+[INFO]  Strict mode set to false
+[DEBUG] adjusting distributions with assemblies
+[DEBUG]   [validation] --== ASSEMBLE ==--
+[DEBUG]   [validation] hooks
+[DEBUG]   [validation] hooks.command
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] hooks.script
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] hooks.jbang
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] project
+[DEBUG]   [validation] download
+[DEBUG]   [validation] catalog.swid
+[DEBUG]   [validation] catalog.swid.swid-tag
+[DEBUG]   [validation] assemble
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] signing
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] release
+[DEBUG]   [validation] release.github
+[DEBUG]   [validation] checksum
+[DEBUG]   [validation] deploy
+[DEBUG]   [validation] deploy.maven
+[DEBUG]   [validation] upload
+[DEBUG]   [validation] catalog
+[DEBUG]   [validation] catalog.sbom
+[DEBUG]   [validation] catalog.sbom.cyclonedx
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] catalog.sbom.syft
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] catalog.github
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] catalog.slsa
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] announce
+[DEBUG]   [validation] - disabled
+[DEBUG]   [postvalidation] project
+[DEBUG]   [postvalidation] assemble
+[DEBUG]   [postvalidation] assemble.deb
+[DEBUG]   [postvalidation] assemble.jpackage
+[DEBUG]   [resolution] assemble
+[DEBUG]   [validation] --== CONFIG ==--
+[DEBUG]   [validation] hooks
+[DEBUG]   [validation] hooks.command
+[DEBUG]   [validation] hooks.script
+[DEBUG]   [validation] hooks.jbang
+[DEBUG]   [validation] project
+[DEBUG]   [validation] download
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] catalog.swid
+[DEBUG]   [validation] catalog.swid.swid-tag
+[DEBUG]   [validation] assemble
+[DEBUG]   [validation] signing
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] release
+[DEBUG]   [validation] release.github
+[DEBUG]   [validation] checksum
+[DEBUG]   [validation] deploy
+[DEBUG]   [validation] deploy.maven
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] upload
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] packagers
+[DEBUG]   [validation] files
+[DEBUG]   [validation] catalog
+[DEBUG]   [validation] catalog.sbom
+[DEBUG]   [validation] catalog.sbom.cyclonedx
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] catalog.sbom.syft
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] catalog.github
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] catalog.slsa
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] announce
+[DEBUG]   [validation] announce.article
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] announce.bluesky
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] announce.discussions
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] announce.discord
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] announce.discourse
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] announce.gitter
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] announce.googleChat
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] announce.linkedin
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] announce.http
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] announce.smtp
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] announce.mastodon
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] announce.mattermost
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] announce.openCollective
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] announce.sdkman
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] announce.slack
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] announce.teams
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] announce.telegram
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] announce.twitter
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] announce.webhooks
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] announce.zulip
+[DEBUG]   [validation] - disabled
+[DEBUG]   [validation] - disabled
+[DEBUG]   [postvalidation] project
+[DEBUG]   [postvalidation] assemble
+[DEBUG]   [postvalidation] assemble.deb
+[DEBUG]   [postvalidation] assemble.jpackage
+[DEBUG]   [postvalidation] distributions
+environment:
+ 
+hooks:
+    enabled: false
+    active: NEVER
+    command:
+        enabled: false
+        active: NEVER
+    jbang:
+        enabled: false
+        active: NEVER
+    script:
+        enabled: false
+        active: NEVER
+ 
+project:
+    name: neko-cli
+    version: 0.1.0
+    versionPattern: SEMVER
+    snapshot:
+        enabled: false
+        pattern: .*-SNAPSHOT
+        label: early-access
+        fullChangelog: false
+    license: Proprietary
+    inceptionYear: 2025
+    authors:
+        Authors here...
+    stereotype: NONE
+    links:
+        license: https://github.com/nekoman-hq/neko-cli/blob/main/LICENSE
+        bugTracker: https://{{repoHost}}/{{repoOwner}}/{{repoName}}/issues
+        vcsBrowser: https://{{repoHost}}/{{repoOwner}}/{{repoName}}
+    extraProperties:
+        versionMajor: 0
+        versionMinor: 1
+        versionPatch: 0
+        versionNumber: 0.1.0
+        versionWithUnderscores: 0_1_0
+        versionWithDashes: 0-1-0
+        versionNumberWithUnderscores: 0_1_0
+        versionNumberWithDashes: 0-1-0
+        effectiveVersionWithUnderscores: 0_1_0
+        effectiveVersionWithDashes: 0-1-0
+    languages:
+        java:
+            enabled: false
+            version: 25
+            groupId: at.neko-cli
+            jvmOptions:
+            environmentVariables:
+            multiProject: false
+ 
+platform:
+ 
+release:
+    github:
+        enabled: true
+        host: github.com
+        owner: nekoman-hq
+        name: neko-cli
+        username: nekoman-hq
+        token: ************
+        artifacts: true
+        files: true
+        checksums: true
+        catalogs: true
+        signatures: true
+        repoUrl: https://{{repoHost}}/{{repoOwner}}/{{repoName}}
+        repoCloneUrl: https://{{repoHost}}/{{repoOwner}}/{{repoName}}.git
+        commitUrl: https://{{repoHost}}/{{repoOwner}}/{{repoName}}/commits
+        srcUrl: https://{{repoHost}}/{{repoOwner}}/{{repoName}}/blob/{{repoBranch}}
+        downloadUrl: https://{{repoHost}}/{{repoOwner}}/{{repoName}}/releases/download/{{tagName}}/{{artifactFile}}
+        releaseNotesUrl: https://{{repoHost}}/{{repoOwner}}/{{repoName}}/releases/tag/{{tagName}}
+        latestReleaseUrl: https://{{repoHost}}/{{repoOwner}}/{{repoName}}/releases/latest
+        issueTrackerUrl: https://{{repoHost}}/{{repoOwner}}/{{repoName}}/issues
+        tagName: neko-cli@{{projectVersion}}
+        releaseName: neko-cli@{{projectVersion}}
+        branch: main
+        branchPush: main
+        commitAuthor:
+            name: jreleaserbot
+            email: jreleaser@kordamp.org
+        sign: false
+        skipTag: false
+        skipRelease: false
+        overwrite: false
+        update:
+            enabled: false
+        apiEndpoint: https://api.github.com
+        connectTimeout: 20
+        readTimeout: 60
+        changelog:
+            enabled: true
+            append:
+                enabled: true
+                title: ## [{{tagName}}]
+                target: CHANGELOG.md
+                content: 
+{{changelogTitle}}
+
+{{changelogContent}}
+            links: false
+            skipMergeCommits: true
+            sort: DESC
+            formatted: ALWAYS
+            preset: gitmoji
+            format: - {{commitShortHash}} {{commitTitle}} ({{commitAuthor}})
+            categoryTitleFormat: ## {{categoryTitle}}
+            contributorsTitleFormat: ## Contributors
+            content: 
+## Changelog
+
+{{changelogChanges}}
+    {{changelogContributors}}
+            includeLabels:
+                hotfix
+                feature
+                fix
+                test
+                docs
+                chore
+                improvement
+                feat
+                refactor
+            hide:
+            contributors:
+                enabled: false
+            categories:
+                category 0:
+                    key: merge
+                    title: 🔀 Merge
+                    labels:
+                        merge
+                    order: 0
+                category 1:
+                    key: features
+                    title: Features
+                    labels:
+                        feature
+                        feat
+                    order: 1
+                category 2:
+                    key: fixes
+                    title: Bug Fixes
+                    labels:
+                        fix
+                        bug
+                    order: 2
+                category 3:
+                    key: refactor
+                    title: Refactoring
+                    labels:
+                        improvement
+                        refactor
+                    order: 3
+                category 4:
+                    key: docs
+                    title: Documentation
+                    labels:
+                        docs
+                        documentation
+                    order: 4
+                category 5:
+                    key: chore
+                    title: Chores
+                    labels:
+                        chore
+                    order: 5
+                category 6:
+                    key: test
+                    title: Tests
+                    labels:
+                        test
+                    order: 6
+                category 7:
+                    key: hotfix
+                    title: Hotfixes
+                    labels:
+                        hotfix
+                    order: 7
+                category 8:
+                    key: added
+                    title: 🚀 Added
+                    labels:
+                        added
+                    order: 10
+                category 9:
+                    key: changed
+                    title: 🔄️ Changed
+                    labels:
+                        changed
+                    order: 20
+                category 10:
+                    key: breaking
+                    title: 🚨 Breaking
+                    labels:
+                        breaking_changes
+                    order: 30
+                category 11:
+                    key: deprecated
+                    title: 💥 Deprecated
+                    labels:
+                        deprecated
+                    order: 40
+                category 12:
+                    key: removed
+                    title: 🗑 Removed
+                    labels:
+                        removed
+                    order: 50
+                category 13:
+                    key: fixed
+                    title: 🐛 Fixed
+                    labels:
+                        fixed
+                    order: 60
+                category 14:
+                    key: security
+                    title: 🔒️ Security
+                    labels:
+                        security
+                    order: 70
+                category 15:
+                    key: deps
+                    title: 📦 Dependencies
+                    labels:
+                        dependencies
+                    order: 80
+                category 16:
+                    key: misc
+                    title: 🎲 Miscellaneous
+                    labels:
+                        misc
+                    order: 100
+                category 17:
+                    key: release
+                    title: 🏁 Release
+                    labels:
+                        release
+                    order: 110
+            labelers:
+                labeler 0:
+                    label: feat
+                    title: regex:feat
+                    order: 1
+                labeler 1:
+                    label: bug
+                    title: regex:bug
+                    order: 2
+                labeler 2:
+                    label: refactor
+                    title: regex:refactor
+                    order: 3
+                labeler 3:
+                    label: docs
+                    title: regex:docs
+                    order: 4
+                labeler 4:
+                    label: chore
+                    title: regex:chore
+                    order: 5
+                labeler 5:
+                    label: test
+                    title: regex:test
+                    order: 6
+                labeler 6:
+                    label: hotfix
+                    title: regex:hotfix
+                    order: 7
+                labeler 7:
+                    label: merge
+                    title: Merge branch
+                labeler 8:
+                    label: changed
+                    title: regex:^(🗃|:card_file_box:).*
+                labeler 9:
+                    label: changed
+                    title: regex:^(🎨|:art:).*
+                labeler 10:
+                    label: breaking_changes
+                    title: regex:^(💥|:boom:).*
+                labeler 11:
+                    label: fixed
+                    title: regex:^(✏️|:pencil2:).*
+                labeler 12:
+                    label: misc
+                    title: regex:^(🥅|:goal_net:).*
+                labeler 13:
+                    label: fixed
+                    title: regex:^(🏁|:checkered_flag:).*
+                labeler 14:
+                    label: changed
+                    title: regex:^(🏗|:building_construction:).*
+                labeler 15:
+                    label: removed
+                    title: regex:^(➖|:heavy_minus_sign:).*
+                labeler 16:
+                    label: changed
+                    title: regex:^(💄|:lipstick:).*
+                labeler 17:
+                    label: removed
+                    title: regex:^(🔇|:mute:).*
+                labeler 18:
+                    label: added
+                    title: regex:^(✨|:sparkles:).*
+                labeler 19:
+                    label: documentation
+                    title: regex:^(📄|:page_facing_up:).*
+                labeler 20:
+                    label: changed
+                    title: regex:^(🚨|:rotating_light:).*
+                labeler 21:
+                    label: changed
+                    title: regex:^(📱|:iphone:).*
+                labeler 22:
+                    label: documentation
+                    title: regex:^(📝|:memo:).*
+                labeler 23:
+                    label: added
+                    title: regex:^(🔊|:loud_sound:).*
+                labeler 24:
+                    label: changed
+                    title: regex:^(📦|:package:).*
+                labeler 25:
+                    label: changed
+                    title: regex:^(⏪|:rewind:).*
+                labeler 26:
+                    label: added
+                    title: regex:^(👷|:construction_worker:).*
+                labeler 27:
+                    label: changed
+                    title: regex:^(♻️|:recycle:).*
+                labeler 28:
+                    label: misc
+                    title: regex:^(🚧|:construction:).*
+                labeler 29:
+                    label: changed
+                    title: regex:^(🚚|:truck:).*
+                labeler 30:
+                    label: fixed
+                    title: regex:^(🍎|:apple:).*
+                labeler 31:
+                    label: misc
+                    title: regex:^(⚗️|:alembic:).*
+                labeler 32:
+                    label: merge
+                    title: Merge pull
+                labeler 33:
+                    label: documentation
+                    title: regex:^(💡|:nulb:).*
+                labeler 34:
+                    label: fixed
+                    title: regex:^(💚|:green_heart:).*
+                labeler 35:
+                    label: added
+                    title: regex:^(🎉|:tada:).*
+                labeler 36:
+                    label: misc
+                    title: regex:^(🔍|:mag:).*
+                labeler 37:
+                    label: release
+                    title: regex:^(🚀|:rocket:).*
+                labeler 38:
+                    label: merge
+                    title: regex:^(🔀|:twisted_rightwards_arrows:).*
+                labeler 39:
+                    label: removed
+                    title: regex:^(🔥|:fire:).*
+                labeler 40:
+                    label: fixed
+                    title: regex:^(🩹️|:adhesive_bandage:).*
+                labeler 41:
+                    label: misc
+                    title: regex:^(👥|:busts_in_silhouette:).*
+                labeler 42:
+                    label: documentation
+                    title: regex:^(🌐|:globe_with_meridians:).*
+                labeler 43:
+                    label: misc
+                    title: regex:^(👌|:ok_hand:).*
+                labeler 44:
+                    label: documentation
+                    title: regex:^(📝|:pencil:).*
+                labeler 45:
+                    label: misc
+                    title: regex:^(👔|:necktie:).*
+                labeler 46:
+                    label: fixed
+                    title: regex:^(🍏|:green_apple:).*
+                labeler 47:
+                    label: removed
+                    title: regex:^(⚰️|:coffin:).*
+                labeler 48:
+                    label: added
+                    title: regex:^(📈|:chart_with_upwards_trend:).*
+                labeler 49:
+                    label: added
+                    title: regex:^(➕|:heavy_plus_sign:).*
+                labeler 50:
+                    label: misc
+                    title: regex:^(💩|:poop:).*
+                labeler 51:
+                    label: misc
+                    title: regex:^(🧐|:monocle_face:).*
+                labeler 52:
+                    label: changed
+                    title: regex:^(💬|:speech_balloon:).*
+                labeler 53:
+                    label: changed
+                    title: regex:^(🔨|:hammer:).*
+                labeler 54:
+                    label: changed
+                    title: regex:^(📌|:pushpin:).*
+                labeler 55:
+                    label: fixed
+                    title: regex:^(🐧|:penguin:).*
+                labeler 56:
+                    label: security
+                    title: regex:^(🛂|:passport_control:).*
+                labeler 57:
+                    label: changed
+                    title: regex:^(⚡️|:zap:).*
+                labeler 58:
+                    label: security
+                    title: regex:^(🔒️|:lock:).*
+                labeler 59:
+                    label: changed
+                    title: regex:^(🚸|:children_crossing:).*
+                labeler 60:
+                    label: changed
+                    title: regex:^(♿️|:wheelchair:).*
+                labeler 61:
+                    label: added
+                    title: regex:^(✅|:white_check_mark:).*
+                labeler 62:
+                    label: misc
+                    title: regex:^(🤡|:clown_face:).*
+                labeler 63:
+                    label: changed
+                    title: regex:^(👽|:alien:).*
+                labeler 64:
+                    label: misc
+                    title: regex:^(🍻|:beers:).*
+                labeler 65:
+                    label: misc
+                    title: regex:^(🥚|:egg:).*
+                labeler 66:
+                    label: misc
+                    title: regex:^(🧪|:test_tube:).*
+                labeler 67:
+                    label: changed
+                    title: regex:^(🔧|:wrench:).*
+                labeler 68:
+                    label: fixed
+                    title: regex:^(🚑|:ambulance:).*
+                labeler 69:
+                    label: deprecated
+                    title: regex:^(🗑|:wastebasket:).*
+                labeler 70:
+                    label: dependencies
+                    title: regex:^(⬆️|:arrow_up:).*
+                labeler 71:
+                    label: fixed
+                    title: regex:^(🤖|:robot:).*
+                labeler 72:
+                    label: misc
+                    title: regex:^(📸|:camera_flash:).*
+                labeler 73:
+                    label: dependencies
+                    title: regex:^(⬇️|:arrow_down:).*
+                labeler 74:
+                    label: fixed
+                    title: regex:^(🐛|:bug:).*
+                labeler 75:
+                    label: release
+                    title: regex:^(🔖|:bookmark:).*
+                labeler 76:
+                    label: changed
+                    title: regex:^(🍱|:bento:).*
+                labeler 77:
+                    label: misc
+                    title: regex:^(🙈|:see_no_evil:).*
+            replacers:
+                replacer 0:
+                    search: :twisted_rightwards_arrows:
+                    replace: 🔀
+                replacer 1:
+                    search: :sparkles:
+                    replace: ✨
+                replacer 2:
+                    search: :tada:
+                    replace: 🎉
+                replacer 3:
+                    search: :white_check_mark:
+                    replace: ✅
+                replacer 4:
+                    search: :construction_worker:
+                    replace: 👷
+                replacer 5:
+                    search: :chart_with_upwards_trend:
+                    replace: 📈
+                replacer 6:
+                    search: :heavy_plus_sign:
+                    replace: ➕
+                replacer 7:
+                    search: :loud_sound:
+                    replace: 🔊
+                replacer 8:
+                    search: :art:
+                    replace: 🎨
+                replacer 9:
+                    search: :zap:
+                    replace: ⚡️
+                replacer 10:
+                    search: :lipstick:
+                    replace: 💄
+                replacer 11:
+                    search: :rotating_light:
+                    replace: 🚨
+                replacer 12:
+                    search: :pushpin:
+                    replace: 📌
+                replacer 13:
+                    search: :recycle:
+                    replace: ♻️
+                replacer 14:
+                    search: :wrench:
+                    replace: 🔧
+                replacer 15:
+                    search: :hammer:
+                    replace: 🔨
+                replacer 16:
+                    search: :rewind:
+                    replace: ⏪
+                replacer 17:
+                    search: :alien:
+                    replace: 👽
+                replacer 18:
+                    search: :truck:
+                    replace: 🚚
+                replacer 19:
+                    search: :bento:
+                    replace: 🍱
+                replacer 20:
+                    search: :wheelchair:
+                    replace: ♿️
+                replacer 21:
+                    search: :speech_balloon:
+                    replace: 💬
+                replacer 22:
+                    search: :card_file_box:
+                    replace: 🗃
+                replacer 23:
+                    search: :children_crossing:
+                    replace: 🚸
+                replacer 24:
+                    search: :building_construction:
+                    replace: 🏗
+                replacer 25:
+                    search: :iphone:
+                    replace: 📱
+                replacer 26:
+                    search: :package:
+                    replace: 📦
+                replacer 27:
+                    search: :boom:
+                    replace: 💥
+                replacer 28:
+                    search: :wastebasket:
+                    replace: 🗑
+                replacer 29:
+                    search: :heavy_minus_sign:
+                    replace: ➖
+                replacer 30:
+                    search: :fire:
+                    replace: 🔥
+                replacer 31:
+                    search: :mute:
+                    replace: 🔇
+                replacer 32:
+                    search: :coffin:
+                    replace: ⚰️
+                replacer 33:
+                    search: :bug:
+                    replace: 🐛
+                replacer 34:
+                    search: :ambulance:
+                    replace: 🚑
+                replacer 35:
+                    search: :apple:
+                    replace: 🍎
+                replacer 36:
+                    search: :green_apple:
+                    replace: 🍏
+                replacer 37:
+                    search: :penguin:
+                    replace: 🐧
+                replacer 38:
+                    search: :checkered_flag:
+                    replace: 🏁
+                replacer 39:
+                    search: :robot:
+                    replace: 🤖
+                replacer 40:
+                    search: :green_heart:
+                    replace: 💚
+                replacer 41:
+                    search: :pencil2:
+                    replace: ✏️
+                replacer 42:
+                    search: :adhesive_bandage:
+                    replace: 🩹️
+                replacer 43:
+                    search: :lock:
+                    replace: 🔒️
+                replacer 44:
+                    search: :passport_control:
+                    replace: 🛂
+                replacer 45:
+                    search: :pencil:
+                    replace: 📝
+                replacer 46:
+                    search: :memo:
+                    replace: 📝
+                replacer 47:
+                    search: :globe_with_meridians:
+                    replace: 🌐
+                replacer 48:
+                    search: :page_facing_up:
+                    replace: 📄
+                replacer 49:
+                    search: :bulb:
+                    replace: 💡
+                replacer 50:
+                    search: :arrow_up:
+                    replace: ⬆️ 
+                replacer 51:
+                    search: :arrow_down:
+                    replace: ⬇️ 
+                replacer 52:
+                    search: :poop:
+                    replace: 💩
+                replacer 53:
+                    search: :construction:
+                    replace: 🚧
+                replacer 54:
+                    search: misc
+                    replace: 🍻:beers:
+                replacer 55:
+                    search: :busts_in_silhouette:
+                    replace: 👥
+                replacer 56:
+                    search: :clown_face:
+                    replace: 🤡
+                replacer 57:
+                    search: :egg:
+                    replace: 🥚
+                replacer 58:
+                    search: :see_no_evil:
+                    replace: 🙈
+                replacer 59:
+                    search: :camera_flash:
+                    replace: 📸
+                replacer 60:
+                    search: misc
+                    replace: ⚗️
+                replacer 61:
+                    search: :alembic:
+                    replace: 🔍:mag:
+                replacer 62:
+                    search: :goal_net:
+                    replace: 🥅
+                replacer 63:
+                    search: :monocle_face:
+                    replace: 🧐
+                replacer 64:
+                    search: :test_tube:
+                    replace: 🧪
+                replacer 65:
+                    search: :necktie:
+                    replace: 👔
+                replacer 66:
+                    search: :ok_hand:
+                    replace: 👌
+                replacer 67:
+                    search: :rocket:
+                    replace: 🚀
+                replacer 68:
+                    search: :bookmark:
+                    replace: 🔖
+        milestone:
+            name: {{tagName}}
+            close: true
+        issues:
+            enabled: false
+            comment: 🎉 This issue has been resolved in `{{tagName}}` ([Release Notes]({{releaseNotesUrl}}))
+            label:
+                name: released
+                color: #FF0000
+                description: Issue has been released
+        prerelease:
+            enabled: false
+        draft: false
+        releaseNotes:
+            enabled: false
+        makeLatest: true
+ 
+checksum:
+    name: checksums.txt
+    individual: false
+    algorithms:
+        SHA_256
+    artifacts: true
+    files: true
+ 
+signing:
+    enabled: false
+    active: NEVER
+    armored: false
+    verify: true
+    artifacts: true
+    files: true
+    checksums: true
+    catalogs: true
+    passphrase: **unset**
+    publicKey: **unset**
+    secretKey: **unset**
+ 
+announce:
+    enabled: false
+    active: NEVER
+    article:
+        enabled: false
+        active: NEVER
+        commitAuthor:
+        repository:
+            enabled: false
+            name: article
+            token: **unset**
+    bluesky:
+        enabled: false
+        active: NEVER
+        handle: **unset**
+        password: **unset**
+    discord:
+        enabled: false
+        active: NEVER
+        webhook: **unset**
+    discourse:
+        enabled: false
+        active: NEVER
+        apiKey: **unset**
+        username: **unset**
+    discussions:
+        enabled: false
+        active: NEVER
+    gitter:
+        enabled: false
+        active: NEVER
+        webhook: **unset**
+    googlechat:
+        enabled: false
+        active: NEVER
+        webhook: **unset**
+    linkedin:
+        enabled: false
+        active: NEVER
+        owner: **unset**
+        accessToken: **unset**
+    smtp:
+        enabled: false
+        active: NEVER
+        auth: false
+        password: **unset**
+    mastodon:
+        enabled: false
+        active: NEVER
+        accessToken: **unset**
+    mattermost:
+        enabled: false
+        active: NEVER
+        webhook: **unset**
+        structuredMessage: true
+    opencollective:
+        enabled: false
+        active: NEVER
+        token: **unset**
+    sdkman:
+        enabled: false
+        consumerKey: **unset**
+        consumerToken: **unset**
+    slack:
+        enabled: false
+        active: NEVER
+        webhook: **unset**
+        token: **unset**
+    teams:
+        enabled: false
+        active: NEVER
+        webhook: **unset**
+    telegram:
+        enabled: false
+        active: NEVER
+        token: **unset**
+        chatId: **unset**
+    twitter:
+        enabled: false
+        active: NEVER
+        consumerKey: **unset**
+        consumerSecret: **unset**
+        accessToken: **unset**
+        accessTokenSecret: **unset**
+    zulip:
+        enabled: false
+        active: NEVER
+        apiKey: **unset**
+ 
+packagers:
+    appimage:
+        enabled: false
+        active: NEVER
+        continueOnError: false
+        skipPublishing: false
+        commitAuthor:
+            name: jreleaserbot
+            email: jreleaser@kordamp.org
+        developerId: nekoman-hq
+        developerName: Authors here...
+        requiresTerminal: false
+        repository:
+            enabled: false
+            owner: nekoman-hq
+            name: appimage
+            tagName: neko-cli@{{projectVersion}}
+            branch: HEAD
+            branchPush: HEAD
+            username: nekoman-hq
+            token: ************
+    asdf:
+        enabled: false
+        active: NEVER
+        continueOnError: false
+        skipPublishing: false
+        commitAuthor:
+            name: jreleaserbot
+            email: jreleaser@kordamp.org
+        repository:
+            enabled: false
+            owner: nekoman-hq
+            name: asdf
+            tagName: neko-cli@{{projectVersion}}
+            branch: HEAD
+            branchPush: HEAD
+            username: nekoman-hq
+            token: ************
+    brew:
+        enabled: false
+        active: NEVER
+        continueOnError: false
+        skipPublishing: false
+        commitAuthor:
+            name: jreleaserbot
+            email: jreleaser@kordamp.org
+        multiPlatform: false
+        repository:
+            enabled: false
+            owner: nekoman-hq
+            name: homebrew-tap
+            tagName: neko-cli@{{projectVersion}}
+            branch: HEAD
+            branchPush: HEAD
+            username: nekoman-hq
+            token: ************
+        cask:
+            enabled: false
+    chocolatey:
+        enabled: false
+        active: NEVER
+        continueOnError: false
+        skipPublishing: false
+        commitAuthor:
+            name: jreleaserbot
+            email: jreleaser@kordamp.org
+        apiKey: **unset**
+        remoteBuild: false
+        repository:
+            enabled: false
+            owner: nekoman-hq
+            name: chocolatey-bucket
+            tagName: neko-cli@{{projectVersion}}
+            branch: HEAD
+            branchPush: HEAD
+            username: nekoman-hq
+            token: ************
+    docker:
+        enabled: false
+        active: NEVER
+        useLocalArtifact: true
+        buildx:
+            enabled: false
+            createBuilder: true
+        commitAuthor:
+            name: jreleaserbot
+            email: jreleaser@kordamp.org
+        repository:
+            enabled: false
+            owner: nekoman-hq
+            name: docker
+            tagName: neko-cli@{{projectVersion}}
+            branch: HEAD
+            branchPush: HEAD
+            username: nekoman-hq
+            token: ************
+            versionedSubfolders: false
+        continueOnError: false
+        skipPublishing: false
+    flatpak:
+        enabled: false
+        active: NEVER
+        continueOnError: false
+        skipPublishing: false
+        commitAuthor:
+            name: jreleaserbot
+            email: jreleaser@kordamp.org
+        developerName: Authors here...
+        repository:
+            enabled: false
+            owner: nekoman-hq
+            name: flatpak
+            tagName: neko-cli@{{projectVersion}}
+            branch: HEAD
+            branchPush: HEAD
+            username: nekoman-hq
+            token: ************
+    gofish:
+        enabled: false
+        active: NEVER
+        continueOnError: false
+        skipPublishing: false
+        commitAuthor:
+            name: jreleaserbot
+            email: jreleaser@kordamp.org
+        repository:
+            enabled: false
+            owner: nekoman-hq
+            name: nekoman-hq-fish-food
+            tagName: neko-cli@{{projectVersion}}
+            branch: HEAD
+            branchPush: HEAD
+            username: nekoman-hq
+            token: ************
+    jbang:
+        enabled: false
+        active: NEVER
+        continueOnError: false
+        skipPublishing: false
+        commitAuthor:
+            name: jreleaserbot
+            email: jreleaser@kordamp.org
+        repository:
+            enabled: false
+            owner: nekoman-hq
+            name: jbang-catalog
+            tagName: neko-cli@{{projectVersion}}
+            branch: HEAD
+            branchPush: HEAD
+            username: nekoman-hq
+            token: ************
+    jib:
+        enabled: false
+        active: NEVER
+        commitAuthor:
+            name: jreleaserbot
+            email: jreleaser@kordamp.org
+        repository:
+            enabled: false
+            owner: nekoman-hq
+            name: jib
+            tagName: neko-cli@{{projectVersion}}
+            branch: HEAD
+            branchPush: HEAD
+            username: nekoman-hq
+            token: ************
+            versionedSubfolders: false
+        continueOnError: false
+        skipPublishing: false
+    macports:
+        enabled: false
+        active: NEVER
+        continueOnError: false
+        skipPublishing: false
+        commitAuthor:
+            name: jreleaserbot
+            email: jreleaser@kordamp.org
+        repository:
+            enabled: false
+            owner: nekoman-hq
+            name: macports
+            tagName: neko-cli@{{projectVersion}}
+            branch: HEAD
+            branchPush: HEAD
+            username: nekoman-hq
+            token: ************
+    scoop:
+        enabled: false
+        active: NEVER
+        continueOnError: false
+        skipPublishing: false
+        commitAuthor:
+            name: jreleaserbot
+            email: jreleaser@kordamp.org
+        repository:
+            enabled: false
+            owner: nekoman-hq
+            name: scoop-nekoman-hq
+            tagName: neko-cli@{{projectVersion}}
+            branch: HEAD
+            branchPush: HEAD
+            username: nekoman-hq
+            token: ************
+    sdkman:
+        enabled: false
+        continueOnError: false
+        skipPublishing: false
+        connectTimeout: 20
+        readTimeout: 60
+        consumerKey: **unset**
+        consumerToken: **unset**
+    snap:
+        enabled: false
+        active: NEVER
+        continueOnError: false
+        skipPublishing: false
+        commitAuthor:
+            name: jreleaserbot
+            email: jreleaser@kordamp.org
+        remoteBuild: false
+        repository:
+            enabled: false
+            owner: nekoman-hq
+            name: snap
+            tagName: neko-cli@{{projectVersion}}
+            branch: HEAD
+            branchPush: HEAD
+            username: nekoman-hq
+            token: ************
+    spec:
+        enabled: false
+        active: NEVER
+        continueOnError: false
+        skipPublishing: false
+        commitAuthor:
+            name: jreleaserbot
+            email: jreleaser@kordamp.org
+        repository:
+            enabled: false
+            owner: nekoman-hq
+            name: nekoman-hq-spec
+            tagName: neko-cli@{{projectVersion}}
+            branch: HEAD
+            branchPush: HEAD
+            username: nekoman-hq
+            token: ************
+    winget:
+        enabled: false
+        active: NEVER
+        continueOnError: false
+        skipPublishing: false
+        commitAuthor:
+            name: jreleaserbot
+            email: jreleaser@kordamp.org
+        package:
+        publisher:
+        installer:
+            type: WIX
+            scope: MACHINE
+            upgradeBehavior: INSTALL
+            dependencies:
+        repository:
+            enabled: false
+            owner: nekoman-hq
+            name: winget
+            tagName: neko-cli@{{projectVersion}}
+            branch: HEAD
+            branchPush: HEAD
+            username: nekoman-hq
+            token: ************
+ 
+download:
+    enabled: false
+    active: NEVER
+ 
+assemble:
+    enabled: false
+    active: NEVER
+ 
+deploy:
+    enabled: false
+    active: NEVER
+    maven:
+        enabled: false
+        active: NEVER
+        pomchecker:
+            version: 1.14.0
+            failOnWarning: true
+            failOnError: true
+            strict: true
+ 
+upload:
+    enabled: false
+    active: NEVER
+ 
+catalog:
+    enabled: false
+    active: NEVER
+    github:
+        enabled: false
+        active: NEVER
+        artifacts: true
+        files: true
+        deployables: true
+    sbom:
+        enabled: false
+        active: NEVER
+        cyclonedx:
+            enabled: false
+            active: NEVER
+            distributions: false
+            files: false
+            pack:
+                enabled: false
+        syft:
+            enabled: false
+            active: NEVER
+            distributions: false
+            files: false
+            pack:
+                enabled: false
+    slsa:
+        enabled: false
+        active: NEVER
+        artifacts: true
+        files: true
+        deployables: true
+    swid:
+        enabled: false
+        active: NEVER
+        name: swid-tag
+        path: SWIDTAG
+        tagId: f4b9eaab-5ed9-3ca9-b53e-9885b945d5b4
+        tagVersion: 1
+        lang: en-US
+        corpus: false
+        patch: false
+        entities:
+            entity 0:
+                name: neko-cli
+                regid: http://invalid.unavailable
+                roles:
+                    softwareCreator
+                    tagCreator
+ 
+[INFO]  Project version set to 0.1.0
+[INFO]  Release is not snapshot
+[INFO]  Timestamp is 2025-12-25T01:55:29.883936+01:00
+[INFO]  HEAD is at 3db78f8
+[INFO]  Platform is osx-aarch_64
+[DEBUG] loading extension default-jreleaser-mustache:org.jreleaser.extensions.internal.mustache.DefaultMustacheExtension
+[DEBUG] adding org.jreleaser.extensions.internal.mustache.DefaultMustacheExtensionPoint from default-jreleaser-mustache extension
+[INFO]  Writing output properties to out/jreleaser/output.properties

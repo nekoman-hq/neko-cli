@@ -49,7 +49,7 @@ func (tb *ToolBase) RequireBinary(name string) {
 	log.Print(
 		log.Init,
 		fmt.Sprintf(
-			"Found %s at %s",
+			"\uF00C Found %s at %s",
 			log.ColorText(log.ColorCyan, name),
 			log.ColorText(log.ColorGreen, path),
 		),

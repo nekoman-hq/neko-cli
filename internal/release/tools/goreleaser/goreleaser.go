@@ -136,7 +136,7 @@ func runGoreleaserCheck() {
 	log.Print(
 		log.Init,
 		fmt.Sprintf(
-			"\uF00C  Configuration check passed for %s",
+			"\uF00C Configuration check passed for %s",
 			log.ColorText(log.ColorCyan, "goreleaser"),
 		),
 	)
