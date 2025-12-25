@@ -55,10 +55,6 @@ func (j *JReleaser) Release(v *semver.Version) error {
 		return err
 	}
 
-	if err := j.ToolBase.CreateGitTag(v); err != nil {
-		return err
-	}
-
 	if err := j.ToolBase.PushCommits(); err != nil {
 		return err
 	}
