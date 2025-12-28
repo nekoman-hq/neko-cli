@@ -22,34 +22,33 @@ func (r *ReleaseIt) Name() string {
 }
 
 func (r *ReleaseIt) Init(cfg *config.NekoConfig) error {
-	// assert package.json
-	// assert node installed
-	// install release it
-	// npm init release-it
-	// validate with npx release-it version
-
 	r.RequireBinary("npm")
-	runReleaseItInit()
-	runReleaseItCheck()
+	r.runReleaseItInit()
+	r.runReleaseItCheck()
 
 	return nil
 }
 
 func (r *ReleaseIt) Release(v *semver.Version) error {
-	//
+	if err := r.runReleaseItDryRun(v); err != nil {
+		return err
+	}
 
+	if err := r.runReleaseItRelease(v); err != nil {
+		return err
+	}
 	return nil
 }
 
 func (r *ReleaseIt) Survey(v *semver.Version) (release.Type, error) {
-	return release.Patch, nil
+	return release.NekoSurvey(v)
 }
 
 func (r *ReleaseIt) SupportsSurvey() bool {
 	return true
 }
 
-func runReleaseItInit() {
+func (r *ReleaseIt) runReleaseItInit() {
 	if _, err := os.Stat(".release-it.json"); err == nil {
 		log.Print(
 			log.Init,
@@ -96,7 +95,7 @@ func runReleaseItInit() {
 	)
 }
 
-func runReleaseItCheck() {
+func (r *ReleaseIt) runReleaseItCheck() {
 	log.V(log.Init,
 		fmt.Sprintf("Verifying release-it installation: %s",
 			log.ColorText(log.ColorGreen, "npx release-it -v"),
@@ -117,6 +116,46 @@ func runReleaseItCheck() {
 		log.ColorText(log.ColorCyan, "release-it"),
 		log.ColorText(log.ColorGreen, string(output)),
 	)
+}
+
+func (r *ReleaseIt) runReleaseItDryRun(v *semver.Version) error {
+	versionStr := v.String()
+	log.V(log.Init,
+		fmt.Sprintf("Running release-it dry-run: %s",
+			log.ColorText(log.ColorGreen, fmt.Sprintf("npx release-it %s --ci --dry-run", versionStr)),
+		),
+	)
+	cmd := exec.Command("npx", "release-it", versionStr, "--ci", "--dry-run")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("dry-run failed: %s\nOutput: %s", err.Error(), string(output))
+	}
+	log.Print(
+		log.Init,
+		"\uF00C  Dry-run successful for version %s",
+		log.ColorText(log.ColorCyan, versionStr),
+	)
+	return nil
+}
+
+func (r *ReleaseIt) runReleaseItRelease(v *semver.Version) error {
+	versionStr := v.String()
+	log.V(log.Init,
+		fmt.Sprintf("Running release-it: %s",
+			log.ColorText(log.ColorGreen, fmt.Sprintf("npx release-it %s --ci", versionStr)),
+		),
+	)
+	cmd := exec.Command("npx", "release-it", versionStr, "--ci")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("release failed: %s\nOutput: %s", err.Error(), string(output))
+	}
+	log.Print(
+		log.Init,
+		"\uF00C  Successfully released version %s",
+		log.ColorText(log.ColorCyan, versionStr),
+	)
+	return nil
 }
 
 func init() {

@@ -32,7 +32,6 @@ func (j *JReleaser) Name() string {
 
 func (j *JReleaser) Init(cfg *config.NekoConfig) error {
 	log.V(log.Init, fmt.Sprintf("Initializing %s for project %s@%s",
-
 		log.ColorText(log.ColorGreen, j.Name()),
 		cfg.ProjectName,
 		cfg.Version,

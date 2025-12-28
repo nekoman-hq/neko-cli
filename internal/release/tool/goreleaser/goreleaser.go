@@ -169,12 +169,13 @@ func (g *GoReleaser) runGoReleaserRelease() error {
 	}
 
 	log.Print(log.Release, "\uF00C GoReleaser release %s",
-		log.ColorText(log.ColorGreen, "successful"))
+		log.ColorText(log.ColorGreen, "successful"),
+	)
 	return nil
 }
 
-func (g *GoReleaser) Survey(version *semver.Version) (release.Type, error) {
-	return release.NekoSurvey(version)
+func (g *GoReleaser) Survey(v *semver.Version) (release.Type, error) {
+	return release.NekoSurvey(v)
 }
 
 func init() {
