@@ -30,7 +30,6 @@ func (j *JReleaser) Name() string {
 }
 
 func (j *JReleaser) Init(cfg *config.NekoConfig) error {
-
 	log.V(log.Init, fmt.Sprintf("Initializing %s for project %s@%s",
 		log.ColorText(log.ColorGreen, j.Name()),
 		cfg.ProjectName,
@@ -46,7 +45,6 @@ func (j *JReleaser) Init(cfg *config.NekoConfig) error {
 }
 
 func (j *JReleaser) Release(v *semver.Version) error {
-
 	if err := j.syncJReleaser(v); err != nil {
 		return err
 	}
@@ -81,7 +79,7 @@ func (j *JReleaser) SupportsSurvey() bool {
 func (j *JReleaser) runJReleaserInit(cfg *config.NekoConfig) {
 	log.V(log.Init, "Generating JReleaser configuration...")
 
-	if _, err := os.Stat(".jreleaser.yml"); err == nil {
+	if _, err := os.Stat("jreleaser.yml"); err == nil {
 		log.Print(
 			log.Init,
 			fmt.Sprintf(

@@ -32,7 +32,7 @@ Initialize Neko in the current project with the underlying release system.
 **Supported Systems**
 - `goreleaser` 
 - `release-it` (In Progress)
-- `jreleaser`  (In Progress)
+- `jreleaser`  
 
 ### `neko release`
 Run the release process using the detected or configured tool.  
