@@ -30,10 +30,6 @@ func (r *ReleaseIt) Init(cfg *config.NekoConfig) error {
 }
 
 func (r *ReleaseIt) Release(v *semver.Version) error {
-	if err := r.runReleaseItDryRun(v); err != nil {
-		return err
-	}
-
 	if err := r.runReleaseItRelease(v); err != nil {
 		return err
 	}
@@ -88,6 +84,14 @@ func (r *ReleaseIt) runReleaseItInit() {
 		)
 	}
 
+	cfg, err := InitDefaultConfig()
+	if err != nil {
+		errors.Fatal("Failed to create default config", err.Error(), errors.ErrFileAccess)
+	}
+	if err := SaveConfig(cfg); err != nil {
+		errors.Fatal("Failed to save .release-it.json", err.Error(), errors.ErrFileAccess)
+	}
+
 	log.Print(
 		log.Init,
 		"\uF00C  Successfully initialized %s",
@@ -112,30 +116,10 @@ func (r *ReleaseIt) runReleaseItCheck() {
 	}
 	log.Print(
 		log.Init,
-		"\uF00C  Successfully verified %s installation (version: %s)",
+		"\uF00C  Successfully verified %s installation ( version: %s )",
 		log.ColorText(log.ColorCyan, "release-it"),
 		log.ColorText(log.ColorGreen, string(output)),
 	)
-}
-
-func (r *ReleaseIt) runReleaseItDryRun(v *semver.Version) error {
-	versionStr := v.String()
-	log.V(log.Init,
-		fmt.Sprintf("Running release-it dry-run: %s",
-			log.ColorText(log.ColorGreen, fmt.Sprintf("npx release-it %s --ci --dry-run --no-git.requireCleanWorkingDir", versionStr)),
-		),
-	)
-	cmd := exec.Command("npx", "release-it", versionStr, "--ci", "--dry-run", "--no-git.requireCleanWorkingDir")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("dry-run failed: %s\nOutput: %s", err.Error(), string(output))
-	}
-	log.Print(
-		log.Init,
-		"\uF00C  Dry-run successful for version %s",
-		log.ColorText(log.ColorCyan, versionStr),
-	)
-	return nil
 }
 
 func (r *ReleaseIt) runReleaseItRelease(v *semver.Version) error {
