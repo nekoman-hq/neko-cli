@@ -1,12 +1,15 @@
-Internal Use License – Nekoman CLI Tool
+Internal Use & Personal License – Nekoman CLI Tool
 Copyright (c) 2025 Nekoman. All rights reserved.
 
-This software, including all source code, configuration, and related materials (the “Software”),
-is proprietary and confidential, and is intended solely for internal use within Nekoman.
-Any unauthorized use, copying, modification, distribution, or disclosure outside of
-Nekoman is strictly prohibited without prior written consent from Nekoman.
+This software, including all source code, configuration, and related materials (the “Software”), is
+proprietary and confidential. It may be used, copied, and shared freely for personal or non-commercial
+purposes only.
 
-This Software is provided "as is" and without any warranties, whether express or implied,
-including but not limited to warranties of merchantability, fitness for a particular purpose, or non-infringement.
+Restrictions:
+- The Software may not be sold, licensed, or used for any commercial or business purposes.
+- Any modification or redistribution must retain this license and copyright notice.
+
+This Software is provided "as is" and without any warranties, whether express or implied, including but
+not limited to warranties of merchantability, fitness for a particular purpose, or non-infringement.
 In no event shall Nekoman be liable for any damages arising from the use or inability to use this Software,
 even if advised of the possibility of such damages.

@@ -31,7 +31,7 @@ Initialize Neko in the current project with the underlying release system.
 
 **Supported Systems**
 - `goreleaser` 
-- `release-it` (In Progress)
+- `release-it` 
 - `jreleaser`  
 
 ### `neko release`
@@ -51,14 +51,14 @@ Show or validate the Neko configuration.
 **Args / Flags:**
 - `--config-show` : display current configuration
 
-### `neko history` (In Progress)
+### `neko history` (In Progress - After full release)
 Show release/tag history.  
 
-### `neko status` (In Progress)
+### `neko status` (In Progress - After full release)
 Display current release status.  
 **Checks include:** git clean state, branch, version file, changelog status
 
-### `neko check-release` (In Progress)
+### `neko check-release` (In Progress - After full release))
 Validate whether the project is ready for release (pre-flight checks).
 
 
