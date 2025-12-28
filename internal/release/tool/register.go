@@ -11,6 +11,7 @@ import (
 	// Register all release tools
 	_ "github.com/nekoman-hq/neko-cli/internal/release/tool/goreleaser"
 	_ "github.com/nekoman-hq/neko-cli/internal/release/tool/jreleaser"
+	_ "github.com/nekoman-hq/neko-cli/internal/release/tool/releaseit"
 	// _ "git.com/nekoman-hq/neko-cli/internal/release/semantic-release"
 	// More tools here
 )
