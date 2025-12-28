@@ -122,10 +122,10 @@ func (r *ReleaseIt) runReleaseItDryRun(v *semver.Version) error {
 	versionStr := v.String()
 	log.V(log.Init,
 		fmt.Sprintf("Running release-it dry-run: %s",
-			log.ColorText(log.ColorGreen, fmt.Sprintf("npx release-it %s --ci --dry-run", versionStr)),
+			log.ColorText(log.ColorGreen, fmt.Sprintf("npx release-it %s --ci --dry-run --no-git.requireCleanWorkingDir", versionStr)),
 		),
 	)
-	cmd := exec.Command("npx", "release-it", versionStr, "--ci", "--dry-run")
+	cmd := exec.Command("npx", "release-it", versionStr, "--ci", "--dry-run", "--no-git.requireCleanWorkingDir")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("dry-run failed: %s\nOutput: %s", err.Error(), string(output))
@@ -142,10 +142,10 @@ func (r *ReleaseIt) runReleaseItRelease(v *semver.Version) error {
 	versionStr := v.String()
 	log.V(log.Init,
 		fmt.Sprintf("Running release-it: %s",
-			log.ColorText(log.ColorGreen, fmt.Sprintf("npx release-it %s --ci", versionStr)),
+			log.ColorText(log.ColorGreen, fmt.Sprintf("npx release-it %s --ci --no-git.requireCleanWorkingDir", versionStr)),
 		),
 	)
-	cmd := exec.Command("npx", "release-it", versionStr, "--ci")
+	cmd := exec.Command("npx", "release-it", versionStr, "--ci", "--no-git.requireCleanWorkingDir")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("release failed: %s\nOutput: %s", err.Error(), string(output))
