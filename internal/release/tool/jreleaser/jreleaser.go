@@ -115,7 +115,7 @@ func (j *JReleaser) runJReleaserInit(cfg *config.NekoConfig) {
 				Overwrite:   false,
 				Owner:       cfg.ProjectOwner,
 				Name:        cfg.ProjectName,
-				TagName:     fmt.Sprintf("%s@{{projectVersion}}", cfg.ProjectName),
+				TagName:     fmt.Sprintf("v{{projectVersion}}"),
 				ReleaseName: fmt.Sprintf("%s@{{projectVersion}}", cfg.ProjectName),
 				Changelog: Changelog{
 					Enabled:          true,

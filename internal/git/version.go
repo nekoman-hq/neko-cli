@@ -19,7 +19,7 @@ import (
 	"github.com/nekoman-hq/neko-cli/internal/log"
 )
 
-func LatestRelease(repoInfo *RepoInfo) github.Release {
+func LatestRelease(repoInfo *RepoInfo) *github.Release {
 	token := config.GetPAT()
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", repoInfo.Owner, repoInfo.Repo)
 
@@ -57,11 +57,11 @@ func LatestRelease(repoInfo *RepoInfo) github.Release {
 	}(resp.Body)
 
 	if resp.StatusCode == 404 {
-		errors.Fatal(
+		errors.Warning(
 			"No Releases Found",
 			fmt.Sprintf("Repository %s/%s has no releases yet.", repoInfo.Owner, repoInfo.Repo),
-			errors.ErrNoReleases,
 		)
+		return nil
 	}
 
 	if resp.StatusCode != 200 {
@@ -92,5 +92,5 @@ func LatestRelease(repoInfo *RepoInfo) github.Release {
 	}
 
 	log.V(log.Release, "\uF00C Successfully received release information from remote!")
-	return release
+	return &release
 }

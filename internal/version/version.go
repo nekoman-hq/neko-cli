@@ -27,7 +27,10 @@ var (
 func Latest(repoInfo *git.RepoInfo) {
 	release := git.LatestRelease(repoInfo)
 	displayCLIVersion()
-	displayRelease(repoInfo, &release)
+
+	if release != nil {
+		displayRelease(repoInfo, release)
+	}
 }
 
 func displayCLIVersion() {
