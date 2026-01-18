@@ -20,7 +20,10 @@ var initCmd = &cobra.Command{
 Neko manages version numbers uniformly across different release systems.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		repoInfo, _ := git.Current()
-		initcmd.Run(repoInfo)
+		err := initcmd.Run(repoInfo)
+		if err != nil {
+			return
+		}
 	},
 }
 

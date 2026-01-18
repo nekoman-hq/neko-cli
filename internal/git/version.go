@@ -33,7 +33,7 @@ func LatestRelease(repoInfo *RepoInfo) (*github.Release, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"Request Creation Failed: %w", err,
+			"request Creation Failed: %w", err,
 		)
 	}
 
@@ -48,7 +48,7 @@ func LatestRelease(repoInfo *RepoInfo) (*github.Release, error) {
 		)
 	}
 	defer func(Body io.ReadCloser) {
-		err := Body.Close()
+		err = Body.Close()
 		if err != nil {
 			// Error log not needed normally
 			return
@@ -56,7 +56,7 @@ func LatestRelease(repoInfo *RepoInfo) (*github.Release, error) {
 	}(resp.Body)
 
 	if resp.StatusCode == 404 {
-		return nil, fmt.Errorf("Repository %s/%s has no releases yet.", repoInfo.Owner, repoInfo.Repo)
+		return nil, fmt.Errorf("repository %s/%s has no releases yet", repoInfo.Owner, repoInfo.Repo)
 	}
 
 	if resp.StatusCode != 200 {
@@ -69,7 +69,7 @@ func LatestRelease(repoInfo *RepoInfo) (*github.Release, error) {
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"Response Read Failed: %w", err,
+			"response Read Failed: %w", err,
 		)
 	}
 

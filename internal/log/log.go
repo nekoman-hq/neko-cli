@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-func Print(cat Category, msg string, args ...interface{}) {
+func Print(cat Category, msg string, args ...any) {
 	color, ok := categoryColors[cat]
 	if !ok {
 		color = ColorReset

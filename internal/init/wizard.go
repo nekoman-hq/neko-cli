@@ -8,13 +8,17 @@ package init
 
 import "github.com/nekoman-hq/neko-cli/internal/config"
 
-func runWizard() config.NekoConfig {
+func runWizard() (config.NekoConfig, error) {
 	cfg := config.NekoConfig{}
 
 	askProjectType(&cfg)
 	askReleaseSystem(&cfg)
 	askInitialVersion(&cfg)
 
-	config.Validate(&cfg)
-	return cfg
+	err := config.Validate(&cfg)
+	if err != nil {
+		return config.NekoConfig{}, err
+	}
+
+	return cfg, nil
 }

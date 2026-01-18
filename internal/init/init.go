@@ -21,30 +21,33 @@ func Run(info *git.RepoInfo) error {
 		return nil
 	}
 
-	cfg := runWizard()
+	cfg, err := runWizard()
+	if err != nil {
+		return err
+	}
 
 	if info != nil {
 		cfg.ProjectOwner = info.Owner
 		cfg.ProjectName = info.Repo
 	}
 
-	if err := config.SaveConfig(cfg); err != nil {
+	if err = config.SaveConfig(cfg); err != nil {
 		return fmt.Errorf(
-			"Configuration write failed: %w", err,
+			"configuration write failed: %w", err,
 		)
 	}
 
 	releaser, err := release.Get(string(cfg.ReleaseSystem))
 	if err != nil {
 		return fmt.Errorf(
-			"Release System Not Found: %w", err,
+			"release System Not Found: %w", err,
 		)
 	}
 
 	err = releaser.Init(&cfg)
 	if err != nil {
 		return errors.New(
-			"Release system initialization failed",
+			"release system initialization failed",
 		)
 	}
 

@@ -8,6 +8,7 @@ package init
 
 import (
 	"github.com/AlecAivazis/survey/v2"
+
 	"github.com/nekoman-hq/neko-cli/internal/config"
 	"github.com/nekoman-hq/neko-cli/internal/errors"
 )

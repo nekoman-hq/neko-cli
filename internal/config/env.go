@@ -23,7 +23,7 @@ func GetPAT() (string, error) {
 	token, ok := os.LookupEnv("GITHUB_TOKEN")
 	if !ok || token == "" {
 		return "", errors.New(
-			"Environment Variable Missing: \nA GitHub Personal Access Token (GITHUB_TOKEN) is required.\nSet it with: export GITHUB_TOKEN=your_token_here",
+			"environment Variable Missing: \nA GitHub Personal Access Token (GITHUB_TOKEN) is required.\nSet it with: export GITHUB_TOKEN=your_token_here",
 		)
 	}
 	return token, nil

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+
 	"github.com/nekoman-hq/neko-cli/internal/config"
 	"github.com/nekoman-hq/neko-cli/internal/errors"
 	"github.com/nekoman-hq/neko-cli/internal/git"
@@ -27,13 +28,11 @@ type JReleaser struct {
 	release.ToolBase
 
 	State struct {
-		PreHead string
-
+		PreHead           string
 		ReleaseCommitHash string
+		TagName           string
+		RanJRelease       bool
 		PushedCommit      bool
-
-		TagName     string
-		RanJRelease bool
 	}
 }
 
@@ -70,11 +69,11 @@ func (j *JReleaser) Release(v *semver.Version) error {
 	}
 	j.State.PreHead = pre
 
-	if err := j.syncJReleaser(v); err != nil {
+	if err = j.syncJReleaser(v); err != nil {
 		return err
 	}
 
-	if err := j.CreateReleaseCommit(v); err != nil {
+	if err = j.CreateReleaseCommit(v); err != nil {
 		return err
 	}
 
@@ -84,16 +83,16 @@ func (j *JReleaser) Release(v *semver.Version) error {
 	}
 	j.State.ReleaseCommitHash = head
 
-	if err := j.PushCommits(); err != nil {
+	if err = j.PushCommits(); err != nil {
 		return err
 	}
 	j.State.PushedCommit = true
 
-	if err := j.runJReleaserDryRun(); err != nil {
+	if err = j.runJReleaserDryRun(); err != nil {
 		return err
 	}
 
-	if err := j.runJReleaserRelease(); err != nil {
+	if err = j.runJReleaserRelease(); err != nil {
 		return err
 	}
 	j.State.TagName = fmt.Sprintf("v%s", v.String())
@@ -134,7 +133,7 @@ func (j *JReleaser) runJReleaserInit(cfg *config.NekoConfig) error {
 		return nil
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf(
-			"Failed to check jreleaser.yml: %w", err,
+			"failed to check jreleaser.yml: %w", err,
 		)
 	}
 
@@ -142,7 +141,7 @@ func (j *JReleaser) runJReleaserInit(cfg *config.NekoConfig) error {
 		Project: Project{
 			Name:    cfg.ProjectName,
 			Version: cfg.Version,
-			Authors: []string{"Authors here..."},
+			Authors: &[]string{"Authors here..."},
 			License: "Proprietary",
 			Languages: ProjectLanguages{
 				Java: JavaLanguage{
@@ -157,7 +156,7 @@ func (j *JReleaser) runJReleaserInit(cfg *config.NekoConfig) error {
 				Overwrite:   false,
 				Owner:       cfg.ProjectOwner,
 				Name:        cfg.ProjectName,
-				TagName:     fmt.Sprintf("v{{projectVersion}}"),
+				TagName:     "v{{projectVersion}}",
 				ReleaseName: fmt.Sprintf("%s@{{projectVersion}}", cfg.ProjectName),
 				Changelog: Changelog{
 					Enabled:          true,
@@ -165,18 +164,18 @@ func (j *JReleaser) runJReleaserInit(cfg *config.NekoConfig) error {
 					SkipMergeCommits: true,
 					Formatted:        "ALWAYS",
 					Preset:           "gitmoji",
-					Contributors: Contributors{
+					Contributors: &Contributors{
 						Enabled: false,
 					},
-					Append: ChangelogAppend{
+					Append: &ChangelogAppend{
 						Enabled: true,
 						Title:   "## [{{tagName}}]",
 						Target:  "CHANGELOG.md",
 					},
-					IncludeLabels: []string{
+					IncludeLabels: &[]string{
 						"feature", "feat", "fix", "refactor", "improvement", "chore", "test", "docs", "hotfix",
 					},
-					Labelers: []Labeler{
+					Labelers: &[]Labeler{
 						{Label: "feat", Title: "regex:feat", Order: 1},
 						{Label: "feature", Title: "regex:feature", Order: 1},
 						{Label: "fix", Title: "regex:fix", Order: 2},
@@ -188,7 +187,7 @@ func (j *JReleaser) runJReleaserInit(cfg *config.NekoConfig) error {
 						{Label: "test", Title: "regex:test", Order: 6},
 						{Label: "hotfix", Title: "regex:hotfix", Order: 7},
 					},
-					Categories: []Category{
+					Categories: &[]Category{
 						{Title: "Features", Key: "features", Labels: []string{"feat", "feature"}, Order: 1},
 						{Title: "Bug Fixes", Key: "fixes", Labels: []string{"fix", "bug"}, Order: 2},
 						{Title: "Refactoring", Key: "refactor", Labels: []string{"refactor", "improvement"}, Order: 3},
@@ -204,7 +203,7 @@ func (j *JReleaser) runJReleaserInit(cfg *config.NekoConfig) error {
 
 	if err := SaveConfig(jcfg); err != nil {
 		return fmt.Errorf(
-			"Configuration write failed: %w", err,
+			"configuration write failed: %w", err,
 		)
 	}
 	log.Print(log.Init, "\uF00C JReleaser configuration generated for %s", log.ColorText(log.ColorCyan, cfg.ProjectName))
@@ -248,7 +247,7 @@ func (j *JReleaser) syncJReleaser(v *semver.Version) error {
 	jcfg, err := LoadConfig()
 	if err != nil {
 		return fmt.Errorf(
-			"Configuration serialization failed: %w", err,
+			"configuration serialization failed: %w", err,
 		)
 	}
 
@@ -256,7 +255,7 @@ func (j *JReleaser) syncJReleaser(v *semver.Version) error {
 
 	if err := SaveConfig(jcfg); err != nil {
 		return fmt.Errorf(
-			"Configuration write failed: %w", err,
+			"configuration write failed: %w", err,
 		)
 	}
 

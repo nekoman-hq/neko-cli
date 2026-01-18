@@ -19,15 +19,17 @@ type Config struct {
 }
 
 type Project struct {
-	Name          string           `yaml:"name"`
-	Version       string           `yaml:"version"`
-	Description   string           `yaml:"description,omitempty"`
-	LongDesc      string           `yaml:"longDescription,omitempty"`
-	Authors       []string         `yaml:"authors"`
-	License       string           `yaml:"license"`
-	Links         ProjectLinks     `yaml:"links"`
-	Languages     ProjectLanguages `yaml:"languages"`
-	InceptionYear string           `yaml:"inceptionYear"`
+	Authors   *[]string        `yaml:"authors"`
+	Languages ProjectLanguages `yaml:"languages"`
+	Links     ProjectLinks     `yaml:"links"`
+
+	Name          string `yaml:"name"`
+	Version       string `yaml:"version"`
+	License       string `yaml:"license"`
+	InceptionYear string `yaml:"inceptionYear"`
+
+	Description string `yaml:"description,omitempty"`
+	LongDesc    string `yaml:"longDescription,omitempty"`
 }
 
 type ProjectLinks struct {
@@ -48,36 +50,37 @@ type Release struct {
 }
 
 type GithubRelease struct {
-	Overwrite   bool      `yaml:"overwrite"`
 	Owner       string    `yaml:"owner"`
 	Name        string    `yaml:"name"`
 	TagName     string    `yaml:"tagName"`
 	ReleaseName string    `yaml:"releaseName"`
 	Changelog   Changelog `yaml:"changelog"`
+	Overwrite   bool      `yaml:"overwrite"`
 }
 
 type Changelog struct {
-	Enabled          bool            `yaml:"enabled"`
-	Sort             string          `yaml:"sort"`
-	SkipMergeCommits bool            `yaml:"skipMergeCommits"`
-	Formatted        string          `yaml:"formatted"`
-	Preset           string          `yaml:"preset"`
-	Contributors     Contributors    `yaml:"contributors"`
-	Append           ChangelogAppend `yaml:"append"`
-	IncludeLabels    []string        `yaml:"includeLabels"`
-	Labelers         []Labeler       `yaml:"labelers"`
-	Categories       []Category      `yaml:"categories"`
+	IncludeLabels *[]string
+	Labelers      *[]Labeler
+	Categories    *[]Category
+	Contributors  *Contributors
+	Append        *ChangelogAppend
+
+	Sort      string
+	Formatted string
+	Preset    string
+
+	Enabled, SkipMergeCommits bool
 }
 
 type Contributors struct {
-	Enabled bool   `yaml:"enabled"`
 	Format  string `yaml:"format,omitempty"`
+	Enabled bool   `yaml:"enabled"`
 }
 
 type ChangelogAppend struct {
-	Enabled bool   `yaml:"enabled"`
 	Title   string `yaml:"title"`
 	Target  string `yaml:"target"`
+	Enabled bool   `yaml:"enabled"`
 }
 
 type Labeler struct {

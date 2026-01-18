@@ -48,14 +48,14 @@ func Current() (*RepoInfo, error) {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf(
-			"Not a Git Repository: %w", err,
+			"not a Git Repository: %w", err,
 		)
 	}
 
 	outputStr := string(output)
 	if strings.TrimSpace(outputStr) == "" {
 		return nil, errors.New(
-			"No Remote Found: This git repository has no remote configured.\nAdd a remote with: git remote add origin <url>",
+			"no Remote Found: This git repository has no remote configured.\nAdd a remote with: git remote add origin <url>",
 		)
 	}
 	return parseRemote(outputStr)
@@ -92,7 +92,7 @@ func parseRemote(remoteOutput string) (*RepoInfo, error) {
 	}
 
 	return nil, errors.New(
-		"Invalid Remote URL: Could not parse GitHub repository information from remote.\nOnly GitHub repositories are supported.",
+		"invalid Remote URL: Could not parse GitHub repository information from remote.\nOnly GitHub repositories are supported",
 	)
 }
 
@@ -217,7 +217,7 @@ func CurrentBranch() (string, error) {
 	branchOut, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf(
-			"Failed to get current branch: %w", err,
+			"failed to get current branch: %w", err,
 		)
 	}
 
@@ -234,7 +234,7 @@ func LastCommit() (string, error) {
 	lastCommitOut, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf(
-			"Failed to get last commit: %w", err,
+			"failed to get last commit: %w", err,
 		)
 	}
 
@@ -249,10 +249,9 @@ func TotalCommits() (string, error) {
 
 	cmd := exec.Command("git", "rev-list", "--count", "HEAD")
 	totalCommitsOut, err := cmd.Output()
-
 	if err != nil {
 		return "", fmt.Errorf(
-			"Failed to count commits: %w", err,
+			"failed to count commits: %w", err,
 		)
 	}
 
@@ -268,7 +267,7 @@ func FilesCount() (int, error) {
 	filesOut, err := cmd.Output()
 	if err != nil {
 		return 0, fmt.Errorf(
-			"Failed to count files: %w", err,
+			"failed to count files: %w", err,
 		)
 	}
 
@@ -284,12 +283,12 @@ func RepoSize() (string, error) {
 	cmd := exec.Command("du", "-sh", ".")
 	sizeOut, err := cmd.Output()
 	if err != nil {
-		return "", errors.New("Could not determine repository size (du command not available")
+		return "", errors.New("could not determine repository size (du command not available")
 	}
 
 	fields := strings.Fields(string(sizeOut))
 	if len(fields) == 0 {
-		return "", errors.New("Failed determing repository size")
+		return "", errors.New("failed determing repository size")
 	}
 
 	return fields[0], nil
@@ -304,7 +303,7 @@ func Contributors() ([]Contributor, error) {
 	contrib, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf(
-			"Failed to fetch contributors: %w", err,
+			"failed to fetch contributors: %w", err,
 		)
 	}
 
@@ -359,7 +358,7 @@ func DeleteGithubRelease(tag string, token string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// If release does not exist, rollback should be idempotent -> success.
 	if resp.StatusCode == http.StatusNotFound {
@@ -375,7 +374,7 @@ func DeleteGithubRelease(tag string, token string) error {
 	var payload struct {
 		ID int64 `json:"id"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+	if err = json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		return err
 	}
 	if payload.ID == 0 {
@@ -397,7 +396,7 @@ func DeleteGithubRelease(tag string, token string) error {
 	if err != nil {
 		return err
 	}
-	defer delResp.Body.Close()
+	defer func() { _ = delResp.Body.Close() }()
 
 	if delResp.StatusCode != http.StatusNoContent {
 		body, _ := io.ReadAll(delResp.Body)

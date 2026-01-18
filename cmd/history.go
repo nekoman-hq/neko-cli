@@ -7,8 +7,9 @@ package cmd
 */
 
 import (
-	"github.com/nekoman-hq/neko-cli/internal/history"
 	"github.com/spf13/cobra"
+
+	"github.com/nekoman-hq/neko-cli/internal/history"
 )
 
 // historyCmd represents the history command

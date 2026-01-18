@@ -13,24 +13,21 @@ import (
 )
 
 type Config struct {
-	Schema string        `json:"$schema"`
-	Github GithubRelease `json:"github"`
-	Git    GitConfig     `json:"git,omitempty"`
-	Hooks  HooksConfig   `json:"hooks,omitempty"`
+	Github *GithubRelease `json:"github"`
+	Git    *GitConfig     `json:"git,omitempty"`
+	Hooks  *HooksConfig   `json:"hooks,omitempty"`
+	Schema string         `json:"$schema"`
 }
 
 type GithubRelease struct {
-	Release     bool   `json:"release"`
 	ReleaseName string `json:"releaseName,omitempty"`
+	Release     bool   `json:"release"`
 }
 
 type GitConfig struct {
-	Commit                 bool   `json:"commit"`
-	Tag                    bool   `json:"tag"`
-	Push                   bool   `json:"push"`
-	RequireCleanWorkingDir bool   `json:"requireCleanWorkingDir"`
-	Changelog              string `json:"changelog,omitempty"`
-	CommitMessage          string `json:"commitMessage,omitempty"`
+	Changelog                                 string `json:"changelog,omitempty"`
+	CommitMessage                             string `json:"commitMessage,omitempty"`
+	Commit, Tag, Push, RequireCleanWorkingDir bool
 }
 
 type HooksConfig struct {
@@ -75,11 +72,11 @@ func SaveConfig(cfg *Config) (err error) {
 func InitDefaultConfig(projectName string) (*Config, error) {
 	return &Config{
 		Schema: "https://unpkg.com/release-it/schema/release-it.json",
-		Github: GithubRelease{
+		Github: &GithubRelease{
 			Release:     true,
 			ReleaseName: fmt.Sprintf("%s@${version}", projectName),
 		},
-		Git: GitConfig{
+		Git: &GitConfig{
 			Commit:                 true,
 			Tag:                    true,
 			Push:                   true,
@@ -87,7 +84,7 @@ func InitDefaultConfig(projectName string) (*Config, error) {
 			Changelog:              "npx auto-changelog --stdout --commit-limit false -u --template https://raw.githubusercontent.com/release-it/release-it/main/templates/changelog-compact.hbs",
 			CommitMessage:          "chore(release): ${version}",
 		},
-		Hooks: HooksConfig{
+		Hooks: &HooksConfig{
 			AfterBump: "npx auto-changelog -p",
 		},
 	}, nil

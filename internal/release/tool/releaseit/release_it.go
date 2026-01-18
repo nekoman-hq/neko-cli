@@ -7,6 +7,7 @@ import (
 	"os/exec"
 
 	"github.com/Masterminds/semver/v3"
+
 	"github.com/nekoman-hq/neko-cli/internal/config"
 	"github.com/nekoman-hq/neko-cli/internal/errors"
 	"github.com/nekoman-hq/neko-cli/internal/git"
@@ -56,7 +57,7 @@ func (r *ReleaseIt) Release(v *semver.Version) error {
 	}
 	r.State.PreHead = pre
 
-	if err := r.runReleaseItRelease(v); err != nil {
+	if err = r.runReleaseItRelease(v); err != nil {
 		return err
 	}
 
@@ -106,7 +107,7 @@ func (r *ReleaseIt) runReleaseItInit(cfg *config.NekoConfig) error {
 		return nil
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf(
-			"Failed to check .release-it.json: %w", err,
+			"failed to check .release-it.json: %w", err,
 		)
 	}
 
@@ -127,16 +128,16 @@ func (r *ReleaseIt) runReleaseItInit(cfg *config.NekoConfig) error {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf(
-			"Failed to initialize release-it: %s: %w", string(output), err,
+			"failed to initialize release-it: %s: %w", string(output), err,
 		)
 	}
 
 	rcfg, err := InitDefaultConfig(cfg.ProjectName)
 	if err != nil {
-		return fmt.Errorf("Failed to create default config: %w", err)
+		return fmt.Errorf("failed to create default config: %w", err)
 	}
 	if err := SaveConfig(rcfg); err != nil {
-		return fmt.Errorf("Failed to save .release-it.json: %w", err)
+		return fmt.Errorf("failed to save .release-it.json: %w", err)
 	}
 
 	log.Print(
@@ -158,7 +159,7 @@ func (r *ReleaseIt) runReleaseItCheck() error {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf(
-			"Failed to verify release-it installation: %s: %w", string(output), err,
+			"failed to verify release-it installation: %s: %w", string(output), err,
 		)
 	}
 	log.Print(

@@ -17,7 +17,10 @@ var versionCmd = &cobra.Command{
 	Short: "Show current version of this repository",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		repoInfo, _ := git.Current()
-		version.Latest(repoInfo)
+		err := version.Latest(repoInfo)
+		if err != nil {
+			return err
+		}
 		return nil
 	},
 }

@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
+
 	"github.com/nekoman-hq/neko-cli/internal/config"
 	"github.com/nekoman-hq/neko-cli/internal/errors"
 	"github.com/nekoman-hq/neko-cli/internal/git"
@@ -40,9 +41,9 @@ type GoReleaser struct {
 	}
 }
 
-type CommitHash struct {
-	rev string
-}
+//type CommitHash struct {
+//	rev string
+//}
 
 func (g *GoReleaser) Name() string {
 	return "goreleaser"
@@ -70,18 +71,16 @@ func (g *GoReleaser) SupportsSurvey() bool {
 
 func (g *GoReleaser) Release(v *semver.Version) error {
 	pre, err := git.Head()
-
 	if err != nil {
 		return err
 	}
 	g.State.PreHead = pre
 
-	if err := g.CreateReleaseCommit(v); err != nil {
+	if err = g.CreateReleaseCommit(v); err != nil {
 		return err
 	}
 
 	head, err := git.Head()
-
 	if err != nil {
 		return err
 	}
@@ -136,7 +135,7 @@ func runGoreleaserInit() error {
 		return nil
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf(
-			"Failed to check goreleaser.yml: %w",
+			"failed to check goreleaser.yml: %w",
 			err,
 		)
 	}
@@ -151,7 +150,7 @@ func runGoreleaserInit() error {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf(
-			"Failed to initialize goreleaser: %s: %w", string(output), err,
+			"failed to initialize goreleaser: %s: %w", string(output), err,
 		)
 	}
 
@@ -175,7 +174,7 @@ func runGoreleaserCheck() error {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf(
-			"Goreleaser configuration check failed: %s: %w", string(output), err,
+			"goreleaser configuration check failed: %s: %w", string(output), err,
 		)
 	}
 

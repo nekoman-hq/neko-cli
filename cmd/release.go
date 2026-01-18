@@ -7,10 +7,11 @@ package cmd
 */
 
 import (
+	"github.com/spf13/cobra"
+
 	"github.com/nekoman-hq/neko-cli/internal/config"
 	"github.com/nekoman-hq/neko-cli/internal/errors"
 	"github.com/nekoman-hq/neko-cli/internal/release"
-	"github.com/spf13/cobra"
 )
 
 // releaseCmd represents the release command
@@ -20,7 +21,6 @@ var releaseCmd = &cobra.Command{
 	ValidArgs: []string{"major", "minor", "patch"},
 	Args:      cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-
 		cfg, err := config.LoadConfig()
 		if err != nil {
 			errors.Fatal(

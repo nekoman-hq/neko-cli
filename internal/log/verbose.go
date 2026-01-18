@@ -10,7 +10,7 @@ import "fmt"
 
 var Verbose = false
 
-func V(cat Category, msg string, args ...interface{}) {
+func V(cat Category, msg string, args ...any) {
 	if !Verbose {
 		return
 	}

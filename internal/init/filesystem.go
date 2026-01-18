@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"github.com/AlecAivazis/survey/v2"
+
 	"github.com/nekoman-hq/neko-cli/internal/errors"
 )
 

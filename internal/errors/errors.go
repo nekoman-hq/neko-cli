@@ -23,10 +23,10 @@ const (
 )
 
 type CLIError struct {
-	Level   ErrorLevel
 	Title   string
 	Message string
 	Code    string
+	Level   ErrorLevel
 }
 
 func PrintError(err CLIError) {
@@ -47,19 +47,19 @@ func PrintError(err CLIError) {
 		color = log.ColorRed
 	}
 
-	fmt.Fprintf(os.Stderr, "%s%s%s", color, log.ColorBold, prefix)
+	_, _ = fmt.Fprintf(os.Stderr, "%s%s%s", color, log.ColorBold, prefix)
 	if err.Title != "" {
-		fmt.Fprintf(os.Stderr, ": %s", err.Title)
+		_, _ = fmt.Fprintf(os.Stderr, ": %s", err.Title)
 	}
-	fmt.Fprintf(os.Stderr, "%s\n", log.ColorReset)
+	_, _ = fmt.Fprintf(os.Stderr, "%s\n", log.ColorReset)
 
-	fmt.Fprintf(os.Stderr, "%s%s%s\n", color, err.Message, log.ColorReset)
+	_, _ = fmt.Fprintf(os.Stderr, "%s%s%s\n", color, err.Message, log.ColorReset)
 
 	if err.Code != "" {
-		fmt.Fprintf(os.Stderr, "%sError Code: %s%s\n", color, err.Code, log.ColorReset)
+		_, _ = fmt.Fprintf(os.Stderr, "%sError Code: %s%s\n", color, err.Code, log.ColorReset)
 	}
 
-	fmt.Fprintln(os.Stderr)
+	_, _ = fmt.Fprintln(os.Stderr)
 
 	if err.Level == ErrorLevelFatal || err.Level == ErrorLevelError {
 		os.Exit(1)

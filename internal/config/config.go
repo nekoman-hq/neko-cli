@@ -19,18 +19,17 @@ import (
 const configFileName = ".neko.json"
 
 func LoadConfig() (*NekoConfig, error) {
-
 	log.V(log.Config, "Loading config from file...")
 
 	data, err := os.ReadFile(configFileName)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, errors.New(
-				"Configuration not found: No .neko.json configuration found. Run 'neko init' first.",
+				"configuration not found: No .neko.json configuration found. Run 'neko init' first",
 			)
 		} else {
 			return nil, fmt.Errorf(
-				"Configuration read error: %w", err,
+				"configuration read error: %w", err,
 			)
 		}
 	}
@@ -38,11 +37,13 @@ func LoadConfig() (*NekoConfig, error) {
 	var config NekoConfig
 	if err := json.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf(
-			"Configuration parse error: %w", err,
+			"configuration parse error: %w", err,
 		)
 	}
 
-	Validate(&config)
+	if err := Validate(&config); err != nil {
+		return nil, err
+	}
 
 	return &config, nil
 }
@@ -56,25 +57,25 @@ func Validate(cfg *NekoConfig) error {
 
 	if !cfg.ProjectType.IsValid() {
 		return errors.New(
-			"Invalid configuration: ProjectType is invalid in .neko.json",
+			"invalid configuration: ProjectType is invalid in .neko.json",
 		)
 	}
 
 	if !cfg.ReleaseSystem.IsValid() {
 		return errors.New(
-			"Invalid configuration: ReleaseSystem is invalid in .neko.json",
+			"invalid configuration: ReleaseSystem is invalid in .neko.json",
 		)
 	}
 
 	if cfg.Version == "" {
 		return errors.New(
-			"Invalid configuration: Version is missing in .neko.json",
+			"invalid configuration: Version is missing in .neko.json",
 		)
 	}
 
 	if !semverRegex.MatchString(cfg.Version) {
 		return errors.New(
-			"Invalid configuration: Version is not a valid semantic version (SemVer)",
+			"invalid configuration: Version is not a valid semantic version (SemVer)",
 		)
 	}
 
@@ -86,15 +87,10 @@ func Validate(cfg *NekoConfig) error {
 func SaveConfig(config NekoConfig) error {
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
-		return fmt.Errorf(
-			"Configuration serialization failed: %w", err,
-		)
+		return fmt.Errorf("configuration serialization failed: %w", err)
 	}
-
-	if err := os.WriteFile(configFileName, data, 0644); err != nil {
-		return fmt.Errorf(
-			"Configuration write failed: %w", err,
-		)
+	if err = os.WriteFile(configFileName, data, 0644); err != nil {
+		return fmt.Errorf("configuration write failed: %w", err)
 	}
 	return nil
 }

@@ -11,6 +11,7 @@ import (
 	"fmt"
 
 	"github.com/Masterminds/semver/v3"
+
 	"github.com/nekoman-hq/neko-cli/internal/config"
 	"github.com/nekoman-hq/neko-cli/internal/errors"
 	"github.com/nekoman-hq/neko-cli/internal/git"
@@ -37,7 +38,7 @@ func (rs *Service) Run(args []string) error {
 	releaser, err := Get(string(rs.cfg.ReleaseSystem))
 	if err != nil {
 		return fmt.Errorf(
-			"Release System Not Found: %w", err,
+			"release System Not Found: %w", err,
 		)
 	}
 
@@ -54,7 +55,7 @@ func (rs *Service) Run(args []string) error {
 	rt, err := ResolveReleaseType(version, args, releaser)
 	if err != nil {
 		return fmt.Errorf(
-			"Invalid Release Type: %w", err,
+			"invalid Release Type: %w", err,
 		)
 	}
 
@@ -63,16 +64,15 @@ func (rs *Service) Run(args []string) error {
 	newVersion := NextVersion(version, rt)
 
 	if err := releaser.Release(&newVersion); err != nil {
-		release_error := fmt.Errorf("Release failed: %w", err)
+		releaseError := fmt.Errorf("release failed: %w", err)
 
 		log.Print(log.VersionGuard, "Encountered error while releasing. Trying to undo changes...")
 		if err := releaser.RevertRelease(); err != nil {
-			return fmt.Errorf("%w: Failed undoing changes: %w", release_error, err)
-
+			return fmt.Errorf("%w: Failed undoing changes: %w", releaseError, err)
 		}
 		log.Print(log.VersionGuard, "Successfully undid changes.")
 
-		return release_error
+		return releaseError
 	}
 
 	if err := rs.updateConfig(&newVersion); err != nil {

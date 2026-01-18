@@ -8,6 +8,7 @@ package init
 
 import (
 	"github.com/AlecAivazis/survey/v2"
+
 	"github.com/nekoman-hq/neko-cli/internal/config"
 	"github.com/nekoman-hq/neko-cli/internal/errors"
 )
@@ -23,7 +24,6 @@ func askProjectType(cfg *config.NekoConfig) {
 			string(config.ProjectTypeOther),
 		},
 	}, &input)
-
 	if err != nil {
 		errors.Error(
 			"Project type selection failed",

@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"github.com/Masterminds/semver/v3"
+
 	"github.com/nekoman-hq/neko-cli/internal/config"
 	"github.com/nekoman-hq/neko-cli/internal/errors"
 	"github.com/nekoman-hq/neko-cli/internal/git"
@@ -29,7 +30,7 @@ func EnsureVersionIsValid(cfg *config.NekoConfig, latestTag string) (*semver.Ver
 	localVer, err := semver.NewVersion(cfg.Version)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"Version %s in .neko.json is not a valid semantic version", cfg.Version,
+			"version %s in .neko.json is not a valid semantic version", cfg.Version,
 		)
 	}
 
@@ -51,7 +52,7 @@ func EnsureVersionIsValid(cfg *config.NekoConfig, latestTag string) (*semver.Ver
 
 	if localVer.LessThan(remoteVer) {
 		return nil, fmt.Errorf(
-			"Version violation: Local version %s is smaller than latest tag %s",
+			"version violation: Local version %s is smaller than latest tag %s",
 			localVer,
 			remoteVer,
 		)

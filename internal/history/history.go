@@ -60,6 +60,7 @@ func showStatistics() {
 	// Total commits
 	totalCommits, err := git.TotalCommits()
 	if err != nil {
+		return
 	}
 
 	// Tags
@@ -95,7 +96,6 @@ func showStatistics() {
 			log.ColorText(log.ColorCyan, "│"),
 			log.ColorText(log.ColorBlue, repoSize),
 		)
-
 	}
 	fmt.Println(log.ColorText(log.ColorCyan, "│"))
 }
