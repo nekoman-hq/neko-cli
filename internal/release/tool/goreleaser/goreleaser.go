@@ -16,12 +16,32 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/nekoman-hq/neko-cli/internal/config"
 	"github.com/nekoman-hq/neko-cli/internal/errors"
+	"github.com/nekoman-hq/neko-cli/internal/git"
 	"github.com/nekoman-hq/neko-cli/internal/log"
 	"github.com/nekoman-hq/neko-cli/internal/release"
 )
 
 type GoReleaser struct {
 	release.ToolBase
+
+	State struct {
+		// HEAD before release started
+		PreHead string
+
+		// hash of the "chore(neko-release): x.y.z" commit
+		ReleaseCommitHash string
+
+		TagName string
+
+		PushedCommit bool
+		PushedTag    bool
+
+		RanGoRelease bool
+	}
+}
+
+type CommitHash struct {
+	rev string
 }
 
 func (g *GoReleaser) Name() string {
@@ -29,9 +49,18 @@ func (g *GoReleaser) Name() string {
 }
 
 func (g *GoReleaser) Init(_ *config.NekoConfig) error {
-	g.RequireBinary(g.Name())
-	runGoreleaserInit()
-	runGoreleaserCheck()
+	if err := g.RequireBinary(g.Name()); err != nil {
+		return err
+	}
+
+	if err := runGoreleaserInit(); err != nil {
+		return err
+	}
+
+	if err := runGoreleaserCheck(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -40,21 +69,38 @@ func (g *GoReleaser) SupportsSurvey() bool {
 }
 
 func (g *GoReleaser) Release(v *semver.Version) error {
+	pre, err := git.Head()
+
+	if err != nil {
+		return err
+	}
+	g.State.PreHead = pre
+
 	if err := g.CreateReleaseCommit(v); err != nil {
 		return err
 	}
 
+	head, err := git.Head()
+
+	if err != nil {
+		return err
+	}
+	g.State.ReleaseCommitHash = head
+
 	if err := g.CreateGitTag(v); err != nil {
 		return err
 	}
+	g.State.TagName = fmt.Sprintf("v%s", v.String())
 
 	if err := g.PushCommits(); err != nil {
 		return err
 	}
+	g.State.PushedCommit = true
 
 	if err := g.PushGitTag(v); err != nil {
 		return err
 	}
+	g.State.PushedTag = true
 
 	if err := g.runGoReleaserDryRun(); err != nil {
 		return err
@@ -63,25 +109,36 @@ func (g *GoReleaser) Release(v *semver.Version) error {
 	if err := g.runGoReleaserRelease(); err != nil {
 		return err
 	}
+	g.State.RanGoRelease = true
 
 	return nil
 }
 
-func runGoreleaserInit() {
+func (g *GoReleaser) RevertRelease() error {
+	return g.RevertGitRelease(release.GitReleaseState{
+		PreHead:              g.State.PreHead,
+		ReleaseHead:          g.State.ReleaseCommitHash,
+		TagName:              g.State.TagName,
+		PushedCommit:         g.State.PushedCommit,
+		PushedTag:            g.State.PushedTag,
+		GitHubReleaseTag:     g.State.TagName,
+		CreatedGitHubRelease: g.State.RanGoRelease,
+	})
+}
+
+func runGoreleaserInit() error {
 	if _, err := os.Stat(".goreleaser.yaml"); err == nil {
 		log.Print(
 			log.Init,
 			"Skipping goreleaser init, %s already exists",
 			log.ColorText(log.ColorCyan, "goreleaser.yml"),
 		)
-		return
+		return nil
 	} else if !os.IsNotExist(err) {
-		errors.Fatal(
-			"Failed to check goreleaser.yml",
-			err.Error(),
-			errors.ErrFileAccess,
+		return fmt.Errorf(
+			"Failed to check goreleaser.yml: %w",
+			err,
 		)
-		return
 	}
 
 	log.V(log.Init,
@@ -93,10 +150,8 @@ func runGoreleaserInit() {
 	cmd := exec.Command("goreleaser", "init")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		errors.Fatal(
-			"Failed to initialize goreleaser",
-			fmt.Sprintf("Command failed: %s\nOutput: %s", err.Error(), string(output)),
-			errors.ErrDependencyMissing,
+		return fmt.Errorf(
+			"Failed to initialize goreleaser: %s: %w", string(output), err,
 		)
 	}
 
@@ -105,9 +160,11 @@ func runGoreleaserInit() {
 		"\uF00C  Successfully initialized %s",
 		log.ColorText(log.ColorCyan, "goreleaser"),
 	)
+
+	return nil
 }
 
-func runGoreleaserCheck() {
+func runGoreleaserCheck() error {
 	log.V(log.Init,
 		fmt.Sprintf("Checking goreleaser configuration: %s",
 			log.ColorText(log.ColorGreen, "goreleaser check"),
@@ -117,10 +174,8 @@ func runGoreleaserCheck() {
 	cmd := exec.Command("goreleaser", "check")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		errors.Fatal(
-			"Goreleaser configuration check failed",
-			fmt.Sprintf("Command failed: %s\nOutput: %s", err.Error(), string(output)),
-			errors.ErrDependencyMissing,
+		return fmt.Errorf(
+			"Goreleaser configuration check failed: %s: %w", string(output), err,
 		)
 	}
 
@@ -129,6 +184,8 @@ func runGoreleaserCheck() {
 		"\uF00C Configuration check passed for %s",
 		log.ColorText(log.ColorCyan, "goreleaser"),
 	)
+
+	return nil
 }
 
 // runGoReleaserDryRun executes goreleaser in dry-run mode
@@ -160,10 +217,8 @@ func (g *GoReleaser) runGoReleaserRelease() error {
 	cmd := exec.Command("goreleaser", "release", "--clean")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		errors.Fatal(
-			"GoReleaser release failed",
-			fmt.Sprintf("goreleaser release failed: %s", strings.TrimSpace(string(output))),
-			errors.ErrGoReleaserExecution,
+		return fmt.Errorf(
+			"GoReleaser release failed: %s: %w", string(output), err,
 		)
 	}
 

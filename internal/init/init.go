@@ -8,15 +8,17 @@ package init
 */
 
 import (
+	"errors"
+	"fmt"
+
 	"github.com/nekoman-hq/neko-cli/internal/config"
-	"github.com/nekoman-hq/neko-cli/internal/errors"
 	"github.com/nekoman-hq/neko-cli/internal/git"
 	"github.com/nekoman-hq/neko-cli/internal/release"
 )
 
-func Run(info *git.RepoInfo) {
+func Run(info *git.RepoInfo) error {
 	if !confirmOverwriteIfExists() {
-		return
+		return nil
 	}
 
 	cfg := runWizard()
@@ -27,32 +29,26 @@ func Run(info *git.RepoInfo) {
 	}
 
 	if err := config.SaveConfig(cfg); err != nil {
-		errors.Fatal(
-			"Configuration write failed",
-			err.Error(),
-			errors.ErrConfigWrite,
+		return fmt.Errorf(
+			"Configuration write failed: %w", err,
 		)
-		return
 	}
 
 	releaser, err := release.Get(string(cfg.ReleaseSystem))
 	if err != nil {
-		errors.Fatal(
-			"Release System Not Found",
-			err.Error(),
-			errors.ErrInvalidReleaseSystem,
+		return fmt.Errorf(
+			"Release System Not Found: %w", err,
 		)
 	}
 
 	err = releaser.Init(&cfg)
 	if err != nil {
-		errors.Fatal(
+		return errors.New(
 			"Release system initialization failed",
-			"Failed to initialize the release system.",
-			errors.ErrReleaseSystemInit,
 		)
-		return
 	}
 
 	printSetupInstructions(cfg)
+
+	return nil
 }

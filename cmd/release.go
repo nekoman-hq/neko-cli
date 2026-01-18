@@ -21,7 +21,14 @@ var releaseCmd = &cobra.Command{
 	Args:      cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 
-		cfg := config.LoadConfig()
+		cfg, err := config.LoadConfig()
+		if err != nil {
+			errors.Fatal(
+				"Loading Configuration Failed",
+				err.Error(),
+				errors.ErrConfigExists,
+			)
+		}
 
 		service := release.NewReleaseService(cfg)
 

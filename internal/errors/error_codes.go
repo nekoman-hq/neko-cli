@@ -30,6 +30,7 @@ const (
 	ErrConfigWrite      = "NEKO_3005"
 	ErrConfigRead       = "NEKO_3006"
 	ErrVersionViolation = "NEKO_3007"
+	ErrConfig           = "NEKO_3008"
 
 	ErrInvalidReleaseType   = "NEKO_4000"
 	ErrInvalidReleaseSystem = "NEKO_4001"

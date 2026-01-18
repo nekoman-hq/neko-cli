@@ -18,12 +18,23 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/nekoman-hq/neko-cli/internal/config"
 	"github.com/nekoman-hq/neko-cli/internal/errors"
+	"github.com/nekoman-hq/neko-cli/internal/git"
 	"github.com/nekoman-hq/neko-cli/internal/log"
 	"github.com/nekoman-hq/neko-cli/internal/release"
 )
 
 type JReleaser struct {
 	release.ToolBase
+
+	State struct {
+		PreHead string
+
+		ReleaseCommitHash string
+		PushedCommit      bool
+
+		TagName     string
+		RanJRelease bool
+	}
 }
 
 func (j *JReleaser) Name() string {
@@ -37,15 +48,28 @@ func (j *JReleaser) Init(cfg *config.NekoConfig) error {
 		cfg.Version,
 	))
 
-	j.RequireBinary(j.Name())
-	j.runJReleaserInit(cfg)
-	j.runJReleaserCheck()
+	if err := j.RequireBinary(j.Name()); err != nil {
+		return err
+	}
+	if err := j.runJReleaserInit(cfg); err != nil {
+		return err
+	}
+	if err := j.runJReleaserCheck(); err != nil {
+		return err
+	}
 
 	log.Print(log.Init, "\uF00C Initialization complete for %s", log.ColorText(log.ColorCyan, j.Name()))
 	return nil
 }
 
 func (j *JReleaser) Release(v *semver.Version) error {
+	pre, err := git.Head()
+
+	if err != nil {
+		return err
+	}
+	j.State.PreHead = pre
+
 	if err := j.syncJReleaser(v); err != nil {
 		return err
 	}
@@ -54,9 +78,16 @@ func (j *JReleaser) Release(v *semver.Version) error {
 		return err
 	}
 
+	head, err := git.Head()
+	if err != nil {
+		return err
+	}
+	j.State.ReleaseCommitHash = head
+
 	if err := j.PushCommits(); err != nil {
 		return err
 	}
+	j.State.PushedCommit = true
 
 	if err := j.runJReleaserDryRun(); err != nil {
 		return err
@@ -65,8 +96,22 @@ func (j *JReleaser) Release(v *semver.Version) error {
 	if err := j.runJReleaserRelease(); err != nil {
 		return err
 	}
+	j.State.TagName = fmt.Sprintf("v%s", v.String())
+	j.State.RanJRelease = true
 
 	return nil
+}
+
+func (j *JReleaser) RevertRelease() error {
+	return j.RevertGitRelease(release.GitReleaseState{
+		PreHead:              j.State.PreHead,
+		ReleaseHead:          j.State.ReleaseCommitHash,
+		PushedCommit:         j.State.PushedCommit,
+		TagName:              j.State.TagName,
+		PushedTag:            j.State.RanJRelease,
+		GitHubReleaseTag:     j.State.TagName,
+		CreatedGitHubRelease: j.State.RanJRelease,
+	})
 }
 
 func (j *JReleaser) Survey(v *semver.Version) (release.Type, error) {
@@ -77,7 +122,7 @@ func (j *JReleaser) SupportsSurvey() bool {
 	return true
 }
 
-func (j *JReleaser) runJReleaserInit(cfg *config.NekoConfig) {
+func (j *JReleaser) runJReleaserInit(cfg *config.NekoConfig) error {
 	log.V(log.Init, "Generating JReleaser configuration...")
 
 	if _, err := os.Stat("jreleaser.yml"); err == nil {
@@ -86,14 +131,11 @@ func (j *JReleaser) runJReleaserInit(cfg *config.NekoConfig) {
 			"Skipping jreleaser init, %s already exists",
 			log.ColorText(log.ColorCyan, "jreleaser.yml"),
 		)
-		return
+		return nil
 	} else if !os.IsNotExist(err) {
-		errors.Fatal(
-			"Failed to check goreleaser.yml",
-			err.Error(),
-			errors.ErrFileAccess,
+		return fmt.Errorf(
+			"Failed to check jreleaser.yml: %w", err,
 		)
-		return
 	}
 
 	jcfg := &Config{
@@ -161,16 +203,16 @@ func (j *JReleaser) runJReleaserInit(cfg *config.NekoConfig) {
 	}
 
 	if err := SaveConfig(jcfg); err != nil {
-		errors.Fatal(
-			"Configuration write failed",
-			err.Error(),
-			errors.ErrConfigWrite,
+		return fmt.Errorf(
+			"Configuration write failed: %w", err,
 		)
 	}
 	log.Print(log.Init, "\uF00C JReleaser configuration generated for %s", log.ColorText(log.ColorCyan, cfg.ProjectName))
+
+	return nil
 }
 
-func (j *JReleaser) runJReleaserCheck() {
+func (j *JReleaser) runJReleaserCheck() error {
 	log.V(log.Init,
 		"Checking JReleaser configuration: %s",
 		log.ColorText(log.ColorGreen, "jreleaser config"),
@@ -178,10 +220,8 @@ func (j *JReleaser) runJReleaserCheck() {
 
 	output, err := executeJReleaserCommand("config")
 	if err != nil {
-		errors.Fatal(
-			"JReleaser configuration check failed",
-			fmt.Sprintf("Command failed: %s\nOutput: %s", err.Error(), string(output)),
-			errors.ErrDependencyMissing,
+		return fmt.Errorf(
+			"JReleaser configuration check failed: %s: %w", string(output), err,
 		)
 	}
 
@@ -190,6 +230,8 @@ func (j *JReleaser) runJReleaserCheck() {
 		"\uF00C Configuration check passed for %s",
 		log.ColorText(log.ColorCyan, "jreleaser"),
 	)
+
+	return nil
 }
 
 func (j *JReleaser) syncJReleaser(v *semver.Version) error {
@@ -205,21 +247,16 @@ func (j *JReleaser) syncJReleaser(v *semver.Version) error {
 
 	jcfg, err := LoadConfig()
 	if err != nil {
-		errors.Fatal(
-			"Configuration serialization failed",
-			"Could not marshal jreleaser.yml: "+err.Error(),
-			errors.ErrConfigMarshal,
+		return fmt.Errorf(
+			"Configuration serialization failed: %w", err,
 		)
-		return err
 	}
 
 	jcfg.Project.Version = v.String()
 
 	if err := SaveConfig(jcfg); err != nil {
-		errors.Fatal(
-			"Configuration write failed",
-			"Could not write jreleaser.yml: "+err.Error(),
-			errors.ErrConfigWrite,
+		return fmt.Errorf(
+			"Configuration write failed: %w", err,
 		)
 	}
 
@@ -278,13 +315,8 @@ func (j *JReleaser) runJReleaserRelease() error {
 
 	output, err := executeJReleaserCommand(action)
 	if err != nil {
-		errors.Fatal(
-			"JReleaser release failed",
-			fmt.Sprintf(
-				"jreleaser full-release failed: %s",
-				strings.TrimSpace(string(output)),
-			),
-			errors.ErrJReleaserExecution,
+		return fmt.Errorf(
+			"JReleaser release failed: %s: %w", string(output), err,
 		)
 	}
 
@@ -297,17 +329,17 @@ func (j *JReleaser) runJReleaserRelease() error {
 }
 
 func executeJReleaserCommand(action string) ([]byte, error) {
-	pat := config.GetPAT()
-	if pat == "" {
-		return nil, fmt.Errorf("personal access token is empty")
+	pat, err := config.GetPAT()
+	if err != nil {
+		return nil, err
 	}
-
-	cmdStr := fmt.Sprintf("JRELEASER_GITHUB_TOKEN=%s jreleaser %s", pat, action)
 
 	maskedPat := strings.Repeat("*", 5)
 	log.V(log.Init, fmt.Sprintf("Executing command: JRELEASER_GITHUB_TOKEN=%s jreleaser %s", maskedPat, action))
 
-	cmd := exec.Command("sh", "-c", cmdStr)
+	cmd := exec.Command("jreleaser", action)
+	cmd.Env = append(os.Environ(), "JRELEASER_GITHUB_TOKEN="+pat)
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return output, fmt.Errorf("failed to execute command: %w", err)

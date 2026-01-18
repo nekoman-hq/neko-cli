@@ -12,7 +12,6 @@ import (
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/Masterminds/semver/v3"
-	"github.com/nekoman-hq/neko-cli/internal/errors"
 	"github.com/nekoman-hq/neko-cli/internal/log"
 )
 
@@ -28,10 +27,9 @@ func ResolveReleaseType(version *semver.Version, args []string, t Tool) (Type, e
 	if len(args) > 0 {
 		rt, err := ParseReleaseType(args[0])
 		if err != nil {
-			errors.Fatal(
-				"Not a valid increment",
-				"The given type is not valid increment option.",
-				errors.ErrInvalidReleaseType,
+			var zero Type
+			return zero, fmt.Errorf(
+				"Not a valid increment: %w", err,
 			)
 		}
 
@@ -48,10 +46,9 @@ func ResolveReleaseType(version *semver.Version, args []string, t Tool) (Type, e
 	}
 
 	if !t.SupportsSurvey() {
-		errors.Fatal(
-			"Interactive mode not supported",
-			fmt.Sprintf("%s requires an explicit release type", t.Name()),
-			errors.ErrSurveyFailed,
+		var zero Type
+		return zero, fmt.Errorf(
+			"Interactive mode not supported: %s requires an explicit release type", t.Name(),
 		)
 	}
 

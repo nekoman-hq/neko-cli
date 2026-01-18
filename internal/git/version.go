@@ -14,13 +14,16 @@ import (
 	"net/http"
 
 	"github.com/nekoman-hq/neko-cli/internal/config"
-	"github.com/nekoman-hq/neko-cli/internal/errors"
 	"github.com/nekoman-hq/neko-cli/internal/git/github"
 	"github.com/nekoman-hq/neko-cli/internal/log"
 )
 
-func LatestRelease(repoInfo *RepoInfo) *github.Release {
-	token := config.GetPAT()
+func LatestRelease(repoInfo *RepoInfo) (*github.Release, error) {
+	token, err := config.GetPAT()
+	if err != nil {
+		return nil, err
+	}
+
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", repoInfo.Owner, repoInfo.Repo)
 
 	log.V(log.Release, fmt.Sprintf("Fetching latest release from remote: %s",
@@ -29,10 +32,8 @@ func LatestRelease(repoInfo *RepoInfo) *github.Release {
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		errors.Fatal(
-			"Request Creation Failed",
-			fmt.Sprintf("Could not create API request: %v", err),
-			errors.ErrAPIRequest,
+		return nil, fmt.Errorf(
+			"Request Creation Failed: %w", err,
 		)
 	}
 
@@ -42,10 +43,8 @@ func LatestRelease(repoInfo *RepoInfo) *github.Release {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		errors.Fatal(
-			"API Request Failed",
-			fmt.Sprintf("Could not fetch latest release: %v", err),
-			errors.ErrAPIRequest,
+		return nil, fmt.Errorf(
+			"API Request Failed: %w", err,
 		)
 	}
 	defer func(Body io.ReadCloser) {
@@ -57,40 +56,30 @@ func LatestRelease(repoInfo *RepoInfo) *github.Release {
 	}(resp.Body)
 
 	if resp.StatusCode == 404 {
-		errors.Warning(
-			"No Releases Found",
-			fmt.Sprintf("Repository %s/%s has no releases yet.", repoInfo.Owner, repoInfo.Repo),
-		)
-		return nil
+		return nil, fmt.Errorf("Repository %s/%s has no releases yet.", repoInfo.Owner, repoInfo.Repo)
 	}
 
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
-		errors.Fatal(
-			"API Error",
-			fmt.Sprintf("GitHub API returned status %d: %s", resp.StatusCode, string(body)),
-			errors.ErrAPIResponse,
+		return nil, fmt.Errorf(
+			"GitHub API returned status %d: %s", resp.StatusCode, string(body),
 		)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		errors.Fatal(
-			"Response Read Failed",
-			fmt.Sprintf("Could not read API response: %v", err),
-			errors.ErrAPIResponse,
+		return nil, fmt.Errorf(
+			"Response Read Failed: %w", err,
 		)
 	}
 
 	var release github.Release
 	if err := json.Unmarshal(body, &release); err != nil {
-		errors.Fatal(
-			"JSON Parse Failed",
-			fmt.Sprintf("Could not parse API response: %v", err),
-			errors.ErrAPIResponse,
+		return nil, fmt.Errorf(
+			"JSON Parse Failed: %w", err,
 		)
 	}
 
 	log.V(log.Release, "\uF00C Successfully received release information from remote!")
-	return &release
+	return &release, nil
 }

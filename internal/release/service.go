@@ -29,14 +29,15 @@ func (rs *Service) Run(args []string) error {
 	_, _ = git.Current()
 
 	Preflight()
-	version := VersionGuard(rs.cfg)
+	version, err := VersionGuard(rs.cfg)
+	if err != nil {
+		return err
+	}
 
 	releaser, err := Get(string(rs.cfg.ReleaseSystem))
 	if err != nil {
-		errors.Fatal(
-			"Release System Not Found",
-			err.Error(),
-			errors.ErrInvalidReleaseSystem,
+		return fmt.Errorf(
+			"Release System Not Found: %w", err,
 		)
 	}
 
@@ -52,10 +53,8 @@ func (rs *Service) Run(args []string) error {
 
 	rt, err := ResolveReleaseType(version, args, releaser)
 	if err != nil {
-		errors.Fatal(
-			"Invalid Release Type",
-			err.Error(),
-			errors.ErrInvalidReleaseType,
+		return fmt.Errorf(
+			"Invalid Release Type: %w", err,
 		)
 	}
 
@@ -63,18 +62,23 @@ func (rs *Service) Run(args []string) error {
 
 	newVersion := NextVersion(version, rt)
 
+	if err := releaser.Release(&newVersion); err != nil {
+		release_error := fmt.Errorf("Release failed: %w", err)
+
+		log.Print(log.VersionGuard, "Encountered error while releasing. Trying to undo changes...")
+		if err := releaser.RevertRelease(); err != nil {
+			return fmt.Errorf("%w: Failed undoing changes: %w", release_error, err)
+
+		}
+		log.Print(log.VersionGuard, "Successfully undid changes.")
+
+		return release_error
+	}
+
 	if err := rs.updateConfig(&newVersion); err != nil {
 		errors.Warning(
 			"Failed to update local config",
 			fmt.Sprintf("Updating version in .neko.json failed. Attempting to proceed with release: %s", err.Error()))
-	}
-
-	if err := releaser.Release(&newVersion); err != nil {
-		errors.Fatal(
-			"Release failed",
-			err.Error(),
-			errors.ErrReleaseFailed,
-		)
 	}
 
 	log.Print(log.Release, "\uF00C Successfully released version %s",

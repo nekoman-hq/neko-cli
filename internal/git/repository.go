@@ -8,12 +8,15 @@ package git
 */
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"os/exec"
 	"regexp"
 	"strings"
 
-	"github.com/nekoman-hq/neko-cli/internal/errors"
 	"github.com/nekoman-hq/neko-cli/internal/log"
 )
 
@@ -32,7 +35,7 @@ func Fetch() {
 		log.ColorText(log.ColorGreen, "git fetch"),
 	))
 
-	exec.Command("git", "fetch")
+	_ = exec.Command("git", "fetch").Run()
 }
 
 // Current checks if a git repository exists and returns owner and repo name
@@ -44,19 +47,15 @@ func Current() (*RepoInfo, error) {
 	cmd := exec.Command("git", "remote", "-v")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		errors.Fatal(
-			"Not a Git Repository",
-			"This directory is not a git repository.\nPlease run this command from within a git repository.",
-			errors.ErrNoGitRepo,
+		return nil, fmt.Errorf(
+			"Not a Git Repository: %w", err,
 		)
 	}
 
 	outputStr := string(output)
 	if strings.TrimSpace(outputStr) == "" {
-		errors.Fatal(
-			"No Remote Found",
-			"This git repository has no remote configured.\nAdd a remote with: git remote add origin <url>",
-			errors.ErrNoRemote,
+		return nil, errors.New(
+			"No Remote Found: This git repository has no remote configured.\nAdd a remote with: git remote add origin <url>",
 		)
 	}
 	return parseRemote(outputStr)
@@ -92,13 +91,9 @@ func parseRemote(remoteOutput string) (*RepoInfo, error) {
 		}, nil
 	}
 
-	errors.Fatal(
-		"Invalid Remote URL",
-		"Could not parse GitHub repository information from remote.\nOnly GitHub repositories are supported.",
-		errors.ErrInvalidRemote,
+	return nil, errors.New(
+		"Invalid Remote URL: Could not parse GitHub repository information from remote.\nOnly GitHub repositories are supported.",
 	)
-
-	return nil, nil // unreachable, but needed for compiler
 }
 
 func IsClean() error {
@@ -214,116 +209,103 @@ func IsUpToDate() error {
 }
 
 // CurrentBranch returns the name of the current branch
-func CurrentBranch() string {
+func CurrentBranch() (string, error) {
 	log.V(log.History, "Fetching current branch: "+
 		log.ColorText(log.ColorGreen, "git rev-parse --abbrev-ref HEAD"))
 
 	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
 	branchOut, err := cmd.Output()
 	if err != nil {
-		errors.Fatal(
-			"Failed to get current branch",
-			fmt.Sprintf("Command failed: %s", err.Error()),
-			errors.ErrFileAccess,
+		return "", fmt.Errorf(
+			"Failed to get current branch: %w", err,
 		)
-		return ""
 	}
 
 	branch := strings.TrimSpace(string(branchOut))
-	return branch
+	return branch, nil
 }
 
 // LastCommit returns the last commit information
-func LastCommit() string {
+func LastCommit() (string, error) {
 	log.V(log.History, "Fetching last commit: "+
 		log.ColorText(log.ColorGreen, "git log -1 --pretty=format:%%h '%%s' (%%cr)"))
 
 	cmd := exec.Command("git", "log", "-1", "--pretty=format:%h '%s' (%cr)")
 	lastCommitOut, err := cmd.Output()
 	if err != nil {
-		errors.Fatal(
-			"Failed to get last commit",
-			fmt.Sprintf("Command failed: %s", err.Error()),
-			errors.ErrFileAccess,
+		return "", fmt.Errorf(
+			"Failed to get last commit: %w", err,
 		)
-		return ""
 	}
 
 	lastCommit := strings.TrimSpace(string(lastCommitOut))
-	return lastCommit
+	return lastCommit, nil
 }
 
 // TotalCommits returns the total number of commits as a string
-func TotalCommits() string {
+func TotalCommits() (string, error) {
 	log.V(log.History, "Counting total commits: "+
 		log.ColorText(log.ColorGreen, "git rev-list --count HEAD"))
 
 	cmd := exec.Command("git", "rev-list", "--count", "HEAD")
 	totalCommitsOut, err := cmd.Output()
+
 	if err != nil {
-		errors.Warning(
-			"Failed to count commits",
-			fmt.Sprintf("Command failed: %s", err.Error()),
+		return "", fmt.Errorf(
+			"Failed to count commits: %w", err,
 		)
-		return "0"
 	}
 
-	return strings.TrimSpace(string(totalCommitsOut))
+	return strings.TrimSpace(string(totalCommitsOut)), nil
 }
 
 // FilesCount returns the number of tracked files
-func FilesCount() int {
+func FilesCount() (int, error) {
 	log.V(log.History, "Counting tracked files: "+
 		log.ColorText(log.ColorGreen, "git ls-files"))
 
 	cmd := exec.Command("git", "ls-files")
 	filesOut, err := cmd.Output()
 	if err != nil {
-		errors.Warning(
-			"Failed to count files",
-			fmt.Sprintf("Command failed: %s", err.Error()),
+		return 0, fmt.Errorf(
+			"Failed to count files: %w", err,
 		)
-		return 0
 	}
 
 	files := strings.Split(strings.TrimSpace(string(filesOut)), "\n")
-	return len(files)
+	return len(files), nil
 }
 
 // RepoSize returns the repository size using du command
-func RepoSize() string {
+func RepoSize() (string, error) {
 	log.V(log.History, "Calculating repository size: "+
 		log.ColorText(log.ColorGreen, "du -sh ."))
 
 	cmd := exec.Command("du", "-sh", ".")
 	sizeOut, err := cmd.Output()
 	if err != nil {
-		log.V(log.History, "Could not determine repository size (du command not available)")
-		return ""
+		return "", errors.New("Could not determine repository size (du command not available")
 	}
 
 	fields := strings.Fields(string(sizeOut))
 	if len(fields) == 0 {
-		return ""
+		return "", errors.New("Failed determing repository size")
 	}
 
-	return fields[0]
+	return fields[0], nil
 }
 
 // Contributors returns a list of contributors with their commit counts
-func Contributors() []Contributor {
+func Contributors() ([]Contributor, error) {
 	log.V(log.History, "Fetching contributors: "+
 		log.ColorText(log.ColorGreen, "git shortlog -sne HEAD"))
 
 	cmd := exec.Command("git", "shortlog", "-sne", "HEAD")
 	contrib, err := cmd.Output()
 	if err != nil {
-		errors.Fatal(
-			"Failed to fetch contributors",
-			fmt.Sprintf("Command failed: %s", err.Error()),
-			errors.ErrFileAccess,
+		return nil, fmt.Errorf(
+			"Failed to fetch contributors: %w", err,
 		)
-		return []Contributor{}
 	}
 
 	contribLines := strings.Split(strings.TrimSpace(string(contrib)), "\n")
@@ -343,5 +325,157 @@ func Contributors() []Contributor {
 		})
 	}
 
-	return contributors
+	return contributors, nil
+}
+
+func DeleteGithubRelease(tag string, token string) error {
+	if tag == "" {
+		return nil
+	}
+	if token == "" {
+		return fmt.Errorf("github token is empty")
+	}
+
+	repo, err := Current()
+	if err != nil {
+		return err
+	}
+
+	owner := repo.Owner
+	name := repo.Repo
+
+	// Resolve release by tag -> get release id
+	getURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/tags/%s", owner, name, tag)
+
+	req, err := http.NewRequest("GET", getURL, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "neko-cli")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	// If release does not exist, rollback should be idempotent -> success.
+	if resp.StatusCode == http.StatusNotFound {
+		log.V(log.Release, fmt.Sprintf("GitHub release for tag %s not found (nothing to delete)", tag))
+		return nil
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("github: failed fetching release by tag %s: status=%d body=%s", tag, resp.StatusCode, string(body))
+	}
+
+	var payload struct {
+		ID int64 `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return err
+	}
+	if payload.ID == 0 {
+		return fmt.Errorf("github: release id missing for tag %s", tag)
+	}
+
+	// Delete release by id
+	delURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/%d", owner, name, payload.ID)
+
+	delReq, err := http.NewRequest("DELETE", delURL, nil)
+	if err != nil {
+		return err
+	}
+	delReq.Header.Set("Authorization", "Bearer "+token)
+	delReq.Header.Set("Accept", "application/vnd.github+json")
+	delReq.Header.Set("User-Agent", "neko-cli")
+
+	delResp, err := http.DefaultClient.Do(delReq)
+	if err != nil {
+		return err
+	}
+	defer delResp.Body.Close()
+
+	if delResp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(delResp.Body)
+		return fmt.Errorf("github: failed deleting release for tag %s: status=%d body=%s", tag, delResp.StatusCode, string(body))
+	}
+
+	log.V(log.Release, fmt.Sprintf("Deleted GitHub release for tag %s", tag))
+	return nil
+}
+
+// Head returns the current commit hash of HEAD.
+func Head() (string, error) {
+	cmd := exec.Command("git", "rev-parse", "--short", "HEAD")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("git rev-parse HEAD failed: %s", strings.TrimSpace(string(out)))
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// CleanUntracked removes untracked files and directories.
+func CleanUntracked() error {
+	cmd := exec.Command("git", "clean", "-fd")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git clean -fd failed: %s", strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// DeleteLocalTag deletes a local git tag.
+func DeleteLocalTag(tag string) error {
+	cmd := exec.Command("git", "tag", "-d", tag)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git tag -d %s failed: %s", tag, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// DeleteRemoteTag deletes a tag from origin.
+func DeleteRemoteTag(tag string) error {
+	cmd := exec.Command("git", "push", "origin", "--delete", tag)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git push origin --delete %s failed: %s", tag, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// RevertCommit creates a new commit that reverts the given commit hash.
+func RevertCommit(hash string) error {
+	cmd := exec.Command("git", "revert", "--no-edit", hash)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git revert %s failed: %s", hash, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// CreateCommit creates a new commit with a given message
+func CreateCommit(message string) error {
+	cmd := exec.Command("git", "commit", "--allow-empty", "-m", message)
+	out, err := cmd.CombinedOutput()
+
+	if err != nil {
+		return fmt.Errorf("git commit -m '%s' failed: %s", message, strings.TrimSpace(string(out)))
+	}
+
+	return nil
+}
+
+// HardResetTo resets HEAD, index, and working tree to the given commit hash.
+func HardResetTo(hash string) error {
+	cmd := exec.Command("git", "reset", "--hard", hash)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git reset --hard %s failed: %s", hash, strings.TrimSpace(string(out)))
+	}
+	return nil
 }

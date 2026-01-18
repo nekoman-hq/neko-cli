@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/nekoman-hq/neko-cli/internal/config"
+	"github.com/nekoman-hq/neko-cli/internal/errors"
 	"github.com/nekoman-hq/neko-cli/internal/log"
 	"github.com/spf13/cobra"
 )
@@ -17,7 +18,14 @@ var checkCmd = &cobra.Command{
 	Long: `Show or validate the Neko configuration.
 You can inspect your current .neko.json or run validations to ensure it is correct.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		cfg := config.LoadConfig()
+		cfg, err := config.LoadConfig()
+		if err != nil {
+			errors.Fatal(
+				"Loading Configuration failed",
+				err.Error(),
+				errors.ErrConfig,
+			)
+		}
 
 		if showConfig {
 			println(fmt.Sprintf("\n%s %s\n",

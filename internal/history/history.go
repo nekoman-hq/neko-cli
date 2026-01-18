@@ -29,7 +29,11 @@ func ShowHistory() {
 
 // showBranch displays the current branch
 func showBranch() {
-	branch := git.CurrentBranch()
+	branch, err := git.CurrentBranch()
+	if err != nil {
+		return
+	}
+
 	fmt.Printf(" %s  %s \n",
 		log.ColorText(log.ColorGreen, "\uE725"),
 		branch,
@@ -38,7 +42,11 @@ func showBranch() {
 
 // showLastCommit displays the last commit information
 func showLastCommit() {
-	lastCommit := git.LastCommit()
+	lastCommit, err := git.LastCommit()
+	if err != nil {
+		return
+	}
+
 	fmt.Printf(" %s  %s \n",
 		log.ColorText(log.ColorYellow, "\uF172"),
 		lastCommit,
@@ -50,16 +58,23 @@ func showStatistics() {
 	log.V(log.History, "Gathering repository statistics")
 
 	// Total commits
-	totalCommits := git.TotalCommits()
+	totalCommits, err := git.TotalCommits()
+	if err != nil {
+	}
 
 	// Tags
 	tagList := git.GetTags()
-
 	// Files count
-	filesCount := git.FilesCount()
+	filesCount, err := git.FilesCount()
+	if err != nil {
+		return
+	}
 
 	// Repo size
-	repoSize := git.RepoSize()
+	repoSize, err := git.RepoSize()
+	if err != nil {
+		return
+	}
 
 	// Print statistics
 	fmt.Println(log.ColorText(log.ColorCyan, "\n┌─ \uF201 Statistics"))
@@ -80,6 +95,7 @@ func showStatistics() {
 			log.ColorText(log.ColorCyan, "│"),
 			log.ColorText(log.ColorBlue, repoSize),
 		)
+
 	}
 	fmt.Println(log.ColorText(log.ColorCyan, "│"))
 }
@@ -96,7 +112,7 @@ func showTagHistory() {
 
 	fmt.Println(log.ColorText(log.ColorCyan, "├─ \U000F04F9 Tag History"))
 
-	for i := 0; i < len(tagList); i++ {
+	for i := range tagList {
 		var commitCount int
 		var prefix string
 
@@ -134,7 +150,10 @@ func showTagHistory() {
 func showContributors() {
 	fmt.Println(log.ColorText(log.ColorCyan, "└─ \uF4FE Contributors"))
 
-	contributors := git.Contributors()
+	contributors, err := git.Contributors()
+	if err != nil {
+		return
+	}
 
 	for i, contributor := range contributors {
 		var prefix string

@@ -3,11 +3,10 @@ package release
 import (
 	"fmt"
 	"os/exec"
-	"strings"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/nekoman-hq/neko-cli/internal/config"
-	"github.com/nekoman-hq/neko-cli/internal/errors"
+	"github.com/nekoman-hq/neko-cli/internal/git"
 	"github.com/nekoman-hq/neko-cli/internal/log"
 )
 
@@ -23,11 +22,12 @@ type Tool interface {
 	Release(v *semver.Version) error
 	Survey(v *semver.Version) (Type, error)
 	SupportsSurvey() bool
+	RevertRelease() error
 }
 
 type ToolBase struct{}
 
-func (tb *ToolBase) RequireBinary(name string) {
+func (tb *ToolBase) RequireBinary(name string) error {
 	log.V(log.Init,
 		fmt.Sprintf("Searching for %s executable: %s",
 			name,
@@ -37,13 +37,8 @@ func (tb *ToolBase) RequireBinary(name string) {
 
 	path, err := exec.LookPath(name)
 	if err != nil {
-		errors.Fatal(
-			"Required dependency missing",
-			fmt.Sprintf(
-				"%s is not installed or not available in PATH",
-				name,
-			),
-			errors.ErrDependencyMissing,
+		return fmt.Errorf(
+			"Required dependency missing: %s: %w", path, err,
 		)
 	}
 
@@ -53,6 +48,96 @@ func (tb *ToolBase) RequireBinary(name string) {
 		log.ColorText(log.ColorCyan, name),
 		log.ColorText(log.ColorGreen, path),
 	)
+
+	return nil
+}
+
+type GitReleaseState struct {
+	PreHead     string
+	ReleaseHead string
+
+	TagName      string
+	PushedCommit bool
+	PushedTag    bool
+
+	GitHubReleaseTag     string // usually same as TagName
+	CreatedGitHubRelease bool
+}
+
+func (t *ToolBase) RevertGitRelease(st GitReleaseState) error {
+	// GitHub release has to be deleted before the corresponding tag
+	if st.CreatedGitHubRelease && st.GitHubReleaseTag != "" {
+		if err := t.DeleteGitHubRelease(st.GitHubReleaseTag); err != nil {
+			return fmt.Errorf(
+				"rollback: failed deleting GitHub release %s: %w",
+				st.GitHubReleaseTag,
+				err,
+			)
+		}
+	}
+
+	// Tags
+	if st.TagName != "" {
+		_ = git.DeleteLocalTag(st.TagName)
+
+		if st.PushedTag {
+			if err := git.DeleteRemoteTag(st.TagName); err != nil {
+				return fmt.Errorf(
+					"rollback: failed deleting remote tag %s: %w",
+					st.TagName,
+					err,
+				)
+			}
+		}
+	}
+
+	// Commits
+	if st.ReleaseHead != "" {
+		if st.PushedCommit {
+			// empty commits cannot be reverted, ignore error
+			if err := git.RevertCommit(st.ReleaseHead); err != nil {
+				_ = git.CreateCommit(fmt.Sprintf("revert %s", st.ReleaseHead))
+			}
+
+			if err := t.PushCommits(); err != nil {
+				return fmt.Errorf(
+					"rollback: failed pushing revert commit: %w",
+					err,
+				)
+			}
+		} else if st.PreHead != "" {
+			if err := git.HardResetTo(st.PreHead); err != nil {
+				return fmt.Errorf(
+					"rollback: failed hard reset to %s: %w",
+					st.PreHead,
+					err,
+				)
+			}
+		} else {
+			return fmt.Errorf(
+				"rollback: inconsistent state (release commit exists but pre-head missing)",
+			)
+		}
+	}
+
+	// Final cleanup
+	if err := git.CleanUntracked(); err != nil {
+		return fmt.Errorf(
+			"rollback: failed cleaning untracked files: %w",
+			err,
+		)
+	}
+
+	return nil
+}
+
+func (t *ToolBase) DeleteGitHubRelease(tag string) error {
+	pat, err := config.GetPAT()
+	if err != nil {
+		return err
+	}
+
+	return git.DeleteGithubRelease(tag, pat)
 }
 
 // CreateReleaseCommit creates the chore commit for the release
@@ -65,10 +150,8 @@ func (tb *ToolBase) CreateReleaseCommit(v *semver.Version) error {
 	cmd := exec.Command("git", "commit", "--allow-empty", "-a", "-m", commitMsg)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		errors.Fatal(
-			"Failed to create release commit",
-			fmt.Sprintf("git commit failed: %s", strings.TrimSpace(string(output))),
-			errors.ErrReleaseCommit,
+		return fmt.Errorf(
+			"Failed to create release commit: %s: %w", string(output), err,
 		)
 	}
 
@@ -87,10 +170,8 @@ func (tb *ToolBase) CreateGitTag(v *semver.Version) error {
 	cmd := exec.Command("git", "tag", tag)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		errors.Fatal(
-			"Failed to create git tag",
-			fmt.Sprintf("git tag %s failed: %s", tag, strings.TrimSpace(string(output))),
-			errors.ErrReleaseTag,
+		return fmt.Errorf(
+			"Failed to create git tag: %s: %w", string(output), err,
 		)
 	}
 
@@ -107,10 +188,8 @@ func (tb *ToolBase) PushCommits() error {
 	cmd := exec.Command("git", "push", "origin", "HEAD")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		errors.Fatal(
-			"Failed to push release commits",
-			fmt.Sprintf("git push failed: %s", strings.TrimSpace(string(output))),
-			errors.ErrReleasePush,
+		return fmt.Errorf(
+			"Failed to push release commits: %s: %w", string(output), err,
 		)
 	}
 
@@ -129,10 +208,8 @@ func (tb *ToolBase) PushGitTag(v *semver.Version) error {
 	cmd := exec.Command("git", "push", "origin", tag)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		errors.Fatal(
-			"Failed to push git tag",
-			fmt.Sprintf("git push %s failed: %s", tag, strings.TrimSpace(string(output))),
-			errors.ErrReleasePush,
+		return fmt.Errorf(
+			"Failed to push git tag: %s: %w", string(output), err,
 		)
 	}
 

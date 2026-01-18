@@ -24,13 +24,16 @@ var (
 	BuiltBy = "unknown"
 )
 
-func Latest(repoInfo *git.RepoInfo) {
-	release := git.LatestRelease(repoInfo)
-	displayCLIVersion()
-
-	if release != nil {
-		displayRelease(repoInfo, release)
+func Latest(repoInfo *git.RepoInfo) error {
+	release, err := git.LatestRelease(repoInfo)
+	if err != nil {
+		return err
 	}
+
+	displayCLIVersion()
+	displayRelease(repoInfo, release)
+
+	return nil
 }
 
 func displayCLIVersion() {
