@@ -184,7 +184,6 @@ func printAvailableHeader(name, version, status string) {
 }
 
 func printTableSeparator() {
-	fmt.Print("  ")
 	log.PrintTableSeparator()
 }
 
