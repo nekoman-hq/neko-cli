@@ -8,4 +8,4 @@ out
 .DS_Store
 .vscode
 # Added by goreleaser init:
-dist/
+dist

@@ -8,8 +8,8 @@ before:
     - go mod tidy
     - go generate ./...
 
-env:
-  - PLUGIN_RELEASE_VERSION={{ if index .Env "PLUGIN_RELEASE_VERSION" }}{{ .Env.PLUGIN_RELEASE_VERSION }}{{ else }}dev{{ end }}
+# NOTE: For monorepo plugin versioning, PLUGIN_RELEASE_VERSION must be set.
+# The release plugin (goreleaser tool) should set this automatically.
 
 builds:
   # Main CLI binary
@@ -24,9 +24,9 @@ builds:
       - darwin
     ldflags:
       - -s -w
-      - -X github.com/nekoman-hq/neko-cli/pkg/version.Version={{.Version}}
-      - -X github.com/nekoman-hq/neko-cli/pkg/version.Commit={{.Commit}}
-      - -X github.com/nekoman-hq/neko-cli/pkg/version.Date={{.Date}}
+      - -X github.com/nekoman-hq/neko-cli/pkg/version.Version={{ .Version }}
+      - -X github.com/nekoman-hq/neko-cli/pkg/version.Commit={{ .Commit }}
+      - -X github.com/nekoman-hq/neko-cli/pkg/version.Date={{ .Date }}
       - -X github.com/nekoman-hq/neko-cli/pkg/version.BuiltBy=goreleaser
 
   # Release plugin
@@ -41,9 +41,9 @@ builds:
       - darwin
     ldflags:
       - -s -w
-      - -X github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata.Version={{ .Env.PLUGIN_RELEASE_VERSION }}
-      - -X github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata.GitCommit={{.Commit}}
-      - -X github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata.BuildDate={{.Date}}
+      - -X github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata.Version={{ if index .Env "PLUGIN_RELEASE_VERSION" }}{{ .Env.PLUGIN_RELEASE_VERSION }}{{ else }}dev{{ end }}
+      - -X github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata.GitCommit={{ .Commit }}
+      - -X github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata.BuildDate={{ .Date }}
 
 archives:
   # Main CLI archive
@@ -70,7 +70,7 @@ archives:
       - plugin-release
     formats: [tar.gz]
     name_template: >-
-      plugin-release_{{ .Env.PLUGIN_RELEASE_VERSION }}_
+      plugin-release_{{ if index .Env "PLUGIN_RELEASE_VERSION" }}{{ .Env.PLUGIN_RELEASE_VERSION }}{{ else }}dev{{ end }}_
       {{- title .Os }}_
       {{- if eq .Arch "amd64" }}x86_64
       {{- else if eq .Arch "386" }}i386
