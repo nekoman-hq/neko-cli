@@ -106,9 +106,19 @@ func addFlagToCommand(cmd *cobra.Command, flag plugin.Flag) {
 func executePlugin(pluginName string, cmd *cobra.Command, args []string) error {
 	d := dispatcher.NewDispatcher(pluginDir)
 
+	// Determine the command name - if we're on the root plugin command and have args,
+	// the first arg might be an unknown subcommand
+	commandName := cmd.Name()
+	actualArgs := args
+	if commandName == pluginName && len(args) > 0 {
+		// User typed something like "neko release unknownCmd" - treat first arg as command
+		commandName = args[0]
+		actualArgs = args[1:]
+	}
+
 	req := plugin.Request{
-		Command: cmd.Name(),
-		Args:    args,
+		Command: commandName,
+		Args:    actualArgs,
 		Flags:   extractFlags(cmd),
 		Context: plugin.Context{
 			WorkingDir: mustGetwd(),
@@ -163,6 +173,11 @@ func mustGetwd() string {
 
 // InitializePlugins loads plugins from the plugin directory and adds them to the root command
 func InitializePlugins() error {
+	// If plugin directory doesn't exist, that's fine - no plugins installed yet
+	if _, err := os.Stat(pluginDir); os.IsNotExist(err) {
+		return nil
+	}
+
 	d := dispatcher.NewDispatcher(pluginDir)
 
 	manifests, err := d.ListPlugins()
