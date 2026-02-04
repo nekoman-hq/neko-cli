@@ -83,8 +83,7 @@ func RenderDescribeTo(resp *plugin.Response, format OutputFormat, w io.Writer) e
 }
 
 func renderMetadataSection(resp *plugin.Response, w io.Writer) {
-	_, _ = fmt.Fprintf(w, "\n%s%s━━━ Command Metadata ━━━%s\n",
-		log.ColorBold, log.ColorCyan, log.ColorReset)
+	log.PrintSectionHeaderTo(w, "Command Metadata", log.ColorCyan)
 
 	_, _ = fmt.Fprintf(w, "%sPlugin:%s     %s\n",
 		log.ColorBrightBlack, log.ColorReset, resp.Metadata.Plugin)
@@ -100,8 +99,7 @@ func renderMetadataSection(resp *plugin.Response, w io.Writer) {
 }
 
 func renderLogsSection(logs []plugin.LogEntry, w io.Writer) {
-	_, _ = fmt.Fprintf(w, "%s%s━━━ Execution Logs (%d entries) ━━━%s\n",
-		log.ColorYellow, log.ColorBold, len(logs), log.ColorReset)
+	log.PrintSectionHeaderTo(w, fmt.Sprintf("Execution Logs (%d entries)", len(logs)), log.ColorYellow)
 
 	for _, entry := range logs {
 		levelColor := getLogLevelColor(entry.Level)
@@ -121,8 +119,7 @@ func renderLogsSection(logs []plugin.LogEntry, w io.Writer) {
 }
 
 func renderOutputSection(resp *plugin.Response, format OutputFormat, w io.Writer) {
-	_, _ = fmt.Fprintf(w, "%s%s━━━ Output ━━━%s\n",
-		log.ColorGreen, log.ColorBold, log.ColorReset)
+	log.PrintSectionHeaderTo(w, "Output", log.ColorGreen)
 
 	wide := format == FormatWide
 	_ = renderTable(resp, w, wide)
@@ -262,6 +259,9 @@ func renderList(items any, w io.Writer) error {
 	// Print header
 	printHeader(w, headers, colWidths)
 
+	// Print separator
+	log.PrintTableSeparatorTo(w, totalWidth(colWidths))
+
 	// Print rows
 	for _, row := range rows {
 		printRow(w, headers, row, colWidths)
@@ -361,6 +361,14 @@ func calculateColumnWidths(headers []string, rows []map[string]string) map[strin
 	}
 
 	return widths
+}
+
+func totalWidth(colWidths map[string]int) int {
+	total := 0
+	for _, w := range colWidths {
+		total += w
+	}
+	return total
 }
 
 func printHeader(w io.Writer, headers []string, widths map[string]int) {
