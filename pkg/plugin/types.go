@@ -59,7 +59,7 @@ type Plugin interface {
 // Manifest describes the plugin
 type Manifest struct {
 	Name          string    `json:"name"`
-	Version       string    `json:"metadata"`
+	Version       string    `json:"version"`
 	Description   string    `json:"description"`
 	Author        string    `json:"author"`
 	Commands      []Command `json:"commands"`
