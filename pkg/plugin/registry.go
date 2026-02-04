@@ -17,7 +17,7 @@ const (
 // AvailablePlugin represents a plugin available in the registry
 type AvailablePlugin struct {
 	Name    string `json:"name"`
-	Version string `json:"metadata"`
+	Version string `json:"version"`
 }
 
 // Registry handles plugin discovery from a remote registry
@@ -71,24 +71,31 @@ func (r *Registry) FetchAvailablePlugins() ([]AvailablePlugin, error) {
 		return nil, err
 	}
 
-	// Parse plugin names from assets
-	pluginMap := make(map[string]bool)
+	// Parse plugin names and versions from assets
+	// Pattern: plugin-{name}_{version}_{OS}_{Arch}.tar.gz
+	pluginMap := make(map[string]string) // name -> version
 	for _, asset := range release.Assets {
-		// Plugin assets follow pattern: plugin-{name}_{OS}_{Arch}.tar.gz
-		if strings.HasPrefix(asset.Name, "plugin-") {
-			parts := strings.Split(asset.Name, "_")
-			if len(parts) >= 1 {
+		if strings.HasPrefix(asset.Name, "plugin-") && strings.HasSuffix(asset.Name, ".tar.gz") {
+			// Remove extension
+			name := strings.TrimSuffix(asset.Name, ".tar.gz")
+			// Split: plugin-release_2.3.0_Darwin_arm64 -> [plugin-release, 2.3.0, Darwin, arm64]
+			parts := strings.Split(name, "_")
+			if len(parts) >= 2 {
 				pluginName := strings.TrimPrefix(parts[0], "plugin-")
-				pluginMap[pluginName] = true
+				pluginVersion := parts[1]
+				// Only store if we haven't seen this plugin yet
+				if _, exists := pluginMap[pluginName]; !exists {
+					pluginMap[pluginName] = pluginVersion
+				}
 			}
 		}
 	}
 
 	var plugins []AvailablePlugin
-	for name := range pluginMap {
+	for name, version := range pluginMap {
 		plugins = append(plugins, AvailablePlugin{
 			Name:    name,
-			Version: latestVersion,
+			Version: version,
 		})
 	}
 
@@ -122,11 +129,9 @@ func (r *Registry) GetLatestVersion() (string, error) {
 	return release.TagName, nil
 }
 
-// GetDownloadURL returns the download URL for a specific plugin metadata
-func (r *Registry) GetDownloadURL(pluginName, version, osName, archName string) (string, error) {
-	assetName := fmt.Sprintf("plugin-%s_%s_%s.tar.gz", pluginName, osName, archName)
-
-	url := fmt.Sprintf("%s/tags/%s", r.baseURL, version)
+// GetDownloadURL returns the download URL for a specific plugin version
+func (r *Registry) GetDownloadURL(pluginName, releaseTag, osName, archName string) (string, error) {
+	url := fmt.Sprintf("%s/tags/%s", r.baseURL, releaseTag)
 	resp, err := r.httpGetWithAuth(url)
 	if err != nil {
 		return "", err
@@ -147,13 +152,18 @@ func (r *Registry) GetDownloadURL(pluginName, version, osName, archName string) 
 		return "", err
 	}
 
+	// Find asset matching pattern: plugin-{name}_{version}_{OS}_{Arch}.tar.gz
+	// We match by prefix and suffix since version is embedded in filename
+	prefix := fmt.Sprintf("plugin-%s_", pluginName)
+	suffix := fmt.Sprintf("_%s_%s.tar.gz", osName, archName)
+
 	for _, asset := range release.Assets {
-		if asset.Name == assetName {
+		if strings.HasPrefix(asset.Name, prefix) && strings.HasSuffix(asset.Name, suffix) {
 			return asset.BrowserDownloadURL, nil
 		}
 	}
 
-	return "", fmt.Errorf("plugin '%s' not found for %s/%s in metadata %s", pluginName, osName, archName, version)
+	return "", fmt.Errorf("plugin '%s' not found for %s/%s in release %s", pluginName, osName, archName, releaseTag)
 }
 
 // httpGetWithAuth performs an HTTP GET request with optional GitHub authentication

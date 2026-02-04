@@ -37,7 +37,7 @@ type LogEntry struct {
 type ResponseMetadata struct {
 	Timestamp time.Time `json:"timestamp"`
 	Plugin    string    `json:"plugin"`
-	Version   string    `json:"metadata"`
+	Version   string    `json:"version"`
 	Command   string    `json:"command"`
 }
 
