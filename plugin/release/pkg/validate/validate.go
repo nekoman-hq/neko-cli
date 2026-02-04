@@ -13,11 +13,7 @@ import (
 	"github.com/nekoman-hq/neko-cli/pkg/log"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
-)
-
-const (
-	PluginName    = "release"
-	PluginVersion = "1.0.0"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata"
 )
 
 // HandleValidate validates the release configuration
@@ -29,8 +25,8 @@ func HandleValidate(req plugin.Request) (*plugin.Response, error) {
 		return &plugin.Response{
 			Status: "error",
 			Metadata: plugin.ResponseMetadata{
-				Plugin:    PluginName,
-				Version:   PluginVersion,
+				Plugin:    metadata.PluginName,
+				Version:   metadata.Version,
 				Command:   "validate",
 				Timestamp: time.Now(),
 			},
@@ -50,8 +46,8 @@ func HandleValidate(req plugin.Request) (*plugin.Response, error) {
 		return &plugin.Response{
 			Status: "error",
 			Metadata: plugin.ResponseMetadata{
-				Plugin:    PluginName,
-				Version:   PluginVersion,
+				Plugin:    metadata.PluginName,
+				Version:   metadata.Version,
 				Command:   "validate",
 				Timestamp: time.Now(),
 			},
@@ -67,8 +63,8 @@ func HandleValidate(req plugin.Request) (*plugin.Response, error) {
 		return &plugin.Response{
 			Status: "error",
 			Metadata: plugin.ResponseMetadata{
-				Plugin:    PluginName,
-				Version:   PluginVersion,
+				Plugin:    metadata.PluginName,
+				Version:   metadata.Version,
 				Command:   "validate",
 				Timestamp: time.Now(),
 			},
@@ -88,8 +84,8 @@ func HandleValidate(req plugin.Request) (*plugin.Response, error) {
 		return &plugin.Response{
 			Status: "success",
 			Metadata: plugin.ResponseMetadata{
-				Plugin:    PluginName,
-				Version:   PluginVersion,
+				Plugin:    metadata.PluginName,
+				Version:   metadata.Version,
 				Command:   "validate",
 				Timestamp: time.Now(),
 			},
@@ -129,8 +125,8 @@ func HandleValidate(req plugin.Request) (*plugin.Response, error) {
 	return &plugin.Response{
 		Status: "success",
 		Metadata: plugin.ResponseMetadata{
-			Plugin:    PluginName,
-			Version:   PluginVersion,
+			Plugin:    metadata.PluginName,
+			Version:   metadata.Version,
 			Command:   "validate",
 			Timestamp: time.Now(),
 		},

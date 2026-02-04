@@ -17,7 +17,7 @@ const (
 // AvailablePlugin represents a plugin available in the registry
 type AvailablePlugin struct {
 	Name    string `json:"name"`
-	Version string `json:"version"`
+	Version string `json:"metadata"`
 }
 
 // Registry handles plugin discovery from a remote registry
@@ -95,7 +95,7 @@ func (r *Registry) FetchAvailablePlugins() ([]AvailablePlugin, error) {
 	return plugins, nil
 }
 
-// GetLatestVersion fetches the latest version tag from the registry
+// GetLatestVersion fetches the latest metadata tag from the registry
 func (r *Registry) GetLatestVersion() (string, error) {
 	url := fmt.Sprintf("%s/latest", r.baseURL)
 
@@ -122,7 +122,7 @@ func (r *Registry) GetLatestVersion() (string, error) {
 	return release.TagName, nil
 }
 
-// GetDownloadURL returns the download URL for a specific plugin version
+// GetDownloadURL returns the download URL for a specific plugin metadata
 func (r *Registry) GetDownloadURL(pluginName, version, osName, archName string) (string, error) {
 	assetName := fmt.Sprintf("plugin-%s_%s_%s.tar.gz", pluginName, osName, archName)
 
@@ -153,7 +153,7 @@ func (r *Registry) GetDownloadURL(pluginName, version, osName, archName string) 
 		}
 	}
 
-	return "", fmt.Errorf("plugin '%s' not found for %s/%s in version %s", pluginName, osName, archName, version)
+	return "", fmt.Errorf("plugin '%s' not found for %s/%s in metadata %s", pluginName, osName, archName, version)
 }
 
 // httpGetWithAuth performs an HTTP GET request with optional GitHub authentication

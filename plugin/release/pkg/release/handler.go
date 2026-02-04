@@ -13,11 +13,7 @@ import (
 	"github.com/nekoman-hq/neko-cli/pkg/log"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
-)
-
-const (
-	PluginName    = "release"
-	PluginVersion = "1.0.0"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata"
 )
 
 // HandleRelease handles the patch, minor, major release commands
@@ -30,8 +26,8 @@ func HandleRelease(req plugin.Request, releaseType Type) (*plugin.Response, erro
 		return &plugin.Response{
 			Status: "error",
 			Metadata: plugin.ResponseMetadata{
-				Plugin:    PluginName,
-				Version:   PluginVersion,
+				Plugin:    metadata.PluginName,
+				Version:   metadata.Version,
 				Command:   string(releaseType),
 				Timestamp: time.Now(),
 			},
@@ -48,14 +44,14 @@ func HandleRelease(req plugin.Request, releaseType Type) (*plugin.Response, erro
 	// Create release service
 	svc := NewReleaseService(cfg)
 
-	// Get version info for response
+	// Get metadata info for response
 	oldVersion, newVersion, err := svc.GetNewVersion(releaseType)
 	if err != nil {
 		return &plugin.Response{
 			Status: "error",
 			Metadata: plugin.ResponseMetadata{
-				Plugin:    PluginName,
-				Version:   PluginVersion,
+				Plugin:    metadata.PluginName,
+				Version:   metadata.Version,
 				Command:   string(releaseType),
 				Timestamp: time.Now(),
 			},
@@ -73,8 +69,8 @@ func HandleRelease(req plugin.Request, releaseType Type) (*plugin.Response, erro
 		return &plugin.Response{
 			Status: "success",
 			Metadata: plugin.ResponseMetadata{
-				Plugin:    PluginName,
-				Version:   PluginVersion,
+				Plugin:    metadata.PluginName,
+				Version:   metadata.Version,
 				Command:   string(releaseType),
 				Timestamp: time.Now(),
 			},
@@ -115,8 +111,8 @@ func HandleRelease(req plugin.Request, releaseType Type) (*plugin.Response, erro
 		return &plugin.Response{
 			Status: "error",
 			Metadata: plugin.ResponseMetadata{
-				Plugin:    PluginName,
-				Version:   PluginVersion,
+				Plugin:    metadata.PluginName,
+				Version:   metadata.Version,
 				Command:   string(releaseType),
 				Timestamp: time.Now(),
 			},
@@ -130,8 +126,8 @@ func HandleRelease(req plugin.Request, releaseType Type) (*plugin.Response, erro
 	return &plugin.Response{
 		Status: "success",
 		Metadata: plugin.ResponseMetadata{
-			Plugin:    PluginName,
-			Version:   PluginVersion,
+			Plugin:    metadata.PluginName,
+			Version:   metadata.Version,
 			Command:   string(releaseType),
 			Timestamp: time.Now(),
 		},

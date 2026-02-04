@@ -75,7 +75,7 @@ func Validate(cfg *NekoConfig) error {
 
 	if cfg.Version == "" {
 		return errors.New(
-			"invalid configuration: Version is missing in ..release.neko.json",
+			"invalid configuration: Version is missing in .release.neko.json",
 		)
 	}
 

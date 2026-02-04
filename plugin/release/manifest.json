@@ -1,67 +1,140 @@
 {
   "name": "release",
-  "version": "1.0.0",
+  "version": "2.3.0",
   "description": "Release management plugin",
   "author": "nekoman-hq",
   "commands": [
     {
       "name": "init",
       "description": "Initialize release system with project configuration",
-      "outputs": ["text", "json"],
+      "outputs": [
+        "text",
+        "json"
+      ],
       "flags": [
-        {"name": "project-type", "type": "string", "required": true, "description": "Project type (frontend|backend|other)"},
-        {"name": "release-system", "type": "string", "required": true, "description": "Release system (release-it|jreleaser|goreleaser)"},
-        {"name": "version", "type": "string", "required": false, "default": "0.1.0", "description": "Initial version (semver)"},
-        {"name": "force", "type": "bool", "required": false, "default": false, "description": "Overwrite existing configuration"}
+        {
+          "name": "project-type",
+          "type": "string",
+          "required": true,
+          "description": "Project type (frontend|backend|other)"
+        },
+        {
+          "name": "release-system",
+          "type": "string",
+          "required": true,
+          "description": "Release system (release-it|jreleaser|goreleaser)"
+        },
+        {
+          "name": "version",
+          "type": "string",
+          "required": false,
+          "default": "0.1.0",
+          "description": "Initial version (semver)"
+        },
+        {
+          "name": "force",
+          "type": "bool",
+          "required": false,
+          "default": false,
+          "description": "Overwrite existing configuration"
+        }
       ]
     },
     {
       "name": "init-options",
       "description": "Get available options for init command",
-      "outputs": ["json"]
+      "outputs": [
+        "json"
+      ]
     },
     {
       "name": "patch",
       "description": "Create a patch release (x.y.Z)",
-      "outputs": ["text", "json"],
+      "outputs": [
+        "text",
+        "json"
+      ],
       "flags": [
-        {"name": "dry-run", "type": "bool", "required": false, "default": false, "description": "Run without making changes"}
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "required": false,
+          "default": false,
+          "description": "Run without making changes"
+        }
       ]
     },
     {
       "name": "minor",
       "description": "Create a minor release (x.Y.0)",
-      "outputs": ["text", "json"],
+      "outputs": [
+        "text",
+        "json"
+      ],
       "flags": [
-        {"name": "dry-run", "type": "bool", "required": false, "default": false, "description": "Run without making changes"}
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "required": false,
+          "default": false,
+          "description": "Run without making changes"
+        }
       ]
     },
     {
       "name": "major",
       "description": "Create a major release (X.0.0)",
-      "outputs": ["text", "json"],
+      "outputs": [
+        "text",
+        "json"
+      ],
       "flags": [
-        {"name": "dry-run", "type": "bool", "required": false, "default": false, "description": "Run without making changes"}
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "required": false,
+          "default": false,
+          "description": "Run without making changes"
+        }
       ]
     },
     {
       "name": "history",
       "description": "Show release history",
-      "outputs": ["table", "json"]
+      "outputs": [
+        "table",
+        "json"
+      ]
     },
     {
       "name": "contributors",
       "description": "Show repository contributors",
-      "outputs": ["table", "json"]
+      "outputs": [
+        "table",
+        "json"
+      ]
     },
     {
       "name": "validate",
       "description": "Validate the release configuration",
-      "outputs": ["table", "json"],
+      "outputs": [
+        "table",
+        "json"
+      ],
       "flags": [
-        {"name": "show", "type": "bool", "required": false, "default": false, "description": "Display current configuration details"}
+        {
+          "name": "show",
+          "type": "bool",
+          "required": false,
+          "default": false,
+          "description": "Display current configuration details"
+        }
       ]
     }
   ],
-  "renderer_types": ["table", "json", "text"]
+  "renderer_types": [
+    "table",
+    "json",
+    "text"
+  ]
 }

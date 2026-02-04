@@ -133,7 +133,7 @@ func runPluginInstall(_ *cobra.Command, args []string) error {
 
 	fmt.Printf("%s%sInstalling plugin '%s'%s", log.ColorCyan, log.ColorBold, pluginName, log.ColorReset)
 	if installVersion != "latest" {
-		fmt.Printf(" version %s", installVersion)
+		fmt.Printf(" metadata %s", installVersion)
 	}
 	fmt.Println("...")
 

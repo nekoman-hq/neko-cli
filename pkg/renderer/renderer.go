@@ -313,7 +313,7 @@ func prioritizeHeaders(headers []string) []string {
 	priority := map[string]int{
 		"name": 1, "NAME": 1,
 		"id": 2, "ID": 2,
-		"version": 3, "VERSION": 3,
+		"metadata": 3, "VERSION": 3,
 		"status": 4, "STATUS": 4,
 		"type": 5, "TYPE": 5,
 		"created": 6, "CREATED": 6,
@@ -410,7 +410,7 @@ func colorizeValue(key, value string) string {
 	}
 
 	// Version coloring
-	if keyLower == "version" || strings.HasPrefix(value, "v") {
+	if keyLower == "metadata" || strings.HasPrefix(value, "v") {
 		return log.ColorText(log.ColorPurple, value)
 	}
 

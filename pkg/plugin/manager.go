@@ -49,12 +49,12 @@ func (m *Manager) Install(pluginName, version string) error {
 		return fmt.Errorf("failed to create plugin directory: %w", err)
 	}
 
-	// Determine version to install
+	// Determine metadata to install
 	actualVersion := version
 	if version == "latest" || version == "" {
 		latestVersion, err := m.registry.GetLatestVersion()
 		if err != nil {
-			return fmt.Errorf("failed to get latest version: %w", err)
+			return fmt.Errorf("failed to get latest metadata: %w", err)
 		}
 		actualVersion = latestVersion
 	}

@@ -6,6 +6,7 @@ import (
 	"github.com/nekoman-hq/neko-cli/pkg/log"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/git"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata"
 )
 
 func HandleContributors() (*plugin.Response, error) {
@@ -26,8 +27,8 @@ func HandleContributors() (*plugin.Response, error) {
 	return &plugin.Response{
 		Status: "success",
 		Metadata: plugin.ResponseMetadata{
-			Plugin:    "release",
-			Version:   "1.0.0",
+			Plugin:    metadata.PluginName,
+			Version:   metadata.Version,
 			Command:   "contributors",
 			Timestamp: time.Now(),
 		},

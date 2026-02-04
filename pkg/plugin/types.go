@@ -37,7 +37,7 @@ type LogEntry struct {
 type ResponseMetadata struct {
 	Timestamp time.Time `json:"timestamp"`
 	Plugin    string    `json:"plugin"`
-	Version   string    `json:"version"`
+	Version   string    `json:"metadata"`
 	Command   string    `json:"command"`
 }
 
@@ -59,7 +59,7 @@ type Plugin interface {
 // Manifest describes the plugin
 type Manifest struct {
 	Name          string    `json:"name"`
-	Version       string    `json:"version"`
+	Version       string    `json:"metadata"`
 	Description   string    `json:"description"`
 	Author        string    `json:"author"`
 	Commands      []Command `json:"commands"`

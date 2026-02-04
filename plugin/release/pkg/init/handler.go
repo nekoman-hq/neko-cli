@@ -15,13 +15,8 @@ import (
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/git"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/release"
-)
-
-const (
-	ConfigFileName = "..release.neko.json"
-	PluginName     = "release"
-	PluginVersion  = "1.0.0"
 )
 
 // HandleInit handles the init command in plugin mode
@@ -38,14 +33,14 @@ func HandleInit(req plugin.Request) (*plugin.Response, error) {
 		return &plugin.Response{
 			Status: "error",
 			Metadata: plugin.ResponseMetadata{
-				Plugin:    PluginName,
-				Version:   PluginVersion,
+				Plugin:    metadata.PluginName,
+				Version:   metadata.Version,
 				Command:   "init",
 				Timestamp: time.Now(),
 			},
 			Error: &plugin.ResponseError{
 				Code:    "CONFIG_EXISTS",
-				Message: fmt.Sprintf("%s already exists. Use --force to overwrite.", ConfigFileName),
+				Message: fmt.Sprintf("%s already exists. Use --force to overwrite.", metadata.ConfigFileName),
 			},
 		}, nil
 	}
@@ -56,8 +51,8 @@ func HandleInit(req plugin.Request) (*plugin.Response, error) {
 		return &plugin.Response{
 			Status: "error",
 			Metadata: plugin.ResponseMetadata{
-				Plugin:    PluginName,
-				Version:   PluginVersion,
+				Plugin:    metadata.PluginName,
+				Version:   metadata.Version,
 				Command:   "init",
 				Timestamp: time.Now(),
 			},
@@ -66,7 +61,7 @@ func HandleInit(req plugin.Request) (*plugin.Response, error) {
 				Message: err.Error(),
 				Details: map[string]any{
 					"required_flags": []string{"project-type", "release-system"},
-					"optional_flags": []string{"version", "force"},
+					"optional_flags": []string{"metadata", "force"},
 				},
 			},
 		}, nil
@@ -85,8 +80,8 @@ func HandleInit(req plugin.Request) (*plugin.Response, error) {
 		return &plugin.Response{
 			Status: "error",
 			Metadata: plugin.ResponseMetadata{
-				Plugin:    PluginName,
-				Version:   PluginVersion,
+				Plugin:    metadata.PluginName,
+				Version:   metadata.Version,
 				Command:   "init",
 				Timestamp: time.Now(),
 			},
@@ -102,8 +97,8 @@ func HandleInit(req plugin.Request) (*plugin.Response, error) {
 		return &plugin.Response{
 			Status: "error",
 			Metadata: plugin.ResponseMetadata{
-				Plugin:    PluginName,
-				Version:   PluginVersion,
+				Plugin:    metadata.PluginName,
+				Version:   metadata.Version,
 				Command:   "init",
 				Timestamp: time.Now(),
 			},
@@ -114,7 +109,7 @@ func HandleInit(req plugin.Request) (*plugin.Response, error) {
 		}, nil
 	}
 
-	log.PluginPrint(log.Init, "Configuration saved to %s", ConfigFileName)
+	log.PluginPrint(log.Init, "Configuration saved to %s", metadata.ConfigFileName)
 
 	// Initialize the release system
 	releaser, err := release.Get(string(cfg.ReleaseSystem))
@@ -122,8 +117,8 @@ func HandleInit(req plugin.Request) (*plugin.Response, error) {
 		return &plugin.Response{
 			Status: "error",
 			Metadata: plugin.ResponseMetadata{
-				Plugin:    PluginName,
-				Version:   PluginVersion,
+				Plugin:    metadata.PluginName,
+				Version:   metadata.Version,
 				Command:   "init",
 				Timestamp: time.Now(),
 			},
@@ -149,18 +144,18 @@ func HandleInit(req plugin.Request) (*plugin.Response, error) {
 	return &plugin.Response{
 		Status: "success",
 		Metadata: plugin.ResponseMetadata{
-			Plugin:    PluginName,
-			Version:   PluginVersion,
+			Plugin:    metadata.PluginName,
+			Version:   metadata.Version,
 			Command:   "init",
 			Timestamp: time.Now(),
 		},
 		Data: map[string]any{
-			"config_file":    ConfigFileName,
+			"config_file":    metadata.ConfigFileName,
 			"project_name":   cfg.ProjectName,
 			"project_owner":  cfg.ProjectOwner,
 			"project_type":   string(cfg.ProjectType),
 			"release_system": string(cfg.ReleaseSystem),
-			"version":        cfg.Version,
+			"metadata":       cfg.Version,
 			"next_steps":     nextSteps,
 		},
 		RendererHint: "text",
@@ -185,10 +180,10 @@ func GetAvailableOptions() (*plugin.Response, error) {
 			"description": "Release tool to use",
 		},
 		{
-			"option":      "version",
+			"option":      "metadata",
 			"values":      "semver (e.g. 0.1.0)",
 			"required":    false,
-			"description": "Initial version (default: 0.1.0)",
+			"description": "Initial metadata (default: 0.1.0)",
 		},
 		{
 			"option":      "force",
@@ -201,8 +196,8 @@ func GetAvailableOptions() (*plugin.Response, error) {
 	return &plugin.Response{
 		Status: "success",
 		Metadata: plugin.ResponseMetadata{
-			Plugin:    PluginName,
-			Version:   PluginVersion,
+			Plugin:    metadata.PluginName,
+			Version:   metadata.Version,
 			Command:   "init-options",
 			Timestamp: time.Now(),
 		},
@@ -241,12 +236,12 @@ func buildConfigFromFlags(flags map[string]any) (config.NekoConfig, error) {
 		return cfg, fmt.Errorf("invalid release system: %s (must be: release-it, jreleaser, or goreleaser)", releaseSystem)
 	}
 
-	// Get version (optional, defaults to 0.1.0)
-	version := getFlagString(flags, "version")
-	if version == "" {
-		version = "0.1.0"
+	// Get metadata (optional, defaults to 0.1.0)
+	versionStr := getFlagString(flags, "metadata")
+	if versionStr == "" {
+		versionStr = "0.1.0"
 	}
-	cfg.Version = version
+	cfg.Version = versionStr
 
 	return cfg, nil
 }
@@ -277,20 +272,20 @@ func buildNextSteps(cfg config.NekoConfig) []string {
 	switch cfg.ReleaseSystem {
 	case config.ReleaseTypeReleaseIt:
 		steps = append(steps,
-			"Neko will manage version in: package.json, .release-it.json",
+			"Neko will manage metadata in: package.json, .release-it.json",
 		)
 	case config.ReleaseTypeJReleaser:
 		steps = append(steps,
-			"Neko will manage version in: jreleaser.yml, pom.xml / build.gradle",
+			"Neko will manage metadata in: jreleaser.yml, pom.xml / build.gradle",
 		)
 	case config.ReleaseTypeGoReleaser:
 		steps = append(steps,
-			"Neko will manage version in: .goreleaser.yml, Git tags",
+			"Neko will manage metadata in: .goreleaser.yml, Git tags",
 		)
 	}
 
 	steps = append(steps,
-		fmt.Sprintf("The version in %s is the single source of truth", ConfigFileName),
+		fmt.Sprintf("The metadata in %s is the single source of truth", metadata.ConfigFileName),
 	)
 
 	return steps
