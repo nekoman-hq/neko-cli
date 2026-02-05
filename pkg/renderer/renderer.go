@@ -154,7 +154,7 @@ func renderLogsSection(logs []plugin.LogEntry, w io.Writer) {
 
 		categoryStr := ""
 		if entry.Category != "" && entry.Category != "plugin" {
-			categoryStr = fmt.Sprintf("[%s] ", entry.Category)
+			categoryStr = fmt.Sprintf("%s ", entry.Category)
 		}
 
 		_, _ = fmt.Fprintf(w, "%s%s %s%s%s%s\n",

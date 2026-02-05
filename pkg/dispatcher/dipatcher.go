@@ -158,7 +158,8 @@ func parseLogLine(line string) plugin.LogEntry {
 	// Try to parse: "15:04:05 [category] message"
 	parts := strings.SplitN(line, " ", 3)
 
-	if len(parts) >= 3 && strings.HasPrefix(parts[1], "[") && strings.HasSuffix(parts[1], "]") {
+	if len(parts) >= 3 && strings.Contains(parts[1], "[") && strings.Contains(parts[1], "]") {
+
 		category := strings.Trim(parts[1], "[]")
 		level := inferLogLevel(parts[2])
 
