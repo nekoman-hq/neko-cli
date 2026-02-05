@@ -1,5 +1,11 @@
 package plugin
 
+/*
+@Author     Benjamin Senekowitsch
+@Contact    senekowitsch@nekoman.at
+@Since      04.02.2026
+*/
+
 import (
 	"archive/tar"
 	"compress/gzip"
@@ -15,13 +21,20 @@ import (
 	"golang.org/x/text/language"
 )
 
-// Manager handles plugin installation, uninstallation, and management
+// Manager handles plugin installation, uninstallation, and management.
+// It provides functionality to download plugins from a registry, install them
+// to a local directory, and manage their lifecycle.
 type Manager struct {
 	registry  *Registry
 	pluginDir string
 }
 
-// NewManager creates a new plugin manager
+// NewManager creates a new plugin manager with the default registry.
+//
+// Args:
+//   - pluginDir: The directory where plugins will be installed
+//
+// Returns a configured Manager instance.
 func NewManager(pluginDir string) *Manager {
 	return &Manager{
 		pluginDir: pluginDir,
@@ -29,7 +42,14 @@ func NewManager(pluginDir string) *Manager {
 	}
 }
 
-// NewManagerWithRegistry creates a new plugin manager with a custom registry
+// NewManagerWithRegistry creates a new plugin manager with a custom registry.
+// This is useful for testing or using alternative plugin sources.
+//
+// Args:
+//   - pluginDir: The directory where plugins will be installed
+//   - registry: A custom Registry instance to use for plugin lookups
+//
+// Returns a configured Manager instance with the specified registry.
 func NewManagerWithRegistry(pluginDir string, registry *Registry) *Manager {
 	return &Manager{
 		pluginDir: pluginDir,
@@ -37,12 +57,27 @@ func NewManagerWithRegistry(pluginDir string, registry *Registry) *Manager {
 	}
 }
 
-// EnsurePluginDir creates the plugin directory if it doesn't exist
+// EnsurePluginDir creates the plugin directory if it doesn't exist.
+// The directory is created with permissions 0755 (rwxr-xr-x).
+//
+// Returns an error if directory creation fails, or nil on success.
 func (m *Manager) EnsurePluginDir() error {
 	return os.MkdirAll(m.pluginDir, 0755)
 }
 
-// Install installs a plugin from the registry
+// Install downloads and installs a plugin from the registry.
+// If version is "latest" or empty, the most recent version is installed.
+// The plugin is downloaded as a tar.gz archive and extracted to the plugin directory.
+//
+// Args:
+//   - pluginName: The name of the plugin to install
+//   - version: The version to install, or "latest" for the newest version
+//
+// Returns an error if:
+//   - The plugin directory cannot be created
+//   - The version cannot be resolved
+//   - The download URL cannot be constructed
+//   - The download or installation fails
 func (m *Manager) Install(pluginName, version string) error {
 	// Ensure plugin directory exists
 	if err := m.EnsurePluginDir(); err != nil {
@@ -73,7 +108,14 @@ func (m *Manager) Install(pluginName, version string) error {
 	return nil
 }
 
-// Uninstall removes an installed plugin
+// Uninstall removes an installed plugin and all its files.
+//
+// Args:
+//   - pluginName: The name of the plugin to uninstall
+//
+// Returns an error if:
+//   - The plugin is not installed
+//   - The plugin directory cannot be removed
 func (m *Manager) Uninstall(pluginName string) error {
 	installPath := filepath.Join(m.pluginDir, pluginName)
 	if _, err := os.Stat(installPath); os.IsNotExist(err) {
@@ -87,14 +129,26 @@ func (m *Manager) Uninstall(pluginName string) error {
 	return nil
 }
 
-// IsInstalled checks if a plugin is installed
+// IsInstalled checks whether a plugin is currently installed.
+//
+// Args:
+//   - pluginName: The name of the plugin to check
+//
+// Returns true if the plugin directory exists, false otherwise.
 func (m *Manager) IsInstalled(pluginName string) bool {
 	installPath := filepath.Join(m.pluginDir, pluginName)
 	_, err := os.Stat(installPath)
 	return err == nil
 }
 
-// GetManifest returns the manifest for an installed plugin
+// GetManifest reads and parses the manifest file for an installed plugin.
+//
+// Args:
+//   - pluginName: The name of the plugin
+//
+// Returns:
+//   - A pointer to the parsed Manifest
+//   - An error if the manifest file cannot be read or parsed
 func (m *Manager) GetManifest(pluginName string) (*Manifest, error) {
 	manifestPath := filepath.Join(m.pluginDir, pluginName, "manifest.json")
 	data, err := os.ReadFile(manifestPath)
@@ -110,7 +164,13 @@ func (m *Manager) GetManifest(pluginName string) (*Manifest, error) {
 	return &manifest, nil
 }
 
-// ListInstalled returns a map of installed plugin names to their versions
+// ListInstalled returns a map of all installed plugins with their versions.
+// The map keys are plugin names, and values are version strings.
+//
+// Returns:
+//   - A map of plugin names to versions
+//   - An error if the plugin directory cannot be read (except if it doesn't exist,
+//     in which case an empty map is returned)
 func (m *Manager) ListInstalled() (map[string]string, error) {
 	installed := make(map[string]string)
 
@@ -134,12 +194,26 @@ func (m *Manager) ListInstalled() (map[string]string, error) {
 	return installed, nil
 }
 
-// GetAvailablePlugins returns the list of available plugins from the registry
+// GetAvailablePlugins fetches the list of all plugins available in the registry.
+//
+// Returns:
+//   - A slice of AvailablePlugin structs containing plugin metadata
+//   - An error if the registry cannot be contacted or the response is invalid
 func (m *Manager) GetAvailablePlugins() ([]AvailablePlugin, error) {
 	return m.registry.FetchAvailablePlugins()
 }
 
-// getPluginDownloadURL builds the download URL for a plugin
+// getPluginDownloadURL constructs the download URL for a specific plugin version.
+// It automatically detects the current OS and architecture and maps them to the
+// appropriate naming conventions used by goreleaser.
+//
+// Args:
+//   - pluginName: The name of the plugin
+//   - version: The version to download
+//
+// Returns:
+//   - The complete download URL
+//   - An error if the URL cannot be constructed
 func (m *Manager) getPluginDownloadURL(pluginName, version string) (string, error) {
 	osName := runtime.GOOS
 	arch := runtime.GOARCH
@@ -157,7 +231,23 @@ func (m *Manager) getPluginDownloadURL(pluginName, version string) (string, erro
 	return m.registry.GetDownloadURL(pluginName, version, osName, archName)
 }
 
-// downloadAndInstall downloads and extracts a plugin
+// downloadAndInstall downloads a plugin from the specified URL and extracts it
+// to the plugin directory. The plugin archive is expected to be in tar.gz format.
+// Any existing installation of the plugin is removed before extraction.
+//
+// The function flattens the archive structure, extracting all files directly into
+// the plugin directory regardless of their path in the archive.
+//
+// Args:
+//   - pluginName: The name of the plugin being installed
+//   - downloadURL: The URL to download the plugin archive from
+//
+// Returns an error if:
+//   - The HTTP request fails
+//   - The response status is not 200 OK
+//   - The existing plugin directory cannot be removed
+//   - The archive cannot be extracted
+//   - File creation or copying fails
 func (m *Manager) downloadAndInstall(pluginName, downloadURL string) error {
 	resp, err := m.httpGetWithAuth(downloadURL)
 	if err != nil {
@@ -239,7 +329,16 @@ func (m *Manager) downloadAndInstall(pluginName, downloadURL string) error {
 	return nil
 }
 
-// httpGetWithAuth performs an HTTP GET request with optional GitHub authentication
+// httpGetWithAuth performs an HTTP GET request with optional GitHub authentication.
+// If the GITHUB_TOKEN environment variable is set, it will be used for authentication,
+// allowing access to private repositories.
+//
+// Args:
+//   - url: The URL to request
+//
+// Returns:
+//   - The HTTP response
+//   - An error if the request cannot be created or executed
 func (m *Manager) httpGetWithAuth(url string) (*http.Response, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -255,7 +354,14 @@ func (m *Manager) httpGetWithAuth(url string) (*http.Response, error) {
 	return http.DefaultClient.Do(req)
 }
 
-// Truncate truncates a string to a maximum length, adding "..." if truncated
+// Truncate shortens a string to a maximum length, appending "..." if truncated.
+// If the string is already shorter than maxLen, it is returned unchanged.
+//
+// Args:
+//   - s: The string to truncate
+//   - maxLen: The maximum length (including the "..." if added)
+//
+// Returns the truncated string.
 func Truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s

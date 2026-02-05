@@ -12,6 +12,7 @@ import (
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/contributors"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/history"
 	initcmd "github.com/nekoman-hq/neko-cli/plugin/release/pkg/init"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/release"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/validate"
 
@@ -21,8 +22,8 @@ import (
 
 func main() {
 	// Set plugin info for error responses
-	errors.PluginName = "release"
-	errors.PluginVersion = "1.0.0"
+	errors.PluginName = metadata.PluginName
+	errors.PluginVersion = metadata.Version
 
 	// Read request from stdin
 	var req plugin.Request

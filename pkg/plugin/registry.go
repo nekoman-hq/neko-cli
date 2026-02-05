@@ -1,5 +1,11 @@
 package plugin
 
+/*
+@Author     Benjamin Senekowitsch
+@Contact    senekowitsch@nekoman.at
+@Since      04.02.2026
+*/
+
 import (
 	"encoding/json"
 	"fmt"
@@ -10,36 +16,60 @@ import (
 )
 
 const (
-	// DefaultRegistry is the default GitHub releases URL for fetching plugins
+	// DefaultRegistry is the default GitHub releases API URL for fetching plugins.
+	// This points to the neko-cli repository's releases endpoint.
 	DefaultRegistry = "https://api.github.com/repos/nekoman-hq/neko-cli/releases"
 )
 
-// AvailablePlugin represents a plugin available in the registry
+// AvailablePlugin represents a plugin that is available for installation
+// from the registry. It contains basic metadata about the plugin.
 type AvailablePlugin struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
+	Name    string `json:"name"`    // The name of the plugin
+	Version string `json:"version"` // The version string (e.g., "1.2.3")
 }
 
-// Registry handles plugin discovery from a remote registry
+// Registry handles plugin discovery and retrieval from a remote registry.
+// It communicates with the GitHub Releases API to fetch plugin information
+// and download URLs.
 type Registry struct {
 	baseURL string
 }
 
-// NewRegistry creates a new registry client
+// NewRegistry creates a new registry client using the default registry URL.
+// The default registry points to the neko-cli GitHub releases.
+//
+// Returns a configured Registry instance.
 func NewRegistry() *Registry {
 	return &Registry{
 		baseURL: DefaultRegistry,
 	}
 }
 
-// NewRegistryWithURL creates a new registry client with a custom URL
+// NewRegistryWithURL creates a new registry client with a custom base URL.
+// This is useful for testing or using alternative plugin sources.
+//
+// Args:
+//   - url: The base URL for the registry API (should be a GitHub releases endpoint)
+//
+// Returns a configured Registry instance.
 func NewRegistryWithURL(url string) *Registry {
 	return &Registry{
 		baseURL: url,
 	}
 }
 
-// FetchAvailablePlugins fetches the list of available plugins from the registry
+// FetchAvailablePlugins retrieves the list of all plugins available in the registry.
+// It fetches the latest release and parses plugin information from the release assets.
+//
+// Plugin assets are expected to follow the naming pattern:
+// plugin-{name}_{version}_{OS}_{Arch}.tar.gz
+//
+// Returns:
+//   - A slice of AvailablePlugin structs containing plugin names and versions
+//   - An error if:
+//   - The latest version cannot be determined
+//   - The HTTP request fails
+//   - The response cannot be decoded
 func (r *Registry) FetchAvailablePlugins() ([]AvailablePlugin, error) {
 	latestVersion, err := r.GetLatestVersion()
 	if err != nil {
@@ -102,7 +132,14 @@ func (r *Registry) FetchAvailablePlugins() ([]AvailablePlugin, error) {
 	return plugins, nil
 }
 
-// GetLatestVersion fetches the latest metadata tag from the registry
+// GetLatestVersion retrieves the tag name of the latest release from the registry.
+//
+// Returns:
+//   - The tag name string (e.g., "v1.2.3")
+//   - An error if:
+//   - The HTTP request fails
+//   - The response status is not 200 OK
+//   - The response body cannot be decoded
 func (r *Registry) GetLatestVersion() (string, error) {
 	url := fmt.Sprintf("%s/latest", r.baseURL)
 
@@ -129,7 +166,25 @@ func (r *Registry) GetLatestVersion() (string, error) {
 	return release.TagName, nil
 }
 
-// GetDownloadURL returns the download URL for a specific plugin version
+// GetDownloadURL constructs the browser download URL for a specific plugin version.
+// It searches the release assets for a file matching the expected naming pattern
+// and returns its download URL.
+//
+// Expected asset naming pattern: plugin-{name}_{version}_{OS}_{Arch}.tar.gz
+// Example: plugin-release_2.3.0_Darwin_arm64.tar.gz
+//
+// Args:
+//   - pluginName: The name of the plugin
+//   - releaseTag: The release tag (e.g., "v1.2.3")
+//   - osName: The operating system name (e.g., "Darwin", "Linux", "Windows")
+//   - archName: The architecture name (e.g., "arm64", "x86_64")
+//
+// Returns:
+//   - The browser download URL for the matching asset
+//   - An error if:
+//   - The HTTP request fails
+//   - The response cannot be decoded
+//   - No matching asset is found for the given OS/architecture combination
 func (r *Registry) GetDownloadURL(pluginName, releaseTag, osName, archName string) (string, error) {
 	url := fmt.Sprintf("%s/tags/%s", r.baseURL, releaseTag)
 	resp, err := r.httpGetWithAuth(url)
@@ -166,7 +221,17 @@ func (r *Registry) GetDownloadURL(pluginName, releaseTag, osName, archName strin
 	return "", fmt.Errorf("plugin '%s' not found for %s/%s in release %s", pluginName, osName, archName, releaseTag)
 }
 
-// httpGetWithAuth performs an HTTP GET request with optional GitHub authentication
+// httpGetWithAuth performs an HTTP GET request with optional GitHub authentication.
+// If the GITHUB_TOKEN environment variable is set, it is included in the request
+// headers as a Bearer token, enabling access to private repositories and higher
+// rate limits.
+//
+// Args:
+//   - url: The URL to request
+//
+// Returns:
+//   - The HTTP response
+//   - An error if the request cannot be created or executed
 func (r *Registry) httpGetWithAuth(url string) (*http.Response, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {

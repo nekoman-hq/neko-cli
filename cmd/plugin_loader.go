@@ -1,5 +1,11 @@
 package cmd
 
+/*
+@Author     Benjamin Senekowitsch
+@Contact    senekowitsch@nekoman.at
+@Since      03.02.2026
+*/
+
 import (
 	"context"
 	"fmt"
@@ -26,7 +32,14 @@ func init() {
 	}
 }
 
-// CreatePluginCommand creates a cobra.Command for the given plugin manifest
+// CreatePluginCommand creates a cobra.Command for a plugin based on its manifest.
+// This generates the main command (e.g., "release", "deploy") and adds all subcommands
+// defined in the plugin's manifest (e.g., "release init", "release create").
+//
+// Args:
+//   - manifest: The plugin manifest containing command definitions
+//
+// Returns a configured cobra.Command representing the plugin and its subcommands.
 func CreatePluginCommand(manifest plugin.Manifest) *cobra.Command {
 	// Main command for every plugin e.g., "release", "deploy"
 	cmd := &cobra.Command{
@@ -46,7 +59,15 @@ func CreatePluginCommand(manifest plugin.Manifest) *cobra.Command {
 	return cmd
 }
 
-// createSubCommand creates a cobra.Command for the given plugin command with flags
+// createSubCommand creates a cobra.Command for a specific plugin subcommand.
+// It automatically adds all flags defined in the plugin command's manifest,
+// including their types, default values, and required status.
+//
+// Args:
+//   - pluginName: The name of the parent plugin
+//   - pluginCmd: The command definition from the plugin manifest
+//
+// Returns a configured cobra.Command for the subcommand.
 func createSubCommand(pluginName string, pluginCmd plugin.Command) *cobra.Command {
 	subCmd := &cobra.Command{
 		Use:   pluginCmd.Name,
@@ -64,7 +85,19 @@ func createSubCommand(pluginName string, pluginCmd plugin.Command) *cobra.Comman
 	return subCmd
 }
 
-// addFlagToCommand adds a flag to the command based on the flag definition
+// addFlagToCommand adds a flag to a cobra command based on the plugin's flag definition.
+// It handles type conversion and default values for string, bool, and int flag types.
+// If the flag is marked as required, it will be enforced by cobra.
+//
+// Args:
+//   - cmd: The cobra.Command to add the flag to
+//   - flag: The flag definition from the plugin manifest
+//
+// Supported flag types:
+//   - "string": String flags with optional default value
+//   - "bool": Boolean flags with optional default value
+//   - "int": Integer flags with optional default value (JSON numbers are float64)
+//   - Any other type defaults to string behavior
 func addFlagToCommand(cmd *cobra.Command, flag plugin.Flag) {
 	switch flag.Type {
 	case "string":
@@ -102,7 +135,22 @@ func addFlagToCommand(cmd *cobra.Command, flag plugin.Flag) {
 	}
 }
 
-// executePlugin dispatches the command to the plugin and renders the response
+// executePlugin dispatches a command to the appropriate plugin and renders the response.
+// It constructs a plugin.Request from the cobra command context, executes it via the
+// dispatcher, and renders the result using the configured output format.
+//
+// This function handles the special case where a user invokes a plugin's root command
+// with an unknown subcommand (e.g., "neko release unknownCmd"), treating the first
+// argument as the command name.
+//
+// Args:
+//   - pluginName: The name of the plugin to execute
+//   - cmd: The cobra.Command being executed
+//   - args: The command-line arguments
+//
+// Returns an error if:
+//   - Plugin execution fails
+//   - Response rendering fails
 func executePlugin(pluginName string, cmd *cobra.Command, args []string) error {
 	d := dispatcher.NewDispatcher(pluginDir)
 
@@ -140,7 +188,15 @@ func executePlugin(pluginName string, cmd *cobra.Command, args []string) error {
 	return renderer.RenderWithOptions(resp, opts)
 }
 
-// extractFlags extracts the flags from the cobra.Command into a map
+// extractFlags extracts all flags from a cobra.Command into a map.
+// Only flags that have been explicitly set (changed from their default) are included.
+// The function preserves type information for bool and int flags, converting them
+// to their appropriate Go types. Other flag types are stored as strings.
+//
+// Args:
+//   - cmd: The cobra.Command to extract flags from
+//
+// Returns a map of flag names to their values with appropriate types.
 func extractFlags(cmd *cobra.Command) map[string]any {
 	flags := make(map[string]any)
 
@@ -165,13 +221,29 @@ func extractFlags(cmd *cobra.Command) map[string]any {
 	return flags
 }
 
-// mustGetwd returns the current working directory or an empty string on error
+// mustGetwd returns the current working directory or an empty string if it cannot
+// be determined. This is a helper function that silently handles errors, suitable
+// for non-critical path resolution.
+//
+// Returns the current working directory path, or empty string on error.
 func mustGetwd() string {
 	wd, _ := os.Getwd()
 	return wd
 }
 
-// InitializePlugins loads plugins from the plugin directory and adds them to the root command
+// InitializePlugins loads all installed plugins from the plugin directory and
+// registers them as commands in the root cobra command. This function is called
+// during CLI initialization to make plugins available to users.
+//
+// If the plugin directory does not exist, the function returns nil (no error),
+// as this is a valid state when no plugins are installed yet.
+//
+// Returns an error if:
+//   - The plugin directory exists but cannot be read
+//   - Plugin manifests cannot be loaded
+//
+// Note: Individual plugin loading errors are not fatal and won't prevent
+// other plugins from being loaded.
 func InitializePlugins() error {
 	// If plugin directory doesn't exist, that's fine - no plugins installed yet
 	if _, err := os.Stat(pluginDir); os.IsNotExist(err) {

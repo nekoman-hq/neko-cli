@@ -1,5 +1,13 @@
 package cmd
 
+/*
+This is the plugin command implementation for the neko-cli.
+
+@Author     Benjamin Senekowitsch
+@Contact    senekowitsch@nekoman.at
+@Since      03.02.2026 *(updated)*
+*/
+
 import (
 	"fmt"
 	"os"

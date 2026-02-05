@@ -1,84 +1,116 @@
 package plugin
 
+/*
+@Author     Benjamin Senekowitsch
+@Contact    senekowitsch@nekoman.at
+@Since      03.02.2026
+*/
+
 import "time"
 
-// Request is the input to the Plugin
+// Request represents the input data passed to a plugin when executing a command.
+// It contains the command to execute, its arguments, flags, and contextual information
+// about the execution environment.
 type Request struct {
-	Command string         `json:"command"`
-	Args    []string       `json:"args"`
-	Flags   map[string]any `json:"flags"`
-	Context Context        `json:"context"`
+	Command string         `json:"command"` // The name of the command to execute
+	Args    []string       `json:"args"`    // Positional arguments for the command
+	Flags   map[string]any `json:"flags"`   // Named flags/options for the command
+	Context Context        `json:"context"` // Execution context information
 }
 
-// Context contains execution context information
+// Context contains information about the execution environment.
+// This provides plugins with necessary context to execute commands appropriately.
 type Context struct {
-	WorkingDir string `json:"working_dir"`
-	User       string `json:"user"`
-	Verbose    bool   `json:"verbose"`
+	WorkingDir string `json:"working_dir"` // The current working directory
+	User       string `json:"user"`        // The username of the executing user
+	Verbose    bool   `json:"verbose"`     // Whether verbose output is enabled
 }
 
-// Response is the output from the Plugin
+// Response represents the output returned by a plugin after executing a command.
+// It includes status information, metadata, optional data payload, error details,
+// and rendering hints for display.
 type Response struct {
-	Status       string           `json:"status"`
-	Metadata     ResponseMetadata `json:"metadata"`
-	Data         map[string]any   `json:"data,omitempty"`
-	Error        *ResponseError   `json:"error,omitempty"`
-	RendererHint string           `json:"renderer_hint,omitempty"`
-	Logs         []LogEntry       `json:"logs,omitempty"`
+	Status       string           `json:"status"`                  // Execution status (e.g., "success", "error")
+	Metadata     ResponseMetadata `json:"metadata"`                // Metadata about the response
+	Data         map[string]any   `json:"data,omitempty"`          // Optional structured data returned by the plugin
+	Error        *ResponseError   `json:"error,omitempty"`         // Error details if the execution failed
+	RendererHint string           `json:"renderer_hint,omitempty"` // Hint for how to render the response (e.g., "table", "json", "text")
+	Logs         []LogEntry       `json:"logs,omitempty"`          // Log entries generated during execution
 }
 
+// LogEntry represents a single log message generated during plugin execution.
+// Logs can be used for debugging, progress tracking, or informational output.
 type LogEntry struct {
-	Timestamp string `json:"timestamp"`
-	Level     string `json:"level"` // "info", "verbose", "warn", "error"
-	Category  string `json:"category"`
-	Message   string `json:"message"`
+	Timestamp string `json:"timestamp"` // ISO 8601 timestamp of when the log was created
+	Level     string `json:"level"`     // Log level: "info", "verbose", "warn", or "error"
+	Category  string `json:"category"`  // Categorization of the log entry (e.g., "network", "filesystem")
+	Message   string `json:"message"`   // The log message content
 }
 
+// ResponseMetadata contains contextual information about a plugin response.
+// This metadata helps track which plugin and command generated the response.
 type ResponseMetadata struct {
-	Timestamp time.Time `json:"timestamp"`
-	Plugin    string    `json:"plugin"`
-	Version   string    `json:"version"`
-	Command   string    `json:"command"`
+	Timestamp time.Time `json:"timestamp"` // When the response was generated
+	Plugin    string    `json:"plugin"`    // Name of the plugin that generated the response
+	Version   string    `json:"version"`   // Version of the plugin
+	Command   string    `json:"command"`   // The command that was executed
 }
 
+// ResponseError contains detailed information about an error that occurred
+// during plugin execution.
 type ResponseError struct {
-	Details map[string]any `json:"details,omitempty"`
-	Code    string         `json:"code"`
-	Message string         `json:"message"`
+	Details map[string]any `json:"details,omitempty"` // Additional structured error details
+	Code    string         `json:"code"`              // Machine-readable error code
+	Message string         `json:"message"`           // Human-readable error message
 }
 
-// Plugin is the interface that all plugins must implement
+// Plugin is the interface that all neko-cli plugins must implement.
+// Plugins extend the CLI's functionality by providing custom commands.
 type Plugin interface {
-	// Execute executes the plugin command with the given request
+	// Execute runs the plugin command with the given request and returns a response.
+	// This is the main entry point for plugin execution.
+	//
+	// Args:
+	//   - req: The request containing command, arguments, flags, and context
+	//
+	// Returns:
+	//   - A pointer to the Response containing execution results
+	//   - An error if the plugin execution fails critically
 	Execute(req Request) (*Response, error)
 
-	// Manifest returns the plugin manifest
+	// Manifest returns the plugin's manifest describing its capabilities,
+	// commands, and metadata.
+	//
+	// Returns the Manifest structure for this plugin.
 	Manifest() Manifest
 }
 
-// Manifest describes the plugin
+// Manifest describes a plugin's metadata, capabilities, and available commands.
+// It is used for plugin discovery, validation, and documentation.
 type Manifest struct {
-	Name          string    `json:"name"`
-	Version       string    `json:"version"`
-	Description   string    `json:"description"`
-	Author        string    `json:"author"`
-	Commands      []Command `json:"commands"`
-	RendererTypes []string  `json:"renderer_types"`
+	Name          string    `json:"name"`           // Unique identifier for the plugin
+	Version       string    `json:"version"`        // Semantic version string (e.g., "1.2.3")
+	Description   string    `json:"description"`    // Brief description of the plugin's purpose
+	Author        string    `json:"author"`         // Plugin author name or organization
+	Commands      []Command `json:"commands"`       // List of commands provided by this plugin
+	RendererTypes []string  `json:"renderer_types"` // Supported output renderer types (e.g., "table", "json", "yaml")
 }
 
-// Command describes a plugin command
+// Command describes a single command provided by a plugin.
+// It defines the command's name, description, outputs, and available flags.
 type Command struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Outputs     []string `json:"outputs"`
-	Flags       []Flag   `json:"flags,omitempty"`
+	Name        string   `json:"name"`            // The command name (used to invoke it)
+	Description string   `json:"description"`     // Brief description of what the command does
+	Outputs     []string `json:"outputs"`         // List of output keys this command can produce
+	Flags       []Flag   `json:"flags,omitempty"` // Optional flags/options for this command
 }
 
-// Flag describes a command flag
+// Flag describes a command-line flag that can be passed to a plugin command.
+// Flags allow users to customize command behavior with named parameters.
 type Flag struct {
-	Default     any    `json:"default,omitempty"`
-	Name        string `json:"name"`
-	Type        string `json:"type"` // "string", "bool", "int"
-	Description string `json:"description"`
-	Required    bool   `json:"required"`
+	Default     any    `json:"default,omitempty"` // Default value if the flag is not provided
+	Name        string `json:"name"`              // The flag name (without dashes, e.g., "output" for --output)
+	Type        string `json:"type"`              // Data type: "string", "bool", or "int"
+	Description string `json:"description"`       // Human-readable description of the flag's purpose
+	Required    bool   `json:"required"`          // Whether this flag must be provided
 }

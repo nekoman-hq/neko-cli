@@ -1,11 +1,14 @@
 /*
-Copyright © 2025 NAME HERE senekowitsch@nekoman.at
+@Title      neko-cli
+@Description Command Line Interface for Neko projects
+@Author     Benjamin Senekowitsch
+@Contact    senekowitsch@nekoman.at
+@Since      16.12.2025
 */
 package main
 
 import (
 	"github.com/nekoman-hq/neko-cli/cmd"
-	_ "github.com/nekoman-hq/neko-cli/plugin/release/pkg/release/tool"
 )
 
 func main() {

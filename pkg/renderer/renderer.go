@@ -1,5 +1,11 @@
 package renderer
 
+/*
+@Author     Benjamin Senekowitsch
+@Contact    senekowitsch@nekoman.at
+@Since      03.02.2026
+*/
+
 import (
 	"encoding/json"
 	"fmt"
@@ -13,21 +19,29 @@ import (
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 )
 
-// OutputFormat defines the supported output formats
+// OutputFormat defines the supported output formats for rendering plugin responses.
 type OutputFormat string
 
 const (
-	FormatTable OutputFormat = "table" // kubectl-style with Colors (default)
+	FormatTable OutputFormat = "table" // kubectl-style table with colors (default)
 	FormatJSON  OutputFormat = "json"  // Raw JSON output
 	FormatWide  OutputFormat = "wide"  // Extended table with more columns if available
 )
 
+// RenderOptions configures how a plugin response should be rendered.
 type RenderOptions struct {
-	Format   OutputFormat
-	Describe bool // when true, include logs and metadata
+	Format   OutputFormat // The output format to use
+	Describe bool         // When true, include logs and metadata in the output
 }
 
-// RenderWithOptions is the new unified render function
+// RenderWithOptions is the unified render function that respects both format and describe options.
+// It delegates to either RenderDescribe (when describe is true) or Render (when false).
+//
+// Args:
+//   - resp: The plugin response to render
+//   - opts: Configuration options for rendering
+//
+// Returns an error if rendering fails.
 func RenderWithOptions(resp *plugin.Response, opts RenderOptions) error {
 	if opts.Describe {
 		return RenderDescribe(resp, opts.Format)
@@ -35,14 +49,27 @@ func RenderWithOptions(resp *plugin.Response, opts RenderOptions) error {
 	return Render(resp, opts.Format)
 }
 
-// Render is the main entry point to render a plugin response to STDOUT
-// --output format is controlled via the format parameter
-// Supported formats: table (default), json, wide
+// Render is the main entry point to render a plugin response to STDOUT.
+// It outputs only the data portion of the response, without metadata or logs.
+//
+// Args:
+//   - resp: The plugin response to render
+//   - format: The output format (table, json, or wide)
+//
+// Returns an error if rendering fails.
 func Render(resp *plugin.Response, format OutputFormat) error {
 	return RenderTo(resp, format, os.Stdout)
 }
 
-// RenderTo renders the plugin response to the given writer
+// RenderTo renders the plugin response to the specified writer.
+// This is useful for testing or redirecting output to files.
+//
+// Args:
+//   - resp: The plugin response to render
+//   - format: The output format (table, json, or wide)
+//   - w: The writer to output to
+//
+// Returns an error if rendering fails.
 func RenderTo(resp *plugin.Response, format OutputFormat, w io.Writer) error {
 	switch format {
 	case FormatJSON:
@@ -56,12 +83,28 @@ func RenderTo(resp *plugin.Response, format OutputFormat, w io.Writer) error {
 	}
 }
 
-// RenderDescribe renders both execution logs and command output
+// RenderDescribe renders both execution logs and command output to STDOUT.
+// This provides a comprehensive view including metadata, logs, and data.
+//
+// Args:
+//   - resp: The plugin response to render
+//   - format: The output format for the data section
+//
+// Returns an error if rendering fails.
 func RenderDescribe(resp *plugin.Response, format OutputFormat) error {
 	return RenderDescribeTo(resp, format, os.Stdout)
 }
 
-// RenderDescribeTo renders describe output to the given writer
+// RenderDescribeTo renders describe output to the specified writer.
+// In JSON format, the entire response is output as JSON. In table/wide format,
+// metadata, logs, and data are rendered as separate formatted sections.
+//
+// Args:
+//   - resp: The plugin response to render
+//   - format: The output format
+//   - w: The writer to output to
+//
+// Returns an error if rendering fails.
 func RenderDescribeTo(resp *plugin.Response, format OutputFormat, w io.Writer) error {
 	if format == FormatJSON {
 		// JSON format includes everything
@@ -82,6 +125,8 @@ func RenderDescribeTo(resp *plugin.Response, format OutputFormat, w io.Writer) e
 	return nil
 }
 
+// renderMetadataSection outputs the command metadata section with plugin info,
+// version, timestamp, and status.
 func renderMetadataSection(resp *plugin.Response, w io.Writer) {
 	log.PrintSectionHeaderTo(w, "Command Metadata", log.ColorCyan)
 
@@ -98,6 +143,8 @@ func renderMetadataSection(resp *plugin.Response, w io.Writer) {
 	_, _ = fmt.Fprintln(w)
 }
 
+// renderLogsSection outputs the execution logs section with timestamps,
+// log levels, categories, and messages.
 func renderLogsSection(logs []plugin.LogEntry, w io.Writer) {
 	log.PrintSectionHeaderTo(w, fmt.Sprintf("Execution Logs (%d entries)", len(logs)), log.ColorYellow)
 
@@ -118,6 +165,7 @@ func renderLogsSection(logs []plugin.LogEntry, w io.Writer) {
 	_, _ = fmt.Fprintln(w)
 }
 
+// renderOutputSection outputs the data section of the response.
 func renderOutputSection(resp *plugin.Response, format OutputFormat, w io.Writer) {
 	log.PrintSectionHeaderTo(w, "Output", log.ColorGreen)
 
@@ -125,6 +173,8 @@ func renderOutputSection(resp *plugin.Response, format OutputFormat, w io.Writer
 	_ = renderTable(resp, w, wide)
 }
 
+// colorizeStatus adds color and icons to status strings.
+// "success" gets a green checkmark, "error" gets a red X.
 func colorizeStatus(status string) string {
 	switch strings.ToLower(status) {
 	case "success":
@@ -136,6 +186,7 @@ func colorizeStatus(status string) string {
 	}
 }
 
+// getLogLevelColor returns the appropriate color for a log level.
 func getLogLevelColor(level string) string {
 	switch level {
 	case "error":
@@ -149,6 +200,7 @@ func getLogLevelColor(level string) string {
 	}
 }
 
+// getLogLevelIcon returns an icon/prefix for a log level.
 func getLogLevelIcon(level string) string {
 	switch level {
 	case "error":
@@ -162,16 +214,23 @@ func getLogLevelIcon(level string) string {
 	}
 }
 
-// renderJSON - raw JSON output
+// renderJSON outputs the entire response as formatted JSON.
 func renderJSON(resp *plugin.Response, w io.Writer) error {
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(resp)
 }
 
-// renderTable - unified kubectl-style output
-// Automatically detects lists (any slice in data) and renders as table
-// Single objects are rendered as key-value pairs
+// renderTable provides unified kubectl-style output rendering.
+// It automatically detects lists (any slice in data) and renders them as tables.
+// Single objects are rendered as key-value pairs.
+//
+// Args:
+//   - resp: The plugin response to render
+//   - w: The writer to output to
+//   - wide: Whether to use wide format (currently unused, reserved for future features)
+//
+// Returns an error if rendering fails.
 func renderTable(resp *plugin.Response, w io.Writer, wide bool) error {
 	_ = wide // TODO: implement wide output format with additional columns
 
@@ -189,8 +248,14 @@ func renderTable(resp *plugin.Response, w io.Writer, wide bool) error {
 	return renderKeyValue(resp.Data, w)
 }
 
-// findListInData searches for any slice/array in the data map
-// Returns the first list found, prioritizing common names like "items"
+// findListInData searches for any slice/array in the data map.
+// It prioritizes common key names like "items", "releases", "resources", etc.
+//
+// Args:
+//   - data: The response data map to search
+//
+// Returns:
+//   - The first list found (prioritizing common names), or nil if no list exists
 func findListInData(data map[string]any) any {
 	if data == nil {
 		return nil
@@ -217,6 +282,7 @@ func findListInData(data map[string]any) any {
 	return nil
 }
 
+// renderError formats and outputs error information from the response.
 func renderError(resp *plugin.Response, w io.Writer) error {
 	_, _ = fmt.Fprintf(w, "%s%s✗ ERROR%s\n", log.ColorRed, log.ColorBold, log.ColorReset)
 	_, _ = fmt.Fprintf(w, "%sCode:%s    %s\n", log.ColorBrightBlack, log.ColorReset, resp.Error.Code)
@@ -231,6 +297,15 @@ func renderError(resp *plugin.Response, w io.Writer) error {
 	return nil
 }
 
+// renderList renders a slice of items as a formatted table.
+// It automatically extracts column headers from the first item and calculates
+// appropriate column widths.
+//
+// Args:
+//   - items: The slice to render (must be a reflect.Slice)
+//   - w: The writer to output to
+//
+// Returns an error if rendering fails.
 func renderList(items any, w io.Writer) error {
 	slice := reflect.ValueOf(items)
 	if slice.Kind() != reflect.Slice {
@@ -270,6 +345,16 @@ func renderList(items any, w io.Writer) error {
 	return nil
 }
 
+// extractTableData analyzes a slice of items and extracts table headers and row data.
+// It collects all unique keys from all items to ensure complete coverage,
+// then prioritizes common fields for better readability.
+//
+// Args:
+//   - slice: The slice to analyze (must be a reflect.Value of kind Slice)
+//
+// Returns:
+//   - headers: Ordered list of column headers
+//   - rows: Slice of maps containing formatted string values for each row
 func extractTableData(slice reflect.Value) ([]string, []map[string]string) {
 	var headers []string
 	headerSet := make(map[string]bool)
@@ -309,6 +394,13 @@ func extractTableData(slice reflect.Value) ([]string, []map[string]string) {
 	return headers, rows
 }
 
+// prioritizeHeaders reorders headers to put common/important fields first.
+// Fields like "name", "id", "version", and "status" are prioritized.
+//
+// Args:
+//   - headers: The original header list
+//
+// Returns the reordered header list with prioritized fields first.
 func prioritizeHeaders(headers []string) []string {
 	priority := map[string]int{
 		"name": 1, "NAME": 1,
@@ -338,6 +430,14 @@ func prioritizeHeaders(headers []string) []string {
 	return headers
 }
 
+// calculateColumnWidths determines the optimal width for each column
+// based on header length and content length, with padding.
+//
+// Args:
+//   - headers: The column headers
+//   - rows: The row data
+//
+// Returns a map of header names to their calculated widths.
 func calculateColumnWidths(headers []string, rows []map[string]string) map[string]int {
 	widths := make(map[string]int)
 
@@ -363,6 +463,7 @@ func calculateColumnWidths(headers []string, rows []map[string]string) map[strin
 	return widths
 }
 
+// totalWidth calculates the total width of all columns combined.
 func totalWidth(colWidths map[string]int) int {
 	total := 0
 	for _, w := range colWidths {
@@ -371,6 +472,7 @@ func totalWidth(colWidths map[string]int) int {
 	return total
 }
 
+// printHeader outputs the table header row with formatting.
 func printHeader(w io.Writer, headers []string, widths map[string]int) {
 	_, _ = fmt.Fprintf(w, "%s%s", log.ColorCyan, log.ColorBold)
 	for _, h := range headers {
@@ -379,6 +481,8 @@ func printHeader(w io.Writer, headers []string, widths map[string]int) {
 	_, _ = fmt.Fprintf(w, "%s\n", log.ColorReset)
 }
 
+// printRow outputs a single table row with proper alignment and coloring.
+// It handles ANSI color codes correctly to ensure proper column alignment.
 func printRow(w io.Writer, headers []string, row map[string]string, widths map[string]int) {
 	for _, h := range headers {
 		value := row[h]
@@ -393,6 +497,15 @@ func printRow(w io.Writer, headers []string, row map[string]string, widths map[s
 	_, _ = fmt.Fprintln(w)
 }
 
+// colorizeValue applies context-aware coloring to values based on their key and content.
+// Status values get semantic colors (green for success, red for error, yellow for pending).
+// Versions, booleans, and names also receive appropriate coloring.
+//
+// Args:
+//   - key: The column/field name (used for context)
+//   - value: The value to colorize
+//
+// Returns the value with ANSI color codes applied.
 func colorizeValue(key, value string) string {
 	keyLower := strings.ToLower(key)
 	valueLower := strings.ToLower(value)
@@ -430,6 +543,13 @@ func colorizeValue(key, value string) string {
 	return value
 }
 
+// formatValue converts any value to a human-readable string representation.
+// It handles nil, strings, booleans, numbers, arrays, and nested objects.
+//
+// Args:
+//   - v: The value to format
+//
+// Returns a formatted string representation. Nil and empty values return "<none>".
 func formatValue(v any) string {
 	if v == nil {
 		return "<none>"
@@ -462,7 +582,7 @@ func formatValue(v any) string {
 		}
 		return strings.Join(parts, ",")
 	case map[string]any:
-		// Nested object - show as condensed
+		// Nested object - show as condensed key=value pairs
 		parts := make([]string, 0, len(val))
 		for k, v := range val {
 			parts = append(parts, fmt.Sprintf("%s=%s", k, formatValue(v)))
@@ -474,6 +594,15 @@ func formatValue(v any) string {
 	}
 }
 
+// renderKeyValue renders a map as aligned key-value pairs.
+// Keys are sorted alphabetically and capitalized. Values are formatted
+// and colorized appropriately.
+//
+// Args:
+//   - data: The map to render
+//   - w: The writer to output to
+//
+// Returns an error if rendering fails.
 func renderKeyValue(data map[string]any, w io.Writer) error {
 	if len(data) == 0 {
 		_, _ = fmt.Fprintf(w, "%sNo data.%s\n", log.ColorBrightBlack, log.ColorReset)
@@ -509,7 +638,13 @@ func renderKeyValue(data map[string]any, w io.Writer) error {
 	return nil
 }
 
-// capitalizeFirst capitalizes the first letter of a string
+// capitalizeFirst capitalizes the first letter of a string.
+// Used for formatting key names in key-value output.
+//
+// Args:
+//   - s: The string to capitalize
+//
+// Returns the string with its first character uppercased.
 func capitalizeFirst(s string) string {
 	if len(s) == 0 {
 		return s
