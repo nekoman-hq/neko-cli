@@ -277,7 +277,7 @@ func getDownloadURL(release *github.Release) (string, error) {
 	osName := runtime.GOOS
 	arch := runtime.GOARCH
 	archName := mapArchName(arch)
-	osNameCap := strings.ToTitle(osName)
+	osNameCap := strings.ToUpper(osName[:1]) + osName[1:]
 	assetPattern := fmt.Sprintf("neko-cli_%s_%s", osNameCap, archName)
 
 	for _, asset := range release.Assets {

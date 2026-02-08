@@ -27,6 +27,7 @@ Example:
 			Force:  updateForce,
 			DryRun: updateDryRun,
 		}
+		cmd.SilenceUsage = true // Don't show usage on error
 		return update.Core(opts)
 	},
 }
@@ -49,6 +50,7 @@ Examples:
 			DryRun:    updateDryRun,
 			All:       updateAll,
 		}
+		cmd.SilenceUsage = true // Don't show usage on error
 		return update.Plugin(args, opts)
 	},
 }
