@@ -296,7 +296,7 @@ func mapArchName(arch string) string {
 	case "amd64":
 		return "x86_64"
 	case "arm64":
-		return "aarch64"
+		return "arm64"
 	default:
 		return arch
 	}
