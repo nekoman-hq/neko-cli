@@ -212,7 +212,6 @@ func extractAndInstall(archivePath string) error {
 		}
 
 		baseName := filepath.Base(header.Name)
-
 		if baseName == "neko" || baseName == "neko.exe" || baseName == "neko-cli" || baseName == "neko-cli.exe" {
 			return installBinary(tr, currentExe)
 		}
@@ -226,6 +225,9 @@ func installBinary(reader io.Reader, targetPath string) error {
 	backupPath := targetPath + ".backup"
 
 	if err := copyFile(targetPath, backupPath); err != nil {
+		if os.IsPermission(err) {
+			return fmt.Errorf("permission denied while creating backup. Try running the update with sudo:\n\nsudo neko update --force")
+		}
 		return fmt.Errorf("failed to create backup: %w", err)
 	}
 	defer func(name string) {
@@ -237,6 +239,9 @@ func installBinary(reader io.Reader, targetPath string) error {
 
 	tmpBinary, err := os.CreateTemp(filepath.Dir(targetPath), "neko-new-*")
 	if err != nil {
+		if os.IsPermission(err) {
+			return fmt.Errorf("permission denied while creating temp file. Try running the update with sudo:\n\nsudo neko update --force")
+		}
 		return fmt.Errorf("failed to create temp binary: %w", err)
 	}
 	tmpPath := tmpBinary.Name()
@@ -264,6 +269,9 @@ func installBinary(reader io.Reader, targetPath string) error {
 	}
 
 	if err := os.Rename(tmpPath, targetPath); err != nil {
+		if os.IsPermission(err) {
+			return fmt.Errorf("permission denied while replacing the binary. Try running the update with sudo:\n\nsudo neko update --force")
+		}
 		if restoreErr := copyFile(backupPath, targetPath); restoreErr != nil {
 			return fmt.Errorf("failed to replace binary: %w (rollback also failed: %v)", err, restoreErr)
 		}
