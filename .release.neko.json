@@ -3,5 +3,5 @@
   "project-owner": "nekoman-hq",
   "project-type": "other",
   "release-system": "goreleaser",
-  "version": "2.1.11"
+  "version": "2.1.12"
 }

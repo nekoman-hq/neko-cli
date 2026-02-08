@@ -212,7 +212,8 @@ func extractAndInstall(archivePath string) error {
 		}
 
 		baseName := filepath.Base(header.Name)
-		if baseName == "neko" || baseName == "neko.exe" {
+
+		if baseName == "neko" || baseName == "neko.exe" || baseName == "neko-cli" || baseName == "neko-cli.exe" {
 			return installBinary(tr, currentExe)
 		}
 	}
