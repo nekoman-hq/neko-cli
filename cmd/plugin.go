@@ -79,7 +79,7 @@ func init() {
 //
 // Returns an error if the plugin directory cannot be read, or nil on success.
 func runPluginList(*cobra.Command, []string) error {
-	d := dispatcher.NewDispatcher(pluginDir)
+	d := dispatcher.NewDispatcher(PluginDir)
 
 	manifests, err := d.ListPlugins()
 	if err != nil {
@@ -116,7 +116,7 @@ func runPluginList(*cobra.Command, []string) error {
 //
 // Returns an error if the registry cannot be reached, or nil on success.
 func runPluginAvailable(*cobra.Command, []string) error {
-	manager := plugin.NewManager(pluginDir)
+	manager := plugin.NewManager(PluginDir)
 
 	plugins, err := manager.GetAvailablePlugins()
 	if err != nil {
@@ -164,17 +164,19 @@ func runPluginAvailable(*cobra.Command, []string) error {
 //   - args[0]: The name of the plugin to install
 //
 // Returns an error if installation fails, or nil on success.
-func runPluginInstall(_ *cobra.Command, args []string) error {
+func runPluginInstall(cmd *cobra.Command, args []string) error {
 	pluginName := args[0]
 
 	fmt.Printf("%s%sInstalling plugin '%s'%s", log.ColorCyan, log.ColorBold, pluginName, log.ColorReset)
 	if installVersion != "latest" {
-		fmt.Printf(" metadata %s", installVersion)
+		fmt.Printf(" version %s", installVersion)
 	}
 	fmt.Println("...")
 
-	manager := plugin.NewManager(pluginDir)
-	if err := manager.Install(pluginName, installVersion); err != nil {
+	manager := plugin.NewManager(PluginDir)
+	err := manager.Install(pluginName, installVersion)
+	if err != nil {
+		cmd.SilenceUsage = true // Don't print usage on error
 		return err
 	}
 
@@ -192,7 +194,7 @@ func runPluginInstall(_ *cobra.Command, args []string) error {
 func runPluginUninstall(_ *cobra.Command, args []string) error {
 	pluginName := args[0]
 
-	manager := plugin.NewManager(pluginDir)
+	manager := plugin.NewManager(PluginDir)
 	if err := manager.Uninstall(pluginName); err != nil {
 		return err
 	}
@@ -211,7 +213,7 @@ func runPluginUninstall(_ *cobra.Command, args []string) error {
 //   - The plugin manifest containing metadata like name, version, description, etc.
 //   - An error if the plugin is not installed or the manifest cannot be read
 func GetInstalledPluginManifest(pluginName string) (*plugin.Manifest, error) {
-	manager := plugin.NewManager(pluginDir)
+	manager := plugin.NewManager(PluginDir)
 	return manager.GetManifest(pluginName)
 }
 

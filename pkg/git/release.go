@@ -1,5 +1,4 @@
-// Package git includes operations using git or git-cli
-package git
+package github
 
 /*
 @Author     Benjamin Senekowitsch
@@ -15,10 +14,9 @@ import (
 
 	"github.com/nekoman-hq/neko-cli/pkg/config"
 	"github.com/nekoman-hq/neko-cli/pkg/log"
-	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/git/github"
 )
 
-func LatestRelease(repoInfo *RepoInfo) (*github.Release, error) {
+func LatestRelease(repoInfo *RepoInfo) (*Release, error) {
 	token, err := config.GetPAT()
 	if err != nil {
 		return nil, err
@@ -73,7 +71,7 @@ func LatestRelease(repoInfo *RepoInfo) (*github.Release, error) {
 		)
 	}
 
-	var release github.Release
+	var release Release
 	if err := json.Unmarshal(body, &release); err != nil {
 		return nil, fmt.Errorf(
 			"JSON Parse Failed: %w", err,

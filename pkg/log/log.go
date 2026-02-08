@@ -28,7 +28,7 @@ import (
 //
 // Note: This function writes to stdout. Plugins should use PluginPrint instead,
 // which writes to stderr so the dispatcher can capture logs separately from responses.
-func Print(cat Category, msg string, args ...any) {
+func Print(cat Category, msg any, args ...any) {
 	color, ok := categoryColors[cat]
 	if !ok {
 		color = ColorReset
@@ -37,7 +37,8 @@ func Print(cat Category, msg string, args ...any) {
 	prefix := fmt.Sprintf("[%s]", cat)
 	coloredPrefix := ColorText(color, prefix)
 	timestamp := time.Now().Format("15:04:05")
-	fullMsg := fmt.Sprintf(msg, args...)
+
+	fullMsg := fmt.Sprint(append([]any{msg}, args...)...)
 	fmt.Printf("%s %s %s\n", timestamp, coloredPrefix, fullMsg)
 }
 

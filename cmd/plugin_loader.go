@@ -20,15 +20,15 @@ import (
 )
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&outputFormat, "output", "table", "Output format (table, json, wide)")
-	rootCmd.PersistentFlags().BoolVar(&describe, "describe", false, "Include execution logs and metadata in output")
+	rootCmd.PersistentFlags().StringVar(&outputFormat, "output", "table", "Output format (table, json, wide) -- only for plugin responses")
+	rootCmd.PersistentFlags().BoolVar(&describe, "describe", false, "Include execution logs and metadata in output -- only for plugin responses")
 
 	// Detect plugin directory
 	home, _ := os.UserHomeDir()
 	defaultPluginDir := filepath.Join(home, ".neko", "plugins")
-	pluginDir = os.Getenv("NEKO_PLUGIN_DIR") // For future use, allows custom plugin dir
-	if pluginDir == "" {
-		pluginDir = defaultPluginDir
+	PluginDir = os.Getenv("NEKO_PLUGIN_DIR") // For future use, allows custom plugin dir
+	if PluginDir == "" {
+		PluginDir = defaultPluginDir
 	}
 }
 
@@ -152,7 +152,7 @@ func addFlagToCommand(cmd *cobra.Command, flag plugin.Flag) {
 //   - Plugin execution fails
 //   - Response rendering fails
 func executePlugin(pluginName string, cmd *cobra.Command, args []string) error {
-	d := dispatcher.NewDispatcher(pluginDir)
+	d := dispatcher.NewDispatcher(PluginDir)
 
 	// Determine the command name - if we're on the root plugin command and have args,
 	// the first arg might be an unknown subcommand
@@ -246,11 +246,11 @@ func mustGetwd() string {
 // other plugins from being loaded.
 func InitializePlugins() error {
 	// If plugin directory doesn't exist, that's fine - no plugins installed yet
-	if _, err := os.Stat(pluginDir); os.IsNotExist(err) {
+	if _, err := os.Stat(PluginDir); os.IsNotExist(err) {
 		return nil
 	}
 
-	d := dispatcher.NewDispatcher(pluginDir)
+	d := dispatcher.NewDispatcher(PluginDir)
 
 	manifests, err := d.ListPlugins()
 	if err != nil {

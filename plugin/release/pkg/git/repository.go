@@ -17,13 +17,9 @@ import (
 	"regexp"
 	"strings"
 
+	github "github.com/nekoman-hq/neko-cli/pkg/git"
 	"github.com/nekoman-hq/neko-cli/pkg/log"
 )
-
-type RepoInfo struct {
-	Owner string
-	Repo  string
-}
 
 type Contributor struct {
 	Commits string
@@ -39,7 +35,7 @@ func Fetch() {
 }
 
 // Current checks if a git repository exists and returns owner and repo name
-func Current() (*RepoInfo, error) {
+func Current() (*github.RepoInfo, error) {
 	log.PluginV(log.Config, fmt.Sprintf("%s (Checking Repository Origin)",
 		log.ColorText(log.ColorGreen, "git remote -v"),
 	))
@@ -62,7 +58,7 @@ func Current() (*RepoInfo, error) {
 }
 
 // parseRemote extracts owner and repo from git remote output
-func parseRemote(remoteOutput string) (*RepoInfo, error) {
+func parseRemote(remoteOutput string) (*github.RepoInfo, error) {
 	// Regex patterns for both SSH and HTTPS URLs
 	// SSH: git@git.com:owner/repo.git
 	sshPattern := regexp.MustCompile(`git@github\.com:([^/]+)/([^/\s]+?)(?:\.git)?(?:\s|$)`)
@@ -74,7 +70,7 @@ func parseRemote(remoteOutput string) (*RepoInfo, error) {
 		repoPath := fmt.Sprintf("%s/%s", matches[1], matches[2])
 		log.PluginV(log.Config, fmt.Sprintf("Found repository: %s (SSH)",
 			log.ColorText(log.ColorGreen, repoPath)))
-		return &RepoInfo{
+		return &github.RepoInfo{
 			Owner: matches[1],
 			Repo:  matches[2],
 		}, nil
@@ -85,7 +81,7 @@ func parseRemote(remoteOutput string) (*RepoInfo, error) {
 		repoPath := fmt.Sprintf("%s/%s", matches[1], matches[2])
 		log.PluginV(log.Config, fmt.Sprintf("Found repository: %s (HTTPS)",
 			log.ColorText(log.ColorGreen, repoPath)))
-		return &RepoInfo{
+		return &github.RepoInfo{
 			Owner: matches[1],
 			Repo:  matches[2],
 		}, nil

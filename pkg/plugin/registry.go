@@ -208,7 +208,6 @@ func (r *Registry) GetDownloadURL(pluginName, releaseTag, osName, archName strin
 	}
 
 	// Find asset matching pattern: plugin-{name}_{version}_{OS}_{Arch}.tar.gz
-	// We match by prefix and suffix since version is embedded in filename
 	prefix := fmt.Sprintf("plugin-%s_", pluginName)
 	suffix := fmt.Sprintf("_%s_%s.tar.gz", osName, archName)
 
@@ -218,7 +217,45 @@ func (r *Registry) GetDownloadURL(pluginName, releaseTag, osName, archName strin
 		}
 	}
 
-	return "", fmt.Errorf("plugin '%s' not found for %s/%s in release %s", pluginName, osName, archName, releaseTag)
+	// Check if the plugin exists at all (any platform)
+	pluginExists := false
+	for _, asset := range release.Assets {
+		if strings.HasPrefix(asset.Name, prefix) && strings.HasSuffix(asset.Name, ".tar.gz") {
+			pluginExists = true
+			break
+		}
+	}
+
+	if pluginExists {
+		return "", fmt.Errorf("plugin '%s' is not available for %s/%s (only available for other platforms)",
+			pluginName, osName, archName)
+	}
+
+	return "", fmt.Errorf("plugin '%s' does not exist in release %s", pluginName, releaseTag)
+}
+
+// GetPluginVersion retrieves the version of a specific plugin from the latest release.
+// It reuses the plugin parsing logic from FetchAvailablePlugins.
+//
+// Args:
+//   - pluginName: The name of the plugin to get the version for
+//
+// Returns:
+//   - The plugin version string (e.g., "2.3.0")
+//   - An error if the plugin cannot be found
+func (r *Registry) GetPluginVersion(pluginName string) (string, error) {
+	availablePlugins, err := r.FetchAvailablePlugins()
+	if err != nil {
+		return "", err
+	}
+
+	for _, plugin := range availablePlugins {
+		if plugin.Name == pluginName {
+			return plugin.Version, nil
+		}
+	}
+
+	return "", fmt.Errorf("plugin '%s' not found in latest release", pluginName)
 }
 
 // httpGetWithAuth performs an HTTP GET request with optional GitHub authentication.

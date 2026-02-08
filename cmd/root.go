@@ -18,7 +18,7 @@ import (
 var (
 	verbose      bool
 	outputFormat string
-	pluginDir    string
+	PluginDir    string
 	describe     bool
 )
 

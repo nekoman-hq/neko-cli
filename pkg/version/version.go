@@ -12,9 +12,8 @@ import (
 	"time"
 
 	"github.com/nekoman-hq/neko-cli/pkg/errors"
+	"github.com/nekoman-hq/neko-cli/pkg/git"
 	"github.com/nekoman-hq/neko-cli/pkg/log"
-	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/git"
-	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/git/github"
 )
 
 var (
@@ -25,14 +24,14 @@ var (
 	BuiltBy = "unknown"
 )
 
-func Latest(repoInfo *git.RepoInfo) error {
+func Latest(repoInfo *github.RepoInfo) error {
 	displayCLIVersion()
 
 	if repoInfo == nil {
 		return nil
 	}
 
-	release, err := git.LatestRelease(repoInfo)
+	release, err := github.LatestRelease(repoInfo)
 	if err != nil {
 		errors.Warning("No Releases Found", fmt.Sprintf("Repository %s/%s has no releases yet.\n", repoInfo.Owner, repoInfo.Repo))
 	}
@@ -68,7 +67,7 @@ func displayCLIVersion() {
 	fmt.Println()
 }
 
-func displayRelease(repoInfo *git.RepoInfo, release *github.Release) {
+func displayRelease(repoInfo *github.RepoInfo, release *github.Release) {
 	// Parse and format the date
 	publishedTime, err := time.Parse(time.RFC3339, release.PublishedAt)
 	var formattedDate string

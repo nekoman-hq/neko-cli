@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -26,7 +27,7 @@ import (
 // to a local directory, and manage their lifecycle.
 type Manager struct {
 	registry  *Registry
-	pluginDir string
+	PluginDir string
 }
 
 // NewManager creates a new plugin manager with the default registry.
@@ -37,7 +38,7 @@ type Manager struct {
 // Returns a configured Manager instance.
 func NewManager(pluginDir string) *Manager {
 	return &Manager{
-		pluginDir: pluginDir,
+		PluginDir: pluginDir,
 		registry:  NewRegistry(),
 	}
 }
@@ -52,7 +53,7 @@ func NewManager(pluginDir string) *Manager {
 // Returns a configured Manager instance with the specified registry.
 func NewManagerWithRegistry(pluginDir string, registry *Registry) *Manager {
 	return &Manager{
-		pluginDir: pluginDir,
+		PluginDir: pluginDir,
 		registry:  registry,
 	}
 }
@@ -62,7 +63,7 @@ func NewManagerWithRegistry(pluginDir string, registry *Registry) *Manager {
 //
 // Returns an error if directory creation fails, or nil on success.
 func (m *Manager) EnsurePluginDir() error {
-	return os.MkdirAll(m.pluginDir, 0755)
+	return os.MkdirAll(m.PluginDir, 0755)
 }
 
 // Install downloads and installs a plugin from the registry.
@@ -89,7 +90,7 @@ func (m *Manager) Install(pluginName, version string) error {
 	if version == "latest" || version == "" {
 		latestVersion, err := m.registry.GetLatestVersion()
 		if err != nil {
-			return fmt.Errorf("failed to get latest metadata: %w", err)
+			return fmt.Errorf("failed to get latest version: %w", err)
 		}
 		actualVersion = latestVersion
 	}
@@ -97,7 +98,17 @@ func (m *Manager) Install(pluginName, version string) error {
 	// Build download URL
 	downloadURL, err := m.getPluginDownloadURL(pluginName, actualVersion)
 	if err != nil {
-		return fmt.Errorf("failed to get download URL: %w", err)
+		// Check if plugin exists at all
+		available, listErr := m.GetAvailablePlugins()
+		if listErr == nil {
+			var pluginNames []string
+			for _, p := range available {
+				pluginNames = append(pluginNames, p.Name)
+			}
+			return fmt.Errorf("%w\n\nAvailable plugins: %s\n\nRun 'neko plugin list' to see all available plugins",
+				err, strings.Join(pluginNames, ", "))
+		}
+		return err
 	}
 
 	// Download and extract
@@ -117,7 +128,7 @@ func (m *Manager) Install(pluginName, version string) error {
 //   - The plugin is not installed
 //   - The plugin directory cannot be removed
 func (m *Manager) Uninstall(pluginName string) error {
-	installPath := filepath.Join(m.pluginDir, pluginName)
+	installPath := filepath.Join(m.PluginDir, pluginName)
 	if _, err := os.Stat(installPath); os.IsNotExist(err) {
 		return fmt.Errorf("plugin '%s' is not installed", pluginName)
 	}
@@ -136,7 +147,7 @@ func (m *Manager) Uninstall(pluginName string) error {
 //
 // Returns true if the plugin directory exists, false otherwise.
 func (m *Manager) IsInstalled(pluginName string) bool {
-	installPath := filepath.Join(m.pluginDir, pluginName)
+	installPath := filepath.Join(m.PluginDir, pluginName)
 	_, err := os.Stat(installPath)
 	return err == nil
 }
@@ -150,7 +161,7 @@ func (m *Manager) IsInstalled(pluginName string) bool {
 //   - A pointer to the parsed Manifest
 //   - An error if the manifest file cannot be read or parsed
 func (m *Manager) GetManifest(pluginName string) (*Manifest, error) {
-	manifestPath := filepath.Join(m.pluginDir, pluginName, "manifest.json")
+	manifestPath := filepath.Join(m.PluginDir, pluginName, "manifest.json")
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
 		return nil, err
@@ -174,7 +185,7 @@ func (m *Manager) GetManifest(pluginName string) (*Manifest, error) {
 func (m *Manager) ListInstalled() (map[string]string, error) {
 	installed := make(map[string]string)
 
-	entries, err := os.ReadDir(m.pluginDir)
+	entries, err := os.ReadDir(m.PluginDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return installed, nil
@@ -262,7 +273,7 @@ func (m *Manager) downloadAndInstall(pluginName, downloadURL string) error {
 	}
 
 	// Remove existing plugin directory if it exists
-	installPath := filepath.Join(m.pluginDir, pluginName)
+	installPath := filepath.Join(m.PluginDir, pluginName)
 	if err = os.RemoveAll(installPath); err != nil {
 		return fmt.Errorf("failed to remove existing plugin: %w", err)
 	}
