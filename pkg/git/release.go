@@ -12,16 +12,10 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/nekoman-hq/neko-cli/pkg/config"
 	"github.com/nekoman-hq/neko-cli/pkg/log"
 )
 
 func LatestRelease(repoInfo *RepoInfo) (*Release, error) {
-	token, err := config.GetPAT()
-	if err != nil {
-		return nil, err
-	}
-
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", repoInfo.Owner, repoInfo.Repo)
 
 	log.PluginV(log.Exec, fmt.Sprintf("Fetching latest release from remote: %s",
@@ -35,7 +29,6 @@ func LatestRelease(repoInfo *RepoInfo) (*Release, error) {
 		)
 	}
 
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	req.Header.Set("Accept", "application/json")
 
 	client := &http.Client{}

@@ -3,8 +3,10 @@ package update
 import (
 	"archive/tar"
 	"compress/gzip"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -225,8 +227,11 @@ func installBinary(reader io.Reader, targetPath string) error {
 	backupPath := targetPath + ".backup"
 
 	if err := copyFile(targetPath, backupPath); err != nil {
-		if os.IsPermission(err) {
-			return fmt.Errorf("permission denied while creating backup. Try running the update with sudo:\n\nsudo neko update --force")
+		if errors.Is(err, fs.ErrPermission) {
+			return fmt.Errorf(
+				"permission denied while updating %s.\n\nTry running:\n\nsudo neko update --force",
+				targetPath,
+			)
 		}
 		return fmt.Errorf("failed to create backup: %w", err)
 	}
@@ -239,11 +244,15 @@ func installBinary(reader io.Reader, targetPath string) error {
 
 	tmpBinary, err := os.CreateTemp(filepath.Dir(targetPath), "neko-new-*")
 	if err != nil {
-		if os.IsPermission(err) {
-			return fmt.Errorf("permission denied while creating temp file. Try running the update with sudo:\n\nsudo neko update --force")
+		if errors.Is(err, fs.ErrPermission) {
+			return fmt.Errorf(
+				"permission denied while writing to %s.\n\nTry running:\n\nsudo neko update --force",
+				filepath.Dir(targetPath),
+			)
 		}
 		return fmt.Errorf("failed to create temp binary: %w", err)
 	}
+
 	tmpPath := tmpBinary.Name()
 	defer func(name string) {
 		err := os.Remove(name)
@@ -269,9 +278,13 @@ func installBinary(reader io.Reader, targetPath string) error {
 	}
 
 	if err := os.Rename(tmpPath, targetPath); err != nil {
-		if os.IsPermission(err) {
-			return fmt.Errorf("permission denied while replacing the binary. Try running the update with sudo:\n\nsudo neko update --force")
+		if errors.Is(err, fs.ErrPermission) {
+			return fmt.Errorf(
+				"permission denied while replacing %s.\n\nTry running:\n\nsudo neko update --force",
+				targetPath,
+			)
 		}
+
 		if restoreErr := copyFile(backupPath, targetPath); restoreErr != nil {
 			return fmt.Errorf("failed to replace binary: %w (rollback also failed: %v)", err, restoreErr)
 		}
