@@ -11,18 +11,18 @@ import (
 	"fmt"
 
 	"github.com/Masterminds/semver/v3"
-	config2 "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
+	"github.com/nekoman-hq/neko-cli/pkg/errors"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/git"
 
-	"github.com/nekoman-hq/neko-cli/pkg/errors"
 	"github.com/nekoman-hq/neko-cli/pkg/log"
 )
 
 type Service struct {
-	cfg *config2.NekoConfig
+	cfg *config.NekoConfig
 }
 
-func NewReleaseService(cfg *config2.NekoConfig) *Service {
+func NewReleaseService(cfg *config.NekoConfig) *Service {
 	return &Service{cfg: cfg}
 }
 
@@ -64,8 +64,18 @@ func (rs *Service) Run(releaseType Type) error {
 
 	newVersion := NextVersion(version, rt)
 
+	if err := rs.updateConfig(&newVersion); err != nil {
+		errors.WriteWarning(
+			"Failed to update local config",
+			fmt.Sprintf("Updating version in .release.neko.json failed. Attempting to proceed with release: %s", err.Error()))
+	}
+
 	if err := releaser.Release(&newVersion); err != nil {
 		releaseError := fmt.Errorf("release failed: %w", err)
+
+		if err := rs.updateConfig(version); err != nil {
+			log.PluginPrint(log.Guard, "Warning: Failed to revert config: %s", err.Error())
+		}
 
 		log.PluginPrint(log.Guard, "Encountered error while releasing. Trying to undo changes...")
 		if err := releaser.RevertRelease(); err != nil {
@@ -74,12 +84,6 @@ func (rs *Service) Run(releaseType Type) error {
 		log.PluginPrint(log.Guard, "Successfully undid changes.")
 
 		return releaseError
-	}
-
-	if err := rs.updateConfig(&newVersion); err != nil {
-		errors.WriteWarning(
-			"Failed to update local config",
-			fmt.Sprintf("Updating version in .release.neko.json failed. Attempting to proceed with release: %s", err.Error()))
 	}
 
 	log.PluginPrint(log.Exec, "\uF00C Successfully released version %s",
@@ -101,5 +105,5 @@ func (rs *Service) GetNewVersion(releaseType Type) (*semver.Version, *semver.Ver
 
 func (rs *Service) updateConfig(newVersion *semver.Version) error {
 	rs.cfg.Version = newVersion.String()
-	return config2.SaveConfig(*rs.cfg)
+	return config.SaveConfig(*rs.cfg)
 }

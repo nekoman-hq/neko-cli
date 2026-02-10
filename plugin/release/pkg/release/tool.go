@@ -57,9 +57,11 @@ type GitReleaseState struct {
 	ReleaseHead          string
 	TagName              string
 	GitHubReleaseTag     string // usually same as TagName
+	PreviousVersion      string
 	PushedCommit         bool
 	PushedTag            bool
 	CreatedGitHubRelease bool
+	UpdatedConfig        bool
 }
 
 func (tb *ToolBase) RevertGitRelease(st GitReleaseState) error {

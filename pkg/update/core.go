@@ -86,7 +86,6 @@ func Core(opts CoreOptions) error {
 
 	log.Print(log.Exec, fmt.Sprintf("Successfully updated to version %s",
 		strings.TrimPrefix(latestVersion, "v")))
-	log.Print(log.Exec, "Please restart your terminal or run 'source ~/.bashrc' (or equivalent) for the changes to take effect")
 
 	return nil
 }
