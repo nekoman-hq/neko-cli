@@ -76,15 +76,15 @@ func Handle(req plugin.Request) (*plugin.Response, error) {
 				continue
 			}
 
-			componentName := entry.Name()
-			if err := removeComponent(localComponentsPath, componentName); err != nil {
-				log.PluginPrint(log.Exec, "Failed to remove component %s: %v", componentName, err)
-				skippedComponents = append(skippedComponents, componentName)
+			compName := entry.Name()
+			if err := removeComponent(localComponentsPath, compName); err != nil {
+				log.PluginPrint(log.Exec, "Failed to remove component %s: %v", compName, err)
+				skippedComponents = append(skippedComponents, compName)
 				continue
 			}
 
-			log.PluginPrint(log.Exec, "Removed component: %s", componentName)
-			removedComponents = append(removedComponents, componentName)
+			log.PluginPrint(log.Exec, "Removed component: %s", compName)
+			removedComponents = append(removedComponents, compName)
 		}
 
 		if len(removedComponents) == 0 && len(skippedComponents) == 0 {

@@ -42,7 +42,7 @@ func Handle(req plugin.Request) (*plugin.Response, error) {
 	// Check if config exists
 	if !config.Exists(projectRoot) {
 		return errorResponse(req, "CONFIG_NOT_FOUND",
-			fmt.Sprintf("Config file not found. Run 'neko ui init --components-path=<path>' first."), nil)
+			"Config file not found. Run 'neko ui init --components-path=<path>' first.", nil)
 	}
 
 	// Load config to get components path
@@ -134,7 +134,9 @@ func fetchGitHubComponents() ([]GitHubContent, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch from GitHub: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)

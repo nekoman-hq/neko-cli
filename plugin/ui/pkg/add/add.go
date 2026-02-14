@@ -173,7 +173,9 @@ func downloadComponent(componentName, destPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to download repository: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("GitHub returned status %d", resp.StatusCode)
@@ -256,14 +258,18 @@ func extractFile(file *zip.File, targetPath string) error {
 	if err != nil {
 		return err
 	}
-	defer rc.Close()
+	defer func() {
+		_ = rc.Close()
+	}()
 
 	// Create target file
 	outFile, err := os.Create(targetPath)
 	if err != nil {
 		return err
 	}
-	defer outFile.Close()
+	defer func() {
+		_ = outFile.Close()
+	}()
 
 	// Copy contents
 	_, err = io.Copy(outFile, rc)
@@ -296,7 +302,9 @@ func fetchGitHubComponents() ([]GitHubContent, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch from GitHub: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)

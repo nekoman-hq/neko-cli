@@ -138,16 +138,6 @@ func errorResponse(req plugin.Request, code, message string, err error) (*plugin
 	}, nil
 }
 
-// getFlagString safely extracts a string flag value
-func getFlagString(flags map[string]any, name string) string {
-	if val, ok := flags[name]; ok {
-		if str, ok := val.(string); ok {
-			return str
-		}
-	}
-	return ""
-}
-
 // getFlagBool safely extracts a boolean flag value
 func getFlagBool(flags map[string]any, name string) bool {
 	if val, ok := flags[name]; ok {
