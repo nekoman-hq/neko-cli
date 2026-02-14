@@ -149,6 +149,7 @@ func addFlagToCommand(cmd *cobra.Command, flag plugin.Flag) {
 //   - args: The command-line arguments
 //
 // Returns an error if:
+//   - Required flags are missing
 //   - Plugin execution fails
 //   - Response rendering fails
 func executePlugin(pluginName string, cmd *cobra.Command, args []string) error {
@@ -162,6 +163,28 @@ func executePlugin(pluginName string, cmd *cobra.Command, args []string) error {
 		// User typed something like "neko release unknownCmd" - treat first arg as command
 		commandName = args[0]
 		actualArgs = args[1:]
+	}
+
+	// Load plugin manifest to validate required flags
+	manifest, err := GetInstalledPluginManifest(pluginName)
+	if err != nil {
+		return fmt.Errorf("failed to load plugin manifest: %w", err)
+	}
+
+	// Find the command definition in manifest
+	var cmdDef *plugin.Command
+	for _, c := range manifest.Commands {
+		if c.Name == commandName {
+			cmdDef = &c
+			break
+		}
+	}
+
+	// Validate required flags if we found the command definition
+	if cmdDef != nil {
+		if err := validateRequiredFlagsFromManifest(cmd, cmdDef.Flags); err != nil {
+			return err
+		}
 	}
 
 	req := plugin.Request{
@@ -186,6 +209,33 @@ func executePlugin(pluginName string, cmd *cobra.Command, args []string) error {
 		Describe: describe,
 	}
 	return renderer.RenderWithOptions(resp, opts)
+}
+
+// validateRequiredFlagsFromManifest checks that all required flags from the manifest
+// have been set by the user. This validation happens before dispatching to the plugin.
+//
+// Args:
+//   - cmd: The cobra.Command to check flags on
+//   - flagDefs: The flag definitions from the plugin manifest
+//
+// Returns an error if any required flag is missing.
+func validateRequiredFlagsFromManifest(cmd *cobra.Command, flagDefs []plugin.Flag) error {
+	var missingFlags []string
+
+	for _, flagDef := range flagDefs {
+		if flagDef.Required {
+			flag := cmd.Flags().Lookup(flagDef.Name)
+			if flag == nil || !flag.Changed {
+				missingFlags = append(missingFlags, flagDef.Name)
+			}
+		}
+	}
+
+	if len(missingFlags) > 0 {
+		return fmt.Errorf("required flag(s) not set: %v", missingFlags)
+	}
+
+	return nil
 }
 
 // extractFlags extracts all flags from a cobra.Command into a map.

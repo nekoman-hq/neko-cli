@@ -24,7 +24,7 @@ import (
 
 // Manager handles plugin installation, uninstallation, and management.
 // It provides functionality to download plugins from a registry, install them
-// to a local directory, and manage their lifecycle.
+// to a local directory, and add their lifecycle.
 type Manager struct {
 	registry  *Registry
 	PluginDir string

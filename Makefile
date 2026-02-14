@@ -16,8 +16,11 @@ LDFLAGS := -X github.com/nekoman-hq/neko-cli/pkg/version.Version=$(VERSION) \
 # Plugin Configuration
 # ============================================================================
 PLUGIN_CONFIG := .plugin.release.neko.json
-PLUGINS := release core
 PLUGIN_DIR := plugin
+PLUGIN_INSTALL_DIR := $(HOME)/.neko/plugins
+
+# Dynamically read plugins from config file
+PLUGINS := $(shell test -f "$(PLUGIN_CONFIG)" && jq -r '.plugins | keys[]' $(PLUGIN_CONFIG) 2>/dev/null || echo "")
 
 # ============================================================================
 # Colors for help output
@@ -50,6 +53,9 @@ help: ## Show this help message
 	@echo "  $(COLOR_GREEN)plugin-%-clean$(COLOR_RESET)       Clean specific plugin"
 	@echo "  $(COLOR_GREEN)plugin-%-test$(COLOR_RESET)        Test specific plugin"
 	@echo ""
+	@echo "$(COLOR_BOLD)Note:$(COLOR_RESET) Plugins are read from $(COLOR_CYAN)$(PLUGIN_CONFIG)$(COLOR_RESET)"
+	@echo "      Use $(COLOR_GREEN)make check-plugin-config$(COLOR_RESET) to validate configuration"
+	@echo ""
 	@$(MAKE) --no-print-directory versions
 
 # ============================================================================
@@ -77,13 +83,22 @@ all: build install-plugins ## Build CLI and install all plugins
 # ============================================================================
 
 .PHONY: install-plugins
-install-plugins: ## Install all plugins
+install-plugins: ## Install all plugins (compile binaries and copy to ~/.neko/plugins/<plugin_name>/)
+	@if [ ! -f "$(PLUGIN_CONFIG)" ]; then \
+		echo "$(COLOR_YELLOW)⚠ $(PLUGIN_CONFIG) not found$(COLOR_RESET)"; \
+		exit 1; \
+	fi
+	@if [ -z "$(PLUGINS)" ]; then \
+		echo "$(COLOR_YELLOW)⚠ No plugins defined in $(PLUGIN_CONFIG)$(COLOR_RESET)"; \
+		exit 1; \
+	fi
 	@echo "$(COLOR_BLUE)Installing all plugins...$(COLOR_RESET)"
 	@for plugin in $(PLUGINS); do \
 		if [ -d "$(PLUGIN_DIR)/$$plugin" ]; then \
 			echo "$(COLOR_CYAN)  → Installing plugin: $$plugin$(COLOR_RESET)"; \
-			cd $(PLUGIN_DIR)/$$plugin && $(MAKE) install || exit 1; \
-			cd ../..; \
+			$(MAKE) --no-print-directory plugin-$$plugin-install || exit 1; \
+		else \
+			echo "$(COLOR_YELLOW)  ⚠ Plugin directory not found: $(PLUGIN_DIR)/$$plugin$(COLOR_RESET)"; \
 		fi; \
 	done
 	@echo "$(COLOR_GREEN)✓ All plugins installed$(COLOR_RESET)"
@@ -140,11 +155,34 @@ plugin-%-build: ## Build a specific plugin
 	fi
 
 .PHONY: plugin-%-install
-plugin-%-install: ## Install a specific plugin
+plugin-%-install: ## Install a specific plugin (compile binary and copy to ~/.neko/plugins/<plugin_name>/)
 	@if [ -d "$(PLUGIN_DIR)/$*" ]; then \
 		echo "$(COLOR_BLUE)Installing plugin: $*$(COLOR_RESET)"; \
-		cd $(PLUGIN_DIR)/$* && $(MAKE) install; \
-		echo "$(COLOR_GREEN)✓ Plugin $* installed$(COLOR_RESET)"; \
+		\
+		echo "$(COLOR_CYAN)  → Building plugin binary...$(COLOR_RESET)"; \
+		cd $(PLUGIN_DIR)/$* && $(MAKE) build || exit 1; \
+		cd ../..; \
+		\
+		echo "$(COLOR_CYAN)  → Creating plugin directory...$(COLOR_RESET)"; \
+		mkdir -p $(PLUGIN_INSTALL_DIR)/$*; \
+		\
+		echo "$(COLOR_CYAN)  → Copying plugin binary...$(COLOR_RESET)"; \
+		if [ -f "$(PLUGIN_DIR)/$*/plugin-$*" ]; then \
+			cp $(PLUGIN_DIR)/$*/plugin-$* $(PLUGIN_INSTALL_DIR)/$*/; \
+			chmod +x $(PLUGIN_INSTALL_DIR)/$*/plugin-$*; \
+		else \
+			echo "$(COLOR_YELLOW)⚠ Binary plugin-$* not found$(COLOR_RESET)"; \
+			exit 1; \
+		fi; \
+		\
+		echo "$(COLOR_CYAN)  → Copying plugin manifest...$(COLOR_RESET)"; \
+		if [ -f "$(PLUGIN_DIR)/$*/manifest.json" ]; then \
+			cp $(PLUGIN_DIR)/$*/manifest.json $(PLUGIN_INSTALL_DIR)/$*/; \
+		else \
+			echo "$(COLOR_YELLOW)⚠ manifest.json not found for plugin $*$(COLOR_RESET)"; \
+		fi; \
+		\
+		echo "$(COLOR_GREEN)✓ Plugin $* installed to $(PLUGIN_INSTALL_DIR)/$*$(COLOR_RESET)"; \
 	else \
 		echo "$(COLOR_YELLOW)⚠ Plugin $* not found$(COLOR_RESET)"; \
 		exit 1; \
@@ -161,6 +199,16 @@ plugin-%-clean: ## Clean a specific plugin
 		exit 1; \
 	fi
 
+.PHONY: plugin-%-uninstall
+plugin-%-uninstall: ## Uninstall a specific plugin from ~/.neko/plugins/<plugin_name>/
+	@echo "$(COLOR_BLUE)Uninstalling plugin: $*$(COLOR_RESET)"
+	@if [ -d "$(PLUGIN_INSTALL_DIR)/$*" ]; then \
+		rm -rf $(PLUGIN_INSTALL_DIR)/$*; \
+		echo "$(COLOR_GREEN)✓ Plugin $* uninstalled$(COLOR_RESET)"; \
+	else \
+		echo "$(COLOR_YELLOW)⚠ Plugin $* not installed$(COLOR_RESET)"; \
+	fi
+
 .PHONY: plugin-%-test
 plugin-%-test: ## Test a specific plugin
 	@if [ -d "$(PLUGIN_DIR)/$*" ]; then \
@@ -170,6 +218,27 @@ plugin-%-test: ## Test a specific plugin
 	else \
 		echo "$(COLOR_YELLOW)⚠ Plugin $* not found$(COLOR_RESET)"; \
 		exit 1; \
+	fi
+
+.PHONY: list-installed-plugins
+list-installed-plugins: ## List all installed plugins
+	@echo "$(COLOR_BOLD)Installed Plugins:$(COLOR_RESET)"
+	@if [ -d "$(PLUGIN_INSTALL_DIR)" ]; then \
+		for plugin_path in $(PLUGIN_INSTALL_DIR)/*; do \
+			if [ -d "$$plugin_path" ]; then \
+				plugin=$$(basename $$plugin_path); \
+				if [ -f "$$plugin_path/manifest.json" ]; then \
+					version=$$(jq -r '.version // "unknown"' $$plugin_path/manifest.json 2>/dev/null || echo "unknown"); \
+					printf "  $(COLOR_GREEN)%-15s$(COLOR_RESET) v%-10s $(COLOR_CYAN)%s$(COLOR_RESET)\n" \
+						"$$plugin" "$$version" "$$plugin_path"; \
+				else \
+					printf "  $(COLOR_GREEN)%-15s$(COLOR_RESET) $(COLOR_YELLOW)%-11s$(COLOR_RESET) $(COLOR_CYAN)%s$(COLOR_RESET)\n" \
+						"$$plugin" "(no manifest)" "$$plugin_path"; \
+				fi; \
+			fi; \
+		done; \
+	else \
+		echo "  $(COLOR_YELLOW)No plugins installed$(COLOR_RESET)"; \
 	fi
 
 # ============================================================================
@@ -221,6 +290,16 @@ clean: ## Clean all build artifacts
 	@rm -f neko
 	@$(MAKE) --no-print-directory clean-plugins
 	@echo "$(COLOR_GREEN)✓ Cleanup complete$(COLOR_RESET)"
+
+.PHONY: uninstall-plugins
+uninstall-plugins: ## Uninstall all plugins from ~/.neko/plugins/
+	@echo "$(COLOR_BLUE)Uninstalling all plugins...$(COLOR_RESET)"
+	@if [ -d "$(PLUGIN_INSTALL_DIR)" ]; then \
+		rm -rf $(PLUGIN_INSTALL_DIR); \
+		echo "$(COLOR_GREEN)✓ All plugins uninstalled$(COLOR_RESET)"; \
+	else \
+		echo "$(COLOR_YELLOW)⚠ No plugins installed$(COLOR_RESET)"; \
+	fi
 
 # ============================================================================
 # Version Information
@@ -319,6 +398,25 @@ deps: ## Download dependencies
 # ============================================================================
 # Verification
 # ============================================================================
+
+.PHONY: check-plugin-config
+check-plugin-config: ## Verify plugin configuration file
+	@echo "$(COLOR_BLUE)Checking plugin configuration...$(COLOR_RESET)"
+	@if [ ! -f "$(PLUGIN_CONFIG)" ]; then \
+		echo "$(COLOR_YELLOW)⚠ $(PLUGIN_CONFIG) not found$(COLOR_RESET)"; \
+		exit 1; \
+	fi
+	@echo "$(COLOR_CYAN)Plugin configuration file: $(PLUGIN_CONFIG)$(COLOR_RESET)"
+	@echo "$(COLOR_CYAN)Configured plugins:$(COLOR_RESET)"
+	@for plugin in $(PLUGINS); do \
+		version=$$(jq -r ".plugins.$$plugin // \"unknown\"" $(PLUGIN_CONFIG) 2>/dev/null); \
+		if [ -d "$(PLUGIN_DIR)/$$plugin" ]; then \
+			printf "  $(COLOR_GREEN)✓$(COLOR_RESET) %-15s v%-10s $(COLOR_GREEN)(directory exists)$(COLOR_RESET)\n" "$$plugin" "$$version"; \
+		else \
+			printf "  $(COLOR_YELLOW)⚠$(COLOR_RESET) %-15s v%-10s $(COLOR_YELLOW)(directory missing)$(COLOR_RESET)\n" "$$plugin" "$$version"; \
+		fi; \
+	done
+	@echo "$(COLOR_GREEN)✓ Configuration check complete$(COLOR_RESET)"
 
 .PHONY: verify
 verify: fmt lint test-all ## Run all verification steps (fmt, lint, test)

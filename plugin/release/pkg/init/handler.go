@@ -272,15 +272,15 @@ func buildNextSteps(cfg config.NekoConfig) []string {
 	switch cfg.ReleaseSystem {
 	case config.ReleaseTypeReleaseIt:
 		steps = append(steps,
-			"Neko will manage metadata in: package.json, .release-it.json",
+			"Neko will add metadata in: package.json, .release-it.json",
 		)
 	case config.ReleaseTypeJReleaser:
 		steps = append(steps,
-			"Neko will manage metadata in: jreleaser.yml, pom.xml / build.gradle",
+			"Neko will add metadata in: jreleaser.yml, pom.xml / build.gradle",
 		)
 	case config.ReleaseTypeGoReleaser:
 		steps = append(steps,
-			"Neko will manage metadata in: .goreleaser.yml, Git tags",
+			"Neko will add metadata in: .goreleaser.yml, Git tags",
 		)
 	}
 
