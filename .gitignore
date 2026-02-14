@@ -1,6 +1,7 @@
 neko
 neko-cli
 plugin/release/plugin-release
+plugin/ui/plugin-ui
 .env
 .envrc
 .idea
