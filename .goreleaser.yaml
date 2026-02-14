@@ -45,6 +45,22 @@ builds:
       - -X github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata.GitCommit={{ .Commit }}
       - -X github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata.BuildDate={{ .Date }}
 
+  # Ui plugin
+  - id: plugin-ui
+    binary: plugin-ui
+    main: ./plugin/ui/main.go
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    ldflags:
+      - -s -w
+      - -X github.com/nekoman-hq/neko-cli/plugin/ui/pkg/metadata.Version={{ if index .Env "PLUGIN_UI_VERSION" }}{{ .Env.PLUGIN_UI_VERSION }}{{ else }}dev{{ end }}
+      - -X github.com/nekoman-hq/neko-cli/plugin/ui/pkg/metadata.GitCommit={{ .Commit }}
+      - -X github.com/nekoman-hq/neko-cli/plugin/ui/pkg/metadata.BuildDate={{ .Date }}
+
 archives:
   # Main CLI archive
   - id: neko-cli
@@ -82,6 +98,24 @@ archives:
     format_overrides:
       - goos: windows
         formats: [zip]
+
+  - id: plugin-ui
+    ids:
+      - plugin-ui
+    formats: [ tar.gz ]
+    name_template: >-
+      plugin-ui_{{ if index .Env "PLUGIN_UI_VERSION" }}{{ .Env.PLUGIN_UI_VERSION }}{{ else }}dev{{ end }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    files:
+      - src: plugin/ui/manifest.json
+        strip_parent: true
+    format_overrides:
+      - goos: windows
+        formats: [ zip ]
 
 changelog:
   sort: asc
