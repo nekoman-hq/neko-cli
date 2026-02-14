@@ -165,30 +165,19 @@ func executePlugin(pluginName string, cmd *cobra.Command, args []string) error {
 		actualArgs = args[1:]
 	}
 
-	fmt.Printf("DEBUG: pluginName=%s, commandName=%s\n", pluginName, commandName)
-
 	// Load plugin manifest to validate required flags
 	manifest, err := GetInstalledPluginManifest(pluginName)
 	if err != nil {
 		return fmt.Errorf("failed to load plugin manifest: %w", err)
 	}
 
-	fmt.Printf("DEBUG: Loaded manifest for '%s', has %d commands\n", manifest.Name, len(manifest.Commands))
-
 	// Find the command definition in manifest
 	var cmdDef *plugin.Command
 	for _, c := range manifest.Commands {
-		fmt.Printf("DEBUG: Checking command '%s' == '%s'?\n", c.Name, commandName)
 		if c.Name == commandName {
 			cmdDef = &c
 			break
 		}
-	}
-
-	if cmdDef == nil {
-		fmt.Printf("DEBUG: Command definition NOT found for '%s'\n", commandName)
-	} else {
-		fmt.Printf("DEBUG: Command definition found for '%s', has %d flags\n", commandName, len(cmdDef.Flags))
 	}
 
 	// Validate required flags if we found the command definition
@@ -233,25 +222,16 @@ func executePlugin(pluginName string, cmd *cobra.Command, args []string) error {
 func validateRequiredFlagsFromManifest(cmd *cobra.Command, flagDefs []plugin.Flag) error {
 	var missingFlags []string
 
-	fmt.Printf("DEBUG: Validating %d flag definitions\n", len(flagDefs))
-
 	for _, flagDef := range flagDefs {
-		fmt.Printf("DEBUG: Checking flag '%s' (required=%v)\n", flagDef.Name, flagDef.Required)
 		if flagDef.Required {
 			flag := cmd.Flags().Lookup(flagDef.Name)
 			if flag == nil {
-				fmt.Printf("DEBUG: Flag '%s' not found in command!\n", flagDef.Name)
 				missingFlags = append(missingFlags, flagDef.Name)
 			} else if !flag.Changed {
-				fmt.Printf("DEBUG: Flag '%s' not changed (value=%s)\n", flagDef.Name, flag.Value.String())
 				missingFlags = append(missingFlags, flagDef.Name)
-			} else {
-				fmt.Printf("DEBUG: Flag '%s' is set (value=%s)\n", flagDef.Name, flag.Value.String())
 			}
 		}
 	}
-
-	fmt.Printf("DEBUG: Missing flags: %v\n", missingFlags)
 
 	if len(missingFlags) > 0 {
 		return fmt.Errorf("required flag(s) not set: %v", missingFlags)
