@@ -262,17 +262,17 @@ func (j *JReleaser) syncJReleaser(v *semver.Version) error {
 
 // runJReleaserDryRun executes JReleaser in dry-run mode
 func (j *JReleaser) runJReleaserDryRun() error {
-	action := "full-release --dry-run"
+	args := []string{"full-release", "--dry-run"}
 
 	log.PluginV(
 		log.Exec,
 		fmt.Sprintf(
 			"Running JReleaser dry run: %s",
-			log.ColorText(log.ColorGreen, "jreleaser "+action),
+			log.ColorText(log.ColorGreen, "jreleaser "+strings.Join(args, " ")),
 		),
 	)
 
-	output, err := executeJReleaserCommand(action)
+	output, err := executeJReleaserCommand(args...)
 	if err != nil {
 		errors.WriteWarning(
 			"JReleaser dry run failed",
@@ -295,17 +295,17 @@ func (j *JReleaser) runJReleaserDryRun() error {
 
 // runJReleaserRelease executes the full jreleaser release
 func (j *JReleaser) runJReleaserRelease() error {
-	action := "full-release"
+	args := []string{"full-release"}
 
 	log.PluginV(
 		log.Exec,
 		fmt.Sprintf(
 			"Running JReleaser release: %s",
-			log.ColorText(log.ColorGreen, "jreleaser "+action),
+			log.ColorText(log.ColorGreen, "jreleaser "+strings.Join(args, " ")),
 		),
 	)
 
-	output, err := executeJReleaserCommand(action)
+	output, err := executeJReleaserCommand(args...)
 	if err != nil {
 		return fmt.Errorf(
 			"JReleaser release failed: %s: %w", string(output), err,
@@ -320,16 +320,20 @@ func (j *JReleaser) runJReleaserRelease() error {
 	return nil
 }
 
-func executeJReleaserCommand(action string) ([]byte, error) {
+func executeJReleaserCommand(args ...string) ([]byte, error) {
 	pat, err := config.GetPAT()
 	if err != nil {
 		return nil, err
 	}
 
 	maskedPat := strings.Repeat("*", 5)
-	log.PluginV(log.Init, fmt.Sprintf("Executing command: JRELEASER_GITHUB_TOKEN=%s jreleaser %s", maskedPat, action))
+	log.PluginV(log.Init, fmt.Sprintf(
+		"Executing command: JRELEASER_GITHUB_TOKEN=%s jreleaser %s",
+		maskedPat,
+		strings.Join(args, " "),
+	))
 
-	cmd := exec.Command("jreleaser", action)
+	cmd := exec.Command("jreleaser", args...)
 	cmd.Env = append(os.Environ(), "JRELEASER_GITHUB_TOKEN="+pat)
 
 	output, err := cmd.CombinedOutput()

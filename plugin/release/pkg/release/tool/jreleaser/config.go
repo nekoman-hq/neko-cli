@@ -19,7 +19,7 @@ type Config struct {
 }
 
 type Project struct {
-	Authors   *[]string        `yaml:"authors"`
+	Authors   *[]string        `yaml:"authors,omitempty"`
 	Languages ProjectLanguages `yaml:"languages"`
 	Links     ProjectLinks     `yaml:"links"`
 
@@ -59,17 +59,18 @@ type GithubRelease struct {
 }
 
 type Changelog struct {
-	IncludeLabels *[]string
-	Labelers      *[]Labeler
-	Categories    *[]Category
-	Contributors  *Contributors
-	Append        *ChangelogAppend
+	IncludeLabels *[]string        `yaml:"includeLabels,omitempty"`
+	Labelers      *[]Labeler       `yaml:"labelers,omitempty"`
+	Categories    *[]Category      `yaml:"categories,omitempty"`
+	Contributors  *Contributors    `yaml:"contributors,omitempty"`
+	Append        *ChangelogAppend `yaml:"append,omitempty"`
 
-	Sort      string
-	Formatted string
-	Preset    string
+	Sort      string `yaml:"sort"`
+	Formatted string `yaml:"formatted"`
+	Preset    string `yaml:"preset"`
 
-	Enabled, SkipMergeCommits bool
+	Enabled          bool `yaml:"enabled"`
+	SkipMergeCommits bool `yaml:"skipMergeCommits"`
 }
 
 type Contributors struct {
