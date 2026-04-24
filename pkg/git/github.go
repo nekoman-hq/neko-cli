@@ -21,6 +21,7 @@ type Release struct {
 	Body        string  `json:"body"`
 	Assets      []Asset `json:"assets"`
 	PreRelease  bool    `json:"prerelease"`
+	Draft       bool    `json:"draft"`
 }
 
 type Asset struct {

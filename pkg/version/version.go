@@ -8,10 +8,11 @@ package version
 */
 
 import (
+	stderrors "errors"
 	"fmt"
 	"time"
 
-	"github.com/nekoman-hq/neko-cli/pkg/errors"
+	clierrors "github.com/nekoman-hq/neko-cli/pkg/errors"
 	"github.com/nekoman-hq/neko-cli/pkg/git"
 	"github.com/nekoman-hq/neko-cli/pkg/log"
 )
@@ -33,7 +34,13 @@ func Latest(repoInfo *github.RepoInfo) error {
 
 	release, err := github.LatestRelease(repoInfo)
 	if err != nil {
-		errors.Warning("No Releases Found", fmt.Sprintf("Repository %s/%s has no releases yet.\n", repoInfo.Owner, repoInfo.Repo))
+		if stderrors.Is(err, github.ErrNoReleases) {
+			clierrors.Warning("No Releases Found", fmt.Sprintf("Repository %s/%s has no releases yet.\n", repoInfo.Owner, repoInfo.Repo))
+			return nil
+		}
+
+		clierrors.Warning("Latest Release Unavailable", err.Error())
+		return nil
 	}
 
 	if release != nil {
