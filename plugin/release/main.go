@@ -15,6 +15,7 @@ import (
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/release"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/validate"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
 
 	// Register all release tools
 	_ "github.com/nekoman-hq/neko-cli/plugin/release/pkg/release/tool"
@@ -33,6 +34,10 @@ func main() {
 
 	// Set verbose mode from request context
 	log.Verbose = req.Context.Verbose
+
+	if err := workspace.ChangeToProjectRoot(req.Context.WorkingDir); err != nil {
+		errors.WriteError("WORKSPACE_ERROR", err.Error())
+	}
 
 	var resp *plugin.Response
 	var err error
