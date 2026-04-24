@@ -30,7 +30,7 @@ func NewReleaseService(cfg *config.NekoConfig) *Service {
 func (rs *Service) Run(releaseType Type) error {
 	_, _ = git.Current()
 
-	Preflight()
+	Preflight(rs.cfg)
 	version, err := VersionGuard(rs.cfg)
 	if err != nil {
 		return err

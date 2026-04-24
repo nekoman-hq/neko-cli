@@ -123,18 +123,18 @@ func (g *GoReleaser) RevertRelease() error {
 }
 
 func runGoreleaserInit() error {
-	if _, err := os.Stat(".goreleaser.yaml"); err == nil {
+	exists, err := goreleaserConfigExists()
+	if err != nil {
+		return err
+	}
+
+	if exists {
 		log.PluginPrint(
 			log.Init,
 			"Skipping goreleaser init, %s already exists",
-			log.ColorText(log.ColorCyan, "goreleaser.yml"),
+			log.ColorText(log.ColorCyan, "a goreleaser config file"),
 		)
 		return nil
-	} else if !os.IsNotExist(err) {
-		return fmt.Errorf(
-			"failed to check goreleaser.yml: %w",
-			err,
-		)
 	}
 
 	log.PluginV(log.Init,
@@ -158,6 +158,18 @@ func runGoreleaserInit() error {
 	)
 
 	return nil
+}
+
+func goreleaserConfigExists() (bool, error) {
+	for _, file := range []string{".goreleaser.yml", ".goreleaser.yaml"} {
+		if _, err := os.Stat(file); err == nil {
+			return true, nil
+		} else if !os.IsNotExist(err) {
+			return false, fmt.Errorf("failed to check %s: %w", file, err)
+		}
+	}
+
+	return false, nil
 }
 
 func runGoreleaserCheck() error {

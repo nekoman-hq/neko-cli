@@ -44,6 +44,22 @@ func HandleRelease(req plugin.Request, releaseType Type) (*plugin.Response, erro
 	// Create release service
 	svc := NewReleaseService(cfg)
 
+	if err = ValidateRequirements(cfg); err != nil {
+		return &plugin.Response{
+			Status: "error",
+			Metadata: plugin.ResponseMetadata{
+				Plugin:    metadata.PluginName,
+				Version:   metadata.Version,
+				Command:   string(releaseType),
+				Timestamp: time.Now(),
+			},
+			Error: &plugin.ResponseError{
+				Code:    "VALIDATION_FAILED",
+				Message: err.Error(),
+			},
+		}, nil
+	}
+
 	// Get metadata info for response
 	oldVersion, newVersion, err := svc.GetNewVersion(releaseType)
 	if err != nil {

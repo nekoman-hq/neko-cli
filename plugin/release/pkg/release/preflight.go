@@ -9,11 +9,20 @@ package release
 import (
 	"github.com/nekoman-hq/neko-cli/pkg/errors"
 	"github.com/nekoman-hq/neko-cli/pkg/log"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/git"
 )
 
-func Preflight() {
+func Preflight(cfg *config.NekoConfig) {
 	log.PluginV(log.Preflight, "Running pre-flight checks")
+
+	if err := ValidateRequirements(cfg); err != nil {
+		errors.WriteError(
+			"RELEASE_REQUIREMENTS_INVALID",
+			err.Error(),
+		)
+	}
+
 	if err := git.IsClean(); err != nil {
 		errors.WriteError(
 			"UNCOMMITTED_CHANGES",

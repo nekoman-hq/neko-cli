@@ -14,6 +14,7 @@ import (
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/release"
 )
 
 // HandleValidate validates the release configuration
@@ -60,6 +61,22 @@ func HandleValidate(req plugin.Request) (*plugin.Response, error) {
 
 	// Validate the config
 	if err := config.Validate(cfg); err != nil {
+		return &plugin.Response{
+			Status: "error",
+			Metadata: plugin.ResponseMetadata{
+				Plugin:    metadata.PluginName,
+				Version:   metadata.Version,
+				Command:   "validate",
+				Timestamp: time.Now(),
+			},
+			Error: &plugin.ResponseError{
+				Code:    "VALIDATION_FAILED",
+				Message: err.Error(),
+			},
+		}, nil
+	}
+
+	if err := release.ValidateRequirements(cfg); err != nil {
 		return &plugin.Response{
 			Status: "error",
 			Metadata: plugin.ResponseMetadata{

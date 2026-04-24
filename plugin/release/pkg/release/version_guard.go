@@ -11,7 +11,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
-	git2 "github.com/nekoman-hq/neko-cli/plugin/release/pkg/git"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/git"
 
 	"github.com/nekoman-hq/neko-cli/pkg/errors"
 	"github.com/nekoman-hq/neko-cli/pkg/log"
@@ -19,9 +19,9 @@ import (
 
 func VersionGuard(cfg *config.NekoConfig) (*semver.Version, error) {
 	log.PluginV(log.Guard, "Running Version Guard checks")
-	git2.Fetch()
+	git.Fetch()
 
-	latestTag := git2.LatestTag()
+	latestTag := git.LatestTag()
 
 	return EnsureVersionIsValid(cfg, latestTag)
 }

@@ -14,11 +14,11 @@ func TestSaveConfigUsesJReleaserChangelogFieldNames(t *testing.T) {
 		t.Fatalf("getwd: %v", err)
 	}
 
-	if err := os.Chdir(tempDir); err != nil {
+	if err = os.Chdir(tempDir); err != nil {
 		t.Fatalf("chdir temp dir: %v", err)
 	}
 	defer func() {
-		if err := os.Chdir(wd); err != nil {
+		if err = os.Chdir(wd); err != nil {
 			t.Fatalf("restore cwd: %v", err)
 		}
 	}()
@@ -80,7 +80,7 @@ func TestSaveConfigUsesJReleaserChangelogFieldNames(t *testing.T) {
 		},
 	}
 
-	if err := SaveConfig(cfg); err != nil {
+	if err = SaveConfig(cfg); err != nil {
 		t.Fatalf("SaveConfig: %v", err)
 	}
 
@@ -122,11 +122,11 @@ func TestSaveConfigOmitsNilOptionalChangelogFields(t *testing.T) {
 		t.Fatalf("getwd: %v", err)
 	}
 
-	if err := os.Chdir(tempDir); err != nil {
+	if err = os.Chdir(tempDir); err != nil {
 		t.Fatalf("chdir temp dir: %v", err)
 	}
 	defer func() {
-		if err := os.Chdir(wd); err != nil {
+		if err = os.Chdir(wd); err != nil {
 			t.Fatalf("restore cwd: %v", err)
 		}
 	}()
@@ -164,7 +164,7 @@ func TestSaveConfigOmitsNilOptionalChangelogFields(t *testing.T) {
 		},
 	}
 
-	if err := SaveConfig(cfg); err != nil {
+	if err = SaveConfig(cfg); err != nil {
 		t.Fatalf("SaveConfig: %v", err)
 	}
 
