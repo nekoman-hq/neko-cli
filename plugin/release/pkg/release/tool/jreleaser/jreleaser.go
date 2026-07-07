@@ -66,7 +66,31 @@ func (j *JReleaser) Init(cfg *config2.V1ReleaseConfig) error {
 	return nil
 }
 
+func (j *JReleaser) Execute(ctx *release2.ReleaseExecutionContext) error {
+	if ctx == nil {
+		return fmt.Errorf("release execution context is missing")
+	}
+	version, err := semver.NewVersion(ctx.NextVersion)
+	if err != nil {
+		return fmt.Errorf("invalid next version %q: %w", ctx.NextVersion, err)
+	}
+	return j.InUnitRoot(ctx, func() error {
+		if ctx.SourceFormat == config2.SourceFormatV2 {
+			return j.releasePrepared(version)
+		}
+		return j.Release(version)
+	})
+}
+
 func (j *JReleaser) Release(v *semver.Version) error {
+	return j.release(v, true)
+}
+
+func (j *JReleaser) releasePrepared(v *semver.Version) error {
+	return j.release(v, false)
+}
+
+func (j *JReleaser) release(v *semver.Version, syncVersionFile bool) error {
 	pre, err := git.Head()
 
 	if err != nil {
@@ -74,8 +98,10 @@ func (j *JReleaser) Release(v *semver.Version) error {
 	}
 	j.State.PreHead = pre
 
-	if err = j.syncJReleaser(v); err != nil {
-		return err
+	if syncVersionFile {
+		if err = j.syncJReleaser(v); err != nil {
+			return err
+		}
 	}
 
 	if err = j.CreateReleaseCommit(v); err != nil {

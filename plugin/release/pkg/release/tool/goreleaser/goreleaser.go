@@ -70,6 +70,19 @@ func (g *GoReleaser) Init(_ *config.V1ReleaseConfig) error {
 	return nil
 }
 
+func (g *GoReleaser) Execute(ctx *release2.ReleaseExecutionContext) error {
+	if ctx == nil {
+		return fmt.Errorf("release execution context is missing")
+	}
+	version, err := semver.NewVersion(ctx.NextVersion)
+	if err != nil {
+		return fmt.Errorf("invalid next version %q: %w", ctx.NextVersion, err)
+	}
+	return g.InUnitRoot(ctx, func() error {
+		return g.Release(version)
+	})
+}
+
 func (g *GoReleaser) Release(v *semver.Version) error {
 	pre, err := git.Head()
 	if err != nil {

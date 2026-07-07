@@ -5,6 +5,7 @@ package release
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -31,6 +32,65 @@ func TestValidateRequirementsRequiresGitHubToken(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "GITHUB_TOKEN") {
 		t.Fatalf("expected error to mention GITHUB_TOKEN, got %q", err.Error())
+	}
+}
+
+func TestValidateRequirementsForContextUsesUnitRoot(t *testing.T) {
+	repositoryRoot := t.TempDir()
+	unitRoot := filepath.Join(repositoryRoot, "api")
+	if err := os.MkdirAll(unitRoot, 0755); err != nil {
+		t.Fatalf("mkdir unit root: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(unitRoot, goReleaserConfigFileYML), []byte("{}"), 0644); err != nil {
+		t.Fatalf("write unit config: %v", err)
+	}
+	otherRoot := t.TempDir()
+	cwd, getwdErr := os.Getwd()
+	if getwdErr != nil {
+		t.Fatalf("getwd: %v", getwdErr)
+	}
+	if chdirErr := os.Chdir(otherRoot); chdirErr != nil {
+		t.Fatalf("chdir other root: %v", chdirErr)
+	}
+	t.Cleanup(func() {
+		if restoreErr := os.Chdir(cwd); restoreErr != nil {
+			t.Fatalf("restore cwd %s: %v", cwd, restoreErr)
+		}
+	})
+	t.Setenv("GITHUB_TOKEN", "test-token")
+
+	ctx := &ReleaseExecutionContext{
+		Executor: "goreleaser",
+		UnitRoot: unitRoot,
+	}
+
+	if err := ValidateRequirementsForContext(ctx); err != nil {
+		t.Fatalf("expected requirements to pass using UnitRoot, got %v", err)
+	}
+}
+
+func TestValidateRequirementsForContextDoesNotUseRepositoryRootFallback(t *testing.T) {
+	repositoryRoot := t.TempDir()
+	unitRoot := filepath.Join(repositoryRoot, "api")
+	if err := os.MkdirAll(unitRoot, 0755); err != nil {
+		t.Fatalf("mkdir unit root: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repositoryRoot, goReleaserConfigFileYML), []byte("{}"), 0644); err != nil {
+		t.Fatalf("write repository config: %v", err)
+	}
+	t.Setenv("GITHUB_TOKEN", "test-token")
+
+	ctx := &ReleaseExecutionContext{
+		Executor: "goreleaser",
+		UnitRoot: unitRoot,
+	}
+
+	err := ValidateRequirementsForContext(ctx)
+	if err == nil {
+		t.Fatal("expected missing unit-local config error")
+	}
+	if !strings.Contains(err.Error(), goReleaserConfigFileYML) {
+		t.Fatalf("expected error to mention goreleaser config, got %q", err.Error())
 	}
 }
 

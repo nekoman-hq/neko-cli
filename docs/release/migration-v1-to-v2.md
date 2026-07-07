@@ -139,5 +139,5 @@ This milestone does not implement:
 - path splitting;
 - `api/v...` or other unit-specific tag-prefix conversion;
 - GitHub Actions delivery;
-- real V2 release execution;
-- V2 state updates from `patch`, `minor`, or `major`.
+- release execution during migration;
+- automatic post-migration release runs.

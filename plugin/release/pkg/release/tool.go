@@ -5,6 +5,7 @@ package release
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 
 	"github.com/Masterminds/semver/v3"
@@ -24,11 +25,42 @@ import (
 type Tool interface {
 	Name() string
 	Init(cfg *config2.V1ReleaseConfig) error
+	Execute(ctx *ReleaseExecutionContext) error
+	ValidateRequirements(ctx *ReleaseExecutionContext) error
+	ResolveFiles(ctx *ReleaseExecutionContext) ([]string, error)
 	Release(v *semver.Version) error
 	RevertRelease() error
 }
 
 type ToolBase struct{}
+
+func (tb *ToolBase) ValidateRequirements(ctx *ReleaseExecutionContext) error {
+	return ValidateRequirementsForContext(ctx)
+}
+
+func (tb *ToolBase) ResolveFiles(ctx *ReleaseExecutionContext) ([]string, error) {
+	if ctx == nil {
+		return nil, fmt.Errorf("release execution context is missing")
+	}
+	return requiredReleaseSystemFiles(ctx.Executor)
+}
+
+func (tb *ToolBase) InUnitRoot(ctx *ReleaseExecutionContext, fn func() error) error {
+	if ctx == nil {
+		return fmt.Errorf("release execution context is missing")
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to resolve current working directory: %w", err)
+	}
+	if err := os.Chdir(ctx.UnitRoot); err != nil {
+		return fmt.Errorf("failed to enter unit root %s: %w", ctx.UnitRoot, err)
+	}
+	defer func() {
+		_ = os.Chdir(cwd)
+	}()
+	return fn()
+}
 
 func (tb *ToolBase) RequireBinary(name string) error {
 	log.PluginV(log.Init,

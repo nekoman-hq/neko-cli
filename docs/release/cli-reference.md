@@ -37,9 +37,12 @@ neko release contributors --unit web
 neko release patch --unit api --dry-run
 neko release minor --unit api --dry-run
 neko release major --unit api --dry-run
+neko release patch --unit api
+neko release minor --unit api
+neko release major --unit api
 ```
 
-`patch`, `minor`, and `major` in V2 are planning-only in this milestone. Dry-run output includes:
+V2 non-dry-run local release is enabled for units using `delivery: local` with `goreleaser` or `jreleaser`. Dry-run output includes:
 
 ```text
 unit
@@ -49,17 +52,17 @@ tag
 executor
 delivery
 workingDirectory
+unitRoot
+stateChange
+materializedFiles
+ownership
+stateCommitGuarantee
 ```
 
-Blocked until a later milestone:
+Blocked:
 
-```bash
-neko release patch --unit api
-neko release minor --unit api
-neko release major --unit api
-```
-
-These commands return a clear error because V2 release execution, state persistence, executor context, and delivery execution are not implemented yet.
+- `delivery: github-actions` returns `github-actions delivery is configured but not implemented yet`.
+- V2 local `release-it` is blocked because the root `.neko/release.state.json` cannot currently be guaranteed in release-it's own release commit.
 
 ## Unit Flag
 

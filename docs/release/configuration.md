@@ -89,7 +89,11 @@ mobile/v
 }
 ```
 
-`github-actions` is valid configuration data in this milestone, but no GitHub Actions dispatch is performed yet.
+`github-actions` is valid configuration data in this milestone and is resolved as a remote delivery contract, but no GitHub Actions dispatch is performed yet. `local` is the only locally executable delivery.
+
+For V2 local releases, `goreleaser` and `jreleaser` are enabled. `jreleaser` materializes `jreleaser.yml` before state write and before the release commit boundary. `goreleaser` currently uses a no-op materializer. `release-it` remains valid configuration and dry-run data, but V2 local execution is blocked until the repository-root state file can be guaranteed in release-it's release commit.
+
+See [Local delivery](local-delivery.md), [Release executors](executors.md), [Version materialization](version-materialization.md), and [Local release transaction](local-release-transaction.md).
 
 ## Migration
 

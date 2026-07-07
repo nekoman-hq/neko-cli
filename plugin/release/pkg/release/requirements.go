@@ -6,6 +6,7 @@ package release
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	coreconfig "github.com/nekoman-hq/neko-cli/pkg/config"
@@ -33,48 +34,75 @@ func ValidateRequirements(cfg *releaseconfig.V1ReleaseConfig) error {
 		log.ColorText(log.ColorCyan, string(cfg.ReleaseSystem)),
 	)
 
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to resolve current working directory: %w", err)
+	}
+
+	return validateRequirementsForExecutor(string(cfg.ReleaseSystem), cwd)
+}
+
+// ValidateRequirementsForContext checks executor requirements relative to the
+// release unit root, not the caller's current working directory.
+func ValidateRequirementsForContext(ctx *ReleaseExecutionContext) error {
+	if ctx == nil {
+		return fmt.Errorf("release execution context is missing")
+	}
+
+	log.PluginV(
+		log.Config,
+		"Validating release requirements for %s in %s",
+		log.ColorText(log.ColorCyan, ctx.Executor),
+		log.ColorText(log.ColorGreen, ctx.UnitRoot),
+	)
+
+	return validateRequirementsForExecutor(ctx.Executor, ctx.UnitRoot)
+}
+
+func validateRequirementsForExecutor(executor, unitRoot string) error {
 	if _, err := coreconfig.GetPAT(); err != nil {
 		return err
 	}
 
-	requiredFiles, err := requiredReleaseSystemFiles(cfg.ReleaseSystem)
+	requiredFiles, err := requiredReleaseSystemFiles(executor)
 	if err != nil {
 		return err
 	}
 
 	for _, file := range requiredFiles {
-		if _, err := os.Stat(file); err == nil {
+		target := filepath.Join(unitRoot, file)
+		if _, err := os.Stat(target); err == nil {
 			return nil
 		} else if !os.IsNotExist(err) {
-			return fmt.Errorf("failed to check %s: %w", file, err)
+			return fmt.Errorf("failed to check %s: %w", target, err)
 		}
 	}
 
 	if len(requiredFiles) == 1 {
 		return fmt.Errorf(
 			"required %s configuration missing: %s not found",
-			cfg.ReleaseSystem,
+			executor,
 			requiredFiles[0],
 		)
 	}
 
 	return fmt.Errorf(
 		"required %s configuration missing: none of %s were found",
-		cfg.ReleaseSystem,
+		executor,
 		joinQuotedFiles(requiredFiles),
 	)
 }
 
-func requiredReleaseSystemFiles(system releaseconfig.V1ReleaseSystem) ([]string, error) {
-	switch system {
-	case releaseconfig.V1ReleaseTypeReleaseIt:
+func requiredReleaseSystemFiles(executor string) ([]string, error) {
+	switch releaseconfig.ExecutorType(executor) {
+	case releaseconfig.ExecutorReleaseIt:
 		return []string{releaseItConfigFile}, nil
-	case releaseconfig.V1ReleaseTypeJReleaser:
+	case releaseconfig.ExecutorJReleaser:
 		return []string{jReleaserConfigFile}, nil
-	case releaseconfig.V1ReleaseTypeGoReleaser:
+	case releaseconfig.ExecutorGoReleaser:
 		return []string{goReleaserConfigFileYML, goReleaserConfigFileYAML}, nil
 	default:
-		return nil, fmt.Errorf("unknown release system: %s", system)
+		return nil, fmt.Errorf("unknown release system: %s", executor)
 	}
 }
 

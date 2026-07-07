@@ -106,7 +106,7 @@ neko release patch --dry-run
 
 With `--dry-run`, Neko only calculates and displays the next version. It does not write config, update executor files, run executors, fetch remotes, commit, tag, push, publish, or rollback.
 
-For V2 repositories, `patch`, `minor`, and `major` support dry-run planning with `--unit`. Non-dry-run V2 release execution is still blocked.
+For V2 repositories, `patch`, `minor`, and `major` support dry-run planning with `--unit`. Non-dry-run V2 local releases are enabled for `goreleaser` and `jreleaser`; `release-it` and `github-actions` remain blocked.
 
 ---
 
@@ -340,7 +340,7 @@ V2 uses repository-root files:
 
 `release.config.json` stores committed repository architecture: units, paths, working directories, tag prefixes, executor type, and delivery. `release.state.json` stores unit versions. Tags are derived from `tagPrefix + version` and are not stored in state.
 
-`neko release validate` can validate V2 now. `history`, `contributors`, dry-run planning, and root V1-to-V2 migration are unit-aware. V2 release execution, state persistence for bumps, executor-context rewiring, and GitHub Actions dispatch are not active yet.
+`neko release validate` can validate V2 now. `history`, `contributors`, dry-run planning, and root V1-to-V2 migration are unit-aware. Dry-run planning builds the execution context, materialization plan, and local delivery/executor capabilities. V2 local release transactions materialize required version files, persist selected unit state, and are enabled for `goreleaser` and `jreleaser`. V2 local `release-it` and GitHub Actions dispatch are not active yet.
 
 `neko release migrate` can convert a root V1 single-unit repository to V2. It archives `.release.neko.json` as `.release.neko.json.v1.bak`, writes V2 config and state atomically, and uses a temporary recovery journal.
 
@@ -353,6 +353,10 @@ See:
 - [Tag strategy](../release/tag-strategy.md)
 - [CLI reference](../release/cli-reference.md)
 - [V1 to V2 migration](../release/migration-v1-to-v2.md)
+- [Release executors](../release/executors.md)
+- [Version materialization](../release/version-materialization.md)
+- [Local delivery](../release/local-delivery.md)
+- [Local release transaction](../release/local-release-transaction.md)
 - [Compatibility](../release/compatibility.md)
 
 ---

@@ -101,6 +101,19 @@ func (r *ReleaseIt) Init(cfg *config.V1ReleaseConfig) error {
 	return nil
 }
 
+func (r *ReleaseIt) Execute(ctx *release2.ReleaseExecutionContext) error {
+	if ctx == nil {
+		return fmt.Errorf("release execution context is missing")
+	}
+	version, err := semver.NewVersion(ctx.NextVersion)
+	if err != nil {
+		return fmt.Errorf("invalid next version %q: %w", ctx.NextVersion, err)
+	}
+	return r.InUnitRoot(ctx, func() error {
+		return r.Release(version)
+	})
+}
+
 func (r *ReleaseIt) Release(v *semver.Version) error {
 	r.ensurePackageManager()
 

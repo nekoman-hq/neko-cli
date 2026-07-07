@@ -31,12 +31,12 @@ V2 is repository-root scoped and uses two files:
 
 `release.state.json` is the version source of truth for all units. Tags are not stored in state; a tag is derived later from `tagPrefix + version`.
 
-In this milestone, V2 can be loaded, strictly parsed, validated, normalized, and used for read-only unit workflows. `history` and `contributors` are unit-aware. `patch`, `minor`, and `major` support V2 dry-run planning only.
+In this milestone, V2 can be loaded, strictly parsed, validated, normalized, and used for unit workflows. `history` and `contributors` are unit-aware. `patch`, `minor`, and `major` support V2 dry-run planning with execution context and delivery resolution.
 
-V2 non-dry-run release execution is intentionally not active yet and returns:
+V2 non-dry-run local release execution is active for `goreleaser` and `jreleaser`. `release-it` is blocked for V2 local release until the root state commit guarantee is proven. `github-actions` delivery is recognized but not implemented and returns:
 
 ```text
-release schema v2 supports planning and read-only history, but release execution is not available yet
+github-actions delivery is configured but not implemented yet
 ```
 
 ## Safety
@@ -56,12 +56,19 @@ Implemented now:
 - Unit-specific V2 history and contributors.
 - Non-mutating V2 dry-run version planning.
 - Safe V1 root single-unit migration with `neko release migrate`.
-- Atomic JSON write helpers for future migration and state updates.
+- Atomic JSON write helpers for migration and state updates.
+- Schema-neutral `ReleaseExecutionContext`.
+- Local delivery resolver with `github-actions` recognized as non-local.
+- Executor capability contracts for `goreleaser`, `jreleaser`, and `release-it`.
+- Executor requirement checks scoped to unit roots.
+- Version materialization before V2 local release commits.
+- V2 local release transaction with atomic materialization and state persistence.
+- Non-destructive V2 recovery boundary.
+- V2 local execution for `goreleaser` and `jreleaser`.
 
 Not implemented yet:
 
-- V2 release execution.
-- V2 state persistence for version bumps.
 - Automatic multi-unit migration.
-- ExecutorContext and executor rewiring.
 - GitHub Actions delivery execution.
+- V2 local `release-it` execution.
+- Neko-owned V2 commit, tag, and push for GitHub Actions delivery.

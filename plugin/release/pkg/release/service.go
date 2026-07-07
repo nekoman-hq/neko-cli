@@ -24,10 +24,15 @@ import (
 
 type Service struct {
 	cfg *config.V1ReleaseConfig
+	ctx *ReleaseExecutionContext
 }
 
 func NewReleaseService(cfg *config.V1ReleaseConfig) *Service {
 	return &Service{cfg: cfg}
+}
+
+func NewReleaseServiceWithContext(cfg *config.V1ReleaseConfig, ctx *ReleaseExecutionContext) *Service {
+	return &Service{cfg: cfg, ctx: ctx}
 }
 
 // Run executes the release with the specified release type (patch, minor, major)
@@ -75,7 +80,12 @@ func (rs *Service) Run(releaseType Type) error {
 	}
 
 	mutatingReleaseStarted := true
-	if err := releaser.Release(&newVersion); err != nil {
+	if rs.ctx != nil {
+		rs.ctx.CurrentVersion = version.String()
+		rs.ctx.NextVersion = newVersion.String()
+		rs.ctx.Tag = rs.ctx.TagSpec.Format(newVersion.String())
+	}
+	if err := executeRelease(releaser, rs.ctx, &newVersion); err != nil {
 		releaseError := fmt.Errorf("release failed: %w", err)
 
 		if err := rs.updateConfig(version); err != nil {
@@ -116,4 +126,11 @@ func (rs *Service) GetNewVersion(releaseType Type) (*semver.Version, *semver.Ver
 func (rs *Service) updateConfig(newVersion *semver.Version) error {
 	rs.cfg.Version = newVersion.String()
 	return config.V1SaveConfig(*rs.cfg)
+}
+
+func executeRelease(releaser Tool, ctx *ReleaseExecutionContext, newVersion *semver.Version) error {
+	if ctx == nil {
+		return releaser.Release(newVersion)
+	}
+	return releaser.Execute(ctx)
 }

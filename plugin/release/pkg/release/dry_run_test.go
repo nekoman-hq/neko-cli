@@ -79,13 +79,13 @@ func TestRevertGitReleaseWithoutMutatingStepIsNoop(t *testing.T) {
 	}
 }
 
-func TestHandleReleaseRejectsV2Execution(t *testing.T) {
+func TestHandleReleaseRejectsV2GitHubActionsExecution(t *testing.T) {
 	withWorkingDirectory(t)
 
 	if err := os.MkdirAll(".neko", 0755); err != nil {
 		t.Fatalf("mkdir .neko: %v", err)
 	}
-	if err := os.WriteFile(".neko/release.config.json", []byte(`{"schemaVersion":2,"units":[{"id":"default","paths":["**"],"tagPrefix":"v","executor":{"type":"goreleaser"}}]}`), 0644); err != nil {
+	if err := os.WriteFile(".neko/release.config.json", []byte(`{"schemaVersion":2,"units":[{"id":"default","paths":["**"],"tagPrefix":"v","executor":{"type":"goreleaser","delivery":"github-actions"}}]}`), 0644); err != nil {
 		t.Fatalf("write v2 config: %v", err)
 	}
 	if err := os.WriteFile(".neko/release.state.json", []byte(`{"schemaVersion":2,"units":{"default":{"version":"1.0.0"}}}`), 0644); err != nil {
@@ -96,8 +96,11 @@ func TestHandleReleaseRejectsV2Execution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HandleRelease: %v", err)
 	}
-	if resp.Status != "error" || resp.Error.Code != "V2_EXECUTION_UNAVAILABLE" {
-		t.Fatalf("expected V2 execution blocker, got %#v", resp)
+	if resp.Status != "error" || resp.Error.Code != "DELIVERY_UNAVAILABLE" {
+		t.Fatalf("expected V2 delivery blocker, got %#v", resp)
+	}
+	if !strings.Contains(resp.Error.Message, "github-actions delivery is configured but not implemented yet") {
+		t.Fatalf("expected github-actions blocker message, got %q", resp.Error.Message)
 	}
 }
 
@@ -116,6 +119,10 @@ func TestHandleReleaseV2DryRunPlansWithoutFetchOrStateWrite(t *testing.T) {
 	if err := os.MkdirAll(".neko", 0755); err != nil {
 		t.Fatalf("mkdir .neko: %v", err)
 	}
+	if err := os.WriteFile(".goreleaser.yml", []byte("{}"), 0644); err != nil {
+		t.Fatalf("write goreleaser config: %v", err)
+	}
+	t.Setenv("GITHUB_TOKEN", "test-token")
 	configContent := `{"schemaVersion":2,"units":[{"id":"api","paths":["api/**"],"workingDirectory":".","tagPrefix":"api/v","executor":{"type":"goreleaser","delivery":"local"}}]}`
 	stateContent := `{"schemaVersion":2,"units":{"api":{"version":"0.1.0"}}}`
 	if err := os.WriteFile(".neko/release.config.json", []byte(configContent), 0644); err != nil {
@@ -147,6 +154,46 @@ func TestHandleReleaseV2DryRunPlansWithoutFetchOrStateWrite(t *testing.T) {
 	}
 	if string(after) != stateContent {
 		t.Fatalf("V2 dry-run rewrote state: %s", string(after))
+	}
+	if !responseContains(resp.Data["items"], "api/v0.1.1") {
+		t.Fatalf("expected planned tag api/v0.1.1, got %#v", resp.Data["items"])
+	}
+}
+
+func TestHandleReleaseV2DryRunAllowsGitHubActionsDelivery(t *testing.T) {
+	withWorkingDirectory(t)
+
+	if err := os.MkdirAll(".neko", 0755); err != nil {
+		t.Fatalf("mkdir .neko: %v", err)
+	}
+	if err := os.WriteFile(".goreleaser.yml", []byte("{}"), 0644); err != nil {
+		t.Fatalf("write goreleaser config: %v", err)
+	}
+	t.Setenv("GITHUB_TOKEN", "test-token")
+	configContent := `{"schemaVersion":2,"units":[{"id":"api","paths":["api/**"],"workingDirectory":".","tagPrefix":"api/v","executor":{"type":"goreleaser","delivery":"github-actions"}}]}`
+	stateContent := `{"schemaVersion":2,"units":{"api":{"version":"0.1.0"}}}`
+	if err := os.WriteFile(".neko/release.config.json", []byte(configContent), 0644); err != nil {
+		t.Fatalf("write v2 config: %v", err)
+	}
+	if err := os.WriteFile(".neko/release.state.json", []byte(stateContent), 0644); err != nil {
+		t.Fatalf("write v2 state: %v", err)
+	}
+
+	resp, err := HandleRelease(plugin.Request{
+		Command: "patch",
+		Flags: map[string]any{
+			"dry-run": true,
+			"unit":    "api",
+		},
+	}, Patch)
+	if err != nil {
+		t.Fatalf("HandleRelease: %v", err)
+	}
+	if resp.Status != "success" {
+		t.Fatalf("expected success, got %#v", resp.Error)
+	}
+	if !responseContains(resp.Data["items"], "github-actions") {
+		t.Fatalf("expected dry-run response to include github-actions delivery, got %#v", resp.Data["items"])
 	}
 	if !responseContains(resp.Data["items"], "api/v0.1.1") {
 		t.Fatalf("expected planned tag api/v0.1.1, got %#v", resp.Data["items"])
