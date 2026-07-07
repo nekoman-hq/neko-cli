@@ -17,7 +17,9 @@ GitHub Actions later owns:
   - build, publish, and optional GitHub release
 ```
 
-The coordinator does not load V1 files, start executors, call GitHub APIs, calculate versions, materialize files, or write state. It only coordinates known release files that were already prepared by the materialization and state transactions.
+The coordinator does not load V1 files, start executors, call GitHub APIs, calculate versions, materialize files, write state, or dispatch workflows. It only coordinates known release files that were already prepared by the materialization and state transactions.
+
+For future GitHub Actions dispatch, V2 units may already validate a canonical workflow path under `.github/workflows/`. That workflow reference is configuration only in this milestone.
 
 ## Known Release Files
 

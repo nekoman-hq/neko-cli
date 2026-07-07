@@ -48,6 +48,8 @@ nextVersion
 tag
 executor
 delivery
+workflow
+dispatch
 workingDirectory
 unitRoot
 stateChange
@@ -67,6 +69,8 @@ Blocked:
 - Public V2 non-dry-run `patch`, `minor`, and `major` return `V2 Git release coordination is prepared, but V2 publication adapters are not available yet. No release state, commit, tag, push, or publish operation was performed.`
 - GitHub Actions dispatch is not implemented yet.
 - V2 local `release-it` remains blocked because no publish-only boundary exists.
+
+For `delivery: github-actions`, V2 config must include `workflow: ".github/workflows/<file>.yml"` or `workflow: ".github/workflows/<file>.yaml"`. `neko release validate --show` displays the workflow only after repository-aware validation confirms that the file exists and stays inside `.github/workflows/`.
 
 ## Unit Flag
 

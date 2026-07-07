@@ -35,7 +35,7 @@ When `.neko/release.config.json` exists in the Git root, it is authoritative for
 `neko release validate` supports both formats:
 
 - V1: existing validation behavior remains compatible.
-- V2: config and state are strictly decoded, validated together, and `--show` displays schema type, units, versions, working directories, tag prefixes, executor, delivery, and paths. `--unit` focuses the displayed unit while still validating the complete repository.
+- V2: config and state are strictly decoded, validated together, and `--show` displays schema type, units, versions, working directories, tag prefixes, executor, delivery, workflow when configured, and paths. `--unit` focuses the displayed unit while still validating the complete repository.
 
 ## V2 Commands
 
@@ -50,6 +50,8 @@ neko release patch --unit api --dry-run
 Dry-run planning does not write state, create tags, commit, push, publish, run executors, or fetch remotes.
 
 Dry-run planning now also builds the schema-neutral execution context. That context resolves the absolute repository root, selected unit root, tag spec, executor capabilities, and delivery contract without mutating files.
+
+`github-actions` is a valid V2 delivery mode only when `workflow` uses canonical `.github/workflows/<file>.yml|yaml` form. Real repository validation requires the workflow file to exist and remain inside `.github/workflows/`.
 
 V2 non-dry-run public release commands are blocked in Milestone 5A. Internally, V2 can prepare known release files and coordinate Neko-owned Git commit, unit tag, and push, but no state write, materialization, commit, tag, push, publish, dispatch, or executor start is performed by public V2 non-dry-run commands until publish-only adapters exist.
 

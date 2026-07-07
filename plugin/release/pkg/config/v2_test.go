@@ -50,8 +50,9 @@ func TestLoadV2RepositoryValidMultiUnitWithDefaults(t *testing.T) {
   "paths": ["web/**"],
   "workingDirectory": "web",
   "tagPrefix": "web/v",
-  "executor": {"type": "release-it", "delivery": "github-actions"}
+  "executor": {"type": "release-it", "delivery": "github-actions", "workflow": ".github/workflows/release-web.yml"}
 }`), validV2State(`"api": {"version": "1.0.0"}, "web": {"version": "2.0.0"}`))
+	mustWrite(t, filepath.Join(root, ".github", "workflows", "release-web.yml"), "name: release web\n")
 
 	repo, err := LoadV2Repository(root)
 	if err != nil {
@@ -65,6 +66,9 @@ func TestLoadV2RepositoryValidMultiUnitWithDefaults(t *testing.T) {
 	}
 	if repo.Units[1].Delivery != "github-actions" {
 		t.Fatalf("expected github-actions delivery, got %s", repo.Units[1].Delivery)
+	}
+	if repo.Units[1].Workflow != ".github/workflows/release-web.yml" {
+		t.Fatalf("expected normalized workflow, got %#v", repo.Units[1])
 	}
 }
 
@@ -84,6 +88,9 @@ func TestNormalizeV1Repository(t *testing.T) {
 	unit := repo.Units[0]
 	if unit.ID != "default" || unit.Paths[0] != "**" || unit.TagPrefix != "v" || unit.Version != "1.2.3" {
 		t.Fatalf("unexpected V1 normalized unit: %#v", unit)
+	}
+	if unit.Workflow != "" {
+		t.Fatalf("V1 normalized unit must not carry workflow: %#v", unit)
 	}
 }
 

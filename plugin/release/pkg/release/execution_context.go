@@ -27,6 +27,7 @@ type ReleaseExecutionContext struct {
 	DryRun         bool
 	Executor       string
 	Delivery       string
+	Workflow       string
 	SourceFormat   releaseconfig.SourceFormat
 	Capabilities   ExecutorCapabilities
 	DeliveryMode   DeliveryContract
@@ -76,6 +77,7 @@ func BuildReleaseExecutionContext(repository *releaseconfig.ReleaseRepository, u
 		DryRun:         dryRun,
 		Executor:       plan.Executor,
 		Delivery:       plan.Delivery,
+		Workflow:       unit.Workflow,
 		SourceFormat:   repository.SourceFormat,
 		Capabilities:   capabilities,
 		DeliveryMode:   delivery,

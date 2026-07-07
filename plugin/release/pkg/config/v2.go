@@ -62,6 +62,7 @@ type V2Unit struct {
 type V2Executor struct {
 	Type     ExecutorType `json:"type"`
 	Delivery DeliveryType `json:"delivery,omitempty"`
+	Workflow string       `json:"workflow,omitempty"`
 }
 
 // V2ReleaseState is the version source of truth for all configured V2 units.
@@ -155,6 +156,7 @@ func NormalizeV2Repository(repositoryRoot string, cfg *V2ReleaseConfig, state *V
 			TagPrefix:        unit.TagPrefix,
 			ExecutorType:     string(unit.Executor.Type),
 			Delivery:         string(delivery),
+			Workflow:         unit.Executor.Workflow,
 			Version:          state.Units[unit.ID].Version,
 		})
 	}
@@ -170,8 +172,21 @@ func NormalizeV2Repository(repositoryRoot string, cfg *V2ReleaseConfig, state *V
 // ValidateV2 checks config and state together. It validates paths against
 // repositoryRoot when supplied, including existing working directories.
 func ValidateV2(repositoryRoot string, cfg *V2ReleaseConfig, state *V2ReleaseState) error {
+	return validateV2ConfigAndState(repositoryRoot, cfg, state, true)
+}
+
+func validateV2ConfigAndState(repositoryRoot string, cfg *V2ReleaseConfig, state *V2ReleaseState, requireState bool) error {
+	if cfg == nil {
+		return fmt.Errorf("v2 config is missing")
+	}
 	if cfg.SchemaVersion != 2 {
 		return fmt.Errorf("v2 config schemaVersion must be exactly 2, got %d", cfg.SchemaVersion)
+	}
+	if !requireState && state == nil {
+		state = &V2ReleaseState{SchemaVersion: 2}
+	}
+	if state == nil {
+		return fmt.Errorf("v2 state is missing")
 	}
 	if state.SchemaVersion != 2 {
 		return fmt.Errorf("v2 state schemaVersion must be exactly 2, got %d", state.SchemaVersion)
@@ -179,7 +194,7 @@ func ValidateV2(repositoryRoot string, cfg *V2ReleaseConfig, state *V2ReleaseSta
 	if len(cfg.Units) == 0 {
 		return fmt.Errorf("v2 config must define at least one unit")
 	}
-	if state.Units == nil {
+	if requireState && state.Units == nil {
 		return fmt.Errorf("v2 state units must be present")
 	}
 
@@ -202,18 +217,20 @@ func ValidateV2(repositoryRoot string, cfg *V2ReleaseConfig, state *V2ReleaseSta
 		tagPrefixes[unit.TagPrefix] = unit.ID
 	}
 
-	for id := range ids {
-		unitState, ok := state.Units[id]
-		if !ok {
-			return fmt.Errorf("v2 state is missing unit %q", id)
+	if requireState {
+		for id := range ids {
+			unitState, ok := state.Units[id]
+			if !ok {
+				return fmt.Errorf("v2 state is missing unit %q", id)
+			}
+			if _, err := semver.NewVersion(unitState.Version); err != nil {
+				return fmt.Errorf("v2 state unit %q version %q is not valid SemVer", id, unitState.Version)
+			}
 		}
-		if _, err := semver.NewVersion(unitState.Version); err != nil {
-			return fmt.Errorf("v2 state unit %q version %q is not valid SemVer", id, unitState.Version)
-		}
-	}
-	for id := range state.Units {
-		if _, ok := ids[id]; !ok {
-			return fmt.Errorf("v2 state contains unknown unit %q", id)
+		for id := range state.Units {
+			if _, ok := ids[id]; !ok {
+				return fmt.Errorf("v2 state contains unknown unit %q", id)
+			}
 		}
 	}
 
@@ -256,17 +273,7 @@ func validateV2Unit(repositoryRoot string, unit V2Unit) error {
 	if err := validateTagPrefix(unit.ID, unit.TagPrefix); err != nil {
 		return err
 	}
-	if !unit.Executor.Type.IsValid() {
-		return fmt.Errorf("v2 config unit %q has unknown executor %q", unit.ID, unit.Executor.Type)
-	}
-	delivery := unit.Executor.Delivery
-	if delivery == "" {
-		delivery = DeliveryLocal
-	}
-	if !delivery.IsValid() {
-		return fmt.Errorf("v2 config unit %q has unknown delivery %q", unit.ID, unit.Executor.Delivery)
-	}
-	return nil
+	return validateV2Executor(repositoryRoot, unit.ID, unit.Executor)
 }
 
 func validateWorkingDirectory(repositoryRoot, unitID, workingDirectory string) error {

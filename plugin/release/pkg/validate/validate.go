@@ -247,15 +247,23 @@ func unitShowRow(unit config.ReleaseUnit) map[string]any {
 	return map[string]any{
 		"property": fmt.Sprintf("Unit %s", unit.ID),
 		"value": fmt.Sprintf(
-			"version=%s workingDirectory=%s tagPrefix=%s executor=%s delivery=%s paths=%v",
+			"version=%s workingDirectory=%s tagPrefix=%s executor=%s delivery=%s workflow=%s paths=%v",
 			unit.Version,
 			unit.WorkingDirectory,
 			unit.TagPrefix,
 			unit.ExecutorType,
 			unit.Delivery,
+			workflowShowValue(unit),
 			unit.Paths,
 		),
 	}
+}
+
+func workflowShowValue(unit config.ReleaseUnit) string {
+	if unit.Workflow == "" {
+		return "not applicable"
+	}
+	return unit.Workflow
 }
 
 func validationError(code, message string) *plugin.Response {

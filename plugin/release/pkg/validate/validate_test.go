@@ -32,6 +32,35 @@ func TestHandleValidateV2Show(t *testing.T) {
 	if !itemsContain(resp.Data["items"], "delivery=local") {
 		t.Fatalf("expected normalized delivery in show output, got %#v", resp.Data["items"])
 	}
+	if !itemsContain(resp.Data["items"], "workflow=not applicable") {
+		t.Fatalf("expected local workflow to be not applicable, got %#v", resp.Data["items"])
+	}
+}
+
+func TestHandleValidateV2ShowDisplaysGitHubActionsWorkflow(t *testing.T) {
+	withWorkingDirectory(t)
+	mustWrite(t, ".github/workflows/release-api.yml", "name: release api\n")
+	writeV2(t, `{"schemaVersion":2,"units":[{
+  "id":"api",
+  "paths":["api/**"],
+  "workingDirectory":".",
+  "tagPrefix":"api/v",
+  "executor":{"type":"jreleaser","delivery":"github-actions","workflow":".github/workflows/release-api.yml"}
+}]}`, `{"schemaVersion":2,"units":{"api":{"version":"0.2.1"}}}`)
+
+	resp, err := HandleValidate(plugin.Request{Flags: map[string]any{"show": true}})
+	if err != nil {
+		t.Fatalf("HandleValidate: %v", err)
+	}
+	if resp.Status != "success" {
+		t.Fatalf("expected success, got %#v", resp.Error)
+	}
+	if !itemsContain(resp.Data["items"], "delivery=github-actions") {
+		t.Fatalf("expected github-actions delivery, got %#v", resp.Data["items"])
+	}
+	if !itemsContain(resp.Data["items"], "workflow=.github/workflows/release-api.yml") {
+		t.Fatalf("expected workflow in show output, got %#v", resp.Data["items"])
+	}
 }
 
 func TestHandleValidateV2ShowFocusesRequestedUnit(t *testing.T) {

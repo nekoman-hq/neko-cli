@@ -268,7 +268,7 @@ Version         2.1.7
 Status          ✓ Valid
 ```
 
-For V2 repositories, `--show` displays schema type, units, versions, working directories, tag prefixes, executor, delivery, and paths.
+For V2 repositories, `--show` displays schema type, units, versions, working directories, tag prefixes, executor, delivery, workflow when configured, and paths.
 
 ---
 
@@ -340,7 +340,7 @@ V2 uses repository-root files:
 
 `release.config.json` stores committed repository architecture: units, paths, working directories, tag prefixes, executor type, and delivery. `release.state.json` stores unit versions. Tags are derived from `tagPrefix + version` and are not stored in state.
 
-`neko release validate` can validate V2 now. `history`, `contributors`, dry-run planning, and root V1-to-V2 migration are unit-aware. Dry-run planning builds the execution context, materialization plan, local delivery/executor capabilities, planned release commit, unit tag, known release files, push order, and V2 Git ownership. V2 non-dry-run public commands are blocked until publish-only adapters exist. V2 local `release-it` and GitHub Actions dispatch are not active yet.
+`neko release validate` can validate V2 now. `history`, `contributors`, dry-run planning, and root V1-to-V2 migration are unit-aware. GitHub Actions delivery is valid V2 configuration when `workflow` points to an existing `.github/workflows/<file>.yml|yaml` file. Dry-run planning builds the execution context, materialization plan, local delivery/executor capabilities, planned release commit, unit tag, known release files, push order, workflow reference, dispatch status, and V2 Git ownership. V2 non-dry-run public commands are blocked until publish-only adapters exist. V2 local `release-it` and GitHub Actions dispatch are not active yet.
 
 `neko release migrate` can convert a root V1 single-unit repository to V2. It archives `.release.neko.json` as `.release.neko.json.v1.bak`, writes V2 config and state atomically, and uses a temporary recovery journal.
 
@@ -356,6 +356,7 @@ See:
 - [Release executors](../release/executors.md)
 - [Version materialization](../release/version-materialization.md)
 - [Local delivery](../release/local-delivery.md)
+- [GitHub Actions delivery](../release/github-actions-delivery.md)
 - [Local release transaction](../release/local-release-transaction.md)
 - [Compatibility](../release/compatibility.md)
 

@@ -42,6 +42,7 @@ type ReleaseUnit struct {
 	TagPrefix        string
 	ExecutorType     string
 	Delivery         string
+	Workflow         string
 	Version          string
 }
 

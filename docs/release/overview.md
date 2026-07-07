@@ -31,7 +31,7 @@ V2 is repository-root scoped and uses two files:
 
 `release.state.json` is the version source of truth for all units. Tags are not stored in state; a tag is derived later from `tagPrefix + version`.
 
-V2 can be loaded, strictly parsed, validated, normalized, and used for unit workflows. `history` and `contributors` are unit-aware. `patch`, `minor`, and `major` support V2 dry-run planning with execution context, delivery resolution, version materialization planning, and Neko-owned Git release planning.
+V2 can be loaded, strictly parsed, validated, normalized, and used for unit workflows. `history` and `contributors` are unit-aware. `patch`, `minor`, and `major` support V2 dry-run planning with execution context, delivery resolution, version materialization planning, GitHub Actions workflow configuration, and Neko-owned Git release planning.
 
 V2 non-dry-run public release commands are intentionally blocked after Milestone 5A. The internal `GitReleaseCoordinator` can stage known release files, create the deterministic release commit, create the unit tag, and push commit then tag, but publish-only adapters and GitHub Actions dispatch are not available yet. Non-dry-run V2 commands return:
 
@@ -59,6 +59,7 @@ Implemented now:
 - Atomic JSON write helpers for migration and state updates.
 - Schema-neutral `ReleaseExecutionContext`.
 - Local delivery resolver with `github-actions` recognized as non-local.
+- GitHub Actions delivery schema with mandatory canonical `.github/workflows/<file>.yml|yaml` workflow validation.
 - Executor capability contracts for `goreleaser`, `jreleaser`, and `release-it`.
 - Executor requirement checks scoped to unit roots.
 - Version materialization before V2 local release commits.

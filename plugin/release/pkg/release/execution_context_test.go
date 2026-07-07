@@ -46,6 +46,7 @@ func TestBuildReleaseExecutionContextForV2UsesUnitWorkingDirectory(t *testing.T)
 		TagPrefix:        "api/v",
 		ExecutorType:     "jreleaser",
 		Delivery:         "github-actions",
+		Workflow:         ".github/workflows/release-api.yml",
 		Version:          "0.4.9",
 	}
 	repository := &releaseconfig.ReleaseRepository{
@@ -67,6 +68,9 @@ func TestBuildReleaseExecutionContextForV2UsesUnitWorkingDirectory(t *testing.T)
 	}
 	if ctx.DeliveryMode.SupportsLocalExecution {
 		t.Fatalf("github-actions delivery must not be locally executable: %#v", ctx.DeliveryMode)
+	}
+	if ctx.Workflow != ".github/workflows/release-api.yml" {
+		t.Fatalf("expected workflow in execution context, got %#v", ctx)
 	}
 	if !ctx.Capabilities.UpdatesVersionFiles || !ctx.Capabilities.SupportsDryRun {
 		t.Fatalf("unexpected jreleaser capabilities: %#v", ctx.Capabilities)

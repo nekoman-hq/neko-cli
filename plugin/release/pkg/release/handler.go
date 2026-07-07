@@ -258,6 +258,8 @@ func v2DryRunPlanResponse(command string, ctx *ReleaseExecutionContext) (*plugin
 				{"property": "Tag", "value": ctx.Tag},
 				{"property": "Executor", "value": ctx.Executor},
 				{"property": "Delivery", "value": ctx.Delivery},
+				{"property": "Workflow", "value": workflowValue(ctx.Workflow)},
+				{"property": "Dispatch", "value": dispatchValue(ctx)},
 				{"property": "Working Directory", "value": ctx.Unit.WorkingDirectory},
 				{"property": "Unit Root", "value": ctx.UnitRoot},
 				{"property": "State Change", "value": plan.StateChange},
@@ -290,6 +292,20 @@ func materializedFilesValue(plan *MaterializationPlan) string {
 		values = append(values, change.RepositoryRelativePath)
 	}
 	return strings.Join(values, ", ")
+}
+
+func workflowValue(workflow string) string {
+	if workflow == "" {
+		return "not applicable"
+	}
+	return workflow
+}
+
+func dispatchValue(ctx *ReleaseExecutionContext) string {
+	if ctx != nil && ctx.Delivery == string(config.DeliveryGitHubActions) {
+		return "not implemented"
+	}
+	return "not applicable"
 }
 
 func commandErrorResponse(command, code, message string) *plugin.Response {
