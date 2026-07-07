@@ -44,21 +44,9 @@ func HandleRelease(req plugin.Request, releaseType Type) (*plugin.Response, erro
 	// Create release service
 	svc := NewReleaseService(cfg)
 
-	if err = ValidateRequirements(cfg); err != nil {
-		return &plugin.Response{
-			Status: "error",
-			Metadata: plugin.ResponseMetadata{
-				Plugin:    metadata.PluginName,
-				Version:   metadata.Version,
-				Command:   string(releaseType),
-				Timestamp: time.Now(),
-			},
-			Error: &plugin.ResponseError{
-				Code:    "VALIDATION_FAILED",
-				Message: err.Error(),
-			},
-		}, nil
-	}
+	// Dry-run planning must stay read-only: no release-tool requirements, no
+	// executor lookup, no remote refresh, and no file writes are allowed.
+	dryRun := getFlagBool(req.Flags, "dry-run")
 
 	// Get metadata info for response
 	oldVersion, newVersion, err := svc.GetNewVersion(releaseType)
@@ -78,8 +66,6 @@ func HandleRelease(req plugin.Request, releaseType Type) (*plugin.Response, erro
 		}, nil
 	}
 
-	// Check for dry-run flag
-	dryRun := getFlagBool(req.Flags, "dry-run")
 	if dryRun {
 		log.PluginPrint(log.Exec, "Dry run mode - no changes will be made")
 		return &plugin.Response{
@@ -119,6 +105,22 @@ func HandleRelease(req plugin.Request, releaseType Type) (*plugin.Response, erro
 				},
 			},
 			RendererHint: "table",
+		}, nil
+	}
+
+	if err = ValidateRequirements(cfg); err != nil {
+		return &plugin.Response{
+			Status: "error",
+			Metadata: plugin.ResponseMetadata{
+				Plugin:    metadata.PluginName,
+				Version:   metadata.Version,
+				Command:   string(releaseType),
+				Timestamp: time.Now(),
+			},
+			Error: &plugin.ResponseError{
+				Code:    "VALIDATION_FAILED",
+				Message: err.Error(),
+			},
 		}, nil
 	}
 

@@ -17,11 +17,29 @@ import (
 	"github.com/nekoman-hq/neko-cli/pkg/log"
 )
 
-func VersionGuard(cfg *config.NekoConfig) (*semver.Version, error) {
-	log.PluginV(log.Guard, "Running Version Guard checks")
-	git.Fetch()
+// VersionGuardOptions makes remote-refresh behavior explicit at every call
+// site. Dry-run planning must stay local/read-only, while real releases may
+// refresh tag information before comparing versions.
+type VersionGuardOptions struct {
+	AllowRemoteRefresh bool
+}
 
-	latestTag := git.LatestTag()
+var (
+	refreshVersionTags = git.Fetch
+	latestVersionTag   = git.LatestTag
+)
+
+func VersionGuard(cfg *config.NekoConfig) (*semver.Version, error) {
+	return VersionGuardWithOptions(cfg, VersionGuardOptions{AllowRemoteRefresh: true})
+}
+
+func VersionGuardWithOptions(cfg *config.NekoConfig, opts VersionGuardOptions) (*semver.Version, error) {
+	log.PluginV(log.Guard, "Running Version Guard checks")
+	if opts.AllowRemoteRefresh {
+		refreshVersionTags()
+	}
+
+	latestTag := latestVersionTag()
 
 	return EnsureVersionIsValid(cfg, latestTag)
 }

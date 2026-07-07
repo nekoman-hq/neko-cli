@@ -70,6 +70,7 @@ func (rs *Service) Run(releaseType Type) error {
 			fmt.Sprintf("Updating version in .release.neko.json failed. Attempting to proceed with release: %s", err.Error()))
 	}
 
+	mutatingReleaseStarted := true
 	if err := releaser.Release(&newVersion); err != nil {
 		releaseError := fmt.Errorf("release failed: %w", err)
 
@@ -77,11 +78,16 @@ func (rs *Service) Run(releaseType Type) error {
 			log.PluginPrint(log.Guard, "Warning: Failed to revert config: %s", err.Error())
 		}
 
-		log.PluginPrint(log.Guard, "Encountered error while releasing. Trying to undo changes...")
-		if err := releaser.RevertRelease(); err != nil {
-			return fmt.Errorf("%w: Failed undoing changes: %w", releaseError, err)
+		// Rollback is intentionally only reachable after this service has
+		// crossed into the mutating release phase. Earlier planning and guard
+		// failures must never trigger destructive git cleanup/reset paths.
+		if mutatingReleaseStarted {
+			log.PluginPrint(log.Guard, "Encountered error while releasing. Trying to undo changes...")
+			if err := releaser.RevertRelease(); err != nil {
+				return fmt.Errorf("%w: Failed undoing changes: %w", releaseError, err)
+			}
+			log.PluginPrint(log.Guard, "Successfully undid changes.")
 		}
-		log.PluginPrint(log.Guard, "Successfully undid changes.")
 
 		return releaseError
 	}
@@ -94,7 +100,7 @@ func (rs *Service) Run(releaseType Type) error {
 
 // GetNewVersion returns what the new version would be for a given release type
 func (rs *Service) GetNewVersion(releaseType Type) (*semver.Version, *semver.Version, error) {
-	version, err := VersionGuard(rs.cfg)
+	version, err := VersionGuardWithOptions(rs.cfg, VersionGuardOptions{AllowRemoteRefresh: false})
 	if err != nil {
 		return nil, nil, err
 	}

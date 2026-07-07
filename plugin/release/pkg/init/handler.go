@@ -61,7 +61,7 @@ func HandleInit(req plugin.Request) (*plugin.Response, error) {
 				Message: err.Error(),
 				Details: map[string]any{
 					"required_flags": []string{"project-type", "release-system"},
-					"optional_flags": []string{"metadata", "force"},
+					"optional_flags": []string{"version", "metadata (deprecated)", "force"},
 				},
 			},
 		}, nil
@@ -155,7 +155,7 @@ func HandleInit(req plugin.Request) (*plugin.Response, error) {
 			"project_owner":  cfg.ProjectOwner,
 			"project_type":   string(cfg.ProjectType),
 			"release_system": string(cfg.ReleaseSystem),
-			"metadata":       cfg.Version,
+			"version":        cfg.Version,
 			"next_steps":     nextSteps,
 		},
 		RendererHint: "text",
@@ -183,7 +183,13 @@ func GetAvailableOptions() (*plugin.Response, error) {
 			"option":      "metadata",
 			"values":      "semver (e.g. 0.1.0)",
 			"required":    false,
-			"description": "Initial metadata (default: 0.1.0)",
+			"description": "Deprecated fallback for --version",
+		},
+		{
+			"option":      "version",
+			"values":      "semver (e.g. 0.1.0)",
+			"required":    false,
+			"description": "Initial version (default: 0.1.0)",
 		},
 		{
 			"option":      "force",
@@ -236,10 +242,14 @@ func buildConfigFromFlags(flags map[string]any) (config.NekoConfig, error) {
 		return cfg, fmt.Errorf("invalid release system: %s (must be: release-it, jreleaser, or goreleaser)", releaseSystem)
 	}
 
-	// Get metadata (optional, defaults to 0.1.0)
-	versionStr := getFlagString(flags, "metadata")
+	// --version is the manifest contract. The old metadata key is accepted only
+	// as a deprecated compatibility fallback for callers that still send it.
+	versionStr := getFlagString(flags, "version")
 	if versionStr == "" {
-		versionStr = "0.1.0"
+		versionStr = getFlagString(flags, "metadata")
+		if versionStr == "" {
+			versionStr = "0.1.0"
+		}
 	}
 	cfg.Version = versionStr
 

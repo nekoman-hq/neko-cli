@@ -64,7 +64,24 @@ type GitReleaseState struct {
 	UpdatedConfig        bool
 }
 
+func (st GitReleaseState) hasMutatingStep() bool {
+	return st.ReleaseHead != "" ||
+		st.TagName != "" ||
+		st.PushedCommit ||
+		st.PushedTag ||
+		st.CreatedGitHubRelease ||
+		st.UpdatedConfig
+}
+
 func (tb *ToolBase) RevertGitRelease(st GitReleaseState) error {
+	// This guard is the rollback blast-radius boundary for release v1. If no
+	// mutating release step has been recorded, rollback must not run git clean,
+	// reset, tag deletion, or GitHub deletion as a side effect of a guard error.
+	if !st.hasMutatingStep() {
+		log.PluginV(log.Guard, "Skipping rollback because no mutating release step was recorded")
+		return nil
+	}
+
 	// GitHub release has to be deleted before the corresponding tag
 	if st.CreatedGitHubRelease && st.GitHubReleaseTag != "" {
 		if err := tb.DeleteGitHubRelease(st.GitHubReleaseTag); err != nil {
