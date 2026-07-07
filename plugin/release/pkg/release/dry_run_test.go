@@ -1,4 +1,7 @@
+//nolint:staticcheck // V1 compatibility code intentionally uses deprecated V1 APIs during migration
 package release
+
+//lint:file-ignore SA1019 V1 compatibility release paths intentionally use deprecated V1 APIs during migration
 
 import (
 	"os"
@@ -34,7 +37,7 @@ func TestDryRunDoesNotFetchOrWriteConfigAndShowsNextVersion(t *testing.T) {
   "release-system": "goreleaser",
   "version": "1.2.3"
 }`
-	if err := os.WriteFile(config.FileName, []byte(configContent), 0644); err != nil {
+	if err := os.WriteFile(config.V1FileName, []byte(configContent), 0644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
@@ -54,7 +57,7 @@ func TestDryRunDoesNotFetchOrWriteConfigAndShowsNextVersion(t *testing.T) {
 		t.Fatal("dry-run called git fetch")
 	}
 
-	after, err := os.ReadFile(config.FileName)
+	after, err := os.ReadFile(config.V1FileName)
 	if err != nil {
 		t.Fatalf("read config: %v", err)
 	}
@@ -82,8 +85,11 @@ func TestHandleReleaseRejectsV2Execution(t *testing.T) {
 	if err := os.MkdirAll(".neko", 0755); err != nil {
 		t.Fatalf("mkdir .neko: %v", err)
 	}
-	if err := os.WriteFile(".neko/release.config.json", []byte(`{"schemaVersion":2,"units":[]}`), 0644); err != nil {
+	if err := os.WriteFile(".neko/release.config.json", []byte(`{"schemaVersion":2,"units":[{"id":"default","paths":["**"],"tagPrefix":"v","executor":{"type":"goreleaser"}}]}`), 0644); err != nil {
 		t.Fatalf("write v2 config: %v", err)
+	}
+	if err := os.WriteFile(".neko/release.state.json", []byte(`{"schemaVersion":2,"units":{"default":{"version":"1.0.0"}}}`), 0644); err != nil {
+		t.Fatalf("write v2 state: %v", err)
 	}
 
 	resp, err := HandleRelease(plugin.Request{Command: "patch"}, Patch)
@@ -92,6 +98,58 @@ func TestHandleReleaseRejectsV2Execution(t *testing.T) {
 	}
 	if resp.Status != "error" || resp.Error.Code != "V2_EXECUTION_UNAVAILABLE" {
 		t.Fatalf("expected V2 execution blocker, got %#v", resp)
+	}
+}
+
+func TestHandleReleaseV2DryRunPlansWithoutFetchOrStateWrite(t *testing.T) {
+	withWorkingDirectory(t)
+
+	originalFetch := refreshVersionTags
+	t.Cleanup(func() {
+		refreshVersionTags = originalFetch
+	})
+	fetched := false
+	refreshVersionTags = func() {
+		fetched = true
+	}
+
+	if err := os.MkdirAll(".neko", 0755); err != nil {
+		t.Fatalf("mkdir .neko: %v", err)
+	}
+	configContent := `{"schemaVersion":2,"units":[{"id":"api","paths":["api/**"],"workingDirectory":".","tagPrefix":"api/v","executor":{"type":"goreleaser","delivery":"local"}}]}`
+	stateContent := `{"schemaVersion":2,"units":{"api":{"version":"0.1.0"}}}`
+	if err := os.WriteFile(".neko/release.config.json", []byte(configContent), 0644); err != nil {
+		t.Fatalf("write v2 config: %v", err)
+	}
+	if err := os.WriteFile(".neko/release.state.json", []byte(stateContent), 0644); err != nil {
+		t.Fatalf("write v2 state: %v", err)
+	}
+
+	resp, err := HandleRelease(plugin.Request{
+		Command: "patch",
+		Flags: map[string]any{
+			"dry-run": true,
+			"unit":    "api",
+		},
+	}, Patch)
+	if err != nil {
+		t.Fatalf("HandleRelease: %v", err)
+	}
+	if resp.Status != "success" {
+		t.Fatalf("expected success, got %#v", resp.Error)
+	}
+	if fetched {
+		t.Fatal("V2 dry-run called git fetch")
+	}
+	after, err := os.ReadFile(".neko/release.state.json")
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+	if string(after) != stateContent {
+		t.Fatalf("V2 dry-run rewrote state: %s", string(after))
+	}
+	if !responseContains(resp.Data["items"], "api/v0.1.1") {
+		t.Fatalf("expected planned tag api/v0.1.1, got %#v", resp.Data["items"])
 	}
 }
 

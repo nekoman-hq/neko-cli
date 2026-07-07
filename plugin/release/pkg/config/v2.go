@@ -1,5 +1,7 @@
 package config
 
+//lint:file-ignore fieldalignment Canonical release models keep logical field order for readability and JSON-domain documentation
+
 import (
 	"bytes"
 	"encoding/json"
@@ -36,13 +38,17 @@ const (
 	DeliveryGitHubActions DeliveryType = "github-actions"
 )
 
-// V2Config is the committed repository architecture file.
-type V2Config struct {
+// V2ReleaseConfig is the committed repository architecture file.
+//
+//nolint:govet // JSON-domain order mirrors the canonical config document.
+type V2ReleaseConfig struct {
 	SchemaVersion int      `json:"schemaVersion"`
 	Units         []V2Unit `json:"units"`
 }
 
 // V2Unit configures one releaseable unit in a repository.
+//
+//nolint:govet // JSON-domain order mirrors the canonical config document.
 type V2Unit struct {
 	ID               string     `json:"id"`
 	DisplayName      string     `json:"displayName,omitempty"`
@@ -58,8 +64,10 @@ type V2Executor struct {
 	Delivery DeliveryType `json:"delivery,omitempty"`
 }
 
-// V2State is the version source of truth for all configured V2 units.
-type V2State struct {
+// V2ReleaseState is the version source of truth for all configured V2 units.
+//
+//nolint:govet // JSON-domain order mirrors the canonical state document.
+type V2ReleaseState struct {
 	SchemaVersion int                    `json:"schemaVersion"`
 	Units         map[string]V2UnitState `json:"units"`
 }
@@ -110,8 +118,8 @@ func LoadV2Repository(repositoryRoot string) (*ReleaseRepository, error) {
 }
 
 // LoadV2Config strictly decodes a V2 release config file.
-func LoadV2Config(path string) (*V2Config, error) {
-	var cfg V2Config
+func LoadV2Config(path string) (*V2ReleaseConfig, error) {
+	var cfg V2ReleaseConfig
 	if err := readStrictJSON(path, &cfg); err != nil {
 		return nil, fmt.Errorf("v2 config %s: %w", path, err)
 	}
@@ -119,8 +127,8 @@ func LoadV2Config(path string) (*V2Config, error) {
 }
 
 // LoadV2State strictly decodes a V2 release state file.
-func LoadV2State(path string) (*V2State, error) {
-	var state V2State
+func LoadV2State(path string) (*V2ReleaseState, error) {
+	var state V2ReleaseState
 	if err := readStrictJSON(path, &state); err != nil {
 		return nil, fmt.Errorf("v2 state %s: %w", path, err)
 	}
@@ -128,7 +136,7 @@ func LoadV2State(path string) (*V2State, error) {
 }
 
 // NormalizeV2Repository applies internal defaults without mutating files.
-func NormalizeV2Repository(repositoryRoot string, cfg *V2Config, state *V2State) *ReleaseRepository {
+func NormalizeV2Repository(repositoryRoot string, cfg *V2ReleaseConfig, state *V2ReleaseState) *ReleaseRepository {
 	units := make([]ReleaseUnit, 0, len(cfg.Units))
 	for _, unit := range cfg.Units {
 		workingDirectory := unit.WorkingDirectory
@@ -161,7 +169,7 @@ func NormalizeV2Repository(repositoryRoot string, cfg *V2Config, state *V2State)
 
 // ValidateV2 checks config and state together. It validates paths against
 // repositoryRoot when supplied, including existing working directories.
-func ValidateV2(repositoryRoot string, cfg *V2Config, state *V2State) error {
+func ValidateV2(repositoryRoot string, cfg *V2ReleaseConfig, state *V2ReleaseState) error {
 	if cfg.SchemaVersion != 2 {
 		return fmt.Errorf("v2 config schemaVersion must be exactly 2, got %d", cfg.SchemaVersion)
 	}
@@ -213,7 +221,7 @@ func ValidateV2(repositoryRoot string, cfg *V2Config, state *V2State) error {
 }
 
 // CanonicalV2Config returns the normalized JSON bytes future writers should use.
-func CanonicalV2Config(cfg V2Config) ([]byte, error) {
+func CanonicalV2Config(cfg V2ReleaseConfig) ([]byte, error) {
 	for i := range cfg.Units {
 		if cfg.Units[i].WorkingDirectory == "" {
 			cfg.Units[i].WorkingDirectory = "."
@@ -226,7 +234,7 @@ func CanonicalV2Config(cfg V2Config) ([]byte, error) {
 }
 
 // CanonicalV2State returns the normalized JSON bytes future writers should use.
-func CanonicalV2State(state V2State) ([]byte, error) {
+func CanonicalV2State(state V2ReleaseState) ([]byte, error) {
 	return marshalCanonicalJSON(state)
 }
 
@@ -313,6 +321,9 @@ func validateTagPrefix(unitID, tagPrefix string) error {
 	}
 	if strings.Contains(tagPrefix, "..") || strings.ContainsAny(tagPrefix, " \t\r\n") || strings.Contains(tagPrefix, "//") {
 		return fmt.Errorf("v2 config unit %q tagPrefix %q is unsafe", unitID, tagPrefix)
+	}
+	if _, err := NewTagSpec(tagPrefix); err != nil {
+		return fmt.Errorf("v2 config unit %q tagPrefix %q is invalid: %w", unitID, tagPrefix, err)
 	}
 	return nil
 }

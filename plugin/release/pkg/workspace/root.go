@@ -1,4 +1,7 @@
+//nolint:staticcheck // V1 compatibility code intentionally uses deprecated V1 APIs during migration
 package workspace
+
+//lint:file-ignore SA1019 Root resolution must detect the deprecated V1 file during compatibility
 
 import (
 	"fmt"
@@ -42,8 +45,8 @@ func ResolveProjectRoot(startDir string) (string, error) {
 	} else if found {
 		v2Config := config.V2ConfigPath(gitRoot)
 		if _, err := os.Stat(v2Config); err == nil {
-			if config.LegacyConfigExistsAt(gitRoot) {
-				return "", fmt.Errorf("release configuration conflict: %s and %s both exist at repository root", filepath.Join(gitRoot, config.FileName), v2Config)
+			if config.V1ConfigExistsAt(gitRoot) {
+				return "", fmt.Errorf("release configuration conflict: %s and %s both exist at repository root", filepath.Join(gitRoot, config.V1FileName), v2Config)
 			}
 			if !config.V2StateExists(gitRoot) {
 				return "", fmt.Errorf("release schema v2 config exists at %s, but required state file %s is missing", v2Config, config.V2StatePath(gitRoot))
@@ -53,7 +56,7 @@ func ResolveProjectRoot(startDir string) (string, error) {
 			return "", fmt.Errorf("failed to inspect %s: %w", v2Config, err)
 		}
 
-		if root, found, err := findAncestorWithMarker(absStartDir, config.FileName); err != nil {
+		if root, found, err := findAncestorWithMarker(absStartDir, config.V1FileName); err != nil {
 			return "", err
 		} else if found {
 			return root, nil
@@ -62,7 +65,7 @@ func ResolveProjectRoot(startDir string) (string, error) {
 		return gitRoot, nil
 	}
 
-	if root, found, err := findAncestorWithMarker(absStartDir, config.FileName); err != nil {
+	if root, found, err := findAncestorWithMarker(absStartDir, config.V1FileName); err != nil {
 		return "", err
 	} else if found {
 		return root, nil

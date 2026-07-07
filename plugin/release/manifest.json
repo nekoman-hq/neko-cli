@@ -61,6 +61,12 @@
           "required": false,
           "default": false,
           "description": "Run without making changes"
+        },
+        {
+          "name": "unit",
+          "type": "string",
+          "required": false,
+          "description": "Selects the release unit. Required when a V2 repository defines multiple units."
         }
       ]
     },
@@ -78,6 +84,12 @@
           "required": false,
           "default": false,
           "description": "Run without making changes"
+        },
+        {
+          "name": "unit",
+          "type": "string",
+          "required": false,
+          "description": "Selects the release unit. Required when a V2 repository defines multiple units."
         }
       ]
     },
@@ -95,6 +107,12 @@
           "required": false,
           "default": false,
           "description": "Run without making changes"
+        },
+        {
+          "name": "unit",
+          "type": "string",
+          "required": false,
+          "description": "Selects the release unit. Required when a V2 repository defines multiple units."
         }
       ]
     },
@@ -104,6 +122,14 @@
       "outputs": [
         "table",
         "json"
+      ],
+      "flags": [
+        {
+          "name": "unit",
+          "type": "string",
+          "required": false,
+          "description": "Selects the release unit. Required when a V2 repository defines multiple units."
+        }
       ]
     },
     {
@@ -112,6 +138,14 @@
       "outputs": [
         "table",
         "json"
+      ],
+      "flags": [
+        {
+          "name": "unit",
+          "type": "string",
+          "required": false,
+          "description": "Selects the release unit. Required when a V2 repository defines multiple units."
+        }
       ]
     },
     {
@@ -128,6 +162,12 @@
           "required": false,
           "default": false,
           "description": "Display current configuration details"
+        },
+        {
+          "name": "unit",
+          "type": "string",
+          "required": false,
+          "description": "Selects the release unit. Required when a V2 repository defines multiple units."
         }
       ]
     }

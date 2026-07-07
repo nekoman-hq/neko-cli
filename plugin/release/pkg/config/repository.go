@@ -1,5 +1,7 @@
 package config
 
+//lint:file-ignore fieldalignment Canonical release models keep logical field order for readability and JSON-domain documentation
+
 import (
 	"fmt"
 	"path/filepath"
@@ -19,15 +21,19 @@ const (
 // V1 is intentionally represented as one virtual "default" unit so legacy
 // commands can continue to rely on the old file while newer code can reason
 // about repositories and units without format-specific branching.
+//
+//nolint:govet // Logical domain order is clearer than fieldalignment ordering here.
 type ReleaseRepository struct {
 	RepositoryRoot string
 	SchemaVersion  int
 	Units          []ReleaseUnit
 	SourceFormat   SourceFormat
-	Legacy         *NekoConfig
+	Legacy         *V1ReleaseConfig
 }
 
 // ReleaseUnit is the normalized releaseable unit used by both V1 and V2.
+//
+//nolint:govet // Logical domain order is clearer than fieldalignment ordering here.
 type ReleaseUnit struct {
 	ID               string
 	DisplayName      string
@@ -41,7 +47,7 @@ type ReleaseUnit struct {
 
 // NormalizeV1Repository converts the legacy global V1 config into the shared
 // single-unit model without renaming or removing any legacy fields.
-func NormalizeV1Repository(repositoryRoot string, cfg *NekoConfig) *ReleaseRepository {
+func NormalizeV1Repository(repositoryRoot string, cfg *V1ReleaseConfig) *ReleaseRepository {
 	return &ReleaseRepository{
 		RepositoryRoot: repositoryRoot,
 		SchemaVersion:  1,
@@ -70,13 +76,13 @@ func LoadReleaseRepository(repositoryRoot string) (*ReleaseRepository, error) {
 	}
 
 	if V2ConfigExists(repositoryRoot) {
-		if LegacyConfigExistsAt(repositoryRoot) {
-			return nil, fmt.Errorf("release configuration conflict: %s and %s both exist at repository root", filepath.Join(repositoryRoot, FileName), V2ConfigPath(repositoryRoot))
+		if V1ConfigExistsAt(repositoryRoot) {
+			return nil, fmt.Errorf("release configuration conflict: %s and %s both exist at repository root", filepath.Join(repositoryRoot, V1FileName), V2ConfigPath(repositoryRoot))
 		}
 		return LoadV2Repository(repositoryRoot)
 	}
 
-	cfg, err := LoadConfigAt(filepath.Join(repositoryRoot, FileName))
+	cfg, err := V1LoadConfigAt(filepath.Join(repositoryRoot, V1FileName))
 	if err != nil {
 		return nil, err
 	}

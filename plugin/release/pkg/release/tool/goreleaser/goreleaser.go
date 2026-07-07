@@ -1,5 +1,9 @@
 // Package goreleaser includes the goreleaser release-system logic
+//
+//nolint:staticcheck // V1 compatibility code intentionally uses deprecated V1 APIs during migration
 package goreleaser
+
+//lint:file-ignore SA1019 V1 executor initialization still receives the legacy config until V2 execution is implemented
 
 /*
 @Author     Benjamin Senekowitsch
@@ -50,7 +54,7 @@ func (g *GoReleaser) Name() string {
 	return "goreleaser"
 }
 
-func (g *GoReleaser) Init(_ *config.NekoConfig) error {
+func (g *GoReleaser) Init(_ *config.V1ReleaseConfig) error {
 	if err := g.RequireBinary(g.Name()); err != nil {
 		return err
 	}

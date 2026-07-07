@@ -306,8 +306,16 @@ func Contributors() ([]Contributor, error) {
 	contribLines := strings.Split(strings.TrimSpace(string(contrib)), "\n")
 	log.PluginV(log.Exec, fmt.Sprintf("Found %d contributors", len(contribLines)))
 
+	return parseContributors(string(contrib)), nil
+}
+
+func parseContributors(output string) []Contributor {
+	contribLines := strings.Split(strings.TrimSpace(output), "\n")
 	contributors := make([]Contributor, 0, len(contribLines))
 	for _, line := range contribLines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
 		parts := strings.Fields(line)
 		if len(parts) < 2 {
 			log.PluginV(log.Exec, fmt.Sprintf("Skipping invalid contributor line: %s", line))
@@ -320,7 +328,7 @@ func Contributors() ([]Contributor, error) {
 		})
 	}
 
-	return contributors, nil
+	return contributors
 }
 
 func DeleteGithubRelease(tag string, token string) error {

@@ -1,4 +1,7 @@
+//nolint:staticcheck // V1 compatibility code intentionally uses deprecated V1 APIs during migration
 package release
+
+//lint:file-ignore SA1019 V1 compatibility release paths intentionally use deprecated V1 APIs during migration
 
 import (
 	"fmt"
@@ -19,7 +22,7 @@ const (
 
 // ValidateRequirements checks that the required environment and release-system
 // specific files exist before validation or release execution continues.
-func ValidateRequirements(cfg *releaseconfig.NekoConfig) error {
+func ValidateRequirements(cfg *releaseconfig.V1ReleaseConfig) error {
 	if cfg == nil {
 		return fmt.Errorf("release configuration is missing")
 	}
@@ -62,13 +65,13 @@ func ValidateRequirements(cfg *releaseconfig.NekoConfig) error {
 	)
 }
 
-func requiredReleaseSystemFiles(system releaseconfig.ReleaseSystem) ([]string, error) {
+func requiredReleaseSystemFiles(system releaseconfig.V1ReleaseSystem) ([]string, error) {
 	switch system {
-	case releaseconfig.ReleaseTypeReleaseIt:
+	case releaseconfig.V1ReleaseTypeReleaseIt:
 		return []string{releaseItConfigFile}, nil
-	case releaseconfig.ReleaseTypeJReleaser:
+	case releaseconfig.V1ReleaseTypeJReleaser:
 		return []string{jReleaserConfigFile}, nil
-	case releaseconfig.ReleaseTypeGoReleaser:
+	case releaseconfig.V1ReleaseTypeGoReleaser:
 		return []string{goReleaserConfigFileYML, goReleaserConfigFileYAML}, nil
 	default:
 		return nil, fmt.Errorf("unknown release system: %s", system)

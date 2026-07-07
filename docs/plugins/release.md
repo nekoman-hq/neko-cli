@@ -7,7 +7,7 @@ The **release** plugin is the core plugin for Neko CLI, providing comprehensive 
 - **Plugin Name:** `release`
 - **Last Change:** v2.4.0
 - **Author:** nekoman-hq
-- **Config Files:** `.release.neko.json` (V1), `.neko/release.config.json` and `.neko/release.state.json` (V2 validation)
+- **Config Files:** `.release.neko.json` (V1 legacy), `.neko/release.config.json` and `.neko/release.state.json` (V2)
 
 ## Installation
 
@@ -106,6 +106,8 @@ neko release patch --dry-run
 
 With `--dry-run`, Neko only calculates and displays the next version. It does not write config, update executor files, run executors, fetch remotes, commit, tag, push, publish, or rollback.
 
+For V2 repositories, `patch`, `minor`, and `major` support dry-run planning with `--unit`. Non-dry-run V2 release execution is still blocked.
+
 ---
 
 ### `neko release minor`
@@ -169,6 +171,8 @@ Show the release history with commit counts between versions.
 neko release history [flags]
 ```
 
+For V2 repositories with multiple units, pass `--unit <unit-id>`. History then includes only tags owned by that unit and counts commits through the unit paths.
+
 **Output Formats:**
 - `table` (default) - Clean tabular view
 - `json` - Full JSON response
@@ -206,6 +210,8 @@ List all contributors to the repository with their commit counts.
 ```bash
 neko release contributors [flags]
 ```
+
+For V2 repositories with multiple units, pass `--unit <unit-id>`. Contributors are calculated through the selected unit paths.
 
 **Examples:**
 ```bash
@@ -334,13 +340,16 @@ V2 uses repository-root files:
 
 `release.config.json` stores committed repository architecture: units, paths, working directories, tag prefixes, executor type, and delivery. `release.state.json` stores unit versions. Tags are derived from `tagPrefix + version` and are not stored in state.
 
-`neko release validate` can validate V2 now. V2 release execution, `--unit`, migration, unit-specific tags, unit-specific history, unit-specific bumps, and GitHub Actions dispatch are not active yet.
+`neko release validate` can validate V2 now. `history`, `contributors`, and dry-run planning are unit-aware. V2 release execution, migration, state persistence for bumps, executor-context rewiring, and GitHub Actions dispatch are not active yet.
 
 See:
 
 - [Release overview](../release/overview.md)
 - [Release configuration](../release/configuration.md)
 - [Release state](../release/state.md)
+- [Unit selection](../release/unit-selection.md)
+- [Tag strategy](../release/tag-strategy.md)
+- [CLI reference](../release/cli-reference.md)
 - [Compatibility](../release/compatibility.md)
 
 ---

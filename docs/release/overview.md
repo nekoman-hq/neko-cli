@@ -31,10 +31,12 @@ V2 is repository-root scoped and uses two files:
 
 `release.state.json` is the version source of truth for all units. Tags are not stored in state; a tag is derived later from `tagPrefix + version`.
 
-In this milestone, V2 can be loaded, strictly parsed, validated, and normalized. V2 release execution is intentionally not active yet. When V2 is configured, `patch`, `minor`, `major`, `history`, and `contributors` return:
+In this milestone, V2 can be loaded, strictly parsed, validated, normalized, and used for read-only unit workflows. `history` and `contributors` are unit-aware. `patch`, `minor`, and `major` support V2 dry-run planning only.
+
+V2 non-dry-run release execution is intentionally not active yet and returns:
 
 ```text
-release schema v2 is configured, but unit-aware release execution is not available yet
+release schema v2 supports planning and read-only history, but release execution is not available yet
 ```
 
 ## Safety
@@ -50,12 +52,14 @@ Implemented now:
 - V1 compatibility.
 - V2 models, strict JSON parsing, validation, and normalization.
 - V2 support in `neko release validate`.
+- Unit selection with `--unit`.
+- Unit-specific V2 history and contributors.
+- Non-mutating V2 dry-run version planning.
 - Atomic JSON write helpers for future migration and state updates.
 
 Not implemented yet:
 
 - `neko release migrate`.
-- `--unit`.
 - V2 release execution.
 - Unit-specific version bumps, tags, history, or contributors.
 - GitHub Actions delivery execution.

@@ -1,5 +1,9 @@
 // Package init includes the init handler for plugin-based execution
+//
+//nolint:staticcheck // V1 compatibility code intentionally uses deprecated V1 APIs during migration
 package init
+
+//lint:file-ignore SA1019 V1 compatibility commands intentionally use deprecated V1 APIs during migration
 
 /*
 @Author     Benjamin Senekowitsch
@@ -28,7 +32,7 @@ func HandleInit(req plugin.Request) (*plugin.Response, error) {
 	force := getFlagBool(req.Flags, "force")
 
 	// Check if config already exists
-	if config.Exists() && !force {
+	if config.V1Exists() && !force {
 		log.PluginV(log.Init, "Config file already exists, force flag not set")
 		return &plugin.Response{
 			Status: "error",
@@ -76,7 +80,7 @@ func HandleInit(req plugin.Request) (*plugin.Response, error) {
 	}
 
 	// Validate the config
-	if err = config.Validate(&cfg); err != nil {
+	if err = config.V1Validate(&cfg); err != nil {
 		return &plugin.Response{
 			Status: "error",
 			Metadata: plugin.ResponseMetadata{
@@ -93,7 +97,7 @@ func HandleInit(req plugin.Request) (*plugin.Response, error) {
 	}
 
 	// Save the config
-	if err = config.SaveConfig(cfg); err != nil {
+	if err = config.V1SaveConfig(cfg); err != nil {
 		return &plugin.Response{
 			Status: "error",
 			Metadata: plugin.ResponseMetadata{
@@ -210,24 +214,24 @@ func GetAvailableOptions() (*plugin.Response, error) {
 		Data: map[string]any{
 			"items": items,
 			"recommendations": map[string]string{
-				"frontend": string(config.ReleaseTypeReleaseIt),
-				"backend":  string(config.ReleaseTypeJReleaser),
-				"other":    string(config.ReleaseTypeGoReleaser),
+				"frontend": string(config.V1ReleaseTypeReleaseIt),
+				"backend":  string(config.V1ReleaseTypeJReleaser),
+				"other":    string(config.V1ReleaseTypeGoReleaser),
 			},
 		},
 		RendererHint: "table",
 	}, nil
 }
 
-func buildConfigFromFlags(flags map[string]any) (config.NekoConfig, error) {
-	cfg := config.NekoConfig{}
+func buildConfigFromFlags(flags map[string]any) (config.V1ReleaseConfig, error) {
+	cfg := config.V1ReleaseConfig{}
 
 	// Get project type (required)
 	projectType := getFlagString(flags, "project-type")
 	if projectType == "" {
 		return cfg, fmt.Errorf("missing required flag: --project-type (frontend|backend|other)")
 	}
-	cfg.ProjectType = config.ProjectType(projectType)
+	cfg.ProjectType = config.V1ProjectType(projectType)
 	if !cfg.ProjectType.IsValid() {
 		return cfg, fmt.Errorf("invalid project type: %s (must be: frontend, backend, or other)", projectType)
 	}
@@ -237,7 +241,7 @@ func buildConfigFromFlags(flags map[string]any) (config.NekoConfig, error) {
 	if releaseSystem == "" {
 		return cfg, fmt.Errorf("missing required flag: --release-system (release-it|jreleaser|goreleaser)")
 	}
-	cfg.ReleaseSystem = config.ReleaseSystem(releaseSystem)
+	cfg.ReleaseSystem = config.V1ReleaseSystem(releaseSystem)
 	if !cfg.ReleaseSystem.IsValid() {
 		return cfg, fmt.Errorf("invalid release system: %s (must be: release-it, jreleaser, or goreleaser)", releaseSystem)
 	}
@@ -274,21 +278,21 @@ func getFlagBool(flags map[string]any, key string) bool {
 	return false
 }
 
-func buildNextSteps(cfg config.NekoConfig) []string {
+func buildNextSteps(cfg config.V1ReleaseConfig) []string {
 	steps := []string{
 		"Use 'neko release' to create a release",
 	}
 
 	switch cfg.ReleaseSystem {
-	case config.ReleaseTypeReleaseIt:
+	case config.V1ReleaseTypeReleaseIt:
 		steps = append(steps,
 			"Neko will add metadata in: package.json, .release-it.json",
 		)
-	case config.ReleaseTypeJReleaser:
+	case config.V1ReleaseTypeJReleaser:
 		steps = append(steps,
 			"Neko will add metadata in: jreleaser.yml, pom.xml / build.gradle",
 		)
-	case config.ReleaseTypeGoReleaser:
+	case config.V1ReleaseTypeGoReleaser:
 		steps = append(steps,
 			"Neko will add metadata in: .goreleaser.yml, Git tags",
 		)

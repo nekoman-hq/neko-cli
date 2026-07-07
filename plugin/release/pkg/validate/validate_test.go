@@ -1,4 +1,7 @@
+//nolint:staticcheck // V1 compatibility code intentionally uses deprecated V1 APIs during migration
 package validate
+
+//lint:file-ignore SA1019 V1 validation compatibility intentionally uses deprecated V1 APIs during migration
 
 import (
 	"os"
@@ -31,10 +34,32 @@ func TestHandleValidateV2Show(t *testing.T) {
 	}
 }
 
+func TestHandleValidateV2ShowFocusesRequestedUnit(t *testing.T) {
+	withWorkingDirectory(t)
+	writeV2(t, `{"schemaVersion":2,"units":[
+  {"id":"api","paths":["api/**"],"workingDirectory":".","tagPrefix":"api/v","executor":{"type":"goreleaser"}},
+  {"id":"web","paths":["web/**"],"workingDirectory":".","tagPrefix":"web/v","executor":{"type":"release-it"}}
+]}`, `{"schemaVersion":2,"units":{"api":{"version":"1.0.0"},"web":{"version":"2.0.0"}}}`)
+
+	resp, err := HandleValidate(plugin.Request{Flags: map[string]any{"show": true, "unit": "api"}})
+	if err != nil {
+		t.Fatalf("HandleValidate: %v", err)
+	}
+	if resp.Status != "success" {
+		t.Fatalf("expected success, got %#v", resp.Error)
+	}
+	if !itemsContain(resp.Data["items"], "Unit api") {
+		t.Fatalf("expected api row, got %#v", resp.Data["items"])
+	}
+	if itemsContain(resp.Data["items"], "Unit web") {
+		t.Fatalf("web row should not be shown when api is focused: %#v", resp.Data["items"])
+	}
+}
+
 func TestHandleValidateV1StillUsesLegacyConfig(t *testing.T) {
 	withWorkingDirectory(t)
 	t.Setenv("GITHUB_TOKEN", "test-token")
-	mustWrite(t, config.FileName, `{
+	mustWrite(t, config.V1FileName, `{
   "project-name": "neko-cli",
   "project-owner": "nekoman-hq",
   "project-type": "backend",

@@ -1,4 +1,7 @@
+//nolint:staticcheck // V1 compatibility code intentionally uses deprecated V1 APIs during migration
 package release
+
+//lint:file-ignore SA1019 V1 compatibility release paths intentionally use deprecated V1 APIs during migration
 
 import (
 	"os"
@@ -11,8 +14,8 @@ import (
 func TestValidateRequirementsRequiresGitHubToken(t *testing.T) {
 	withWorkingDirectory(t)
 
-	cfg := &releaseconfig.NekoConfig{
-		ReleaseSystem: releaseconfig.ReleaseTypeReleaseIt,
+	cfg := &releaseconfig.V1ReleaseConfig{
+		ReleaseSystem: releaseconfig.V1ReleaseTypeReleaseIt,
 	}
 
 	if err := os.WriteFile(releaseItConfigFile, []byte("{}"), 0644); err != nil {
@@ -34,22 +37,22 @@ func TestValidateRequirementsRequiresGitHubToken(t *testing.T) {
 func TestValidateRequirementsRequiresReleaseSystemConfig(t *testing.T) {
 	tests := []struct {
 		name          string
-		system        releaseconfig.ReleaseSystem
+		system        releaseconfig.V1ReleaseSystem
 		expectedParts []string
 	}{
 		{
 			name:          "release-it",
-			system:        releaseconfig.ReleaseTypeReleaseIt,
+			system:        releaseconfig.V1ReleaseTypeReleaseIt,
 			expectedParts: []string{"release-it", releaseItConfigFile},
 		},
 		{
 			name:          "jreleaser",
-			system:        releaseconfig.ReleaseTypeJReleaser,
+			system:        releaseconfig.V1ReleaseTypeJReleaser,
 			expectedParts: []string{"jreleaser", jReleaserConfigFile},
 		},
 		{
 			name:          "goreleaser",
-			system:        releaseconfig.ReleaseTypeGoReleaser,
+			system:        releaseconfig.V1ReleaseTypeGoReleaser,
 			expectedParts: []string{"goreleaser", goReleaserConfigFileYML, goReleaserConfigFileYAML},
 		},
 	}
@@ -59,7 +62,7 @@ func TestValidateRequirementsRequiresReleaseSystemConfig(t *testing.T) {
 			withWorkingDirectory(t)
 			t.Setenv("GITHUB_TOKEN", "test-token")
 
-			cfg := &releaseconfig.NekoConfig{
+			cfg := &releaseconfig.V1ReleaseConfig{
 				ReleaseSystem: tt.system,
 			}
 
@@ -80,27 +83,27 @@ func TestValidateRequirementsRequiresReleaseSystemConfig(t *testing.T) {
 func TestValidateRequirementsAcceptsExistingConfig(t *testing.T) {
 	tests := []struct {
 		name       string
-		system     releaseconfig.ReleaseSystem
+		system     releaseconfig.V1ReleaseSystem
 		configFile string
 	}{
 		{
 			name:       "release-it",
-			system:     releaseconfig.ReleaseTypeReleaseIt,
+			system:     releaseconfig.V1ReleaseTypeReleaseIt,
 			configFile: releaseItConfigFile,
 		},
 		{
 			name:       "jreleaser",
-			system:     releaseconfig.ReleaseTypeJReleaser,
+			system:     releaseconfig.V1ReleaseTypeJReleaser,
 			configFile: jReleaserConfigFile,
 		},
 		{
 			name:       "goreleaser yml",
-			system:     releaseconfig.ReleaseTypeGoReleaser,
+			system:     releaseconfig.V1ReleaseTypeGoReleaser,
 			configFile: goReleaserConfigFileYML,
 		},
 		{
 			name:       "goreleaser yaml",
-			system:     releaseconfig.ReleaseTypeGoReleaser,
+			system:     releaseconfig.V1ReleaseTypeGoReleaser,
 			configFile: goReleaserConfigFileYAML,
 		},
 	}
@@ -110,7 +113,7 @@ func TestValidateRequirementsAcceptsExistingConfig(t *testing.T) {
 			withWorkingDirectory(t)
 			t.Setenv("GITHUB_TOKEN", "test-token")
 
-			cfg := &releaseconfig.NekoConfig{
+			cfg := &releaseconfig.V1ReleaseConfig{
 				ReleaseSystem: tt.system,
 			}
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/nekoman-hq/neko-cli/pkg/errors"
 	"github.com/nekoman-hq/neko-cli/pkg/log"
+	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
 /*
@@ -99,4 +100,119 @@ func CountCommitsBetween(from, to string) int {
 	}
 
 	return count
+}
+
+// UnitTag is a tag that exactly matches a release unit TagSpec.
+type UnitTag struct {
+	Tag     string
+	Version string
+}
+
+// LatestUnitTag returns the closest matching tag reachable from HEAD.
+func LatestUnitTag(spec releaseconfig.TagSpec) (*UnitTag, error) {
+	tags, err := UnitTagsInHistory(spec)
+	if err != nil {
+		return nil, err
+	}
+	if len(tags) == 0 {
+		return nil, nil
+	}
+	return &tags[len(tags)-1], nil
+}
+
+// UnitTagsInHistory returns exact TagSpec matches in HEAD history order.
+func UnitTagsInHistory(spec releaseconfig.TagSpec) ([]UnitTag, error) {
+	commits, err := gitOutput("log", "--reverse", "--format=%H", "HEAD")
+	if err != nil {
+		return nil, err
+	}
+
+	seen := make(map[string]struct{})
+	var result []UnitTag
+	for _, commit := range nonEmptyLines(commits) {
+		tagsAtCommit, err := gitOutput("tag", "--points-at", commit, "--list", spec.Pattern())
+		if err != nil {
+			return nil, err
+		}
+		for _, tag := range nonEmptyLines(tagsAtCommit) {
+			version, ok := spec.Parse(tag)
+			if !ok {
+				continue
+			}
+			if _, exists := seen[tag]; exists {
+				continue
+			}
+			seen[tag] = struct{}{}
+			result = append(result, UnitTag{Tag: tag, Version: version})
+		}
+	}
+	return result, nil
+}
+
+// CountCommitsBetweenPaths counts commits in a range constrained to pathspecs.
+func CountCommitsBetweenPaths(from, to string, paths []string) (int, error) {
+	var rev string
+	if from == "" {
+		rev = to
+	} else {
+		rev = fmt.Sprintf("%s..%s", from, to)
+	}
+	args := []string{"rev-list", "--count", rev}
+	args = append(args, gitPathspecArgs(paths)...)
+
+	out, err := gitOutput(args...)
+	if err != nil {
+		return 0, err
+	}
+	count, err := strconv.Atoi(strings.TrimSpace(out))
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse commit count %q: %w", strings.TrimSpace(out), err)
+	}
+	return count, nil
+}
+
+// ContributorsForPaths returns contributors constrained to pathspecs.
+func ContributorsForPaths(paths []string) ([]Contributor, error) {
+	args := []string{"shortlog", "-sne", "HEAD"}
+	args = append(args, gitPathspecArgs(paths)...)
+
+	out, err := gitOutput(args...)
+	if err != nil {
+		return nil, err
+	}
+	return parseContributors(out), nil
+}
+
+func gitPathspecArgs(paths []string) []string {
+	if len(paths) == 0 || (len(paths) == 1 && paths[0] == "**") {
+		return nil
+	}
+	args := []string{"--"}
+	for _, path := range paths {
+		if path == "**" {
+			continue
+		}
+		args = append(args, ":(glob)"+path)
+	}
+	if len(args) == 1 {
+		return nil
+	}
+	return args
+}
+
+func gitOutput(args ...string) (string, error) {
+	cmd := exec.Command("git", args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("git %s failed: %s", strings.Join(args, " "), strings.TrimSpace(string(out)))
+	}
+	return string(out), nil
+}
+
+func nonEmptyLines(output string) []string {
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) == 1 && lines[0] == "" {
+		return nil
+	}
+	return lines
 }

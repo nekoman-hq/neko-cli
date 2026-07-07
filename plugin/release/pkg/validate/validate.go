@@ -1,5 +1,9 @@
 // Package validate includes the validate command handler
+//
+//nolint:staticcheck // V1 compatibility code intentionally uses deprecated V1 APIs during migration
 package validate
+
+//lint:file-ignore SA1019 V1 validation compatibility intentionally uses deprecated V1 APIs during migration
 
 /*
 @Author     Benjamin Senekowitsch
@@ -27,10 +31,10 @@ func HandleValidate(req plugin.Request) (*plugin.Response, error) {
 		return validateV2Response(req, repository), nil
 	}
 	if err == nil && repository.SourceFormat == config.SourceFormatV1 {
-		return validateV1Response(req, repository.Legacy)
+		return validateV1Response(req, repository)
 	}
 
-	if config.V2ConfigExists(".") || config.Exists() {
+	if config.V2ConfigExists(".") || config.V1Exists() {
 		return &plugin.Response{
 			Status: "error",
 			Metadata: plugin.ResponseMetadata{
@@ -65,9 +69,15 @@ func HandleValidate(req plugin.Request) (*plugin.Response, error) {
 	}, nil
 }
 
-func validateV1Response(req plugin.Request, cfg *config.NekoConfig) (*plugin.Response, error) {
+func validateV1Response(req plugin.Request, repository *config.ReleaseRepository) (*plugin.Response, error) {
+	unit, err := config.ResolveReleaseUnit(repository, getFlagString(req.Flags, "unit"), config.UnitResolutionOptions{})
+	if err != nil {
+		return validationError("UNIT_RESOLUTION_FAILED", err.Error()), nil
+	}
+
+	cfg := repository.Legacy
 	// Validate the config
-	if err := config.Validate(cfg); err != nil {
+	if err := config.V1Validate(cfg); err != nil {
 		return &plugin.Response{
 			Status: "error",
 			Metadata: plugin.ResponseMetadata{
@@ -164,6 +174,10 @@ func validateV1Response(req plugin.Request, cfg *config.NekoConfig) (*plugin.Res
 					"property": "Status",
 					"value":    "✓ Valid",
 				},
+				{
+					"property": "Unit",
+					"value":    unit.ID,
+				},
 			},
 		},
 		RendererHint: "table",
@@ -174,6 +188,15 @@ func validateV2Response(req plugin.Request, repository *config.ReleaseRepository
 	log.PluginPrint(log.Config, "V2 release configuration is valid")
 
 	showConfig := getFlagBool(req.Flags, "show")
+	requestedUnit := getFlagString(req.Flags, "unit")
+	var focusedUnit *config.ReleaseUnit
+	if requestedUnit != "" {
+		unit, err := config.ResolveReleaseUnit(repository, requestedUnit, config.UnitResolutionOptions{})
+		if err != nil {
+			return validationError("UNIT_RESOLUTION_FAILED", err.Error())
+		}
+		focusedUnit = unit
+	}
 	items := []map[string]any{
 		{
 			"property": "Configuration",
@@ -196,19 +219,12 @@ func validateV2Response(req plugin.Request, repository *config.ReleaseRepository
 				"value":    "v2",
 			},
 		}
-		for _, unit := range repository.Units {
-			items = append(items, map[string]any{
-				"property": fmt.Sprintf("Unit %s", unit.ID),
-				"value": fmt.Sprintf(
-					"version=%s workingDirectory=%s tagPrefix=%s executor=%s delivery=%s paths=%v",
-					unit.Version,
-					unit.WorkingDirectory,
-					unit.TagPrefix,
-					unit.ExecutorType,
-					unit.Delivery,
-					unit.Paths,
-				),
-			})
+		units := repository.Units
+		if focusedUnit != nil {
+			units = []config.ReleaseUnit{*focusedUnit}
+		}
+		for _, unit := range units {
+			items = append(items, unitShowRow(unit))
 		}
 	}
 
@@ -227,6 +243,37 @@ func validateV2Response(req plugin.Request, repository *config.ReleaseRepository
 	}
 }
 
+func unitShowRow(unit config.ReleaseUnit) map[string]any {
+	return map[string]any{
+		"property": fmt.Sprintf("Unit %s", unit.ID),
+		"value": fmt.Sprintf(
+			"version=%s workingDirectory=%s tagPrefix=%s executor=%s delivery=%s paths=%v",
+			unit.Version,
+			unit.WorkingDirectory,
+			unit.TagPrefix,
+			unit.ExecutorType,
+			unit.Delivery,
+			unit.Paths,
+		),
+	}
+}
+
+func validationError(code, message string) *plugin.Response {
+	return &plugin.Response{
+		Status: "error",
+		Metadata: plugin.ResponseMetadata{
+			Plugin:    metadata.PluginName,
+			Version:   metadata.Version,
+			Command:   "validate",
+			Timestamp: time.Now(),
+		},
+		Error: &plugin.ResponseError{
+			Code:    code,
+			Message: message,
+		},
+	}
+}
+
 func getFlagBool(flags map[string]any, name string) bool {
 	if v, ok := flags[name]; ok {
 		if b, ok := v.(bool); ok {
@@ -234,4 +281,13 @@ func getFlagBool(flags map[string]any, name string) bool {
 		}
 	}
 	return false
+}
+
+func getFlagString(flags map[string]any, name string) string {
+	if v, ok := flags[name]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
 }

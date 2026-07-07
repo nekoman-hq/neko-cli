@@ -1,5 +1,9 @@
 // Package release includes all neko cli release logic
+//
+//nolint:staticcheck // V1 compatibility code intentionally uses deprecated V1 APIs during migration
 package release
+
+//lint:file-ignore SA1019 V1 compatibility release paths intentionally use deprecated V1 APIs during migration
 
 /*
 @Author     Benjamin Senekowitsch
@@ -19,10 +23,10 @@ import (
 )
 
 type Service struct {
-	cfg *config.NekoConfig
+	cfg *config.V1ReleaseConfig
 }
 
-func NewReleaseService(cfg *config.NekoConfig) *Service {
+func NewReleaseService(cfg *config.V1ReleaseConfig) *Service {
 	return &Service{cfg: cfg}
 }
 
@@ -111,5 +115,5 @@ func (rs *Service) GetNewVersion(releaseType Type) (*semver.Version, *semver.Ver
 
 func (rs *Service) updateConfig(newVersion *semver.Version) error {
 	rs.cfg.Version = newVersion.String()
-	return config.SaveConfig(*rs.cfg)
+	return config.V1SaveConfig(*rs.cfg)
 }

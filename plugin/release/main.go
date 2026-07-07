@@ -54,9 +54,9 @@ func main() {
 	case "major":
 		resp, err = release.HandleRelease(req, release.Major)
 	case "history":
-		resp, err = history.HandleHistory()
+		resp, err = history.HandleHistory(req)
 	case "contributors":
-		resp, err = contributors.HandleContributors()
+		resp, err = contributors.HandleContributors(req)
 	case "validate":
 		resp, err = validate.HandleValidate(req)
 	default:

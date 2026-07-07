@@ -69,11 +69,11 @@ func TestLoadV2RepositoryValidMultiUnitWithDefaults(t *testing.T) {
 }
 
 func TestNormalizeV1Repository(t *testing.T) {
-	cfg := &NekoConfig{
+	cfg := &V1ReleaseConfig{
 		ProjectName:   "neko-cli",
 		ProjectOwner:  "nekoman-hq",
-		ProjectType:   ProjectTypeBackend,
-		ReleaseSystem: ReleaseTypeGoReleaser,
+		ProjectType:   V1ProjectTypeBackend,
+		ReleaseSystem: V1ReleaseTypeGoReleaser,
 		Version:       "1.2.3",
 	}
 
@@ -275,7 +275,7 @@ func writeV2Files(t *testing.T, root, cfg, state string) {
 
 func writeV1Config(t *testing.T, root string) {
 	t.Helper()
-	mustWrite(t, filepath.Join(root, FileName), `{
+	mustWrite(t, filepath.Join(root, V1FileName), `{
   "project-name": "neko-cli",
   "project-owner": "nekoman-hq",
   "project-type": "backend",

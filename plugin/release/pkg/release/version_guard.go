@@ -1,3 +1,4 @@
+//nolint:staticcheck // V1 compatibility code intentionally uses deprecated V1 APIs during migration
 package release
 
 /*
@@ -29,11 +30,11 @@ var (
 	latestVersionTag   = git.LatestTag
 )
 
-func VersionGuard(cfg *config.NekoConfig) (*semver.Version, error) {
+func VersionGuard(cfg *config.V1ReleaseConfig) (*semver.Version, error) {
 	return VersionGuardWithOptions(cfg, VersionGuardOptions{AllowRemoteRefresh: true})
 }
 
-func VersionGuardWithOptions(cfg *config.NekoConfig, opts VersionGuardOptions) (*semver.Version, error) {
+func VersionGuardWithOptions(cfg *config.V1ReleaseConfig, opts VersionGuardOptions) (*semver.Version, error) {
 	log.PluginV(log.Guard, "Running Version Guard checks")
 	if opts.AllowRemoteRefresh {
 		refreshVersionTags()
@@ -44,7 +45,7 @@ func VersionGuardWithOptions(cfg *config.NekoConfig, opts VersionGuardOptions) (
 	return EnsureVersionIsValid(cfg, latestTag)
 }
 
-func EnsureVersionIsValid(cfg *config.NekoConfig, latestTag string) (*semver.Version, error) {
+func EnsureVersionIsValid(cfg *config.V1ReleaseConfig, latestTag string) (*semver.Version, error) {
 	localVer, err := semver.NewVersion(cfg.Version)
 	if err != nil {
 		return nil, fmt.Errorf(

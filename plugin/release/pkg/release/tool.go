@@ -1,4 +1,7 @@
+//nolint:staticcheck // V1 compatibility code intentionally uses deprecated V1 APIs during migration
 package release
+
+//lint:file-ignore SA1019 V1 compatibility release paths intentionally use deprecated V1 APIs during migration
 
 import (
 	"fmt"
@@ -20,7 +23,7 @@ import (
 
 type Tool interface {
 	Name() string
-	Init(cfg *config2.NekoConfig) error
+	Init(cfg *config2.V1ReleaseConfig) error
 	Release(v *semver.Version) error
 	RevertRelease() error
 }

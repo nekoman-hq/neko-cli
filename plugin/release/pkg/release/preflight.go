@@ -1,3 +1,4 @@
+//nolint:staticcheck // V1 compatibility code intentionally uses deprecated V1 APIs during migration
 package release
 
 /*
@@ -13,7 +14,7 @@ import (
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/git"
 )
 
-func Preflight(cfg *config.NekoConfig) {
+func Preflight(cfg *config.V1ReleaseConfig) {
 	log.PluginV(log.Preflight, "Running pre-flight checks")
 
 	if err := ValidateRequirements(cfg); err != nil {

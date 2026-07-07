@@ -20,12 +20,7 @@ import (
 func HandleRelease(req plugin.Request, releaseType Type) (*plugin.Response, error) {
 	log.PluginPrint(log.Exec, "Starting %s release", string(releaseType))
 
-	if config.V2ConfigExists(".") {
-		return V2ExecutionUnavailableResponse(string(releaseType)), nil
-	}
-
-	// Load config
-	cfg, err := config.LoadConfig()
+	repository, err := config.LoadReleaseRepository(".")
 	if err != nil {
 		return &plugin.Response{
 			Status: "error",
@@ -45,12 +40,26 @@ func HandleRelease(req plugin.Request, releaseType Type) (*plugin.Response, erro
 		}, nil
 	}
 
+	dryRun := getFlagBool(req.Flags, "dry-run")
+	unit, err := config.ResolveReleaseUnit(repository, getFlagString(req.Flags, "unit"), config.UnitResolutionOptions{RequireExplicitForMulti: true})
+	if err != nil {
+		return commandErrorResponse(string(releaseType), "UNIT_RESOLUTION_FAILED", err.Error()), nil
+	}
+
+	if repository.SourceFormat == config.SourceFormatV2 {
+		if dryRun {
+			return v2DryRunPlanResponse(string(releaseType), *unit, releaseType)
+		}
+		return V2ExecutionUnavailableResponse(string(releaseType)), nil
+	}
+
+	cfg := repository.Legacy
+
 	// Create release service
 	svc := NewReleaseService(cfg)
 
 	// Dry-run planning must stay read-only: no release-tool requirements, no
 	// executor lookup, no remote refresh, and no file writes are allowed.
-	dryRun := getFlagBool(req.Flags, "dry-run")
 
 	// Get metadata info for response
 	oldVersion, newVersion, err := svc.GetNewVersion(releaseType)
@@ -190,9 +199,65 @@ func getFlagBool(flags map[string]any, name string) bool {
 	return false
 }
 
-// V2ExecutionUnavailableResponse documents the temporary Milestone-1 boundary:
-// V2 can be validated and normalized, but unit-aware execution/history is not
-// active yet, so falling through to global V1 tags/executors would be unsafe.
+func getFlagString(flags map[string]any, name string) string {
+	if v, ok := flags[name]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+func v2DryRunPlanResponse(command string, unit config.ReleaseUnit, releaseType Type) (*plugin.Response, error) {
+	plan, err := PlanUnitVersionBump(unit, releaseType)
+	if err != nil {
+		return commandErrorResponse(command, "VERSION_ERROR", err.Error()), nil
+	}
+	return &plugin.Response{
+		Status: "success",
+		Metadata: plugin.ResponseMetadata{
+			Plugin:    metadata.PluginName,
+			Version:   metadata.Version,
+			Command:   command,
+			Timestamp: time.Now(),
+		},
+		Data: map[string]any{
+			"items": []map[string]any{
+				{"property": "Release Type", "value": command},
+				{"property": "Unit", "value": plan.UnitID},
+				{"property": "Current Version", "value": plan.CurrentVersion},
+				{"property": "New Version", "value": plan.NextVersion},
+				{"property": "Tag", "value": plan.Tag},
+				{"property": "Executor", "value": plan.Executor},
+				{"property": "Delivery", "value": plan.Delivery},
+				{"property": "Working Directory", "value": plan.WorkingDirectory},
+				{"property": "Dry Run", "value": "yes"},
+				{"property": "Status", "value": "V2 preview - no changes made"},
+			},
+		},
+		RendererHint: "table",
+	}, nil
+}
+
+func commandErrorResponse(command, code, message string) *plugin.Response {
+	return &plugin.Response{
+		Status: "error",
+		Metadata: plugin.ResponseMetadata{
+			Plugin:    metadata.PluginName,
+			Version:   metadata.Version,
+			Command:   command,
+			Timestamp: time.Now(),
+		},
+		Error: &plugin.ResponseError{
+			Code:    code,
+			Message: message,
+		},
+	}
+}
+
+// V2ExecutionUnavailableResponse documents the temporary Milestone-2 boundary:
+// V2 can plan releases and read unit-aware history, but mutating execution is
+// not active yet.
 func V2ExecutionUnavailableResponse(command string) *plugin.Response {
 	return &plugin.Response{
 		Status: "error",
@@ -204,7 +269,7 @@ func V2ExecutionUnavailableResponse(command string) *plugin.Response {
 		},
 		Error: &plugin.ResponseError{
 			Code:    "V2_EXECUTION_UNAVAILABLE",
-			Message: "release schema v2 is configured, but unit-aware release execution is not available yet",
+			Message: "release schema v2 supports planning and read-only history, but release execution is not available yet",
 		},
 	}
 }

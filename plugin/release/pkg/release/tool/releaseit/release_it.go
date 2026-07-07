@@ -1,5 +1,9 @@
 // Package releaseit provides functions for release automation.
+//
+//nolint:staticcheck // V1 compatibility code intentionally uses deprecated V1 APIs during migration
 package releaseit
+
+//lint:file-ignore SA1019 V1 executor initialization still receives the legacy config until V2 execution is implemented
 
 import (
 	"fmt"
@@ -79,7 +83,7 @@ func (r *ReleaseIt) getRunCommand() string {
 	return "npx"
 }
 
-func (r *ReleaseIt) Init(cfg *config.NekoConfig) error {
+func (r *ReleaseIt) Init(cfg *config.V1ReleaseConfig) error {
 	r.ensurePackageManager()
 
 	if err := r.RequireBinary(r.packageManager); err != nil {
@@ -138,7 +142,7 @@ func (r *ReleaseIt) RevertRelease() error {
 	})
 }
 
-func (r *ReleaseIt) runReleaseItInit(cfg *config.NekoConfig) error {
+func (r *ReleaseIt) runReleaseItInit(cfg *config.V1ReleaseConfig) error {
 	if _, err := os.Stat(".release-it.json"); err == nil {
 		log.PluginPrint(
 			log.Init,

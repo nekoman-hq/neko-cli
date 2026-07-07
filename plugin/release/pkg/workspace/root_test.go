@@ -1,3 +1,4 @@
+//nolint:staticcheck // V1 compatibility code intentionally uses deprecated V1 APIs during migration
 package workspace
 
 import (
@@ -14,8 +15,8 @@ func TestResolveProjectRootPrefersNearestReleaseConfig(t *testing.T) {
 	startDir := filepath.Join(nestedProject, "src", "components")
 
 	mustMkdirAll(t, filepath.Join(repoRoot, gitMarker))
-	mustWriteFile(t, filepath.Join(repoRoot, config.FileName), "{}")
-	mustWriteFile(t, filepath.Join(nestedProject, config.FileName), "{}")
+	mustWriteFile(t, filepath.Join(repoRoot, config.V1FileName), "{}")
+	mustWriteFile(t, filepath.Join(nestedProject, config.V1FileName), "{}")
 	mustMkdirAll(t, startDir)
 
 	root, err := ResolveProjectRoot(startDir)
@@ -53,7 +54,7 @@ func TestResolveProjectRootPrefersGitRootV2OverNestedV1(t *testing.T) {
 	mustMkdirAll(t, filepath.Join(repoRoot, gitMarker))
 	mustWriteFile(t, config.V2ConfigPath(repoRoot), `{"schemaVersion":2,"units":[]}`)
 	mustWriteFile(t, config.V2StatePath(repoRoot), `{"schemaVersion":2,"units":{}}`)
-	mustWriteFile(t, filepath.Join(nestedProject, config.FileName), "{}")
+	mustWriteFile(t, filepath.Join(nestedProject, config.V1FileName), "{}")
 	mustMkdirAll(t, startDir)
 
 	root, err := ResolveProjectRoot(startDir)
@@ -71,7 +72,7 @@ func TestResolveProjectRootRejectsRootV1V2Conflict(t *testing.T) {
 
 	mustMkdirAll(t, filepath.Join(repoRoot, gitMarker))
 	mustMkdirAll(t, startDir)
-	mustWriteFile(t, filepath.Join(repoRoot, config.FileName), "{}")
+	mustWriteFile(t, filepath.Join(repoRoot, config.V1FileName), "{}")
 	mustWriteFile(t, config.V2ConfigPath(repoRoot), `{"schemaVersion":2,"units":[]}`)
 	mustWriteFile(t, config.V2StatePath(repoRoot), `{"schemaVersion":2,"units":{}}`)
 

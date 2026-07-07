@@ -1,5 +1,9 @@
 // Package jreleaser includes the jreleaser release-system logic
+//
+//nolint:staticcheck // V1 compatibility code intentionally uses deprecated V1 APIs during migration
 package jreleaser
+
+//lint:file-ignore SA1019 V1 executor initialization still receives the legacy config until V2 execution is implemented
 
 /*
 @Author     Benjamin Senekowitsch
@@ -41,7 +45,7 @@ func (j *JReleaser) Name() string {
 	return "jreleaser"
 }
 
-func (j *JReleaser) Init(cfg *config2.NekoConfig) error {
+func (j *JReleaser) Init(cfg *config2.V1ReleaseConfig) error {
 	log.PluginV(log.Init, fmt.Sprintf("Initializing %s for project %s@%s",
 		log.ColorText(log.ColorGreen, j.Name()),
 		cfg.ProjectName,
@@ -114,7 +118,7 @@ func (j *JReleaser) RevertRelease() error {
 	})
 }
 
-func (j *JReleaser) runJReleaserInit(cfg *config2.NekoConfig) error {
+func (j *JReleaser) runJReleaserInit(cfg *config2.V1ReleaseConfig) error {
 	log.PluginV(log.Init, "Generating JReleaser configuration...")
 
 	if _, err := os.Stat("jreleaser.yml"); err == nil {
