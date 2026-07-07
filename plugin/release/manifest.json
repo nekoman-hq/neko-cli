@@ -48,6 +48,23 @@
       ]
     },
     {
+      "name": "migrate",
+      "description": "Safely migrate a root V1 release configuration to V2",
+      "outputs": [
+        "table",
+        "json"
+      ],
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "required": false,
+          "default": false,
+          "description": "Preview the migration without writing files"
+        }
+      ]
+    },
+    {
       "name": "patch",
       "description": "Create a patch release (x.y.Z)",
       "outputs": [

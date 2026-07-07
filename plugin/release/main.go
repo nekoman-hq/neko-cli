@@ -13,6 +13,7 @@ import (
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/history"
 	initcmd "github.com/nekoman-hq/neko-cli/plugin/release/pkg/init"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/migrate"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/release"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/validate"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
@@ -47,6 +48,8 @@ func main() {
 		resp, err = initcmd.HandleInit(req)
 	case "init-options":
 		resp, err = initcmd.GetAvailableOptions()
+	case "migrate":
+		resp, err = migrate.HandleMigrate(req)
 	case "patch":
 		resp, err = release.HandleRelease(req, release.Patch)
 	case "minor":
