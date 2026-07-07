@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 
 	"github.com/nekoman-hq/neko-cli/pkg/log"
@@ -20,14 +21,25 @@ const FileName = ".release.neko.json"
 
 // Exists checks if the configuration file already exists
 func Exists() bool {
-	_, err := os.Stat(FileName)
+	return LegacyConfigExistsAt(".")
+}
+
+// LegacyConfigExistsAt checks for a V1 release config in a specific root.
+func LegacyConfigExistsAt(root string) bool {
+	_, err := os.Stat(filepath.Join(root, FileName))
 	return err == nil
 }
 
 func LoadConfig() (*NekoConfig, error) {
+	return LoadConfigAt(FileName)
+}
+
+// LoadConfigAt reads a legacy .release.neko.json file without changing the
+// public V1 schema fields used by existing init and release flows.
+func LoadConfigAt(path string) (*NekoConfig, error) {
 	log.PluginV(log.Config, "Loading config from file...")
 
-	data, err := os.ReadFile(FileName)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, errors.New(

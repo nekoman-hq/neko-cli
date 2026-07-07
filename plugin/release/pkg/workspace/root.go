@@ -12,8 +12,9 @@ import (
 const gitMarker = ".git"
 
 // ResolveProjectRoot finds the best project root for release operations.
-// It prefers the nearest ancestor containing .release.neko.json and falls back
-// to the nearest git root when the release config is not present yet.
+// V2 is repository-root scoped: once a git root contains .neko config, nested
+// V1 files cannot override it. Without V2, the legacy nearest-V1 behavior is
+// preserved for existing repositories.
 func ResolveProjectRoot(startDir string) (string, error) {
 	if startDir == "" {
 		var err error
@@ -36,13 +37,32 @@ func ResolveProjectRoot(startDir string) (string, error) {
 		absStartDir = filepath.Dir(absStartDir)
 	}
 
-	if root, found, err := findAncestorWithMarker(absStartDir, config.FileName); err != nil {
+	if gitRoot, found, err := findAncestorWithMarker(absStartDir, gitMarker); err != nil {
 		return "", err
 	} else if found {
-		return root, nil
+		v2Config := config.V2ConfigPath(gitRoot)
+		if _, err := os.Stat(v2Config); err == nil {
+			if config.LegacyConfigExistsAt(gitRoot) {
+				return "", fmt.Errorf("release configuration conflict: %s and %s both exist at repository root", filepath.Join(gitRoot, config.FileName), v2Config)
+			}
+			if !config.V2StateExists(gitRoot) {
+				return "", fmt.Errorf("release schema v2 config exists at %s, but required state file %s is missing", v2Config, config.V2StatePath(gitRoot))
+			}
+			return gitRoot, nil
+		} else if !os.IsNotExist(err) {
+			return "", fmt.Errorf("failed to inspect %s: %w", v2Config, err)
+		}
+
+		if root, found, err := findAncestorWithMarker(absStartDir, config.FileName); err != nil {
+			return "", err
+		} else if found {
+			return root, nil
+		}
+
+		return gitRoot, nil
 	}
 
-	if root, found, err := findAncestorWithMarker(absStartDir, gitMarker); err != nil {
+	if root, found, err := findAncestorWithMarker(absStartDir, config.FileName); err != nil {
 		return "", err
 	} else if found {
 		return root, nil

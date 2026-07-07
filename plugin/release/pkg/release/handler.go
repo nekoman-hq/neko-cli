@@ -20,6 +20,10 @@ import (
 func HandleRelease(req plugin.Request, releaseType Type) (*plugin.Response, error) {
 	log.PluginPrint(log.Exec, "Starting %s release", string(releaseType))
 
+	if config.V2ConfigExists(".") {
+		return V2ExecutionUnavailableResponse(string(releaseType)), nil
+	}
+
 	// Load config
 	cfg, err := config.LoadConfig()
 	if err != nil {
@@ -184,4 +188,23 @@ func getFlagBool(flags map[string]any, name string) bool {
 		}
 	}
 	return false
+}
+
+// V2ExecutionUnavailableResponse documents the temporary Milestone-1 boundary:
+// V2 can be validated and normalized, but unit-aware execution/history is not
+// active yet, so falling through to global V1 tags/executors would be unsafe.
+func V2ExecutionUnavailableResponse(command string) *plugin.Response {
+	return &plugin.Response{
+		Status: "error",
+		Metadata: plugin.ResponseMetadata{
+			Plugin:    metadata.PluginName,
+			Version:   metadata.Version,
+			Command:   command,
+			Timestamp: time.Now(),
+		},
+		Error: &plugin.ResponseError{
+			Code:    "V2_EXECUTION_UNAVAILABLE",
+			Message: "release schema v2 is configured, but unit-aware release execution is not available yet",
+		},
+	}
 }

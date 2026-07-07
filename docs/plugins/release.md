@@ -5,9 +5,9 @@ The **release** plugin is the core plugin for Neko CLI, providing comprehensive 
 ## Overview
 
 - **Plugin Name:** `release`
-- **Last Change:** v2.3.1
+- **Last Change:** v2.4.0
 - **Author:** nekoman-hq
-- **Config File:** `.release.neko.json`
+- **Config Files:** `.release.neko.json` (V1), `.neko/release.config.json` and `.neko/release.state.json` (V2 validation)
 
 ## Installation
 
@@ -45,6 +45,8 @@ neko release init --project-type=<type> --release-system=<system> [flags]
 |------|------|---------|-------------|
 | `--version` | string | `0.1.0` | Initial semantic version |
 | `--force` | bool | `false` | Overwrite existing configuration |
+
+`metadata` is accepted only as a deprecated compatibility fallback if old callers still send it. `--version` is the canonical flag.
 
 **Examples:**
 ```bash
@@ -101,6 +103,8 @@ neko release patch --dry-run
 5. Creates and pushes a git tag
 6. Runs the underlying release system (e.g., `goreleaser release`)
 7. Updates the version in `.release.neko.json`
+
+With `--dry-run`, Neko only calculates and displays the next version. It does not write config, update executor files, run executors, fetch remotes, commit, tag, push, publish, or rollback.
 
 ---
 
@@ -258,6 +262,8 @@ Version         2.1.7
 Status          ✓ Valid
 ```
 
+For V2 repositories, `--show` displays schema type, units, versions, working directories, tag prefixes, executor, delivery, and paths.
+
 ---
 
 ### `neko release init-options`
@@ -284,7 +290,8 @@ DESCRIPTION                        OPTION          REQUIRED  VALUES
 ────────────────────────────────────────────────────────────────────────────────────────────────
 Type of project being released     project-type    true      frontend, backend, other
 Release tool to use                release-system  true      release-it, jreleaser, goreleaser
-Initial metadata (default: 0.1.0)  metadata        false     semver (e.g. 0.1.0)
+Initial version (default: 0.1.0)   version         false     semver (e.g. 0.1.0)
+Deprecated fallback for --version  metadata        false     semver (e.g. 0.1.0)
 Overwrite existing config          force           false     true, false
 ```
 
@@ -292,9 +299,9 @@ Overwrite existing config          force           false     true, false
 
 ## Configuration
 
-### Configuration File
+### V1 Configuration File
 
-The release plugin uses `.release.neko.json` in your project root:
+The V1 release plugin uses `.release.neko.json` in your project root:
 
 ```json
 {
@@ -315,6 +322,26 @@ The release plugin uses `.release.neko.json` in your project root:
 | `project-type` | string | One of: `frontend`, `backend`, `other` |
 | `release-system` | string | One of: `goreleaser`, `jreleaser`, `release-it` |
 | `version` | string | Current semantic version (without `v` prefix) |
+
+### V2 Configuration Files
+
+V2 uses repository-root files:
+
+```text
+.neko/release.config.json
+.neko/release.state.json
+```
+
+`release.config.json` stores committed repository architecture: units, paths, working directories, tag prefixes, executor type, and delivery. `release.state.json` stores unit versions. Tags are derived from `tagPrefix + version` and are not stored in state.
+
+`neko release validate` can validate V2 now. V2 release execution, `--unit`, migration, unit-specific tags, unit-specific history, unit-specific bumps, and GitHub Actions dispatch are not active yet.
+
+See:
+
+- [Release overview](../release/overview.md)
+- [Release configuration](../release/configuration.md)
+- [Release state](../release/state.md)
+- [Compatibility](../release/compatibility.md)
 
 ---
 
@@ -502,6 +529,8 @@ If a release fails, Neko attempts to automatically rollback:
 [GUARD] Encountered error while releasing. Trying to undo changes...
 [GUARD] Successfully undid changes.
 ```
+
+Rollback only runs after a mutating release step has been recorded. Dry-run planning and guard failures do not trigger destructive rollback operations such as hard reset or untracked-file cleanup.
 
 ---
 

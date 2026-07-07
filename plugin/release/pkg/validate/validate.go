@@ -8,6 +8,7 @@ package validate
 */
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/nekoman-hq/neko-cli/pkg/log"
@@ -21,29 +22,15 @@ import (
 func HandleValidate(req plugin.Request) (*plugin.Response, error) {
 	log.PluginPrint(log.Config, "Validating release configuration")
 
-	// Check if config exists
-	if !config.Exists() {
-		return &plugin.Response{
-			Status: "error",
-			Metadata: plugin.ResponseMetadata{
-				Plugin:    metadata.PluginName,
-				Version:   metadata.Version,
-				Command:   "validate",
-				Timestamp: time.Now(),
-			},
-			Error: &plugin.ResponseError{
-				Code:    "CONFIG_NOT_FOUND",
-				Message: "No .release.neko.json configuration found",
-				Details: map[string]any{
-					"hint": "Run 'neko release init' first to initialize the release configuration",
-				},
-			},
-		}, nil
+	repository, err := config.LoadReleaseRepository(".")
+	if err == nil && repository.SourceFormat == config.SourceFormatV2 {
+		return validateV2Response(req, repository), nil
+	}
+	if err == nil && repository.SourceFormat == config.SourceFormatV1 {
+		return validateV1Response(req, repository.Legacy)
 	}
 
-	// Load config
-	cfg, err := config.LoadConfig()
-	if err != nil {
+	if config.V2ConfigExists(".") || config.Exists() {
 		return &plugin.Response{
 			Status: "error",
 			Metadata: plugin.ResponseMetadata{
@@ -59,6 +46,26 @@ func HandleValidate(req plugin.Request) (*plugin.Response, error) {
 		}, nil
 	}
 
+	// Check if config exists
+	return &plugin.Response{
+		Status: "error",
+		Metadata: plugin.ResponseMetadata{
+			Plugin:    metadata.PluginName,
+			Version:   metadata.Version,
+			Command:   "validate",
+			Timestamp: time.Now(),
+		},
+		Error: &plugin.ResponseError{
+			Code:    "CONFIG_NOT_FOUND",
+			Message: "No release configuration found",
+			Details: map[string]any{
+				"hint": "Run 'neko release init' for V1 or add .neko/release.config.json and .neko/release.state.json for V2",
+			},
+		},
+	}, nil
+}
+
+func validateV1Response(req plugin.Request, cfg *config.NekoConfig) (*plugin.Response, error) {
 	// Validate the config
 	if err := config.Validate(cfg); err != nil {
 		return &plugin.Response{
@@ -161,6 +168,63 @@ func HandleValidate(req plugin.Request) (*plugin.Response, error) {
 		},
 		RendererHint: "table",
 	}, nil
+}
+
+func validateV2Response(req plugin.Request, repository *config.ReleaseRepository) *plugin.Response {
+	log.PluginPrint(log.Config, "V2 release configuration is valid")
+
+	showConfig := getFlagBool(req.Flags, "show")
+	items := []map[string]any{
+		{
+			"property": "Configuration",
+			"value":    ".neko/release.config.json",
+		},
+		{
+			"property": "Schema",
+			"value":    "v2",
+		},
+		{
+			"property": "Status",
+			"value":    "✓ Valid",
+		},
+	}
+
+	if showConfig {
+		items = []map[string]any{
+			{
+				"property": "Schema",
+				"value":    "v2",
+			},
+		}
+		for _, unit := range repository.Units {
+			items = append(items, map[string]any{
+				"property": fmt.Sprintf("Unit %s", unit.ID),
+				"value": fmt.Sprintf(
+					"version=%s workingDirectory=%s tagPrefix=%s executor=%s delivery=%s paths=%v",
+					unit.Version,
+					unit.WorkingDirectory,
+					unit.TagPrefix,
+					unit.ExecutorType,
+					unit.Delivery,
+					unit.Paths,
+				),
+			})
+		}
+	}
+
+	return &plugin.Response{
+		Status: "success",
+		Metadata: plugin.ResponseMetadata{
+			Plugin:    metadata.PluginName,
+			Version:   metadata.Version,
+			Command:   "validate",
+			Timestamp: time.Now(),
+		},
+		Data: map[string]any{
+			"items": items,
+		},
+		RendererHint: "table",
+	}
 }
 
 func getFlagBool(flags map[string]any, name string) bool {

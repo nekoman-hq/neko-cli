@@ -45,6 +45,56 @@ func TestResolveProjectRootFallsBackToGitRoot(t *testing.T) {
 	}
 }
 
+func TestResolveProjectRootPrefersGitRootV2OverNestedV1(t *testing.T) {
+	repoRoot := t.TempDir()
+	nestedProject := filepath.Join(repoRoot, "apps", "web")
+	startDir := filepath.Join(nestedProject, "src")
+
+	mustMkdirAll(t, filepath.Join(repoRoot, gitMarker))
+	mustWriteFile(t, config.V2ConfigPath(repoRoot), `{"schemaVersion":2,"units":[]}`)
+	mustWriteFile(t, config.V2StatePath(repoRoot), `{"schemaVersion":2,"units":{}}`)
+	mustWriteFile(t, filepath.Join(nestedProject, config.FileName), "{}")
+	mustMkdirAll(t, startDir)
+
+	root, err := ResolveProjectRoot(startDir)
+	if err != nil {
+		t.Fatalf("ResolveProjectRoot: %v", err)
+	}
+	if root != repoRoot {
+		t.Fatalf("expected V2 git root %s, got %s", repoRoot, root)
+	}
+}
+
+func TestResolveProjectRootRejectsRootV1V2Conflict(t *testing.T) {
+	repoRoot := t.TempDir()
+	startDir := filepath.Join(repoRoot, "app")
+
+	mustMkdirAll(t, filepath.Join(repoRoot, gitMarker))
+	mustMkdirAll(t, startDir)
+	mustWriteFile(t, filepath.Join(repoRoot, config.FileName), "{}")
+	mustWriteFile(t, config.V2ConfigPath(repoRoot), `{"schemaVersion":2,"units":[]}`)
+	mustWriteFile(t, config.V2StatePath(repoRoot), `{"schemaVersion":2,"units":{}}`)
+
+	_, err := ResolveProjectRoot(startDir)
+	if err == nil {
+		t.Fatal("expected conflict error")
+	}
+}
+
+func TestResolveProjectRootRejectsV2WithoutState(t *testing.T) {
+	repoRoot := t.TempDir()
+	startDir := filepath.Join(repoRoot, "app")
+
+	mustMkdirAll(t, filepath.Join(repoRoot, gitMarker))
+	mustMkdirAll(t, startDir)
+	mustWriteFile(t, config.V2ConfigPath(repoRoot), `{"schemaVersion":2,"units":[]}`)
+
+	_, err := ResolveProjectRoot(startDir)
+	if err == nil {
+		t.Fatal("expected missing state error")
+	}
+}
+
 func TestResolveProjectRootReturnsWorkingDirWithoutMarkers(t *testing.T) {
 	startDir := filepath.Join(t.TempDir(), "feature", "area")
 	mustMkdirAll(t, startDir)

@@ -5,12 +5,18 @@ import (
 
 	"github.com/nekoman-hq/neko-cli/pkg/log"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/git"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/release"
 )
 
 func HandleContributors() (*plugin.Response, error) {
 	log.PluginPrint(log.Exec, "Collecting contributors")
+
+	if config.V2ConfigExists(".") {
+		return release.V2ExecutionUnavailableResponse("contributors"), nil
+	}
 
 	contributors, _ := git.Contributors()
 

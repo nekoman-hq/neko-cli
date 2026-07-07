@@ -76,6 +76,25 @@ func TestRevertGitReleaseWithoutMutatingStepIsNoop(t *testing.T) {
 	}
 }
 
+func TestHandleReleaseRejectsV2Execution(t *testing.T) {
+	withWorkingDirectory(t)
+
+	if err := os.MkdirAll(".neko", 0755); err != nil {
+		t.Fatalf("mkdir .neko: %v", err)
+	}
+	if err := os.WriteFile(".neko/release.config.json", []byte(`{"schemaVersion":2,"units":[]}`), 0644); err != nil {
+		t.Fatalf("write v2 config: %v", err)
+	}
+
+	resp, err := HandleRelease(plugin.Request{Command: "patch"}, Patch)
+	if err != nil {
+		t.Fatalf("HandleRelease: %v", err)
+	}
+	if resp.Status != "error" || resp.Error.Code != "V2_EXECUTION_UNAVAILABLE" {
+		t.Fatalf("expected V2 execution blocker, got %#v", resp)
+	}
+}
+
 func responseContains(items any, expected string) bool {
 	rows, ok := items.([]map[string]any)
 	if !ok {
