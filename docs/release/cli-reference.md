@@ -28,6 +28,8 @@ V2 uses:
 Supported now:
 
 ```bash
+neko release migrate
+neko release migrate --dry-run
 neko release validate
 neko release validate --unit api --show
 neko release history --unit api
@@ -73,3 +75,13 @@ validate
 ```
 
 It is required for unit-bound commands when a V2 repository defines multiple units.
+
+## Migrate
+
+`migrate` has one flag:
+
+```text
+--dry-run
+```
+
+It migrates only `.release.neko.json` in the Git root to a V2 `default` unit. It does not migrate nested V1 files, infer multiple units, change tag prefixes, or enable real V2 releases.

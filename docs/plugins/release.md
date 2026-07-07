@@ -340,7 +340,9 @@ V2 uses repository-root files:
 
 `release.config.json` stores committed repository architecture: units, paths, working directories, tag prefixes, executor type, and delivery. `release.state.json` stores unit versions. Tags are derived from `tagPrefix + version` and are not stored in state.
 
-`neko release validate` can validate V2 now. `history`, `contributors`, and dry-run planning are unit-aware. V2 release execution, migration, state persistence for bumps, executor-context rewiring, and GitHub Actions dispatch are not active yet.
+`neko release validate` can validate V2 now. `history`, `contributors`, dry-run planning, and root V1-to-V2 migration are unit-aware. V2 release execution, state persistence for bumps, executor-context rewiring, and GitHub Actions dispatch are not active yet.
+
+`neko release migrate` can convert a root V1 single-unit repository to V2. It archives `.release.neko.json` as `.release.neko.json.v1.bak`, writes V2 config and state atomically, and uses a temporary recovery journal.
 
 See:
 
@@ -350,6 +352,7 @@ See:
 - [Unit selection](../release/unit-selection.md)
 - [Tag strategy](../release/tag-strategy.md)
 - [CLI reference](../release/cli-reference.md)
+- [V1 to V2 migration](../release/migration-v1-to-v2.md)
 - [Compatibility](../release/compatibility.md)
 
 ---

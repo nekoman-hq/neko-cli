@@ -49,11 +49,18 @@ neko release patch --unit api --dry-run
 
 Dry-run planning does not write state, create tags, commit, push, publish, run executors, or fetch remotes.
 
+## Migration
+
+`neko release migrate` converts only root V1 single-unit repositories to V2. It writes `.neko/release.config.json`, `.neko/release.state.json`, and archives `.release.neko.json` to `.release.neko.json.v1.bak`.
+
+`neko release migrate --dry-run` is read-only and shows the planned V2 JSON content.
+
+Nested V1 configs are rejected because the CLI cannot safely infer whether they represent the whole repository or one future unit.
+
 ## Not Yet Available
 
 The following remain future work:
 
-- V1-to-V2 migration.
 - V2 release execution.
 - V2 state persistence for bumps.
 - V2 executor context and executor rewiring.

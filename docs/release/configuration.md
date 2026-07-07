@@ -90,3 +90,15 @@ mobile/v
 ```
 
 `github-actions` is valid configuration data in this milestone, but no GitHub Actions dispatch is performed yet.
+
+## Migration
+
+Classic V1 repositories with `.release.neko.json` directly in the Git root can be migrated with:
+
+```bash
+neko release migrate
+```
+
+The migration creates a single V2 unit named `default`, keeps the tag prefix as `v`, and archives the original V1 file as `.release.neko.json.v1.bak`. Nested V1 files are not migrated automatically.
+
+See [V1 to V2 migration](migration-v1-to-v2.md).

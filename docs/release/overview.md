@@ -55,11 +55,13 @@ Implemented now:
 - Unit selection with `--unit`.
 - Unit-specific V2 history and contributors.
 - Non-mutating V2 dry-run version planning.
+- Safe V1 root single-unit migration with `neko release migrate`.
 - Atomic JSON write helpers for future migration and state updates.
 
 Not implemented yet:
 
-- `neko release migrate`.
 - V2 release execution.
-- Unit-specific version bumps, tags, history, or contributors.
+- V2 state persistence for version bumps.
+- Automatic multi-unit migration.
+- ExecutorContext and executor rewiring.
 - GitHub Actions delivery execution.

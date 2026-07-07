@@ -39,3 +39,5 @@ Multi-unit state:
 ```
 
 Normal V2 loading never writes state. The repository includes an atomic JSON writer for future migration and state-update commands, but those commands are not part of this milestone.
+
+`neko release migrate` writes V2 state once when converting a root V1 repository. `patch`, `minor`, and `major` still do not persist V2 state updates.
