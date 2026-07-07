@@ -10,8 +10,8 @@ ReleasePlan
   -> MaterializationPlan
   -> MaterializationTransaction
   -> StateTransaction
-  -> targeted staging
-  -> commit/tag/push/delivery
+  -> GitReleaseCoordinator
+  -> later dispatch or publish-only adapter
 ```
 
 `MaterializationPlan` lists structured file changes with absolute paths, repository-relative paths, before bytes or hashes, after bytes, file mode, reason, and whether the file is required in the release commit. `.neko/release.state.json` is not part of this plan; it remains owned by the state transaction.
@@ -20,17 +20,17 @@ Dry runs only plan and validate materialization. They do not write files, stage 
 
 ## Executor Decisions
 
-| Executor | Materializer | V2 local status |
+| Executor | Materializer | V2 public status |
 |----------|--------------|-----------------|
-| `goreleaser` | no-op | enabled |
-| `jreleaser` | updates `jreleaser.yml` project version before state staging | enabled |
+| `goreleaser` | no-op | blocked until publish-only adapter exists |
+| `jreleaser` | updates `jreleaser.yml` project version before state staging | blocked until publish-only adapter exists |
 | `release-it` | no real materialization | blocked |
 
 GoReleaser does not currently need a local version file from Neko CLI. Its release version is anchored by the Neko-created release context and tag. Existing optional `.plugin.release.neko.json` data is read as environment injection and is not materialized by V2 release.
 
-JReleaser needs `jreleaser.yml` to contain the planned project version. The materializer updates only `project.version`, snapshots the original bytes and mode, writes before state staging, and stages `jreleaser.yml` with state for the release commit.
+JReleaser needs `jreleaser.yml` to contain the planned project version. The materializer updates only `project.version`, snapshots the original bytes and mode, writes before state preparation, and marks `jreleaser.yml` as required for the Neko-owned release commit.
 
-release-it remains blocked because it owns commit, tag, push, and GitHub release behavior in the current adapter. No package or `.release-it.json` mutation is performed for real V2 execution.
+release-it remains blocked because it owns commit, tag, push, and GitHub release behavior in the current adapter. No package or `.release-it.json` mutation is performed for V2 Git coordination.
 
 ## Recovery
 

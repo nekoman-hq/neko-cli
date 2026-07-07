@@ -69,6 +69,7 @@ type ReleasePlan struct {
 	Tag                string
 	StateChange        string
 	OwnershipSummary   string
+	V2GitOwnership     string
 	StateGuarantee     string
 	V2LocalBlockReason string
 }
@@ -129,6 +130,7 @@ func BuildReleasePlan(ctx *ReleaseExecutionContext) ReleasePlan {
 		Tag:                ctx.Tag,
 		StateChange:        fmt.Sprintf("%s: %s -> %s", ctx.Unit.ID, ctx.CurrentVersion, ctx.NextVersion),
 		OwnershipSummary:   ownershipSummary(ctx.Capabilities),
+		V2GitOwnership:     NewV2GitOwnership().Summary(),
 		StateGuarantee:     ctx.Capabilities.StateCommitGuarantee,
 		V2LocalBlockReason: ctx.Capabilities.V2LocalExecutionBlockedReason,
 	}
@@ -141,6 +143,10 @@ func (tx *ReleaseTransaction) Execute() (*ReleaseTransactionResult, error) {
 	if tx.Context.DryRun {
 		return nil, fmt.Errorf("release transaction cannot execute in dry-run mode")
 	}
+	return nil, fmt.Errorf("%s", v2GitCoordinationUnavailableMessage)
+}
+
+func (tx *ReleaseTransaction) prepareReleaseFilesForCoordinator() (*KnownReleaseFiles, error) {
 	if err := validateV2LocalExecution(tx.Context); err != nil {
 		return nil, err
 	}
@@ -169,17 +175,17 @@ func (tx *ReleaseTransaction) Execute() (*ReleaseTransactionResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := materializer.Validate(materializationPlan); err != nil {
-		return nil, err
+	if validationErr := materializer.Validate(materializationPlan); validationErr != nil {
+		return nil, validationErr
 	}
 	tx.MaterializationPlan = materializationPlan
 	tx.Materialization = NewMaterializationTransaction(materializationPlan)
-	if err := tx.Materialization.CaptureSnapshots(); err != nil {
-		return nil, err
+	if captureErr := tx.Materialization.CaptureSnapshots(); captureErr != nil {
+		return nil, captureErr
 	}
 	tx.Tracker.Mark(ExecutionPhaseMaterializationPrepared)
-	if _, err := tx.Materialization.Apply(); err != nil {
-		return nil, tx.fail(err)
+	if _, applyErr := tx.Materialization.Apply(); applyErr != nil {
+		return nil, tx.fail(applyErr)
 	}
 	for _, file := range tx.Materialization.ChangedFiles() {
 		tx.Tracker.TrackFile(file)
@@ -187,51 +193,30 @@ func (tx *ReleaseTransaction) Execute() (*ReleaseTransactionResult, error) {
 	tx.Tracker.Mark(ExecutionPhaseMaterializationApplied)
 
 	if tx.AfterMaterialization != nil {
-		if err := tx.AfterMaterialization(tx); err != nil {
-			return nil, tx.fail(err)
+		if hookErr := tx.AfterMaterialization(tx); hookErr != nil {
+			return nil, tx.fail(hookErr)
 		}
 	}
 
-	if err := tx.State.CaptureSnapshot(); err != nil {
-		return nil, tx.fail(err)
+	if stateCaptureErr := tx.State.CaptureSnapshot(); stateCaptureErr != nil {
+		return nil, tx.fail(stateCaptureErr)
 	}
-	if err := tx.State.WriteUnitVersion(tx.Context.Unit.ID, tx.Context.NextVersion); err != nil {
-		return nil, tx.fail(err)
+	if stateWriteErr := tx.State.WriteUnitVersion(tx.Context.Unit.ID, tx.Context.NextVersion); stateWriteErr != nil {
+		return nil, tx.fail(stateWriteErr)
 	}
 	tx.Tracker.TrackFile(tx.State.StatePath)
 	tx.Tracker.Mark(ExecutionPhaseStatePrepared)
 
 	if tx.AfterStateWrite != nil {
-		if err := tx.AfterStateWrite(tx); err != nil {
-			return nil, tx.fail(err)
+		if hookErr := tx.AfterStateWrite(tx); hookErr != nil {
+			return nil, tx.fail(hookErr)
 		}
 	}
-
-	if err := stageReleaseFiles(tx.Context.RepositoryRoot, tx.State, tx.MaterializationPlan); err != nil {
+	knownFiles, err := NewKnownReleaseFiles(tx.Context, tx.MaterializationPlan)
+	if err != nil {
 		return nil, tx.fail(err)
 	}
-	tx.Tracker.TrackStagedFile(tx.State.StatePath)
-	if tx.MaterializationPlan != nil {
-		for _, change := range tx.MaterializationPlan.Changes {
-			if change.RequiredForReleaseCommit {
-				tx.Tracker.TrackStagedFile(change.AbsolutePath)
-			}
-		}
-	}
-	tx.Tracker.Mark(ExecutionPhaseReleaseFilesStaged)
-	if tx.AfterReleaseFilesStaged != nil {
-		if err := tx.AfterReleaseFilesStaged(tx); err != nil {
-			return nil, tx.fail(err)
-		}
-	}
-	tx.Tracker.Mark(ExecutionPhaseCommitOrTagStarted)
-
-	if err := tx.Executor.Execute(tx.Context); err != nil {
-		return nil, tx.fail(err)
-	}
-	tx.Tracker.Mark(ExecutionPhaseCompleted)
-
-	return tx.result(false), nil
+	return &knownFiles, nil
 }
 
 func (tx *ReleaseTransaction) fail(cause error) error {
@@ -267,18 +252,6 @@ func (tx *ReleaseTransaction) fail(cause error) error {
 	)
 }
 
-func (tx *ReleaseTransaction) result(rolledBack bool) *ReleaseTransactionResult {
-	return &ReleaseTransactionResult{
-		Phase:             tx.Tracker.Phase,
-		UnitID:            tx.Context.Unit.ID,
-		CurrentVersion:    tx.Context.CurrentVersion,
-		NextVersion:       tx.Context.NextVersion,
-		Tag:               tx.Context.Tag,
-		KnownChangedFiles: append([]string(nil), tx.Tracker.KnownChangedFiles...),
-		RolledBackState:   rolledBack,
-	}
-}
-
 func validateV2LocalExecution(ctx *ReleaseExecutionContext) error {
 	if ctx.Delivery != string(releaseconfig.DeliveryLocal) {
 		return fmt.Errorf("github-actions delivery is configured but not implemented yet")
@@ -306,28 +279,6 @@ func ensureGitClean(repositoryRoot string) error {
 	}
 	if strings.TrimSpace(string(output)) != "" {
 		return fmt.Errorf("the working tree has uncommitted changes. Please commit or stash them")
-	}
-	return nil
-}
-
-func stageReleaseFiles(repositoryRoot string, state *StateTransaction, materializationPlan *MaterializationPlan) error {
-	relativeStatePath, err := state.RelativeStatePath()
-	if err != nil {
-		return err
-	}
-	paths := []string{relativeStatePath}
-	if materializationPlan != nil {
-		for _, change := range materializationPlan.Changes {
-			if change.RequiredForReleaseCommit {
-				paths = append(paths, change.RepositoryRelativePath)
-			}
-		}
-	}
-	args := append([]string{"-C", repositoryRoot, "add", "--"}, paths...)
-	cmd := exec.Command("git", args...)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("stage release files %s: %s: %w", strings.Join(paths, ", "), strings.TrimSpace(string(output)), err)
 	}
 	return nil
 }

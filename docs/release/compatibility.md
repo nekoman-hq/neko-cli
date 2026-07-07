@@ -51,7 +51,7 @@ Dry-run planning does not write state, create tags, commit, push, publish, run e
 
 Dry-run planning now also builds the schema-neutral execution context. That context resolves the absolute repository root, selected unit root, tag spec, executor capabilities, and delivery contract without mutating files.
 
-V2 local non-dry-run release is enabled for `goreleaser` and `jreleaser`. It materializes required version files, writes only the selected unit version in `.neko/release.state.json`, validates the written state, stages materialized files and state, and then starts the executor. V2 local `release-it` is blocked because the state commit guarantee is not proven.
+V2 non-dry-run public release commands are blocked in Milestone 5A. Internally, V2 can prepare known release files and coordinate Neko-owned Git commit, unit tag, and push, but no state write, materialization, commit, tag, push, publish, dispatch, or executor start is performed by public V2 non-dry-run commands until publish-only adapters exist.
 
 ## Migration
 
@@ -67,6 +67,9 @@ The following remain future work:
 
 - GitHub Actions delivery execution.
 - V2 local `release-it` execution.
+- Publish-only adapters for GoReleaser and JReleaser.
+- Public V2 non-dry-run release execution.
+- Dispatch journal and resume command.
 
 ## Dry-Run And Rollback Safety
 
@@ -74,4 +77,4 @@ V1 dry-run release commands are read-only and do not fetch remotes, write config
 
 Rollback only runs after a mutating release step has been recorded. This prevents planning and guard errors from reaching destructive Git rollback operations.
 
-V2 transaction recovery is more conservative: before commit/tag work starts, materialized files and `.neko/release.state.json` are restored from snapshots and transaction-staged files are unstaged. After commit/tag/remote work starts, V2 does not call `git reset --hard`, `git clean -fd`, remote tag deletion, or GitHub release deletion.
+V2 recovery is more conservative: before commit/tag work starts, materialized files and `.neko/release.state.json` may be restored from snapshots and known release files may be unstaged. After commit/tag/remote work starts, V2 does not call `git reset --hard`, `git clean -fd`, remote tag deletion, or GitHub release deletion.

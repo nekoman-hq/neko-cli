@@ -6,7 +6,7 @@ Local delivery is the delivery contract where Neko CLI runs the selected executo
 
 | Delivery | Meaning | Local execution |
 |----------|---------|-----------------|
-| `local` | Execute the release locally through the configured executor | supported |
+| `local` | Local release delivery | dry-run only for public V2 commands in this milestone |
 | `github-actions` | Remote workflow delivery | recognized, not dispatched |
 
 Unknown delivery values are rejected.
@@ -25,6 +25,6 @@ V2 `workingDirectory` must be relative, stay inside the repository, and exist. R
 
 ## Current Boundary
 
-V1 local release behavior is unchanged. V2 `patch`, `minor`, and `major` dry-runs build plans, check requirements, and show state/ownership information without writing files.
+V1 local release behavior is unchanged. V2 `patch`, `minor`, and `major` dry-runs build plans, check requirements, and show state, materialization, Git ownership, release commit, unit tag, known files, and push order without writing files.
 
-V2 non-dry-run local release is enabled for `goreleaser` and `jreleaser` through the local release transaction. Required version files are materialized before state write and before the commit/tag boundary. `release-it` is blocked until the root state commit guarantee can be implemented and tested. `github-actions` remains recognized but not dispatched.
+V2 non-dry-run local release commands are blocked until publish-only adapters exist. Internally, Neko CLI now has the `GitReleaseCoordinator` needed to stage known release files, create the release commit, create the unit tag, and push commit then tag. `release-it` remains blocked, and `github-actions` remains recognized but not dispatched.

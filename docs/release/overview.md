@@ -31,12 +31,12 @@ V2 is repository-root scoped and uses two files:
 
 `release.state.json` is the version source of truth for all units. Tags are not stored in state; a tag is derived later from `tagPrefix + version`.
 
-In this milestone, V2 can be loaded, strictly parsed, validated, normalized, and used for unit workflows. `history` and `contributors` are unit-aware. `patch`, `minor`, and `major` support V2 dry-run planning with execution context and delivery resolution.
+V2 can be loaded, strictly parsed, validated, normalized, and used for unit workflows. `history` and `contributors` are unit-aware. `patch`, `minor`, and `major` support V2 dry-run planning with execution context, delivery resolution, version materialization planning, and Neko-owned Git release planning.
 
-V2 non-dry-run local release execution is active for `goreleaser` and `jreleaser`. `release-it` is blocked for V2 local release until the root state commit guarantee is proven. `github-actions` delivery is recognized but not implemented and returns:
+V2 non-dry-run public release commands are intentionally blocked after Milestone 5A. The internal `GitReleaseCoordinator` can stage known release files, create the deterministic release commit, create the unit tag, and push commit then tag, but publish-only adapters and GitHub Actions dispatch are not available yet. Non-dry-run V2 commands return:
 
 ```text
-github-actions delivery is configured but not implemented yet
+V2 Git release coordination is prepared, but V2 publication adapters are not available yet. No release state, commit, tag, push, or publish operation was performed.
 ```
 
 ## Safety
@@ -62,13 +62,16 @@ Implemented now:
 - Executor capability contracts for `goreleaser`, `jreleaser`, and `release-it`.
 - Executor requirement checks scoped to unit roots.
 - Version materialization before V2 local release commits.
-- V2 local release transaction with atomic materialization and state persistence.
+- V2 local release transaction internals with atomic materialization and state persistence.
+- Internal V2 `GitReleaseCoordinator` for targeted staging, deterministic release commits, unit tags, and explicit commit/tag pushes.
 - Non-destructive V2 recovery boundary.
-- V2 local execution for `goreleaser` and `jreleaser`.
+- Public V2 dry-run Git planning.
 
 Not implemented yet:
 
 - Automatic multi-unit migration.
 - GitHub Actions delivery execution.
 - V2 local `release-it` execution.
-- Neko-owned V2 commit, tag, and push for GitHub Actions delivery.
+- Publish-only adapters for GoReleaser and JReleaser.
+- Public V2 non-dry-run release execution.
+- Dispatch journal and resume command.

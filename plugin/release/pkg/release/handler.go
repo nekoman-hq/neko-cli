@@ -58,22 +58,7 @@ func HandleRelease(req plugin.Request, releaseType Type) (*plugin.Response, erro
 			}
 			return v2DryRunPlanResponse(string(releaseType), ctx)
 		}
-		if ctx.Delivery != string(config.DeliveryLocal) {
-			return commandErrorResponse(string(releaseType), "DELIVERY_UNAVAILABLE", "github-actions delivery is configured but not implemented yet"), nil
-		}
-		releaser, getErr := Get(ctx.Executor)
-		if getErr != nil {
-			return commandErrorResponse(string(releaseType), "EXECUTOR_NOT_FOUND", getErr.Error()), nil
-		}
-		transaction, transactionErr := NewReleaseTransaction(ctx, releaser)
-		if transactionErr != nil {
-			return commandErrorResponse(string(releaseType), "TRANSACTION_FAILED", transactionErr.Error()), nil
-		}
-		result, executeErr := transaction.Execute()
-		if executeErr != nil {
-			return commandErrorResponse(string(releaseType), "RELEASE_FAILED", executeErr.Error()), nil
-		}
-		return v2ReleaseSuccessResponse(string(releaseType), result), nil
+		return commandErrorResponse(string(releaseType), "V2_PUBLICATION_ADAPTERS_UNAVAILABLE", v2GitCoordinationUnavailableMessage), nil
 	}
 
 	cfg := repository.Legacy
@@ -248,9 +233,14 @@ func v2DryRunPlanResponse(command string, ctx *ReleaseExecutionContext) (*plugin
 	if err != nil {
 		return commandErrorResponse(command, "MATERIALIZATION_FAILED", err.Error()), nil
 	}
-	if err := materializer.Validate(materializationPlan); err != nil {
-		return commandErrorResponse(command, "MATERIALIZATION_FAILED", err.Error()), nil
+	if validationErr := materializer.Validate(materializationPlan); validationErr != nil {
+		return commandErrorResponse(command, "MATERIALIZATION_FAILED", validationErr.Error()), nil
 	}
+	knownFiles, err := NewKnownReleaseFiles(ctx, materializationPlan)
+	if err != nil {
+		return commandErrorResponse(command, "GIT_COORDINATION_FAILED", err.Error()), nil
+	}
+	commitMessage := ReleaseCommitMessage(ctx)
 	return &plugin.Response{
 		Status: "success",
 		Metadata: plugin.ResponseMetadata{
@@ -272,8 +262,14 @@ func v2DryRunPlanResponse(command string, ctx *ReleaseExecutionContext) (*plugin
 				{"property": "Unit Root", "value": ctx.UnitRoot},
 				{"property": "State Change", "value": plan.StateChange},
 				{"property": "Materialized Files", "value": materializedFilesValue(materializationPlan)},
-				{"property": "Ownership", "value": plan.OwnershipSummary},
+				{"property": "Known Release Files", "value": strings.Join(knownFiles.RelativePaths(), ", ")},
+				{"property": "Planned Release Commit", "value": commitMessage},
+				{"property": "Planned Tag", "value": ctx.Tag},
+				{"property": "Planned Push Order", "value": "1. release commit, 2. unit tag"},
+				{"property": "Tool Ownership", "value": plan.OwnershipSummary},
+				{"property": "V2 Git Ownership", "value": plan.V2GitOwnership},
 				{"property": "State Commit Guarantee", "value": plan.StateGuarantee},
+				{"property": "Executor Start", "value": "no"},
 				{"property": "Dry Run", "value": "yes"},
 				{"property": "Status", "value": "V2 preview - no changes made"},
 			},
@@ -294,31 +290,6 @@ func materializedFilesValue(plan *MaterializationPlan) string {
 		values = append(values, change.RepositoryRelativePath)
 	}
 	return strings.Join(values, ", ")
-}
-
-func v2ReleaseSuccessResponse(command string, result *ReleaseTransactionResult) *plugin.Response {
-	return &plugin.Response{
-		Status: "success",
-		Metadata: plugin.ResponseMetadata{
-			Plugin:    metadata.PluginName,
-			Version:   metadata.Version,
-			Command:   command,
-			Timestamp: time.Now(),
-		},
-		Data: map[string]any{
-			"items": []map[string]any{
-				{"property": "Release Type", "value": command},
-				{"property": "Unit", "value": result.UnitID},
-				{"property": "Previous Version", "value": result.CurrentVersion},
-				{"property": "New Version", "value": result.NextVersion},
-				{"property": "Tag", "value": result.Tag},
-				{"property": "Phase", "value": string(result.Phase)},
-				{"property": "Changed Files", "value": strings.Join(result.KnownChangedFiles, ", ")},
-				{"property": "Status", "value": "Released successfully"},
-			},
-		},
-		RendererHint: "table",
-	}
 }
 
 func commandErrorResponse(command, code, message string) *plugin.Response {

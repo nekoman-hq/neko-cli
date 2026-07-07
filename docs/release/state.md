@@ -38,8 +38,10 @@ Multi-unit state:
 }
 ```
 
-Normal V2 loading never writes state. V2 local release transactions write state only after preflight and version materialization succeed, and only for the selected unit.
+Normal V2 loading never writes state. Public V2 non-dry-run commands are blocked in Milestone 5A before any state mutation.
 
-`neko release migrate` writes V2 state once when converting a root V1 repository. V2 local `patch`, `minor`, and `major` persist the selected unit's next version through the atomic writer, then reload and validate the real V2 repository.
+`neko release migrate` writes V2 state once when converting a root V1 repository. Internal V2 transaction preparation can persist the selected unit's next version through the atomic writer, then reload and validate the real V2 repository; this is not yet exposed through public V2 release commands.
 
-Before a V2 local release writes state, it captures a byte-for-byte snapshot of `.neko/release.state.json`. If a local failure happens before commit/tag work starts, state and materialized version files are restored from snapshots.
+Before internal V2 preparation writes state, it captures a byte-for-byte snapshot of `.neko/release.state.json`. If a local failure happens before commit/tag work starts, state and materialized version files are restored from snapshots.
+
+The Git release coordinator later commits exactly `.neko/release.state.json` plus required materialization files. It verifies that the committed state contains the selected unit's next version.

@@ -106,7 +106,7 @@ neko release patch --dry-run
 
 With `--dry-run`, Neko only calculates and displays the next version. It does not write config, update executor files, run executors, fetch remotes, commit, tag, push, publish, or rollback.
 
-For V2 repositories, `patch`, `minor`, and `major` support dry-run planning with `--unit`. Non-dry-run V2 local releases are enabled for `goreleaser` and `jreleaser`; `release-it` and `github-actions` remain blocked.
+For V2 repositories, `patch`, `minor`, and `major` support dry-run planning with `--unit`. Non-dry-run V2 releases remain blocked until publish-only adapters exist; the internal GitReleaseCoordinator is prepared but no public V2 command writes state, commits, tags, pushes, publishes, dispatches, or starts an executor.
 
 ---
 
@@ -340,7 +340,7 @@ V2 uses repository-root files:
 
 `release.config.json` stores committed repository architecture: units, paths, working directories, tag prefixes, executor type, and delivery. `release.state.json` stores unit versions. Tags are derived from `tagPrefix + version` and are not stored in state.
 
-`neko release validate` can validate V2 now. `history`, `contributors`, dry-run planning, and root V1-to-V2 migration are unit-aware. Dry-run planning builds the execution context, materialization plan, and local delivery/executor capabilities. V2 local release transactions materialize required version files, persist selected unit state, and are enabled for `goreleaser` and `jreleaser`. V2 local `release-it` and GitHub Actions dispatch are not active yet.
+`neko release validate` can validate V2 now. `history`, `contributors`, dry-run planning, and root V1-to-V2 migration are unit-aware. Dry-run planning builds the execution context, materialization plan, local delivery/executor capabilities, planned release commit, unit tag, known release files, push order, and V2 Git ownership. V2 non-dry-run public commands are blocked until publish-only adapters exist. V2 local `release-it` and GitHub Actions dispatch are not active yet.
 
 `neko release migrate` can convert a root V1 single-unit repository to V2. It archives `.release.neko.json` as `.release.neko.json.v1.bak`, writes V2 config and state atomically, and uses a temporary recovery journal.
 

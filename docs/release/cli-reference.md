@@ -37,12 +37,9 @@ neko release contributors --unit web
 neko release patch --unit api --dry-run
 neko release minor --unit api --dry-run
 neko release major --unit api --dry-run
-neko release patch --unit api
-neko release minor --unit api
-neko release major --unit api
 ```
 
-V2 non-dry-run local release is enabled for units using `delivery: local` with `goreleaser` or `jreleaser`. Dry-run output includes:
+V2 non-dry-run release commands are intentionally blocked until publish-only adapters exist. Dry-run output includes:
 
 ```text
 unit
@@ -55,14 +52,21 @@ workingDirectory
 unitRoot
 stateChange
 materializedFiles
-ownership
+knownReleaseFiles
+plannedReleaseCommit
+plannedTag
+plannedPushOrder
+toolOwnership
+v2GitOwnership
 stateCommitGuarantee
+executorStart
 ```
 
 Blocked:
 
-- `delivery: github-actions` returns `github-actions delivery is configured but not implemented yet`.
-- V2 local `release-it` is blocked because the root `.neko/release.state.json` cannot currently be guaranteed in release-it's own release commit.
+- Public V2 non-dry-run `patch`, `minor`, and `major` return `V2 Git release coordination is prepared, but V2 publication adapters are not available yet. No release state, commit, tag, push, or publish operation was performed.`
+- GitHub Actions dispatch is not implemented yet.
+- V2 local `release-it` remains blocked because no publish-only boundary exists.
 
 ## Unit Flag
 

@@ -4,13 +4,13 @@ Release executors are resolved through a schema-neutral execution context. The c
 
 ## Supported Executors
 
-| Executor | Version files | Commit | Tag | Push | GitHub release | V2 local execution | Dry run |
+| Executor | Legacy version files | Legacy commit | Legacy tag | Legacy push | Legacy GitHub release | V2 public execution | Dry run |
 |----------|---------------|--------|-----|------|----------------|--------------------|---------|
-| `goreleaser` | no-op materializer | Neko CLI | Neko CLI | Neko CLI | GoReleaser | enabled | yes |
-| `jreleaser` | Neko CLI materializes `jreleaser.yml` before state staging | Neko CLI | JReleaser | Neko CLI and JReleaser release flow | JReleaser | enabled | yes |
-| `release-it` | release-it updates configured files | release-it | release-it | release-it | release-it | blocked for V2 local | no local dry-run contract yet |
+| `goreleaser` | no-op materializer | legacy adapter | legacy adapter | legacy adapter | GoReleaser | blocked until publish-only adapter | yes |
+| `jreleaser` | Neko CLI materializes `jreleaser.yml` before state staging | legacy adapter | JReleaser | legacy adapter and JReleaser release flow | JReleaser | blocked until publish-only adapter | yes |
+| `release-it` | release-it updates configured files | release-it | release-it | release-it | release-it | blocked | no local dry-run contract yet |
 
-The capability model is active in V2 local transactions. It decides whether state is written before executor start and whether the central V2 state can be guaranteed in the release commit.
+The capability model describes current tool or legacy-adapter behavior. V2 Git ownership is separate: Neko CLI owns the V2 release commit, unit tag, and push of commit then tag. Executors must become publish-only before public V2 non-dry-run release execution is enabled.
 
 ## Requirement Files
 
@@ -24,10 +24,21 @@ Executor requirement checks are scoped to the selected unit root:
 
 For V1, the unit root is the repository root. For V2, the unit root is the unit `workingDirectory` resolved under the Git root.
 
-## V2 State Commit Guarantee
+## V2 Git Ownership
 
-GoReleaser and JReleaser are enabled because Neko CLI owns the release commit in the current implementation. The transaction materializes required version files, writes state, and stages all release files before executor execution.
+For V2, Neko CLI owns:
+
+```text
+version authority
+version materialization
+central release state
+release commit
+unit tag
+push of commit and tag
+```
+
+The `GitReleaseCoordinator` creates commits as `chore(release): <unit-id> <tag>`, creates lightweight unit tags from `TagSpec`, and pushes commit before tag. No executor owns V2 commit, tag, or push.
 
 release-it is blocked for V2 local release because release-it owns commit, tag, push, and GitHub release creation. When a unit root is nested, the repository-root `.neko/release.state.json` cannot currently be proven to land in release-it's commit.
 
-See [Version materialization](version-materialization.md).
+See [Version materialization](version-materialization.md) and [Git release coordination](git-coordination.md).

@@ -39,94 +39,33 @@ func (f *fakeTransactionExecutor) Execute(_ *ReleaseExecutionContext) error {
 	return f.executeErr
 }
 
-func TestReleaseTransactionPreflightErrorWritesNothing(t *testing.T) {
-	root := newCleanV2GitRepository(t, "goreleaser")
-	ctx := mustBuildTransactionContext(t, root, Patch)
-	statePath := releaseconfig.V2StatePath(root)
-	before := mustReadString(t, statePath)
-	executor := &fakeTransactionExecutor{name: "goreleaser", validateErr: fmt.Errorf("preflight failed")}
-	tx := mustNewReleaseTransaction(t, ctx, executor)
-
-	_, err := tx.Execute()
-	if err == nil {
-		t.Fatal("expected preflight error")
-	}
-	if got := mustReadString(t, statePath); got != before {
-		t.Fatalf("state changed after preflight error:\n%s", got)
-	}
-	if executor.executed {
-		t.Fatal("executor started after preflight error")
-	}
-}
-
-func TestReleaseTransactionRestoresStateBeforeIrreversiblePhase(t *testing.T) {
+func TestReleaseTransactionBlocksV2NonDryRunBeforeAnyMutation(t *testing.T) {
 	root := newCleanV2GitRepository(t, "goreleaser")
 	ctx := mustBuildTransactionContext(t, root, Patch)
 	statePath := releaseconfig.V2StatePath(root)
 	before := mustReadString(t, statePath)
 	executor := &fakeTransactionExecutor{name: "goreleaser"}
 	tx := mustNewReleaseTransaction(t, ctx, executor)
-	tx.AfterStateWrite = func(_ *ReleaseTransaction) error {
-		return fmt.Errorf("executor preparation failed")
-	}
 
 	_, err := tx.Execute()
 	if err == nil {
-		t.Fatal("expected after-state error")
+		t.Fatal("expected V2 publication adapter block")
 	}
-	if !strings.Contains(err.Error(), "restored V2 state") {
-		t.Fatalf("expected restore message, got %v", err)
+	if !strings.Contains(err.Error(), "V2 Git release coordination is prepared") {
+		t.Fatalf("expected M5A block message, got %v", err)
 	}
 	if got := mustReadString(t, statePath); got != before {
-		t.Fatalf("state was not restored:\n%s", got)
+		t.Fatalf("state changed despite M5A block:\n%s", got)
 	}
 	if executor.executed {
-		t.Fatal("executor should not execute after preparation error")
+		t.Fatal("executor started despite M5A block")
+	}
+	if status := strings.TrimSpace(gitOutput(t, root, "status", "--porcelain")); status != "" {
+		t.Fatalf("expected clean repository after block, got %q", status)
 	}
 }
 
-func TestReleaseTransactionDoesNotRestoreAfterCommitOrTagStarted(t *testing.T) {
-	root := newCleanV2GitRepository(t, "goreleaser")
-	ctx := mustBuildTransactionContext(t, root, Patch)
-	statePath := releaseconfig.V2StatePath(root)
-	before := mustReadString(t, statePath)
-	executor := &fakeTransactionExecutor{name: "goreleaser", executeErr: fmt.Errorf("commit failed")}
-	tx := mustNewReleaseTransaction(t, ctx, executor)
-
-	_, err := tx.Execute()
-	if err == nil {
-		t.Fatal("expected executor error")
-	}
-	if !strings.Contains(err.Error(), "no destructive rollback was attempted") {
-		t.Fatalf("expected non-destructive recovery message, got %v", err)
-	}
-	if got := mustReadString(t, statePath); got == before {
-		t.Fatal("state was restored after irreversible phase")
-	}
-	if tx.Tracker.Phase != ExecutionPhaseFailed || !tx.Tracker.Irreversible {
-		t.Fatalf("unexpected tracker state: %#v", tx.Tracker)
-	}
-}
-
-func TestReleaseTransactionStagesStateBeforeExecutor(t *testing.T) {
-	root := newCleanV2GitRepository(t, "goreleaser")
-	ctx := mustBuildTransactionContext(t, root, Patch)
-	executor := &fakeTransactionExecutor{name: "goreleaser"}
-	tx := mustNewReleaseTransaction(t, ctx, executor)
-
-	if _, err := tx.Execute(); err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if !executor.executed {
-		t.Fatal("expected executor to run")
-	}
-	staged := gitOutput(t, root, "diff", "--cached", "--name-only")
-	if !strings.Contains(staged, ".neko/release.state.json") {
-		t.Fatalf("expected state to be staged, got %q", staged)
-	}
-}
-
-func TestReleaseTransactionMaterializesJReleaserBeforeStateAndCommitPhase(t *testing.T) {
+func TestReleaseTransactionInternalPreparationMaterializesBeforeState(t *testing.T) {
 	root := newCleanV2MaterializationGitRepository(t, "jreleaser")
 	ctx := mustBuildTransactionContext(t, root, Minor)
 	statePath := releaseconfig.V2StatePath(root)
@@ -150,25 +89,25 @@ func TestReleaseTransactionMaterializesJReleaserBeforeStateAndCommitPhase(t *tes
 		return nil
 	}
 
-	if _, err := tx.Execute(); err != nil {
-		t.Fatalf("Execute: %v", err)
+	knownFiles, err := tx.prepareReleaseFilesForCoordinator()
+	if err != nil {
+		t.Fatalf("prepareReleaseFilesForCoordinator: %v", err)
 	}
 	if !seenMaterializedBeforeState {
 		t.Fatal("materialization hook was not called")
 	}
-	if !executor.executed {
-		t.Fatal("expected executor to run")
-	}
-	staged := gitOutput(t, root, "diff", "--cached", "--name-only")
-	if !strings.Contains(staged, ".neko/release.state.json") || !strings.Contains(staged, "jreleaser.yml") {
-		t.Fatalf("expected state and jreleaser.yml staged, got %q", staged)
+	if executor.executed {
+		t.Fatal("executor must not run while preparing release files for coordinator")
 	}
 	if beforeJReleaser == mustReadString(t, jreleaserPath) {
 		t.Fatal("expected jreleaser.yml to remain materialized after successful transaction")
 	}
+	if !sameStringSet(knownFiles.RelativePaths(), []string{".neko/release.state.json", "jreleaser.yml"}) {
+		t.Fatalf("unexpected known release files: %#v", knownFiles.RelativePaths())
+	}
 }
 
-func TestReleaseTransactionRestoresMaterializationStateAndIndexBeforeCommitPhase(t *testing.T) {
+func TestReleaseTransactionInternalPreparationRestoresBeforeCoordinator(t *testing.T) {
 	root := newCleanV2MaterializationGitRepository(t, "jreleaser")
 	ctx := mustBuildTransactionContext(t, root, Minor)
 	statePath := releaseconfig.V2StatePath(root)
@@ -177,13 +116,13 @@ func TestReleaseTransactionRestoresMaterializationStateAndIndexBeforeCommitPhase
 	beforeJReleaser := mustReadString(t, jreleaserPath)
 	executor := &fakeTransactionExecutor{name: "jreleaser"}
 	tx := mustNewReleaseTransaction(t, ctx, executor)
-	tx.AfterReleaseFilesStaged = func(_ *ReleaseTransaction) error {
-		return fmt.Errorf("stop before commit")
+	tx.AfterStateWrite = func(_ *ReleaseTransaction) error {
+		return fmt.Errorf("stop before coordinator")
 	}
 
-	_, err := tx.Execute()
+	_, err := tx.prepareReleaseFilesForCoordinator()
 	if err == nil {
-		t.Fatal("expected pre-commit failure")
+		t.Fatal("expected pre-coordinator failure")
 	}
 	if !strings.Contains(err.Error(), "restored V2 state and materialized files") {
 		t.Fatalf("expected restore message, got %v", err)
@@ -195,10 +134,10 @@ func TestReleaseTransactionRestoresMaterializationStateAndIndexBeforeCommitPhase
 		t.Fatalf("jreleaser.yml not restored:\n%s", got)
 	}
 	if staged := strings.TrimSpace(gitOutput(t, root, "diff", "--cached", "--name-only")); staged != "" {
-		t.Fatalf("expected transaction-staged files to be unstaged, got %q", staged)
+		t.Fatalf("expected no staged files, got %q", staged)
 	}
 	if executor.executed {
-		t.Fatal("executor should not start before commit failure")
+		t.Fatal("executor should not start before coordinator")
 	}
 }
 
@@ -211,9 +150,9 @@ func TestReleaseTransactionBlocksReleaseItV2Local(t *testing.T) {
 
 	_, err := tx.Execute()
 	if err == nil {
-		t.Fatal("expected release-it block")
+		t.Fatal("expected V2 block")
 	}
-	if !strings.Contains(err.Error(), "V2 local release-it is blocked") {
+	if !strings.Contains(err.Error(), "V2 Git release coordination is prepared") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got := mustReadString(t, releaseconfig.V2StatePath(root)); got != before {
@@ -241,9 +180,9 @@ func TestReleaseTransactionBlocksGitHubActionsBeforeExecutor(t *testing.T) {
 
 	_, err = tx.Execute()
 	if err == nil {
-		t.Fatal("expected github-actions block")
+		t.Fatal("expected V2 block")
 	}
-	if !strings.Contains(err.Error(), "github-actions delivery is configured but not implemented yet") {
+	if !strings.Contains(err.Error(), "V2 Git release coordination is prepared") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if executor.executed {

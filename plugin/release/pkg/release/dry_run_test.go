@@ -96,11 +96,11 @@ func TestHandleReleaseRejectsV2GitHubActionsExecution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HandleRelease: %v", err)
 	}
-	if resp.Status != "error" || resp.Error.Code != "DELIVERY_UNAVAILABLE" {
-		t.Fatalf("expected V2 delivery blocker, got %#v", resp)
+	if resp.Status != "error" || resp.Error.Code != "V2_PUBLICATION_ADAPTERS_UNAVAILABLE" {
+		t.Fatalf("expected V2 publication adapter blocker, got %#v", resp)
 	}
-	if !strings.Contains(resp.Error.Message, "github-actions delivery is configured but not implemented yet") {
-		t.Fatalf("expected github-actions blocker message, got %q", resp.Error.Message)
+	if !strings.Contains(resp.Error.Message, "V2 Git release coordination is prepared") {
+		t.Fatalf("expected M5A blocker message, got %q", resp.Error.Message)
 	}
 }
 

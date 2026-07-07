@@ -1,6 +1,8 @@
 # Local Release Transaction
 
-V2 local releases run through one transaction boundary. The transaction owns the order of preflight, state persistence, executor start, and recovery.
+V2 local release internals run through one transaction boundary. The transaction owns the order of preflight, materialization, state persistence, handoff to Git coordination, and recovery.
+
+Public V2 non-dry-run commands are blocked in Milestone 5A before this transaction mutates files. The transaction exists so later publish-only adapters can reuse the same preparation boundary.
 
 ## Phases
 
@@ -34,7 +36,7 @@ For a V2 local release, the transaction:
 9. captures exact bytes and mode of `.neko/release.state.json`;
 10. writes the selected unit's next version through the atomic JSON writer;
 11. validates the written state through the real V2 loader;
-12. stages materialized files and `.neko/release.state.json` before starting enabled executors.
+12. hands the known release files to `GitReleaseCoordinator` for targeted staging, commit, tag, and push.
 
 Only the selected unit version is changed. Other units remain unchanged in the state model.
 
@@ -46,10 +48,12 @@ If the release reaches commit/tag/remote phases, no `git reset --hard`, `git cle
 
 ## Executor Status
 
-| Executor | V2 local status | State commit guarantee |
+| Executor | V2 local public status | Internal preparation |
 |----------|-----------------|------------------------|
-| `goreleaser` | enabled | No version file materialization; Neko CLI writes and stages state before its release commit |
-| `jreleaser` | enabled | Neko CLI materializes `jreleaser.yml`, writes state, and stages both before its metadata commit; JReleaser creates tag/release later |
-| `release-it` | blocked | release-it owns commit/tag/push/release and the root state file cannot be guaranteed from nested unit roots |
+| `goreleaser` | blocked until publish-only adapter exists | No version file materialization; state is prepared as a known release file |
+| `jreleaser` | blocked until publish-only adapter exists | Neko CLI materializes `jreleaser.yml` and prepares it with state as known release files |
+| `release-it` | blocked | release-it owns commit/tag/push/release in the legacy adapter and has no V2 publish-only boundary |
 
 GitHub Actions delivery remains recognized but not implemented.
+
+See [Git release coordination](git-coordination.md).
