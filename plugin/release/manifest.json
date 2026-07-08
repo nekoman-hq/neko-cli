@@ -1,6 +1,6 @@
 {
   "name": "release",
-  "version": "4.0.0",
+  "version": "4.0.1",
   "description": "Release management plugin",
   "author": "nekoman-hq",
   "commands": [
