@@ -4,28 +4,158 @@ on:
   workflow_dispatch:
     inputs:
       unit:
-        description: Release unit id dispatched by Neko CLI.
         required: true
         type: string
       version:
-        description: Release version dispatched by Neko CLI.
         required: true
         type: string
       tag:
-        description: Existing release tag dispatched by Neko CLI.
         required: true
         type: string
       release_sha:
-        description: Release commit SHA dispatched by Neko CLI.
         required: true
         type: string
 
+permissions:
+  contents: write
+
+concurrency:
+  group: release-neko-cli-${{ inputs.tag }}
+  cancel-in-progress: false
+
 jobs:
-  placeholder:
-    name: Placeholder
+  validate-build-publish:
+    name: Validate, build, and publish cli
     runs-on: ubuntu-latest
+    env:
+      RELEASE_UNIT: ${{ inputs.unit }}
+      RELEASE_VERSION: ${{ inputs.version }}
+      RELEASE_TAG: ${{ inputs.tag }}
+      RELEASE_SHA: ${{ inputs.release_sha }}
+      RELEASE_WORKFLOW: .github/workflows/release-neko-cli.yml
+      GORELEASER_CONFIG: .goreleaser.cli.yaml
     steps:
-      - name: No publish yet
+      - name: Validate dispatch inputs
+        shell: bash
         run: |
-          echo "Temporary Self-Migration M1 placeholder."
-          echo "Publishing is intentionally not implemented in this workflow yet."
+          set -euo pipefail
+
+          if [[ "$RELEASE_UNIT" != "cli" ]]; then
+            echo "::error::unit must be cli, got '$RELEASE_UNIT'"
+            exit 1
+          fi
+
+          if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::version must be a semver-like value, got '$RELEASE_VERSION'"
+            exit 1
+          fi
+
+          expected_tag="v${RELEASE_VERSION}"
+          if [[ "$RELEASE_TAG" != "$expected_tag" ]]; then
+            echo "::error::tag must be '${expected_tag}', got '$RELEASE_TAG'"
+            exit 1
+          fi
+
+          if [[ ! "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::release_sha must be a 40-character lowercase Git SHA"
+            exit 1
+          fi
+
+      - name: Checkout dispatched tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate tag and release SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          head_sha="$(git rev-parse HEAD)"
+          tag_sha="$(git rev-list -n 1 "$RELEASE_TAG")"
+
+          if [[ "$head_sha" != "$RELEASE_SHA" ]]; then
+            echo "::error::checked-out HEAD $head_sha does not match release_sha $RELEASE_SHA"
+            exit 1
+          fi
+
+          if [[ "$tag_sha" != "$RELEASE_SHA" ]]; then
+            echo "::error::tag $RELEASE_TAG points to $tag_sha, expected $RELEASE_SHA"
+            exit 1
+          fi
+
+      - name: Validate release state and config
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          jq -e --arg version "$RELEASE_VERSION" '.units.cli.version == $version' .neko/release.state.json > /dev/null
+
+          jq -e --arg workflow "$RELEASE_WORKFLOW" '
+            .schemaVersion == 2 and
+            any(.units[]; .id == "cli" and
+              .tagPrefix == "v" and
+              .executor.type == "goreleaser" and
+              .executor.delivery == "github-actions" and
+              .executor.workflow == $workflow)
+          ' .neko/release.config.json > /dev/null
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run Go tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test ./...
+
+      - name: Validate GoReleaser configuration
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: check --config ${{ env.GORELEASER_CONFIG }}
+
+      - name: Snapshot build cli only
+        uses: goreleaser/goreleaser-action@v6
+        env:
+          CLI_VERSION: ${{ inputs.version }}
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: build --config ${{ env.GORELEASER_CONFIG }} --snapshot --clean --single-target
+
+      - name: Verify tracked files were not modified
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code
+
+      - name: Publish cli GitHub Release
+        uses: goreleaser/goreleaser-action@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CLI_VERSION: ${{ inputs.version }}
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --config ${{ env.GORELEASER_CONFIG }} --clean
+
+      - name: Publish summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "## cli release"
+            echo ""
+            echo "- unit: \`$RELEASE_UNIT\`"
+            echo "- version: \`$RELEASE_VERSION\`"
+            echo "- tag: \`$RELEASE_TAG\`"
+            echo "- release_sha: \`$RELEASE_SHA\`"
+            echo "- goreleaser_config: \`$GORELEASER_CONFIG\`"
+          } >> "$GITHUB_STEP_SUMMARY"

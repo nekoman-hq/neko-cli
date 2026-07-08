@@ -26,7 +26,7 @@ Dry runs only plan and validate materialization. They do not write files, stage 
 | `jreleaser` | updates `jreleaser.yml` project version before state staging | blocked until publish-only adapter exists |
 | `release-it` | no real materialization | blocked |
 
-GoReleaser units normally do not need a local version file from Neko CLI. Their release version is anchored by the Neko-created release context and tag. Nekocli's plugin units are the current exception: `.neko/release.state.json` is authoritative, and V2 planning materializes the selected plugin manifest to the planned next version. `plugin-release` updates only `plugin/release/manifest.json`; `plugin-ui` updates only `plugin/ui/manifest.json`. `make update-manifests` remains a manual developer helper and reads V2 state.
+GoReleaser units normally do not need a local version file from Neko CLI. Their release version is anchored by the Neko-created release context and tag. Nekocli's plugin units are the current exception: `.neko/release.state.json` is authoritative, and V2 planning materializes the selected plugin manifest to the planned next version. `plugin-release` updates only `plugin/release/manifest.json`; `plugin-ui` updates only `plugin/ui/manifest.json`; `cli` materializes no plugin manifest. `make update-manifests` remains a manual developer helper and reads V2 state. `.plugin.release.neko.json` has been removed and is not part of any active materialization path.
 
 JReleaser needs `jreleaser.yml` to contain the planned project version. The materializer updates only `project.version`, snapshots the original bytes and mode, writes before state preparation, and marks `jreleaser.yml` as required for the Neko-owned release commit.
 

@@ -290,6 +290,7 @@ func v2DryRunPlanResponse(command string, ctx *ReleaseExecutionContext) (*plugin
 			map[string]any{"property": "Dispatch Status", "value": dispatchSummary.Status},
 		)
 	}
+	logV2DryRunPlan(ctx, materializationPlan, knownFiles, dispatchSummary)
 	return &plugin.Response{
 		Status: "success",
 		Metadata: plugin.ResponseMetadata{
@@ -303,6 +304,23 @@ func v2DryRunPlanResponse(command string, ctx *ReleaseExecutionContext) (*plugin
 		},
 		RendererHint: "table",
 	}, nil
+}
+
+func logV2DryRunPlan(ctx *ReleaseExecutionContext, materializationPlan *MaterializationPlan, knownFiles KnownReleaseFiles, dispatchSummary *ReleaseDispatchDryRunSummary) {
+	log.PluginPrint(log.Config, "Repository root: %s", ctx.RepositoryRoot)
+	log.PluginPrint(log.Config, "Release source format: %s", ctx.SourceFormat)
+	log.PluginPrint(log.Config, "Selected unit: %s", ctx.Unit.ID)
+	log.PluginPrint(log.Config, "Config path: %s", config.V2ConfigPath(ctx.RepositoryRoot))
+	log.PluginPrint(log.Config, "State path: %s", config.V2StatePath(ctx.RepositoryRoot))
+	log.PluginPrint(log.Exec, "Planning V2 dry-run: current=%s next=%s tag=%s", ctx.CurrentVersion, ctx.NextVersion, ctx.Tag)
+	log.PluginPrint(log.Exec, "Executor=%s delivery=%s workflow=%s tagPrefix=%s", ctx.Executor, ctx.Delivery, workflowValue(ctx.Workflow), ctx.TagSpec.Prefix)
+	log.PluginPrint(log.Exec, "Planned materialized files: %s", materializedFilesValue(materializationPlan))
+	log.PluginPrint(log.Exec, "Known release files: %s", strings.Join(knownFiles.RelativePaths(), ", "))
+	log.PluginPrint(log.Exec, "Dry run only: no token required, no journal created, no commit/tag/push/dispatch")
+	if dispatchSummary != nil {
+		log.PluginPrint(log.Exec, "Planned dispatch ref: %s", dispatchSummary.Ref)
+		log.PluginPrint(log.Exec, "Planned dispatch inputs: %s", dispatchInputsValue(dispatchSummary.Inputs))
+	}
 }
 
 func materializedFilesValue(plan *MaterializationPlan) string {

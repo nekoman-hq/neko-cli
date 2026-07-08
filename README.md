@@ -83,6 +83,7 @@ Plugins are installed in `~/.neko/plugins/{plugin-name}/` and include:
 | Plugin | Description | Documentation |
 |--------|-------------|---------------|
 | **release** | Release management with semantic versioning | [📖 Docs](docs/plugins/release.md) |
+| **ui** | UI component helper plugin | [📖 Docs](docs/plugins/ui.md) |
 
 > Each plugin has its own documentation with detailed command references. Use `neko plugin available` to see all plugins.
 
@@ -117,6 +118,19 @@ Once installed, plugin commands are available as subcommands:
 neko release patch
 neko release history --output json
 ```
+
+### Release V2 Dogfood
+
+This repository releases itself with V2 multi-unit release state:
+
+- `cli` uses global tags like `v3.0.0`.
+- `plugin-release` uses tags like `plugin-release/v4.0.0`.
+- `plugin-ui` uses tags like `plugin-ui/v1.0.0`.
+- All releaseable versions live in `.neko/release.state.json`; the old `.plugin.release.neko.json` map has been removed.
+- Neko CLI owns version/materialization/state, release commit, tag, push, and workflow dispatch.
+- GitHub Actions workflows own build, GitHub Release creation, and asset publishing.
+- Dry-run release planning needs no token and writes nothing.
+- Use `--verbose --describe` to see journal paths, commit/tag, workflow, dispatch state, run URL when resolvable, and recovery guidance.
 
 ### Global Flags
 

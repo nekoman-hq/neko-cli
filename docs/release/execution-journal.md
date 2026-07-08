@@ -110,3 +110,5 @@ A pending action cannot be replaced by another pending action. The public `resum
 ## Public Boundary
 
 Public V2 GitHub Actions non-dry-run releases create and update this journal. V2 local non-dry-run releases remain blocked. `resume` uses this journal to continue only an exact existing release intent.
+
+Verbose and `--describe` release output includes the execution journal path, journal identity, selected unit, next version, tag, workflow, release commit SHA, execution state, dispatch journal path when present, dispatch state, dispatch run URL when resolvable, and recovery guidance. This output is the primary operator map after a handoff or failure.

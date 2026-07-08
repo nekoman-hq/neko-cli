@@ -107,7 +107,19 @@ neko release patch --dry-run
 
 With `--dry-run`, Neko only calculates and displays the next version. It does not write config, update executor files, run executors, fetch remotes, commit, tag, push, publish, or rollback.
 
-For V2 repositories, `patch`, `minor`, and `major` support dry-run planning with `--unit`. Non-dry-run V2 releases are active for `delivery: github-actions`; V2 local delivery remains blocked. The GitHub Actions path writes execution and dispatch journals, commits and tags the release, pushes commit and tag, and dispatches the configured workflow. No local V2 executor publishes artifacts.
+For V2 repositories, `patch`, `minor`, and `major` support dry-run planning with `--unit`. Non-dry-run V2 releases are active for `delivery: github-actions`; V2 local delivery remains blocked. The GitHub Actions path writes execution and dispatch journals, commits and tags the release, pushes commit and tag, and dispatches the configured workflow. Neko CLI owns commit/tag/push/dispatch; GitHub Actions owns build, GitHub Release creation, and asset publishing from the pushed tag.
+
+Nekocli dogfoods three independent V2 units: `cli`, `plugin-release`, and `plugin-ui`. Their versions live in `.neko/release.state.json`; `.plugin.release.neko.json` has been removed. Plugin releases materialize only their own manifest before the release commit.
+
+Production publishing uses dedicated workflows and GoReleaser configs:
+
+| Unit | Workflow | GoReleaser config |
+| --- | --- | --- |
+| `cli` | `.github/workflows/release-neko-cli.yml` | `.goreleaser.cli.yaml` |
+| `plugin-release` | `.github/workflows/release-plugin-release.yml` | `.goreleaser.plugin-release.yaml` |
+| `plugin-ui` | `.github/workflows/release-plugin-ui.yml` | `.goreleaser.plugin-ui.yaml` |
+
+Dry-run does not require `GITHUB_TOKEN`. Verbose and `--describe` output shows the planned materialized files, known release files, workflow, dispatch inputs, and, for real handoffs, execution/dispatch journal paths, release commit SHA, dispatch state, run URL when resolvable, and recovery guidance. Unknown dispatch or ambiguous push outcomes must not be retried blindly; inspect with `neko release resume --unit <unit> --dry-run`.
 
 ---
 
@@ -399,7 +411,9 @@ V2 uses repository-root files:
 
 In Nekocli itself, `plugin-release` and `plugin-ui` are V2 units. `.neko/release.state.json` is authoritative for both plugin versions; `plugin/release/manifest.json` and `plugin/ui/manifest.json` are materialized release files for their selected units. `make update-manifests` remains a manual compatibility helper and reads V2 state. V2 dry-run planning does not require or resolve `GITHUB_TOKEN`; real GitHub Actions release execution still requires it.
 
-The `plugin-release` unit uses `plugin-release/vX.Y.Z` tags and `.github/workflows/release-plugin-release.yml`. Neko CLI owns state, materialized files, release commit, tag, push, and workflow dispatch. The workflow checks out the dispatched tag, validates `release_sha`, validates the materialized version files and unit config, runs tests, checks `.goreleaser.plugin-release.yaml`, performs a plugin-release-only snapshot build, and publishes with that dedicated GoReleaser config. The dedicated config must not build or publish the main CLI or `plugin-ui`; it embeds `PLUGIN_RELEASE_VERSION` from the dispatch version into the release plugin binary and archives the committed `plugin/release/manifest.json`. The `plugin-ui` workflow is currently a validation-only placeholder.
+The `plugin-release` unit uses `plugin-release/vX.Y.Z` tags and `.github/workflows/release-plugin-release.yml`. Neko CLI owns state, materialized files, release commit, tag, push, and workflow dispatch. The workflow checks out the dispatched tag, validates `release_sha`, validates the materialized version files and unit config, runs tests, checks `.goreleaser.plugin-release.yaml`, performs a plugin-release-only snapshot build, and publishes with that dedicated GoReleaser config. The dedicated config must not build or publish the main CLI or `plugin-ui`; it embeds `PLUGIN_RELEASE_VERSION` from the dispatch version into the release plugin binary and archives the committed `plugin/release/manifest.json`.
+
+The `plugin-ui` unit follows the same production pattern with `plugin-ui/vX.Y.Z`, `.github/workflows/release-plugin-ui.yml`, `.goreleaser.plugin-ui.yaml`, `PLUGIN_UI_VERSION`, and `plugin/ui/manifest.json`.
 
 `neko release migrate` can convert a root V1 single-unit repository to V2. It archives `.release.neko.json` as `.release.neko.json.v1.bak`, writes V2 config and state atomically, and uses a temporary recovery journal.
 

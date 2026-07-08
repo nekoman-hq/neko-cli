@@ -33,9 +33,9 @@ V2 is repository-root scoped and uses two files:
 
 V2 can be loaded, strictly parsed, validated, normalized, and used for unit workflows. `history` and `contributors` are unit-aware. `patch`, `minor`, and `major` support V2 dry-run planning with execution context, delivery resolution, version materialization planning, GitHub Actions workflow configuration, and Neko-owned Git release planning.
 
-Nekocli itself now has `plugin-release` and `plugin-ui` V2 units. `.neko/release.state.json` is authoritative for both plugin versions, and each plugin release plan materializes only that unit's `manifest.json`.
+Nekocli itself now has `cli`, `plugin-release`, and `plugin-ui` V2 units. `.neko/release.state.json` is authoritative for every releaseable version. `.plugin.release.neko.json` has been removed and must not be reintroduced. Each plugin release plan materializes only that unit's `manifest.json`.
 
-V2 GitHub Actions non-dry-run public release commands are active after Milestone 5C3B. Neko CLI owns materialization, state update, targeted staging, release commit, unit tag, commit push, tag push, execution journal, dispatch journal, and workflow dispatch. GitHub Actions owns build and publish from the pushed tag. V2 local delivery remains blocked.
+V2 GitHub Actions non-dry-run public release commands are active. Neko CLI owns materialization, state update, targeted staging, release commit, unit tag, commit push, tag push, execution journal, dispatch journal, and workflow dispatch. GitHub Actions owns build, GitHub Release creation, and asset publishing from the pushed tag. V2 local delivery remains blocked.
 
 ## Safety
 
@@ -63,6 +63,8 @@ Implemented now:
 - Durable dispatch journal model under the Git common directory.
 - Internal GitHub.com-only Actions workflow-dispatch client with `GITHUB_TOKEN` token resolution, redirect blocking, and accepted/rejected/unknown classification.
 - Public V2 GitHub Actions release execution.
+- Production GitHub Actions publishing workflows for `cli`, `plugin-release`, and `plugin-ui`.
+- Dedicated GoReleaser configs for `cli`, `plugin-release`, and `plugin-ui`.
 - Public `neko release resume --unit <unit>` and read-only `--dry-run` recovery assessment.
 - Executor capability contracts for `goreleaser`, `jreleaser`, and `release-it`.
 - Executor requirement checks scoped to unit roots.
@@ -76,6 +78,5 @@ Not implemented yet:
 
 - Automatic multi-unit migration.
 - V2 local `release-it` execution.
-- Publish-only adapters for GoReleaser and JReleaser.
 - V2 local non-dry-run release execution.
 - Public standalone dispatch and retry commands.

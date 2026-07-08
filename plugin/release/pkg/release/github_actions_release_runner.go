@@ -3,9 +3,11 @@ package release
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
+	"github.com/nekoman-hq/neko-cli/pkg/log"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata"
@@ -81,14 +83,24 @@ func (runner *GitHubActionsReleaseRunner) Run(ctx context.Context, execCtx *Rele
 	if strings.TrimSpace(execCtx.Workflow) == "" {
 		return nil, fmt.Errorf("github-actions release requires a validated workflow")
 	}
+	log.PluginPrint(log.Config, "Repository root: %s", execCtx.RepositoryRoot)
+	log.PluginPrint(log.Config, "Release source format: %s", execCtx.SourceFormat)
+	log.PluginPrint(log.Config, "Selected unit: %s", execCtx.Unit.ID)
+	log.PluginPrint(log.Config, "Config path: %s", releaseconfig.V2ConfigPath(execCtx.RepositoryRoot))
+	log.PluginPrint(log.Config, "State path: %s", releaseconfig.V2StatePath(execCtx.RepositoryRoot))
+	log.PluginPrint(log.Exec, "Planning V2 release: current=%s next=%s tag=%s", execCtx.CurrentVersion, execCtx.NextVersion, execCtx.Tag)
+	log.PluginPrint(log.Exec, "Executor=%s delivery=%s workflow=%s tagPrefix=%s", execCtx.Executor, execCtx.Delivery, execCtx.Workflow, execCtx.TagSpec.Prefix)
+	log.PluginPrint(log.Exec, "GitHub token preflight: resolving token without printing it")
 	token, err := runner.tokenResolver.ResolveGitHubActionsDispatchToken(ctx)
 	if err != nil {
 		return nil, err
 	}
+	log.PluginPrint(log.Exec, "GitHub token preflight: token available")
 	materializer, err := ResolveVersionMaterializer(execCtx.Executor)
 	if err != nil {
 		return nil, err
 	}
+	log.PluginPrint(log.Exec, "Planning materialized files")
 	materializationPlan, err := materializer.Plan(execCtx)
 	if err != nil {
 		return nil, err
@@ -96,22 +108,28 @@ func (runner *GitHubActionsReleaseRunner) Run(ctx context.Context, execCtx *Rele
 	if validationErr := materializer.Validate(materializationPlan); validationErr != nil {
 		return nil, validationErr
 	}
+	log.PluginPrint(log.Exec, "Planned materialized files: %s", materializedFilesValue(materializationPlan))
 	knownFiles, err := NewKnownReleaseFiles(execCtx, materializationPlan)
 	if err != nil {
 		return nil, err
 	}
+	log.PluginPrint(log.Exec, "Known release files: %s", strings.Join(knownFiles.RelativePaths(), ", "))
+	log.PluginPrint(log.Exec, "Running git preflight checks")
 	preflight, err := runner.coordinator.Preflight(execCtx, knownFiles)
 	if err != nil {
 		return nil, err
 	}
+	log.PluginPrint(log.Exec, "Git preflight: branch=%s remote=%s upstream=%s", preflight.Branch, preflight.Remote, preflight.UpstreamBranch)
 	remoteURL, err := runner.coordinator.gitOutput(execCtx.RepositoryRoot, "remote", "get-url", preflight.Remote)
 	if err != nil {
 		return nil, fmt.Errorf("resolve V2 release remote %q: %w", preflight.Remote, err)
 	}
 	remoteURL = strings.TrimSpace(remoteURL)
+	log.PluginPrint(log.Exec, "Git preflight: remote URL=%s", sanitizeRemoteForLog(remoteURL))
 	if _, targetErr := ResolveGitHubRepositoryTarget(preflight.Remote, remoteURL); targetErr != nil {
 		return nil, targetErr
 	}
+	log.PluginPrint(log.Exec, "Git preflight: workflow validation passed for %s", execCtx.Workflow)
 	unresolved, err := NewReleaseExecutionJournalStore(execCtx.RepositoryRoot).FindUnresolved(remoteURL, execCtx.Unit.ID)
 	if err != nil {
 		return nil, err
@@ -132,10 +150,13 @@ func (runner *GitHubActionsReleaseRunner) Run(ctx context.Context, execCtx *Rele
 	if err != nil {
 		return nil, err
 	}
+	log.PluginPrint(log.Exec, "Execution journal path: %s", resolution.Path)
+	log.PluginPrint(log.Exec, "Execution journal identity: %s", journal.Identity.SHA256)
 	journal = resolution.Journal
 	if _, phaseErr := store.ConfirmPhase(journal.Identity, ReleaseExecutionPreflightValidated, ReleaseExecutionJournalUpdate{}); phaseErr != nil {
 		return nil, phaseErr
 	}
+	log.PluginPrint(log.Exec, "Execution phase: %s", ReleaseExecutionPreflightValidated)
 	materialization := NewMaterializationTransaction(materializationPlan)
 	state := NewStateTransaction(execCtx.RepositoryRoot)
 	commitStarted := false
@@ -150,11 +171,13 @@ func (runner *GitHubActionsReleaseRunner) Run(ctx context.Context, execCtx *Rele
 		_, _ = store.RecordLastError(journal.Identity, materializationErr.Error())
 		return nil, materializationErr
 	}
+	log.PluginPrint(log.Exec, "Applied materialized files: %s", materializedFilesValue(materializationPlan))
 	if stateSnapshotErr := state.CaptureSnapshot(); stateSnapshotErr != nil {
 		_ = materialization.Restore()
 		_, _ = store.RecordLastError(journal.Identity, stateSnapshotErr.Error())
 		return nil, stateSnapshotErr
 	}
+	log.PluginPrint(log.Exec, "Writing V2 state update: %s -> %s", execCtx.Unit.ID, execCtx.NextVersion)
 	if stateErr := storeAndRun(store, journal.Identity, ReleaseExecutionPendingWriteState, func() error {
 		return state.WriteUnitVersion(execCtx.Unit.ID, execCtx.NextVersion)
 	}, ReleaseExecutionStateWritten, ReleaseExecutionJournalUpdate{}); stateErr != nil {
@@ -162,6 +185,8 @@ func (runner *GitHubActionsReleaseRunner) Run(ctx context.Context, execCtx *Rele
 		_, _ = store.RecordLastError(journal.Identity, stateErr.Error())
 		return nil, stateErr
 	}
+	log.PluginPrint(log.Exec, "State update written")
+	log.PluginPrint(log.Exec, "Staging targeted release files: %s", strings.Join(knownFiles.RelativePaths(), ", "))
 	if stageErr := storeAndRun(store, journal.Identity, ReleaseExecutionPendingStageReleaseFiles, func() error {
 		return runner.coordinator.Stage(execCtx, knownFiles)
 	}, ReleaseExecutionReleaseFilesStaged, ReleaseExecutionJournalUpdate{}); stageErr != nil {
@@ -171,11 +196,13 @@ func (runner *GitHubActionsReleaseRunner) Run(ctx context.Context, execCtx *Rele
 		_, _ = store.RecordLastError(journal.Identity, stageErr.Error())
 		return nil, stageErr
 	}
+	log.PluginPrint(log.Exec, "Targeted release files staged")
 	var commitSHA string
 	if _, pendingErr := store.BeginPending(journal.Identity, ReleaseExecutionPendingCreateReleaseCommit); pendingErr != nil {
 		return nil, pendingErr
 	}
 	commitStarted = true
+	log.PluginPrint(log.Exec, "Creating release commit: %s", ReleaseCommitMessage(execCtx))
 	commitSHA, err = runner.coordinator.Commit(execCtx, knownFiles)
 	if err == nil {
 		_, err = store.ConfirmPhase(journal.Identity, ReleaseExecutionCommitCreated, ReleaseExecutionJournalUpdate{ReleaseCommitSHA: commitSHA})
@@ -189,9 +216,11 @@ func (runner *GitHubActionsReleaseRunner) Run(ctx context.Context, execCtx *Rele
 		_, _ = store.RecordLastError(journal.Identity, err.Error())
 		return nil, err
 	}
+	log.PluginPrint(log.Exec, "Release commit created: %s", commitSHA)
 	if _, tagPendingErr := store.BeginPending(journal.Identity, ReleaseExecutionPendingCreateUnitTag); tagPendingErr != nil {
 		return nil, tagPendingErr
 	}
+	log.PluginPrint(log.Exec, "Creating unit tag: %s", execCtx.Tag)
 	if _, tagErr := runner.coordinator.CreateTag(execCtx, commitSHA); tagErr != nil {
 		_, _ = store.RecordLastError(journal.Identity, tagErr.Error())
 		return nil, tagErr
@@ -225,9 +254,12 @@ func (runner *GitHubActionsReleaseRunner) Run(ctx context.Context, execCtx *Rele
 		_, _ = store.RecordLastError(journal.Identity, err.Error())
 		return nil, err
 	}
+	log.PluginPrint(log.Exec, "Dispatch journal path: %s", dispatchResolution.Path)
+	log.PluginPrint(log.Exec, "Dispatch inputs: %s", dispatchInputsValue(dispatchRequest.Inputs))
 	if _, dispatchPhaseErr := store.ConfirmPhase(journal.Identity, ReleaseExecutionDispatchJournalPrepared, ReleaseExecutionJournalUpdate{DispatchJournalIdentity: dispatchRequest.Identity.SHA256}); dispatchPhaseErr != nil {
 		return nil, dispatchPhaseErr
 	}
+	log.PluginPrint(log.Exec, "Pushing release commit %s to %s/%s", commitSHA, preflight.Remote, preflight.UpstreamBranch)
 	if commitPushErr := storeAndRun(store, journal.Identity, ReleaseExecutionPendingPushReleaseCommit, func() error {
 		return runner.coordinator.PushCommit(execCtx, preflight.Remote, preflight.UpstreamBranch, commitSHA)
 	}, ReleaseExecutionCommitPushed, ReleaseExecutionJournalUpdate{CommitPushStatus: "pushed"}); commitPushErr != nil {
@@ -235,6 +267,8 @@ func (runner *GitHubActionsReleaseRunner) Run(ctx context.Context, execCtx *Rele
 		return nil, commitPushErr
 	}
 	gitResult.CommitPushed = true
+	log.PluginPrint(log.Exec, "Release commit push succeeded")
+	log.PluginPrint(log.Exec, "Pushing unit tag %s", execCtx.Tag)
 	if tagPushErr := storeAndRun(store, journal.Identity, ReleaseExecutionPendingPushUnitTag, func() error {
 		return runner.coordinator.PushTag(execCtx, preflight.Remote, execCtx.Tag, commitSHA)
 	}, ReleaseExecutionTagPushed, ReleaseExecutionJournalUpdate{TagPushStatus: "pushed"}); tagPushErr != nil {
@@ -242,6 +276,7 @@ func (runner *GitHubActionsReleaseRunner) Run(ctx context.Context, execCtx *Rele
 		return nil, tagPushErr
 	}
 	gitResult.TagPushed = true
+	log.PluginPrint(log.Exec, "Unit tag push succeeded")
 	dispatcher, err := NewGitHubActionsDispatcher(execCtx.RepositoryRoot,
 		WithGitHubActionsDispatcherClient(runner.dispatchClient),
 		WithGitHubActionsDispatcherTokenResolver(staticGitHubActionsDispatchTokenResolver{token: token}),
@@ -249,11 +284,14 @@ func (runner *GitHubActionsReleaseRunner) Run(ctx context.Context, execCtx *Rele
 	if err != nil {
 		return nil, err
 	}
+	log.PluginPrint(log.Exec, "Dispatching workflow %s for ref %s", execCtx.Workflow, execCtx.Tag)
 	dispatchResult, err := dispatcher.Dispatch(ctx, dispatchRequest)
 	if err != nil {
 		_, _ = store.RecordLastError(journal.Identity, err.Error())
 		return nil, err
 	}
+	log.PluginPrint(log.Exec, "Dispatch state: %s", dispatchResult.State)
+	log.PluginPrint(log.Exec, "Dispatch run: %s", emptyFallback(dispatchResult.HTMLURL, "not resolved"))
 	if !dispatchResult.Accepted {
 		_, _ = store.RecordLastError(journal.Identity, dispatchResult.RecoveryGuidance)
 		return &GitHubActionsReleaseResult{
@@ -273,6 +311,8 @@ func (runner *GitHubActionsReleaseRunner) Run(ctx context.Context, execCtx *Rele
 	if _, err := store.ConfirmPhase(journal.Identity, ReleaseExecutionHandoffReady, ReleaseExecutionJournalUpdate{}); err != nil {
 		return nil, err
 	}
+	log.PluginPrint(log.Exec, "Execution state: %s", ReleaseExecutionHandoffReady)
+	log.PluginPrint(log.Exec, "Recovery guidance: GitHub Actions dispatch accepted. GitHub Actions owns build and publish from the pushed tag.")
 	return &GitHubActionsReleaseResult{
 		Unit:                 execCtx.Unit.ID,
 		Version:              execCtx.NextVersion,
@@ -286,6 +326,15 @@ func (runner *GitHubActionsReleaseRunner) Run(ctx context.Context, execCtx *Rele
 		RecoveryGuidance:     "GitHub Actions dispatch accepted. GitHub Actions owns build and publish from the pushed tag.",
 		DispatchRunURL:       dispatchResult.HTMLURL,
 	}, nil
+}
+
+func sanitizeRemoteForLog(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.User == nil {
+		return raw
+	}
+	parsed.User = nil
+	return parsed.String()
 }
 
 func storeAndRun(store *ReleaseExecutionJournalStore, identity ReleaseExecutionIdentity, action ReleaseExecutionPendingAction, mutation func() error, phase ReleaseExecutionJournalState, update ReleaseExecutionJournalUpdate) error {
@@ -323,7 +372,7 @@ func githubActionsReleaseResponse(command string, result *GitHubActionsReleaseRe
 		{"property": "Dispatch Journal", "value": result.DispatchJournalPath},
 		{"property": "Execution State", "value": string(result.ExecutionState)},
 		{"property": "Dispatch State", "value": string(result.DispatchState)},
-		{"property": "Dispatch Run", "value": emptyFallback(result.DispatchRunURL, "not reported")},
+		{"property": "Dispatch Run", "value": emptyFallback(result.DispatchRunURL, "not resolved")},
 		{"property": "Status", "value": result.RecoveryGuidance},
 	}
 	return &plugin.Response{

@@ -61,3 +61,11 @@ corrupted
 The assessor prefers `conflicted` or `corrupted` over guessing. Unknown remote state is reported as local evidence only. Non-dry-run resume decides explicitly whether and how to continue from each status and blocks ambiguous push or dispatch outcomes.
 
 `neko release resume --unit <unit>` exists for V2 GitHub Actions execution journals. No public standalone retry or dispatch command exists.
+
+Failure output includes the last confirmed phase, pending action, release commit SHA when created, tag when created, push markers, execution journal path, dispatch journal path when present, dispatch state when attempted, and recovery guidance. The first safe inspection command is usually:
+
+```bash
+neko release resume --unit <unit> --dry-run
+```
+
+Unknown dispatch or ambiguous push outcomes must not be retried blindly. Keep failed tags and journals until an operator has inspected GitHub Actions, GitHub Releases, and the local journals.

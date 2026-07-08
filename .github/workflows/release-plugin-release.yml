@@ -24,8 +24,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  validate-build:
-    name: Validate plugin-release dispatch
+  validate-build-publish:
+    name: Validate, build, and publish plugin-release
     runs-on: ubuntu-latest
     env:
       RELEASE_UNIT: ${{ inputs.unit }}
@@ -33,6 +33,7 @@ jobs:
       RELEASE_TAG: ${{ inputs.tag }}
       RELEASE_SHA: ${{ inputs.release_sha }}
       RELEASE_WORKFLOW: .github/workflows/release-plugin-release.yml
+      GORELEASER_CONFIG: .goreleaser.plugin-release.yaml
     steps:
       - name: Validate dispatch inputs
         shell: bash
@@ -82,7 +83,7 @@ jobs:
           set -euo pipefail
 
           head_sha="$(git rev-parse HEAD)"
-          tag_sha="$(git rev-parse "$RELEASE_TAG")"
+          tag_sha="$(git rev-list -n 1 "$RELEASE_TAG")"
 
           if [[ "$head_sha" != "$RELEASE_SHA" ]]; then
             echo "::error::checked-out HEAD $head_sha does not match release_sha $RELEASE_SHA"
@@ -142,7 +143,7 @@ jobs:
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: check --config .goreleaser.plugin-release.yaml
+          args: check --config ${{ env.GORELEASER_CONFIG }}
 
       - name: Build plugin-release only
         uses: goreleaser/goreleaser-action@v6
@@ -151,7 +152,7 @@ jobs:
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: build --config .goreleaser.plugin-release.yaml --snapshot --clean --single-target
+          args: build --config ${{ env.GORELEASER_CONFIG }} --snapshot --clean --single-target
 
       - name: Verify tracked files were not modified
         shell: bash
@@ -168,7 +169,7 @@ jobs:
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --config .goreleaser.plugin-release.yaml --clean
+          args: release --config ${{ env.GORELEASER_CONFIG }} --clean
 
       - name: Publish summary
         shell: bash
@@ -178,5 +179,5 @@ jobs:
             echo ""
             echo "## Publish status"
             echo ""
-            echo "Published plugin-release artifacts for \`$RELEASE_TAG\` using \`.goreleaser.plugin-release.yaml\`."
+            echo "Published plugin-release artifacts for \`$RELEASE_TAG\` using \`$GORELEASER_CONFIG\`."
           } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# Dedicated release config for the V2 cli unit.
+# It intentionally contains only the main Nekocli build and archive.
+
+version: 2
+
+project_name: neko-cli
+
+builds:
+  - id: neko-cli
+    binary: neko-cli
+    main: ./main.go
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    ldflags:
+      - -s -w
+      - -X github.com/nekoman-hq/neko-cli/pkg/version.Version={{ if index .Env "CLI_VERSION" }}{{ .Env.CLI_VERSION }}{{ else }}{{ .Version }}{{ end }}
+      - -X github.com/nekoman-hq/neko-cli/pkg/version.Commit={{ .Commit }}
+      - -X github.com/nekoman-hq/neko-cli/pkg/version.Date={{ .Date }}
+      - -X github.com/nekoman-hq/neko-cli/pkg/version.BuiltBy=goreleaser
+
+archives:
+  - id: neko-cli
+    ids:
+      - neko-cli
+    formats: [tar.gz]
+    name_template: >-
+      neko-cli_{{ if index .Env "CLI_VERSION" }}{{ .Env.CLI_VERSION }}{{ else }}{{ .Version }}{{ end }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - none*
+
+changelog:
+  disable: true
+
+release:
+  ids:
+    - neko-cli
+  name_template: "Nekocli {{ if index .Env \"CLI_VERSION\" }}{{ .Env.CLI_VERSION }}{{ else }}{{ .Version }}{{ end }}"
+  footer: >-
+
+    ---
+
+    Released by [GoReleaser](https://github.com/goreleaser/goreleaser).

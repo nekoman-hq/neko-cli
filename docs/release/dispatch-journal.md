@@ -43,6 +43,8 @@ recoveryGuidance
 
 It must not contain tokens, authorization headers, secrets, environment values, or GitHub credentials.
 
+Verbose release output renders the dispatch journal path, dispatch state, request status, and GitHub Actions run URL when GitHub can resolve one. If no run URL is available, the output says `not resolved`; it does not invent a URL.
+
 ## States
 
 ```text

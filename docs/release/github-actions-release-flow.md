@@ -42,9 +42,9 @@ Dry-run does not require or resolve a token.
 
 `accepted` marks the execution journal `handoff-ready`. GitHub Actions owns build and publish from the pushed tag.
 
-For Nekocli's own `plugin-release` unit, `.github/workflows/release-plugin-release.yml` accepts the canonical dispatch inputs `unit`, `version`, `tag`, and `release_sha`. It checks out `inputs.tag`, verifies that `unit == plugin-release`, verifies that `tag == plugin-release/v<version>`, and verifies that both checked-out `HEAD` and the tag resolve to `release_sha`. It also validates `.neko/release.state.json`, `plugin/release/manifest.json`, and the V2 unit config before publishing. The workflow does not calculate versions, commit, tag, push, or modify tracked repository files.
+For Nekocli's own units, `.github/workflows/release-neko-cli.yml`, `.github/workflows/release-plugin-release.yml`, and `.github/workflows/release-plugin-ui.yml` accept the canonical dispatch inputs `unit`, `version`, `tag`, and `release_sha`. Each workflow checks out `inputs.tag`, verifies that the unit and tag prefix match the configured unit, and verifies that both checked-out `HEAD` and the tag resolve to `release_sha`. It also validates `.neko/release.state.json`, the V2 unit config, and the selected plugin manifest for plugin units before publishing. Workflows do not calculate versions, commit, tag, push, or modify tracked repository files.
 
-`plugin-release` publishes with `.goreleaser.plugin-release.yaml`, a dedicated config that contains only the `plugin-release` build and archive. The workflow sets `PLUGIN_RELEASE_VERSION` from the dispatch input so the binary metadata, archive names, and GitHub Release name use the materialized V2 version from the release commit. The root `.goreleaser.yaml` remains multi-artifact and is not used by this workflow.
+Publishing uses dedicated GoReleaser configs: `.goreleaser.cli.yaml`, `.goreleaser.plugin-release.yaml`, and `.goreleaser.plugin-ui.yaml`. Each config contains only that unit's build/archive/release definition. The root `.goreleaser.yaml` remains multi-artifact and is not used by production V2 publishing workflows.
 
 `rejected` keeps the execution journal at `tag-pushed`, preserves the dispatch journal rejection, and does not roll back Git state.
 
@@ -60,6 +60,8 @@ neko release resume --unit api --dry-run
 Resume continues only an existing unresolved V2 GitHub Actions execution journal. It never calculates a new version, chooses a new tag, creates a new release intent, or blindly retries uncertain push or dispatch outcomes.
 
 `resume --dry-run` performs only read-only recovery assessment and does not require `GITHUB_TOKEN`.
+
+Verbose and `--describe` output includes the selected unit, version, tag, workflow, release commit SHA, execution journal path, dispatch journal path, execution state, dispatch state, dispatch run URL when resolvable, and recovery guidance. Unknown dispatch or ambiguous push outcomes must not be retried blindly; inspect the journals and use `neko release resume --unit <unit> --dry-run` first.
 
 ## Boundaries
 

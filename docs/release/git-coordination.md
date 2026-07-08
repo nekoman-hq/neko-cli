@@ -14,7 +14,7 @@ Neko CLI owns:
 GitHub Actions later owns:
   - checkout of an already pushed tag
   - validation of config, state, unit, version, and tag
-  - build, publish, and optional GitHub release
+  - build, publish, and GitHub Release creation
 ```
 
 The coordinator does not load V1 files, start executors, call GitHub APIs, calculate versions, materialize files, write state, or dispatch workflows. It only coordinates known release files that were already prepared by the materialization and state transactions.
@@ -114,6 +114,6 @@ They do not affect Git cleanliness and do not enter release commits.
 
 ## Public Boundary
 
-Public V2 GitHub Actions non-dry-run release commands are active. V2 local non-dry-run release commands remain blocked until publish-only adapter boundaries exist.
+Public V2 GitHub Actions non-dry-run release commands are active for Nekocli `cli`, `plugin-release`, and `plugin-ui`. Every successful handoff dispatches a workflow that publishes a GitHub Release for the exact pushed tag. V2 local non-dry-run release commands remain blocked until publish-only adapter boundaries exist.
 
 V1 behavior is unchanged.

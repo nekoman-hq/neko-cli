@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# Dedicated release config for the V2 plugin-ui unit.
+# It intentionally contains only the UI plugin build and archive.
+
+version: 2
+
+project_name: plugin-ui
+
+builds:
+  - id: plugin-ui
+    binary: plugin-ui
+    main: ./plugin/ui
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    ldflags:
+      - -s -w
+      - -X github.com/nekoman-hq/neko-cli/plugin/ui/pkg/metadata.Version={{ if index .Env "PLUGIN_UI_VERSION" }}{{ .Env.PLUGIN_UI_VERSION }}{{ else }}{{ .Version }}{{ end }}
+      - -X github.com/nekoman-hq/neko-cli/plugin/ui/pkg/metadata.GitCommit={{ .Commit }}
+      - -X github.com/nekoman-hq/neko-cli/plugin/ui/pkg/metadata.BuildDate={{ .Date }}
+
+archives:
+  - id: plugin-ui
+    ids:
+      - plugin-ui
+    formats: [tar.gz]
+    name_template: >-
+      plugin-ui_{{ if index .Env "PLUGIN_UI_VERSION" }}{{ .Env.PLUGIN_UI_VERSION }}{{ else }}{{ .Version }}{{ end }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    files:
+      - src: plugin/ui/manifest.json
+        strip_parent: true
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+changelog:
+  disable: true
+
+release:
+  ids:
+    - plugin-ui
+  name_template: "plugin-ui {{ if index .Env \"PLUGIN_UI_VERSION\" }}{{ .Env.PLUGIN_UI_VERSION }}{{ else }}{{ .Version }}{{ end }}"
+  footer: >-
+
+    ---
+
+    Released by [GoReleaser](https://github.com/goreleaser/goreleaser).
