@@ -62,6 +62,55 @@ func TestGitHubActionsReleaseRunnerCompletesJournaledRelease(t *testing.T) {
 	}
 }
 
+func TestGitHubActionsReleaseRunnerCommitsPluginReleaseMaterializedFiles(t *testing.T) {
+	root := newPluginReleaseMaterializationRepository(t)
+	gitCmd(t, root, "init")
+	gitCmd(t, root, "config", "user.email", "test@example.com")
+	gitCmd(t, root, "config", "user.name", "Test User")
+	gitCmd(t, root, "add", ".")
+	gitCmd(t, root, "commit", "-m", "initial")
+	gitCmd(t, root, "remote", "add", "origin", "https://github.com/nekoman/repo.git")
+	branch := strings.TrimSpace(gitOutput(t, root, "symbolic-ref", "--short", "HEAD"))
+	gitCmd(t, root, "config", "branch."+branch+".remote", "origin")
+	gitCmd(t, root, "config", "branch."+branch+".merge", "refs/heads/"+branch)
+	bare := filepath.Join(t.TempDir(), "origin.git")
+	gitCmd(t, root, "init", "--bare", bare)
+	gitCmd(t, root, "remote", "set-url", "--push", "origin", bare)
+
+	repository, err := releaseconfig.LoadV2Repository(root)
+	if err != nil {
+		t.Fatalf("LoadV2Repository: %v", err)
+	}
+	ctx, err := BuildReleaseExecutionContext(repository, repository.Units[0], Patch, false)
+	if err != nil {
+		t.Fatalf("BuildReleaseExecutionContext: %v", err)
+	}
+	client := &recordingWorkflowDispatchClient{response: GitHubActionsDispatchResponse{
+		State:      DispatchJournalAccepted,
+		HTTPStatus: 204,
+	}}
+	runner := NewGitHubActionsReleaseRunner(
+		WithGitHubActionsReleaseTokenResolver(staticDispatchTokenResolver{token: "secret-token"}),
+		WithGitHubActionsReleaseDispatchClient(client),
+	)
+
+	result, err := runner.Run(context.Background(), ctx)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	changed := sortedNonEmptyLines(gitDirOutput(t, bare, "diff-tree", "--no-commit-id", "--name-only", "-r", result.CommitSHA))
+	want := []string{".neko/release.state.json", ".plugin.release.neko.json", "plugin/release/manifest.json"}
+	if !sameStringSet(changed, want) {
+		t.Fatalf("unexpected release commit files: got %#v want %#v", changed, want)
+	}
+	if client.calls != 1 {
+		t.Fatalf("expected one dispatch call, got %d", client.calls)
+	}
+	if status := strings.TrimSpace(gitOutput(t, root, "status", "--porcelain")); status != "" {
+		t.Fatalf("expected clean repository after runner, got %q", status)
+	}
+}
+
 //nolint:govet // Test fake fields are ordered by behavior.
 type recordingWorkflowDispatchClient struct {
 	response GitHubActionsDispatchResponse

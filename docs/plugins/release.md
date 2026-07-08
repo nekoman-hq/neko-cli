@@ -397,6 +397,8 @@ V2 uses repository-root files:
 
 `neko release validate` can validate V2 now. `history`, `contributors`, dry-run planning, and root V1-to-V2 migration are unit-aware. GitHub Actions delivery is valid V2 configuration when `workflow` points to an existing `.github/workflows/<file>.yml|yaml` file. Dry-run planning builds the execution context, materialization plan, local delivery/executor capabilities, planned release commit, unit tag, known release files, push order, workflow reference, dispatch input contract, dispatch status, and V2 Git ownership. V2 GitHub Actions non-dry-run release commands are active and journaled; `neko release resume --unit <unit>` resumes only existing unresolved execution journals. V2 local `release-it` and standalone public dispatch/retry commands are not active.
 
+In Nekocli itself, `plugin-release` is a V2 unit. `.neko/release.state.json` is authoritative for its version; `.plugin.release.neko.json` and `plugin/release/manifest.json` are materialized release files for that unit. `make update-manifests` remains a legacy/manual compatibility path for now, and the `ui` plugin version in `.plugin.release.neko.json` is not migrated yet. V2 dry-run planning does not require or resolve `GITHUB_TOKEN`; real GitHub Actions release execution still requires it.
+
 `neko release migrate` can convert a root V1 single-unit repository to V2. It archives `.release.neko.json` as `.release.neko.json.v1.bak`, writes V2 config and state atomically, and uses a temporary recovery journal.
 
 See:
@@ -704,10 +706,12 @@ neko plugin install release
 
 ### Git authentication errors
 
-Ensure `GITHUB_TOKEN` is set:
+Ensure `GITHUB_TOKEN` is set for real release execution:
 ```bash
 export GITHUB_TOKEN=your_token_here
 ```
+
+Dry-run commands do not require `GITHUB_TOKEN`.
 
 ### Release system not found
 

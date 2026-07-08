@@ -30,13 +30,13 @@ GitHub Actions workflow dispatch
 handoff-ready
 ```
 
-The release commit contains exactly `.neko/release.state.json` plus materialized files marked `RequiredForReleaseCommit`. Journals live under the Git common directory and never enter the release commit.
+The release commit contains exactly `.neko/release.state.json` plus materialized files marked `RequiredForReleaseCommit`. For Nekocli's `plugin-release` unit, those materialized files are `.plugin.release.neko.json` and `plugin/release/manifest.json`. Journals live under the Git common directory and never enter the release commit.
 
 ## Token Preflight
 
 Non-dry-run GitHub Actions delivery requires `GITHUB_TOKEN` with repository Actions write permission. The token is resolved before any materialization, state write, journal write, commit, tag, push, or dispatch. It is never persisted, logged, or rendered.
 
-Dry-run does not require a token.
+Dry-run does not require or resolve a token.
 
 ## Dispatch Outcomes
 

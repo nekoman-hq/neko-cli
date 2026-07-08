@@ -181,7 +181,7 @@ func TestHandleReleaseV2DryRunAllowsGitHubActionsDelivery(t *testing.T) {
 	if err := os.WriteFile(".github/workflows/release-api.yml", []byte("name: release api\n"), 0644); err != nil {
 		t.Fatalf("write workflow: %v", err)
 	}
-	t.Setenv("GITHUB_TOKEN", "test-token")
+	t.Setenv("GITHUB_TOKEN", "")
 	configContent := `{"schemaVersion":2,"units":[{"id":"api","paths":["api/**"],"workingDirectory":".","tagPrefix":"api/v","executor":{"type":"goreleaser","delivery":"github-actions","workflow":".github/workflows/release-api.yml"}}]}`
 	stateContent := `{"schemaVersion":2,"units":{"api":{"version":"0.1.0"}}}`
 	if err := os.WriteFile(".neko/release.config.json", []byte(configContent), 0644); err != nil {
@@ -216,6 +216,71 @@ func TestHandleReleaseV2DryRunAllowsGitHubActionsDelivery(t *testing.T) {
 	if !responseContains(resp.Data["items"], "api/v0.1.1") {
 		t.Fatalf("expected planned tag api/v0.1.1, got %#v", resp.Data["items"])
 	}
+	if got := responseValueForProperty(t, resp.Data["items"], "Materialized Files"); got != "none" {
+		t.Fatalf("expected api dry-run to have no materialized files, got %q", got)
+	}
+	if got := responseValueForProperty(t, resp.Data["items"], "Known Release Files"); got != ".neko/release.state.json" {
+		t.Fatalf("expected api dry-run known files to stay state-only, got %q", got)
+	}
+}
+
+func TestHandleReleasePluginReleaseDryRunMaterializesManifestsWithoutToken(t *testing.T) {
+	root := newPluginReleaseMaterializationRepository(t)
+	gitCmd(t, root, "init")
+	gitCmd(t, root, "config", "user.email", "test@example.com")
+	gitCmd(t, root, "config", "user.name", "Test User")
+	gitCmd(t, root, "add", ".")
+	gitCmd(t, root, "commit", "-m", "initial")
+	withWorkingDirectoryRoot(t, root)
+	t.Setenv("GITHUB_TOKEN", "")
+
+	stateBefore := mustReadString(t, ".neko/release.state.json")
+	versionFileBefore := mustReadString(t, pluginReleaseVersionFilePath)
+	manifestBefore := mustReadString(t, pluginReleaseManifestPath)
+	statusBefore := strings.TrimSpace(gitOutput(t, root, "status", "--porcelain"))
+
+	resp, err := HandleRelease(plugin.Request{
+		Command: "patch",
+		Flags: map[string]any{
+			"dry-run": true,
+			"unit":    "plugin-release",
+		},
+	}, Patch)
+	if err != nil {
+		t.Fatalf("HandleRelease: %v", err)
+	}
+	if resp.Status != "success" {
+		t.Fatalf("expected success, got %#v", resp.Error)
+	}
+	if !responseContains(resp.Data["items"], "3.0.1") {
+		t.Fatalf("expected dry-run response to show next version 3.0.1, got %#v", resp.Data["items"])
+	}
+	if !responseContains(resp.Data["items"], "plugin-release/v3.0.1") {
+		t.Fatalf("expected dry-run response to show planned tag, got %#v", resp.Data["items"])
+	}
+
+	materialized := responseValueForProperty(t, resp.Data["items"], "Materialized Files")
+	if !strings.Contains(materialized, pluginReleaseVersionFilePath) || !strings.Contains(materialized, pluginReleaseManifestPath) {
+		t.Fatalf("expected plugin release materialized files, got %q", materialized)
+	}
+	knownFiles := responseValueForProperty(t, resp.Data["items"], "Known Release Files")
+	for _, path := range []string{".neko/release.state.json", pluginReleaseVersionFilePath, pluginReleaseManifestPath} {
+		if !strings.Contains(knownFiles, path) {
+			t.Fatalf("expected known release files to include %s, got %q", path, knownFiles)
+		}
+	}
+	if got := mustReadString(t, ".neko/release.state.json"); got != stateBefore {
+		t.Fatalf("dry-run rewrote state:\n%s", got)
+	}
+	if got := mustReadString(t, pluginReleaseVersionFilePath); got != versionFileBefore {
+		t.Fatalf("dry-run rewrote plugin version file:\n%s", got)
+	}
+	if got := mustReadString(t, pluginReleaseManifestPath); got != manifestBefore {
+		t.Fatalf("dry-run rewrote plugin manifest:\n%s", got)
+	}
+	if statusAfter := strings.TrimSpace(gitOutput(t, root, "status", "--porcelain")); statusAfter != statusBefore {
+		t.Fatalf("dry-run changed git status: before %q after %q", statusBefore, statusAfter)
+	}
 }
 
 func responseContains(items any, expected string) bool {
@@ -231,6 +296,21 @@ func responseContains(items any, expected string) bool {
 		}
 	}
 	return false
+}
+
+func responseValueForProperty(t *testing.T, items any, property string) string {
+	t.Helper()
+	rows, ok := items.([]map[string]any)
+	if !ok {
+		t.Fatalf("unexpected response items: %#v", items)
+	}
+	for _, row := range rows {
+		if row["property"] == property {
+			return valueAsString(row["value"])
+		}
+	}
+	t.Fatalf("response property %q not found in %#v", property, items)
+	return ""
 }
 
 func valueAsString(value any) string {

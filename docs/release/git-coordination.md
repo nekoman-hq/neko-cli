@@ -32,6 +32,8 @@ materialization files with RequiredForReleaseCommit == true
 
 Every known file must resolve to an absolute path inside `RepositoryRoot` and to an auditable repository-relative path. Paths outside the repository are rejected before staging.
 
+For Nekocli's `plugin-release` unit, `.neko/release.state.json` remains the authoritative version source. The required materialization files are `.plugin.release.neko.json` and `plugin/release/manifest.json`, so the release commit for that unit is constrained to those three files. The `ui` entry in `.plugin.release.neko.json` is preserved and not migrated yet.
+
 ## Preflight
 
 Real V2 Git coordination requires:

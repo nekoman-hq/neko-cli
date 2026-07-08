@@ -33,11 +33,13 @@ V2 is repository-root scoped and uses two files:
 
 V2 can be loaded, strictly parsed, validated, normalized, and used for unit workflows. `history` and `contributors` are unit-aware. `patch`, `minor`, and `major` support V2 dry-run planning with execution context, delivery resolution, version materialization planning, GitHub Actions workflow configuration, and Neko-owned Git release planning.
 
+Nekocli itself now has a `plugin-release` V2 unit. For that unit, `.neko/release.state.json` is authoritative and the release plan materializes `.plugin.release.neko.json` and `plugin/release/manifest.json`; the `ui` plugin version is intentionally not migrated yet.
+
 V2 GitHub Actions non-dry-run public release commands are active after Milestone 5C3B. Neko CLI owns materialization, state update, targeted staging, release commit, unit tag, commit push, tag push, execution journal, dispatch journal, and workflow dispatch. GitHub Actions owns build and publish from the pushed tag. V2 local delivery remains blocked.
 
 ## Safety
 
-Dry-run release planning is read-only. It calculates and displays the next version without writing `.release.neko.json`, updating executor files, starting executors, running rollback, fetching remotes, committing, tagging, pushing, or publishing.
+Dry-run release planning is read-only. It calculates and displays the next version without writing `.release.neko.json`, updating executor files, starting executors, resolving `GITHUB_TOKEN`, running rollback, fetching remotes, committing, tagging, pushing, dispatching, or publishing.
 
 Rollback is bounded to release runs that have recorded a mutating step. Guard and planning failures must not trigger destructive cleanup such as `git reset --hard` or `git clean -fd`.
 

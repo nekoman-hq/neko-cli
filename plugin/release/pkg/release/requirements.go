@@ -39,7 +39,7 @@ func ValidateRequirements(cfg *releaseconfig.V1ReleaseConfig) error {
 		return fmt.Errorf("failed to resolve current working directory: %w", err)
 	}
 
-	return validateRequirementsForExecutor(string(cfg.ReleaseSystem), cwd)
+	return validateRequirementsForExecutor(string(cfg.ReleaseSystem), cwd, true)
 }
 
 // ValidateRequirementsForContext checks executor requirements relative to the
@@ -56,12 +56,14 @@ func ValidateRequirementsForContext(ctx *ReleaseExecutionContext) error {
 		log.ColorText(log.ColorGreen, ctx.UnitRoot),
 	)
 
-	return validateRequirementsForExecutor(ctx.Executor, ctx.UnitRoot)
+	return validateRequirementsForExecutor(ctx.Executor, ctx.UnitRoot, !ctx.DryRun)
 }
 
-func validateRequirementsForExecutor(executor, unitRoot string) error {
-	if _, err := coreconfig.GetPAT(); err != nil {
-		return err
+func validateRequirementsForExecutor(executor, unitRoot string, requireToken bool) error {
+	if requireToken {
+		if _, err := coreconfig.GetPAT(); err != nil {
+			return err
+		}
 	}
 
 	requiredFiles, err := requiredReleaseSystemFiles(executor)
