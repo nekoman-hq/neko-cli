@@ -298,17 +298,37 @@ func getDownloadURL(release *github.Release) (string, error) {
 	osName := runtime.GOOS
 	arch := runtime.GOARCH
 	archName := mapArchName(arch)
-	osNameCap := strings.ToUpper(osName[:1]) + osName[1:]
-	assetPattern := fmt.Sprintf("neko-cli_%s_%s", osNameCap, archName)
+	osNameCap := releaseOSName(osName)
 
 	for _, asset := range release.Assets {
-		if strings.Contains(asset.Name, assetPattern) && strings.HasSuffix(asset.Name, ".tar.gz") {
+		if isCompatibleCoreReleaseAsset(asset.Name, osNameCap, archName) {
 			return asset.BrowserDownloadURL, nil
 		}
 	}
 
-	return "", fmt.Errorf("no compatible release found for %s/%s (expected pattern: %s*.tar.gz)",
-		osName, arch, assetPattern)
+	return "", fmt.Errorf("no compatible release found for %s/%s (expected patterns: %s)",
+		osName, arch, strings.Join(coreReleaseAssetPatterns(osNameCap, archName), " or "))
+}
+
+func isCompatibleCoreReleaseAsset(name, osName, archName string) bool {
+	for _, pattern := range coreReleaseAssetPatterns(osName, archName) {
+		if name == pattern {
+			return true
+		}
+	}
+	return strings.HasPrefix(name, "neko-cli_") &&
+		strings.HasSuffix(name, fmt.Sprintf("_%s_%s.tar.gz", osName, archName))
+}
+
+func coreReleaseAssetPatterns(osName, archName string) []string {
+	return []string{
+		fmt.Sprintf("neko-cli_%s_%s.tar.gz", osName, archName),
+		fmt.Sprintf("neko-cli_<version>_%s_%s.tar.gz", osName, archName),
+	}
+}
+
+func releaseOSName(osName string) string {
+	return strings.ToUpper(osName[:1]) + osName[1:]
 }
 
 // mapArchName maps Go architecture names to goreleaser naming conventions
