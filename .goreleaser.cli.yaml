@@ -29,8 +29,7 @@ archives:
       - neko-cli
     formats: [tar.gz]
     name_template: >-
-      neko-cli_{{ if index .Env "CLI_VERSION" }}{{ .Env.CLI_VERSION }}{{ else }}{{ .Version }}{{ end }}_
-      {{- title .Os }}_
+      neko-cli_{{ title .Os }}_
       {{- if eq .Arch "amd64" }}x86_64
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
