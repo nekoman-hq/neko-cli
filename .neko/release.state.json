@@ -3,6 +3,9 @@
   "units": {
     "cli": {
       "version": "2.2.4"
+    },
+    "plugin-release": {
+      "version": "3.0.0"
     }
   }
 }

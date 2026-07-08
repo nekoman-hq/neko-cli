@@ -14,6 +14,23 @@
         "delivery": "github-actions",
         "workflow": ".github/workflows/release-neko-cli.yml"
       }
+    },
+    {
+      "id": "plugin-release",
+      "displayName": "Nekocli Release Plugin",
+      "paths": [
+        "plugin/release/**",
+        ".plugin.release.neko.json",
+        "docs/release/**",
+        "docs/plugins/release.md"
+      ],
+      "workingDirectory": ".",
+      "tagPrefix": "plugin-release/v",
+      "executor": {
+        "type": "goreleaser",
+        "delivery": "github-actions",
+        "workflow": ".github/workflows/release-plugin-release.yml"
+      }
     }
   ]
 }

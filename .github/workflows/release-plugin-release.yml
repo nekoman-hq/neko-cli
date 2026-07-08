@@ -1,0 +1,30 @@
+name: Release Plugin Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      unit:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+      tag:
+        required: true
+        type: string
+      release_sha:
+        required: true
+        type: string
+
+jobs:
+  placeholder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Explain placeholder
+        run: |
+          echo "This is a placeholder for the plugin-release V2 workflow."
+          echo "Publishing is intentionally not implemented in Self-Migration M1."
+          echo "unit=${{ inputs.unit }}"
+          echo "version=${{ inputs.version }}"
+          echo "tag=${{ inputs.tag }}"
+          echo "release_sha=${{ inputs.release_sha }}"
