@@ -1,0 +1,31 @@
+name: Release Nekocli
+
+on:
+  workflow_dispatch:
+    inputs:
+      unit:
+        description: Release unit id dispatched by Neko CLI.
+        required: true
+        type: string
+      version:
+        description: Release version dispatched by Neko CLI.
+        required: true
+        type: string
+      tag:
+        description: Existing release tag dispatched by Neko CLI.
+        required: true
+        type: string
+      release_sha:
+        description: Release commit SHA dispatched by Neko CLI.
+        required: true
+        type: string
+
+jobs:
+  placeholder:
+    name: Placeholder
+    runs-on: ubuntu-latest
+    steps:
+      - name: No publish yet
+        run: |
+          echo "Temporary Self-Migration M1 placeholder."
+          echo "Publishing is intentionally not implemented in this workflow yet."

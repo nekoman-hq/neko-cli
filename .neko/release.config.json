@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 2,
+  "units": [
+    {
+      "id": "cli",
+      "displayName": "Nekocli",
+      "paths": [
+        "**"
+      ],
+      "workingDirectory": ".",
+      "tagPrefix": "v",
+      "executor": {
+        "type": "goreleaser",
+        "delivery": "github-actions",
+        "workflow": ".github/workflows/release-neko-cli.yml"
+      }
+    }
+  ]
+}
