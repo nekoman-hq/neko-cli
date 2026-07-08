@@ -135,7 +135,6 @@ func parseLogOutput(stderr string) []plugin.LogEntry {
 		entry := parseLogLine(line)
 		logs = append(logs, entry)
 	}
-
 	return logs
 }
 
