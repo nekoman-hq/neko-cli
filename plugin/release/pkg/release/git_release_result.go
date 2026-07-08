@@ -1,6 +1,8 @@
 package release
 
 import (
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -45,9 +47,16 @@ func (ownership V2GitOwnership) Summary() string {
 	)
 }
 
+//nolint:govet // File metadata fields are ordered by recovery semantics.
 type KnownReleaseFile struct {
-	AbsolutePath           string
-	RepositoryRelativePath string
+	AbsolutePath             string
+	RepositoryRelativePath   string
+	ExpectedExistsBefore     bool
+	ExpectedExistsAfter      bool
+	PreimageSHA256           string
+	PostimageSHA256          string
+	RequiredForReleaseCommit bool
+	Reason                   string
 }
 
 type KnownReleaseFiles struct {
@@ -60,13 +69,13 @@ func NewKnownReleaseFiles(ctx *ReleaseExecutionContext, materializationPlan *Mat
 		return KnownReleaseFiles{}, fmt.Errorf("release execution context is missing")
 	}
 	files := KnownReleaseFiles{RepositoryRoot: ctx.RepositoryRoot}
-	if err := files.AddAbsolute(releaseconfig.V2StatePath(ctx.RepositoryRoot)); err != nil {
+	if err := files.AddState(ctx); err != nil {
 		return KnownReleaseFiles{}, err
 	}
 	if materializationPlan != nil {
 		for _, change := range materializationPlan.Changes {
 			if change.RequiredForReleaseCommit {
-				if err := files.AddAbsolute(change.AbsolutePath); err != nil {
+				if err := files.AddMaterializedChange(change); err != nil {
 					return KnownReleaseFiles{}, err
 				}
 			}
@@ -83,6 +92,45 @@ func (files *KnownReleaseFiles) AddAbsolute(absolutePath string) error {
 	if err != nil {
 		return err
 	}
+	files.Files = append(files.Files, file)
+	return nil
+}
+
+func (files *KnownReleaseFiles) AddState(ctx *ReleaseExecutionContext) error {
+	file, err := newKnownReleaseFile(files.RepositoryRoot, releaseconfig.V2StatePath(ctx.RepositoryRoot))
+	if err != nil {
+		return err
+	}
+	preimage, existed, err := hashFileIfExists(file.AbsolutePath)
+	if err != nil {
+		return err
+	}
+	postimage, err := plannedV2StatePostimageHash(ctx)
+	if err != nil {
+		return err
+	}
+	file.ExpectedExistsBefore = existed
+	file.ExpectedExistsAfter = true
+	file.PreimageSHA256 = preimage
+	file.PostimageSHA256 = postimage
+	file.RequiredForReleaseCommit = true
+	file.Reason = "v2 release state"
+	files.Files = append(files.Files, file)
+	return nil
+}
+
+func (files *KnownReleaseFiles) AddMaterializedChange(change MaterializedFileChange) error {
+	file, err := newKnownReleaseFile(files.RepositoryRoot, change.AbsolutePath)
+	if err != nil {
+		return err
+	}
+	sum := sha256.Sum256(change.AfterContent)
+	file.ExpectedExistsBefore = change.Existed
+	file.ExpectedExistsAfter = true
+	file.PreimageSHA256 = change.BeforeHash
+	file.PostimageSHA256 = fmt.Sprintf("%x", sum[:])
+	file.RequiredForReleaseCommit = change.RequiredForReleaseCommit
+	file.Reason = change.Reason
 	files.Files = append(files.Files, file)
 	return nil
 }
@@ -106,6 +154,27 @@ func (files KnownReleaseFiles) Validate() error {
 		seen[normalized.RepositoryRelativePath] = struct{}{}
 	}
 	return nil
+}
+
+func plannedV2StatePostimageHash(ctx *ReleaseExecutionContext) (string, error) {
+	state, err := releaseconfig.LoadV2State(releaseconfig.V2StatePath(ctx.RepositoryRoot))
+	if err != nil {
+		return "", err
+	}
+	nextState := cloneV2State(state)
+	unitState, ok := nextState.Units[ctx.Unit.ID]
+	if !ok {
+		return "", fmt.Errorf("v2 state is missing unit %q", ctx.Unit.ID)
+	}
+	unitState.Version = ctx.NextVersion
+	nextState.Units[ctx.Unit.ID] = unitState
+	data, err := json.MarshalIndent(nextState, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("marshal planned v2 state: %w", err)
+	}
+	data = append(data, '\n')
+	sum := sha256.Sum256(data)
+	return fmt.Sprintf("%x", sum[:]), nil
 }
 
 func (files KnownReleaseFiles) RelativePaths() []string {
@@ -152,17 +221,19 @@ func newKnownReleaseFile(repositoryRoot, absolutePath string) (KnownReleaseFile,
 //
 //nolint:govet // Release result fields follow the release lifecycle order.
 type GitReleaseResult struct {
-	Unit              string
-	Version           string
-	Tag               string
-	CommitSHA         string
-	CommitCreated     bool
-	TagCreated        bool
-	CommitPushed      bool
-	TagPushed         bool
-	ReachedPhase      string
-	KnownReleaseFiles []string
-	RecoveryGuidance  string
+	Unit                 string
+	Version              string
+	Tag                  string
+	CommitSHA            string
+	RepositoryRemoteName string
+	RepositoryRemote     string
+	CommitCreated        bool
+	TagCreated           bool
+	CommitPushed         bool
+	TagPushed            bool
+	ReachedPhase         string
+	KnownReleaseFiles    []string
+	RecoveryGuidance     string
 }
 
 func newGitReleaseResult(ctx *ReleaseExecutionContext, files KnownReleaseFiles) *GitReleaseResult {

@@ -19,7 +19,7 @@ GitHub Actions later owns:
 
 The coordinator does not load V1 files, start executors, call GitHub APIs, calculate versions, materialize files, write state, or dispatch workflows. It only coordinates known release files that were already prepared by the materialization and state transactions.
 
-For future GitHub Actions dispatch, V2 units may already validate a canonical workflow path under `.github/workflows/`. That workflow reference is configuration only in this milestone.
+For future GitHub Actions dispatch, V2 units validate a canonical workflow path under `.github/workflows/`. The execution journal records the local V2 transaction before materialization, state write, staging, commit, tag, push, and dispatch handoff. The dispatch journal records the later HTTP dispatch attempt.
 
 ## Known Release Files
 
@@ -100,16 +100,18 @@ The coordinator does not use `--follow-tags`, does not push all tags, does not p
 
 Before the commit boundary, state and materialization transactions may restore their own snapshots and unstage only their known files. After commit, tag, or push starts, V2 does not run `git reset --hard`, `git clean -fd`, remote tag deletion, or GitHub release deletion.
 
-The result model records unit, version, tag, commit SHA, created/pushed booleans, reached phase, known files, and recovery guidance. A future dispatch journal and `resume` command are not implemented in this milestone.
+The result model records unit, version, tag, commit SHA, selected remote, created/pushed booleans, reached phase, known files, and recovery guidance. Public V2 GitHub Actions releases now use the execution journal before mutation and dispatch journal before workflow dispatch.
+
+Execution journals are stored outside the worktree under:
+
+```text
+<git-common-dir>/neko/release/executions/<sha256>.json
+```
+
+They do not affect Git cleanliness and do not enter release commits.
 
 ## Public Boundary
 
-Public V2 non-dry-run release commands remain blocked until publish-only adapters exist:
-
-```text
-V2 Git release coordination is prepared, but V2 publication adapters
-are not available yet. No release state, commit, tag, push, or publish
-operation was performed.
-```
+Public V2 GitHub Actions non-dry-run release commands are active. V2 local non-dry-run release commands remain blocked until publish-only adapter boundaries exist.
 
 V1 behavior is unchanged.

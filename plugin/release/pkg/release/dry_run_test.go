@@ -79,7 +79,7 @@ func TestRevertGitReleaseWithoutMutatingStepIsNoop(t *testing.T) {
 	}
 }
 
-func TestHandleReleaseRejectsV2GitHubActionsExecution(t *testing.T) {
+func TestHandleReleaseV2GitHubActionsRequiresTokenBeforeMutation(t *testing.T) {
 	withWorkingDirectory(t)
 
 	if err := os.MkdirAll(".neko", 0755); err != nil {
@@ -102,11 +102,11 @@ func TestHandleReleaseRejectsV2GitHubActionsExecution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HandleRelease: %v", err)
 	}
-	if resp.Status != "error" || resp.Error.Code != "V2_PUBLICATION_ADAPTERS_UNAVAILABLE" {
-		t.Fatalf("expected V2 publication adapter blocker, got %#v", resp)
+	if resp.Status != "error" || resp.Error.Code != "V2_GITHUB_ACTIONS_RELEASE_FAILED" {
+		t.Fatalf("expected V2 github-actions token blocker, got %#v", resp)
 	}
-	if !strings.Contains(resp.Error.Message, "V2 Git release coordination is prepared") {
-		t.Fatalf("expected M5A blocker message, got %q", resp.Error.Message)
+	if !strings.Contains(resp.Error.Message, "GITHUB_TOKEN") {
+		t.Fatalf("expected token guidance, got %q", resp.Error.Message)
 	}
 }
 
@@ -210,8 +210,8 @@ func TestHandleReleaseV2DryRunAllowsGitHubActionsDelivery(t *testing.T) {
 	if !responseContains(resp.Data["items"], ".github/workflows/release-api.yml") {
 		t.Fatalf("expected dry-run response to include workflow, got %#v", resp.Data["items"])
 	}
-	if !responseContains(resp.Data["items"], "not implemented") {
-		t.Fatalf("expected dry-run response to show dispatch not implemented, got %#v", resp.Data["items"])
+	if !responseContains(resp.Data["items"], "planned after release commit and tag push") {
+		t.Fatalf("expected dry-run response to show planned dispatch, got %#v", resp.Data["items"])
 	}
 	if !responseContains(resp.Data["items"], "api/v0.1.1") {
 		t.Fatalf("expected planned tag api/v0.1.1, got %#v", resp.Data["items"])

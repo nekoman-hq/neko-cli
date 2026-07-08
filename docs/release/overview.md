@@ -33,11 +33,7 @@ V2 is repository-root scoped and uses two files:
 
 V2 can be loaded, strictly parsed, validated, normalized, and used for unit workflows. `history` and `contributors` are unit-aware. `patch`, `minor`, and `major` support V2 dry-run planning with execution context, delivery resolution, version materialization planning, GitHub Actions workflow configuration, and Neko-owned Git release planning.
 
-V2 non-dry-run public release commands are intentionally blocked after Milestone 5A. The internal `GitReleaseCoordinator` can stage known release files, create the deterministic release commit, create the unit tag, and push commit then tag, but publish-only adapters and GitHub Actions dispatch are not available yet. Non-dry-run V2 commands return:
-
-```text
-V2 Git release coordination is prepared, but V2 publication adapters are not available yet. No release state, commit, tag, push, or publish operation was performed.
-```
+V2 GitHub Actions non-dry-run public release commands are active after Milestone 5C3B. Neko CLI owns materialization, state update, targeted staging, release commit, unit tag, commit push, tag push, execution journal, dispatch journal, and workflow dispatch. GitHub Actions owns build and publish from the pushed tag. V2 local delivery remains blocked.
 
 ## Safety
 
@@ -60,6 +56,12 @@ Implemented now:
 - Schema-neutral `ReleaseExecutionContext`.
 - Local delivery resolver with `github-actions` recognized as non-local.
 - GitHub Actions delivery schema with mandatory canonical `.github/workflows/<file>.yml|yaml` workflow validation.
+- Immutable GitHub Actions dispatch request contract and SHA-256 identity.
+- Durable V2 release execution journal and read-only recovery assessment under the Git common directory.
+- Durable dispatch journal model under the Git common directory.
+- Internal GitHub.com-only Actions workflow-dispatch client with `GITHUB_TOKEN` token resolution, redirect blocking, and accepted/rejected/unknown classification.
+- Public V2 GitHub Actions release execution.
+- Public `neko release resume --unit <unit>` and read-only `--dry-run` recovery assessment.
 - Executor capability contracts for `goreleaser`, `jreleaser`, and `release-it`.
 - Executor requirement checks scoped to unit roots.
 - Version materialization before V2 local release commits.
@@ -71,8 +73,7 @@ Implemented now:
 Not implemented yet:
 
 - Automatic multi-unit migration.
-- GitHub Actions delivery execution.
 - V2 local `release-it` execution.
 - Publish-only adapters for GoReleaser and JReleaser.
-- Public V2 non-dry-run release execution.
-- Dispatch journal and resume command.
+- V2 local non-dry-run release execution.
+- Public standalone dispatch and retry commands.

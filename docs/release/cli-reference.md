@@ -1,5 +1,4 @@
 # Release CLI Reference
-
 ## V1
 
 V1 uses `.release.neko.json` and supports the existing release commands.
@@ -37,9 +36,14 @@ neko release contributors --unit web
 neko release patch --unit api --dry-run
 neko release minor --unit api --dry-run
 neko release major --unit api --dry-run
+neko release patch --unit api
+neko release minor --unit api
+neko release major --unit api
+neko release resume --unit api
+neko release resume --unit api --dry-run
 ```
 
-V2 non-dry-run release commands are intentionally blocked until publish-only adapters exist. Dry-run output includes:
+V2 non-dry-run release commands are active only for `delivery: github-actions`. V2 local delivery remains blocked. Dry-run output includes:
 
 ```text
 unit
@@ -50,6 +54,10 @@ executor
 delivery
 workflow
 dispatch
+dispatchRef
+dispatchInputs
+journalIdentity
+journalLocation
 workingDirectory
 unitRoot
 stateChange
@@ -66,11 +74,22 @@ executorStart
 
 Blocked:
 
-- Public V2 non-dry-run `patch`, `minor`, and `major` return `V2 Git release coordination is prepared, but V2 publication adapters are not available yet. No release state, commit, tag, push, or publish operation was performed.`
-- GitHub Actions dispatch is not implemented yet.
+- V2 local non-dry-run release commands return `V2 local release execution is not available yet.`
+- Execution journals and dispatch journals are not written by dry-run.
 - V2 local `release-it` remains blocked because no publish-only boundary exists.
 
 For `delivery: github-actions`, V2 config must include `workflow: ".github/workflows/<file>.yml"` or `workflow: ".github/workflows/<file>.yaml"`. `neko release validate --show` displays the workflow only after repository-aware validation confirms that the file exists and stays inside `.github/workflows/`.
+
+The execution journal records V2 release phases and recovery evidence under the Git common directory. The dispatch contract targets GitHub.com remotes only, uses `GITHUB_TOKEN` with repository Actions write permission, sends the existing unit tag as `ref`, and sends exactly four inputs: `unit`, `version`, `tag`, and `release_sha`. No public standalone dispatch or retry command exists.
+
+## Resume
+
+`resume` continues only an existing unresolved V2 GitHub Actions execution journal. It never calculates a new version, chooses a new tag, or blindly retries uncertain push or dispatch outcomes.
+
+```bash
+neko release resume --unit api
+neko release resume --unit api --dry-run
+```
 
 ## Unit Flag
 

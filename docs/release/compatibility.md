@@ -53,7 +53,9 @@ Dry-run planning now also builds the schema-neutral execution context. That cont
 
 `github-actions` is a valid V2 delivery mode only when `workflow` uses canonical `.github/workflows/<file>.yml|yaml` form. Real repository validation requires the workflow file to exist and remain inside `.github/workflows/`.
 
-V2 non-dry-run public release commands are blocked in Milestone 5A. Internally, V2 can prepare known release files and coordinate Neko-owned Git commit, unit tag, and push, but no state write, materialization, commit, tag, push, publish, dispatch, or executor start is performed by public V2 non-dry-run commands until publish-only adapters exist.
+V2 GitHub Actions non-dry-run public release commands are active. They prepare known release files, build a durable release execution journal, coordinate Neko-owned materialization, state update, commit, unit tag, push, build the GitHub Actions dispatch request and journal identity, resolve GitHub.com repository targets, and dispatch the workflow. V2 local non-dry-run remains blocked.
+
+Execution and dispatch journals never use V1 `project-owner` or `project-name`. Dispatch derives owner and repository only from the selected V2 Git remote and currently supports GitHub.com remotes only.
 
 ## Migration
 
@@ -67,11 +69,10 @@ Nested V1 configs are rejected because the CLI cannot safely infer whether they 
 
 The following remain future work:
 
-- GitHub Actions delivery execution.
 - V2 local `release-it` execution.
 - Publish-only adapters for GoReleaser and JReleaser.
-- Public V2 non-dry-run release execution.
-- Dispatch journal and resume command.
+- Public V2 local non-dry-run release execution.
+- Public standalone dispatch and retry commands.
 
 ## Dry-Run And Rollback Safety
 

@@ -2,7 +2,7 @@
 
 V2 local release internals run through one transaction boundary. The transaction owns the order of preflight, materialization, state persistence, handoff to Git coordination, and recovery.
 
-Public V2 non-dry-run commands are blocked in Milestone 5A before this transaction mutates files. The transaction exists so later publish-only adapters can reuse the same preparation boundary.
+Public V2 local non-dry-run commands remain blocked. V2 GitHub Actions releases use the journaled flow described in [GitHub Actions release flow](github-actions-release-flow.md).
 
 ## Phases
 
@@ -54,6 +54,6 @@ If the release reaches commit/tag/remote phases, no `git reset --hard`, `git cle
 | `jreleaser` | blocked until publish-only adapter exists | Neko CLI materializes `jreleaser.yml` and prepares it with state as known release files |
 | `release-it` | blocked | release-it owns commit/tag/push/release in the legacy adapter and has no V2 publish-only boundary |
 
-GitHub Actions delivery remains recognized but not implemented.
+GitHub Actions delivery is active through the journaled remote workflow dispatch path; local executors still do not publish V2 GitHub Actions releases.
 
 See [Git release coordination](git-coordination.md).

@@ -56,6 +56,8 @@ func main() {
 		resp, err = release.HandleRelease(req, release.Minor)
 	case "major":
 		resp, err = release.HandleRelease(req, release.Major)
+	case "resume":
+		resp, err = release.HandleResume(req)
 	case "history":
 		resp, err = history.HandleHistory(req)
 	case "contributors":

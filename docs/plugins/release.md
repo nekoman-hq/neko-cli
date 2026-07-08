@@ -106,7 +106,7 @@ neko release patch --dry-run
 
 With `--dry-run`, Neko only calculates and displays the next version. It does not write config, update executor files, run executors, fetch remotes, commit, tag, push, publish, or rollback.
 
-For V2 repositories, `patch`, `minor`, and `major` support dry-run planning with `--unit`. Non-dry-run V2 releases remain blocked until publish-only adapters exist; the internal GitReleaseCoordinator is prepared but no public V2 command writes state, commits, tags, pushes, publishes, dispatches, or starts an executor.
+For V2 repositories, `patch`, `minor`, and `major` support dry-run planning with `--unit`. Non-dry-run V2 releases are active for `delivery: github-actions`; V2 local delivery remains blocked. The GitHub Actions path writes execution and dispatch journals, commits and tags the release, pushes commit and tag, and dispatches the configured workflow. No local V2 executor publishes artifacts.
 
 ---
 
@@ -340,7 +340,7 @@ V2 uses repository-root files:
 
 `release.config.json` stores committed repository architecture: units, paths, working directories, tag prefixes, executor type, and delivery. `release.state.json` stores unit versions. Tags are derived from `tagPrefix + version` and are not stored in state.
 
-`neko release validate` can validate V2 now. `history`, `contributors`, dry-run planning, and root V1-to-V2 migration are unit-aware. GitHub Actions delivery is valid V2 configuration when `workflow` points to an existing `.github/workflows/<file>.yml|yaml` file. Dry-run planning builds the execution context, materialization plan, local delivery/executor capabilities, planned release commit, unit tag, known release files, push order, workflow reference, dispatch status, and V2 Git ownership. V2 non-dry-run public commands are blocked until publish-only adapters exist. V2 local `release-it` and GitHub Actions dispatch are not active yet.
+`neko release validate` can validate V2 now. `history`, `contributors`, dry-run planning, and root V1-to-V2 migration are unit-aware. GitHub Actions delivery is valid V2 configuration when `workflow` points to an existing `.github/workflows/<file>.yml|yaml` file. Dry-run planning builds the execution context, materialization plan, local delivery/executor capabilities, planned release commit, unit tag, known release files, push order, workflow reference, dispatch input contract, dispatch status, and V2 Git ownership. M5C3B activates the journaled V2 GitHub Actions release path and `neko release resume --unit <unit>`. V2 local `release-it` and standalone public dispatch/retry commands are not active yet.
 
 `neko release migrate` can convert a root V1 single-unit repository to V2. It archives `.release.neko.json` as `.release.neko.json.v1.bak`, writes V2 config and state atomically, and uses a temporary recovery journal.
 
@@ -357,6 +357,12 @@ See:
 - [Version materialization](../release/version-materialization.md)
 - [Local delivery](../release/local-delivery.md)
 - [GitHub Actions delivery](../release/github-actions-delivery.md)
+- [GitHub Actions release flow](../release/github-actions-release-flow.md)
+- [Execution journal](../release/execution-journal.md)
+- [Recovery model](../release/recovery-model.md)
+- [GitHub Actions dispatch](../release/github-actions-dispatch.md)
+- [Dispatch contract](../release/dispatch-contract.md)
+- [Dispatch journal](../release/dispatch-journal.md)
 - [Local release transaction](../release/local-release-transaction.md)
 - [Compatibility](../release/compatibility.md)
 
@@ -555,7 +561,7 @@ Rollback only runs after a mutating release step has been recorded. Dry-run plan
 
 | Variable | Description |
 |----------|-------------|
-| `GITHUB_TOKEN` | Required for GitHub releases |
+| `GITHUB_TOKEN` | Required for V1 GitHub releases and future internal GitHub Actions dispatch attempts with repository Actions write permission |
 | `PLUGIN_{NAME}_VERSION` | Auto-injected plugin versions (from `.plugin.release.neko.json`) |
 
 Custom token naming options are not currently supported but may be added in the future.

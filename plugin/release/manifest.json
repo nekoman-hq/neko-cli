@@ -134,6 +134,29 @@
       ]
     },
     {
+      "name": "resume",
+      "description": "Resumes a previously journaled V2 GitHub Actions release. It never calculates a new version and does not automatically retry uncertain push or dispatch outcomes.",
+      "outputs": [
+        "table",
+        "json"
+      ],
+      "flags": [
+        {
+          "name": "unit",
+          "type": "string",
+          "required": false,
+          "description": "Selects the release unit whose existing V2 GitHub Actions journal should be resumed."
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "required": false,
+          "default": false,
+          "description": "Assess the existing release journal without writing files, refs, journals, remotes, or dispatching."
+        }
+      ]
+    },
+    {
       "name": "history",
       "description": "Show release history",
       "outputs": [

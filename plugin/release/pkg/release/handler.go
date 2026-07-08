@@ -8,6 +8,7 @@ package release
 */
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -57,6 +58,16 @@ func HandleRelease(req plugin.Request, releaseType Type) (*plugin.Response, erro
 				return commandErrorResponse(string(releaseType), "VALIDATION_FAILED", validationErr.Error()), nil
 			}
 			return v2DryRunPlanResponse(string(releaseType), ctx)
+		}
+		if ctx.Delivery == string(config.DeliveryGitHubActions) {
+			result, runErr := NewGitHubActionsReleaseRunner().Run(context.Background(), ctx)
+			if runErr != nil {
+				return commandErrorResponse(string(releaseType), "V2_GITHUB_ACTIONS_RELEASE_FAILED", runErr.Error()), nil
+			}
+			return githubActionsReleaseResponse(string(releaseType), result), nil
+		}
+		if ctx.Delivery == string(config.DeliveryLocal) {
+			return commandErrorResponse(string(releaseType), "V2_LOCAL_DELIVERY_BLOCKED", "V2 local release execution is not available yet."), nil
 		}
 		return commandErrorResponse(string(releaseType), "V2_PUBLICATION_ADAPTERS_UNAVAILABLE", v2GitCoordinationUnavailableMessage), nil
 	}
@@ -240,7 +251,45 @@ func v2DryRunPlanResponse(command string, ctx *ReleaseExecutionContext) (*plugin
 	if err != nil {
 		return commandErrorResponse(command, "GIT_COORDINATION_FAILED", err.Error()), nil
 	}
+	dispatchSummary, err := BuildReleaseDispatchDryRunSummary(ctx)
+	if err != nil {
+		return commandErrorResponse(command, "DISPATCH_CONTRACT_FAILED", err.Error()), nil
+	}
 	commitMessage := ReleaseCommitMessage(ctx)
+	items := []map[string]any{
+		{"property": "Release Type", "value": command},
+		{"property": "Unit", "value": ctx.Unit.ID},
+		{"property": "Current Version", "value": ctx.CurrentVersion},
+		{"property": "New Version", "value": ctx.NextVersion},
+		{"property": "Tag", "value": ctx.Tag},
+		{"property": "Executor", "value": ctx.Executor},
+		{"property": "Delivery", "value": ctx.Delivery},
+		{"property": "Workflow", "value": workflowValue(ctx.Workflow)},
+		{"property": "Dispatch", "value": dispatchValue(ctx)},
+		{"property": "Working Directory", "value": ctx.Unit.WorkingDirectory},
+		{"property": "Unit Root", "value": ctx.UnitRoot},
+		{"property": "State Change", "value": plan.StateChange},
+		{"property": "Materialized Files", "value": materializedFilesValue(materializationPlan)},
+		{"property": "Known Release Files", "value": strings.Join(knownFiles.RelativePaths(), ", ")},
+		{"property": "Planned Release Commit", "value": commitMessage},
+		{"property": "Planned Tag", "value": ctx.Tag},
+		{"property": "Planned Push Order", "value": "1. release commit, 2. unit tag"},
+		{"property": "Tool Ownership", "value": plan.OwnershipSummary},
+		{"property": "V2 Git Ownership", "value": plan.V2GitOwnership},
+		{"property": "State Commit Guarantee", "value": plan.StateGuarantee},
+		{"property": "Executor Start", "value": "no"},
+		{"property": "Dry Run", "value": "yes"},
+		{"property": "Status", "value": "V2 preview - no changes made"},
+	}
+	if dispatchSummary != nil {
+		items = append(items,
+			map[string]any{"property": "Dispatch Ref", "value": dispatchSummary.Ref},
+			map[string]any{"property": "Dispatch Inputs", "value": dispatchInputsValue(dispatchSummary.Inputs)},
+			map[string]any{"property": "Journal Identity", "value": dispatchSummary.JournalIdentity},
+			map[string]any{"property": "Journal Location", "value": dispatchSummary.JournalLocation},
+			map[string]any{"property": "Dispatch Status", "value": dispatchSummary.Status},
+		)
+	}
 	return &plugin.Response{
 		Status: "success",
 		Metadata: plugin.ResponseMetadata{
@@ -250,31 +299,7 @@ func v2DryRunPlanResponse(command string, ctx *ReleaseExecutionContext) (*plugin
 			Timestamp: time.Now(),
 		},
 		Data: map[string]any{
-			"items": []map[string]any{
-				{"property": "Release Type", "value": command},
-				{"property": "Unit", "value": ctx.Unit.ID},
-				{"property": "Current Version", "value": ctx.CurrentVersion},
-				{"property": "New Version", "value": ctx.NextVersion},
-				{"property": "Tag", "value": ctx.Tag},
-				{"property": "Executor", "value": ctx.Executor},
-				{"property": "Delivery", "value": ctx.Delivery},
-				{"property": "Workflow", "value": workflowValue(ctx.Workflow)},
-				{"property": "Dispatch", "value": dispatchValue(ctx)},
-				{"property": "Working Directory", "value": ctx.Unit.WorkingDirectory},
-				{"property": "Unit Root", "value": ctx.UnitRoot},
-				{"property": "State Change", "value": plan.StateChange},
-				{"property": "Materialized Files", "value": materializedFilesValue(materializationPlan)},
-				{"property": "Known Release Files", "value": strings.Join(knownFiles.RelativePaths(), ", ")},
-				{"property": "Planned Release Commit", "value": commitMessage},
-				{"property": "Planned Tag", "value": ctx.Tag},
-				{"property": "Planned Push Order", "value": "1. release commit, 2. unit tag"},
-				{"property": "Tool Ownership", "value": plan.OwnershipSummary},
-				{"property": "V2 Git Ownership", "value": plan.V2GitOwnership},
-				{"property": "State Commit Guarantee", "value": plan.StateGuarantee},
-				{"property": "Executor Start", "value": "no"},
-				{"property": "Dry Run", "value": "yes"},
-				{"property": "Status", "value": "V2 preview - no changes made"},
-			},
+			"items": items,
 		},
 		RendererHint: "table",
 	}, nil
@@ -303,9 +328,18 @@ func workflowValue(workflow string) string {
 
 func dispatchValue(ctx *ReleaseExecutionContext) string {
 	if ctx != nil && ctx.Delivery == string(config.DeliveryGitHubActions) {
-		return "not implemented"
+		return "planned after commit and tag push"
 	}
 	return "not applicable"
+}
+
+func dispatchInputsValue(inputs map[string]string) string {
+	keys := sortedDispatchInputKeys(inputs)
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, key+"="+inputs[key])
+	}
+	return strings.Join(parts, " ")
 }
 
 func commandErrorResponse(command, code, message string) *plugin.Response {
