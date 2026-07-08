@@ -1,7 +1,0 @@
-{
-  "project-name": "neko-cli",
-  "project-owner": "nekoman-hq",
-  "project-type": "other",
-  "release-system": "goreleaser",
-  "version": "2.2.4"
-}
