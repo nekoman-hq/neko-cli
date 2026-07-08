@@ -16,15 +16,174 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: read
+
+concurrency:
+  group: release-plugin-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
 jobs:
-  placeholder:
+  validate-build:
+    name: Validate plugin-release dispatch
     runs-on: ubuntu-latest
+    env:
+      RELEASE_UNIT: ${{ inputs.unit }}
+      RELEASE_VERSION: ${{ inputs.version }}
+      RELEASE_TAG: ${{ inputs.tag }}
+      RELEASE_SHA: ${{ inputs.release_sha }}
+      RELEASE_WORKFLOW: .github/workflows/release-plugin-release.yml
     steps:
-      - name: Explain placeholder
+      - name: Validate dispatch inputs
+        shell: bash
         run: |
-          echo "This is a placeholder for the plugin-release V2 workflow."
-          echo "Publishing is intentionally not implemented in Self-Migration M1."
-          echo "unit=${{ inputs.unit }}"
-          echo "version=${{ inputs.version }}"
-          echo "tag=${{ inputs.tag }}"
-          echo "release_sha=${{ inputs.release_sha }}"
+          set -euo pipefail
+
+          if [[ "$RELEASE_UNIT" != "plugin-release" ]]; then
+            echo "::error::unit must be plugin-release, got '$RELEASE_UNIT'"
+            exit 1
+          fi
+
+          if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::version must be a semver-like value, got '$RELEASE_VERSION'"
+            exit 1
+          fi
+
+          expected_tag="plugin-release/v${RELEASE_VERSION}"
+          if [[ "$RELEASE_TAG" != "$expected_tag" ]]; then
+            echo "::error::tag must be '${expected_tag}', got '$RELEASE_TAG'"
+            exit 1
+          fi
+
+          if [[ ! "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::release_sha must be a 40-character lowercase Git SHA"
+            exit 1
+          fi
+
+          {
+            echo "## plugin-release dispatch"
+            echo ""
+            echo "- unit: \`$RELEASE_UNIT\`"
+            echo "- version: \`$RELEASE_VERSION\`"
+            echo "- tag: \`$RELEASE_TAG\`"
+            echo "- release_sha: \`$RELEASE_SHA\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Checkout dispatched tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate tag and release SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          head_sha="$(git rev-parse HEAD)"
+          tag_sha="$(git rev-parse "$RELEASE_TAG")"
+
+          if [[ "$head_sha" != "$RELEASE_SHA" ]]; then
+            echo "::error::checked-out HEAD $head_sha does not match release_sha $RELEASE_SHA"
+            exit 1
+          fi
+
+          if [[ "$tag_sha" != "$RELEASE_SHA" ]]; then
+            echo "::error::tag $RELEASE_TAG points to $tag_sha, expected $RELEASE_SHA"
+            exit 1
+          fi
+
+          echo "Tag and release_sha validation passed." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Validate materialized release state
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if ! jq -e --arg version "$RELEASE_VERSION" '.units["plugin-release"].version == $version' .neko/release.state.json > /dev/null; then
+            echo "::error::.neko/release.state.json must contain units.plugin-release.version == $RELEASE_VERSION"
+            exit 1
+          fi
+
+          if ! jq -e --arg version "$RELEASE_VERSION" '.plugins.release == $version' .plugin.release.neko.json > /dev/null; then
+            echo "::error::.plugin.release.neko.json must contain plugins.release == $RELEASE_VERSION"
+            exit 1
+          fi
+
+          if ! jq -e --arg version "$RELEASE_VERSION" '.version == $version' plugin/release/manifest.json > /dev/null; then
+            echo "::error::plugin/release/manifest.json must contain version == $RELEASE_VERSION"
+            exit 1
+          fi
+
+          if ! jq -e --arg workflow "$RELEASE_WORKFLOW" '
+            .schemaVersion == 2 and
+            any(.units[]; .id == "plugin-release" and
+              .tagPrefix == "plugin-release/v" and
+              .executor.type == "goreleaser" and
+              .executor.delivery == "github-actions" and
+              .executor.workflow == $workflow)
+          ' .neko/release.config.json > /dev/null; then
+            echo "::error::.neko/release.config.json must define plugin-release with tagPrefix plugin-release/v, goreleaser, github-actions, and $RELEASE_WORKFLOW"
+            exit 1
+          fi
+
+          echo "Repository version-file validation passed." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run Go tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test ./...
+
+      - name: Validate GoReleaser configuration
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: check
+
+      - name: Build plugin-release only
+        uses: goreleaser/goreleaser-action@v6
+        env:
+          PLUGIN_RELEASE_VERSION: ${{ inputs.version }}
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: build --snapshot --clean --single-target --id plugin-release --skip=before
+
+      - name: Verify tracked files were not modified
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code
+          echo "Build validation completed without tracked file changes." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish status
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo ""
+            echo "## Publish status"
+            echo ""
+            echo "Publishing is intentionally disabled in Self-Migration M3."
+            echo "The current .goreleaser.yaml contains CLI, release-plugin, and UI-plugin build/archive IDs."
+            echo "GoReleaser release in version 2.13.1 does not provide the build-style --id filter, so an unfiltered release could publish unrelated artifacts."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # TODO(Self-Migration M4): enable publish only after GoReleaser release
+      # configuration can safely publish the plugin-release artifacts without
+      # publishing neko-cli or plugin-ui artifacts from plugin-release/vX.Y.Z tags.
+      #
+      # - name: Publish plugin-release
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #     PLUGIN_RELEASE_VERSION: ${{ inputs.version }}
+      #   run: goreleaser release --clean

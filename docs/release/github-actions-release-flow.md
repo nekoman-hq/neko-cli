@@ -42,6 +42,10 @@ Dry-run does not require or resolve a token.
 
 `accepted` marks the execution journal `handoff-ready`. GitHub Actions owns build and publish from the pushed tag.
 
+For Nekocli's own `plugin-release` unit, `.github/workflows/release-plugin-release.yml` accepts the canonical dispatch inputs `unit`, `version`, `tag`, and `release_sha`. It checks out `inputs.tag`, verifies that `unit == plugin-release`, verifies that `tag == plugin-release/v<version>`, and verifies that both checked-out `HEAD` and the tag resolve to `release_sha`. It also validates `.neko/release.state.json`, `.plugin.release.neko.json`, `plugin/release/manifest.json`, and the V2 unit config before running build validation. The workflow does not calculate versions, commit, tag, push, or modify tracked repository files.
+
+Publishing for `plugin-release` is intentionally not enabled yet. The current `.goreleaser.yaml` defines CLI, release-plugin, and UI-plugin artifacts, while GoReleaser 2.13.1 `release` does not expose the build-style `--id` filter needed to safely publish only `plugin-release` artifacts from a `plugin-release/vX.Y.Z` tag.
+
 `rejected` keeps the execution journal at `tag-pushed`, preserves the dispatch journal rejection, and does not roll back Git state.
 
 `unknown` also keeps the execution journal at `tag-pushed`. Neko CLI does not automatically retry uncertain dispatch or push outcomes.
