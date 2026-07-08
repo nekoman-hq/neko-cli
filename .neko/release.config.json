@@ -3,7 +3,7 @@
   "units": [
     {
       "id": "cli",
-      "displayName": "Nekocli",
+      "displayName": "neko-cli",
       "paths": [
         "**"
       ],
@@ -17,7 +17,7 @@
     },
     {
       "id": "plugin-release",
-      "displayName": "Nekocli Release Plugin",
+      "displayName": "neko-cli release plugin",
       "paths": [
         "plugin/release/**",
         "docs/release/**",
@@ -33,7 +33,7 @@
     },
     {
       "id": "plugin-ui",
-      "displayName": "Nekocli UI Plugin",
+      "displayName": "neko-cli ui plugin",
       "paths": [
         "plugin/ui/**",
         "docs/release/**",

@@ -134,6 +134,7 @@ func (runner *GitHubActionsReleaseRunner) Run(ctx context.Context, execCtx *Rele
 	if err != nil {
 		return nil, err
 	}
+	log.PluginPrint(log.Exec, "Execution journal preflight: unresolved journals=%d", len(unresolved))
 	if len(unresolved) > 0 {
 		return nil, fmt.Errorf("unresolved V2 release execution journal exists for unit %q; use neko release resume --unit %s", execCtx.Unit.ID, execCtx.Unit.ID)
 	}
@@ -141,11 +142,13 @@ func (runner *GitHubActionsReleaseRunner) Run(ctx context.Context, execCtx *Rele
 	if err != nil {
 		return nil, err
 	}
+	log.PluginPrint(log.Exec, "Base commit before release: %s", baseSHA)
 	journal, err := BuildReleaseExecutionJournal(execCtx, BuildReleasePlan(execCtx), knownFiles, baseSHA, remoteURL)
 	if err != nil {
 		return nil, err
 	}
 	store := NewReleaseExecutionJournalStore(execCtx.RepositoryRoot)
+	log.PluginPrint(log.Exec, "Preparing execution journal")
 	resolution, err := store.Prepare(journal)
 	if err != nil {
 		return nil, err
@@ -160,10 +163,12 @@ func (runner *GitHubActionsReleaseRunner) Run(ctx context.Context, execCtx *Rele
 	materialization := NewMaterializationTransaction(materializationPlan)
 	state := NewStateTransaction(execCtx.RepositoryRoot)
 	commitStarted := false
+	log.PluginPrint(log.Exec, "Capturing materialization snapshots")
 	if snapshotErr := materialization.CaptureSnapshots(); snapshotErr != nil {
 		_, _ = store.RecordLastError(journal.Identity, snapshotErr.Error())
 		return nil, snapshotErr
 	}
+	log.PluginPrint(log.Exec, "Materialization snapshots captured")
 	if materializationErr := storeAndRun(store, journal.Identity, ReleaseExecutionPendingApplyMaterialization, func() error {
 		_, applyErr := materialization.Apply()
 		return applyErr
@@ -172,11 +177,13 @@ func (runner *GitHubActionsReleaseRunner) Run(ctx context.Context, execCtx *Rele
 		return nil, materializationErr
 	}
 	log.PluginPrint(log.Exec, "Applied materialized files: %s", materializedFilesValue(materializationPlan))
+	log.PluginPrint(log.Exec, "Capturing V2 state snapshot")
 	if stateSnapshotErr := state.CaptureSnapshot(); stateSnapshotErr != nil {
 		_ = materialization.Restore()
 		_, _ = store.RecordLastError(journal.Identity, stateSnapshotErr.Error())
 		return nil, stateSnapshotErr
 	}
+	log.PluginPrint(log.Exec, "V2 state snapshot captured: %s", state.StatePath)
 	log.PluginPrint(log.Exec, "Writing V2 state update: %s -> %s", execCtx.Unit.ID, execCtx.NextVersion)
 	if stateErr := storeAndRun(store, journal.Identity, ReleaseExecutionPendingWriteState, func() error {
 		return state.WriteUnitVersion(execCtx.Unit.ID, execCtx.NextVersion)
@@ -202,6 +209,7 @@ func (runner *GitHubActionsReleaseRunner) Run(ctx context.Context, execCtx *Rele
 		return nil, pendingErr
 	}
 	commitStarted = true
+	log.PluginV(log.Exec, "Execution journal pending action recorded: %s", ReleaseExecutionPendingCreateReleaseCommit)
 	log.PluginPrint(log.Exec, "Creating release commit: %s", ReleaseCommitMessage(execCtx))
 	commitSHA, err = runner.coordinator.Commit(execCtx, knownFiles)
 	if err == nil {
@@ -216,10 +224,12 @@ func (runner *GitHubActionsReleaseRunner) Run(ctx context.Context, execCtx *Rele
 		_, _ = store.RecordLastError(journal.Identity, err.Error())
 		return nil, err
 	}
+	log.PluginV(log.Exec, "Execution phase confirmed: %s", ReleaseExecutionCommitCreated)
 	log.PluginPrint(log.Exec, "Release commit created: %s", commitSHA)
 	if _, tagPendingErr := store.BeginPending(journal.Identity, ReleaseExecutionPendingCreateUnitTag); tagPendingErr != nil {
 		return nil, tagPendingErr
 	}
+	log.PluginV(log.Exec, "Execution journal pending action recorded: %s", ReleaseExecutionPendingCreateUnitTag)
 	log.PluginPrint(log.Exec, "Creating unit tag: %s", execCtx.Tag)
 	if _, tagErr := runner.coordinator.CreateTag(execCtx, commitSHA); tagErr != nil {
 		_, _ = store.RecordLastError(journal.Identity, tagErr.Error())
@@ -228,6 +238,7 @@ func (runner *GitHubActionsReleaseRunner) Run(ctx context.Context, execCtx *Rele
 	if _, tagPhaseErr := store.ConfirmPhase(journal.Identity, ReleaseExecutionTagCreated, ReleaseExecutionJournalUpdate{TagTargetSHA: commitSHA}); tagPhaseErr != nil {
 		return nil, tagPhaseErr
 	}
+	log.PluginV(log.Exec, "Execution phase confirmed: %s", ReleaseExecutionTagCreated)
 	gitResult := &GitReleaseResult{
 		Unit:                 execCtx.Unit.ID,
 		Version:              execCtx.NextVersion,
@@ -249,6 +260,8 @@ func (runner *GitHubActionsReleaseRunner) Run(ctx context.Context, execCtx *Rele
 	if _, dispatchPendingErr := store.BeginPending(journal.Identity, ReleaseExecutionPendingCreateDispatchJournal); dispatchPendingErr != nil {
 		return nil, dispatchPendingErr
 	}
+	log.PluginV(log.Exec, "Execution journal pending action recorded: %s", ReleaseExecutionPendingCreateDispatchJournal)
+	log.PluginPrint(log.Exec, "Preparing dispatch journal")
 	dispatchResolution, err := dispatchStore.Prepare(dispatchRequest)
 	if err != nil {
 		_, _ = store.RecordLastError(journal.Identity, err.Error())
@@ -259,6 +272,7 @@ func (runner *GitHubActionsReleaseRunner) Run(ctx context.Context, execCtx *Rele
 	if _, dispatchPhaseErr := store.ConfirmPhase(journal.Identity, ReleaseExecutionDispatchJournalPrepared, ReleaseExecutionJournalUpdate{DispatchJournalIdentity: dispatchRequest.Identity.SHA256}); dispatchPhaseErr != nil {
 		return nil, dispatchPhaseErr
 	}
+	log.PluginV(log.Exec, "Execution phase confirmed: %s", ReleaseExecutionDispatchJournalPrepared)
 	log.PluginPrint(log.Exec, "Pushing release commit %s to %s/%s", commitSHA, preflight.Remote, preflight.UpstreamBranch)
 	if commitPushErr := storeAndRun(store, journal.Identity, ReleaseExecutionPendingPushReleaseCommit, func() error {
 		return runner.coordinator.PushCommit(execCtx, preflight.Remote, preflight.UpstreamBranch, commitSHA)
@@ -338,15 +352,19 @@ func sanitizeRemoteForLog(raw string) string {
 }
 
 func storeAndRun(store *ReleaseExecutionJournalStore, identity ReleaseExecutionIdentity, action ReleaseExecutionPendingAction, mutation func() error, phase ReleaseExecutionJournalState, update ReleaseExecutionJournalUpdate) error {
+	log.PluginV(log.Exec, "Starting release action: %s", action)
 	if _, err := store.BeginPending(identity, action); err != nil {
 		return err
 	}
+	log.PluginV(log.Exec, "Execution journal pending action recorded: %s", action)
 	if err := mutation(); err != nil {
 		return err
 	}
+	log.PluginV(log.Exec, "Release action completed: %s", action)
 	if _, err := store.ConfirmPhase(identity, phase, update); err != nil {
 		return err
 	}
+	log.PluginV(log.Exec, "Execution phase confirmed: %s", phase)
 	return nil
 }
 
