@@ -235,7 +235,6 @@ func TestHandleReleasePluginReleaseDryRunMaterializesManifestsWithoutToken(t *te
 	t.Setenv("GITHUB_TOKEN", "")
 
 	stateBefore := mustReadString(t, ".neko/release.state.json")
-	versionFileBefore := mustReadString(t, pluginReleaseVersionFilePath)
 	manifestBefore := mustReadString(t, pluginReleaseManifestPath)
 	statusBefore := strings.TrimSpace(gitOutput(t, root, "status", "--porcelain"))
 
@@ -260,11 +259,11 @@ func TestHandleReleasePluginReleaseDryRunMaterializesManifestsWithoutToken(t *te
 	}
 
 	materialized := responseValueForProperty(t, resp.Data["items"], "Materialized Files")
-	if !strings.Contains(materialized, pluginReleaseVersionFilePath) || !strings.Contains(materialized, pluginReleaseManifestPath) {
+	if materialized != pluginReleaseManifestPath {
 		t.Fatalf("expected plugin release materialized files, got %q", materialized)
 	}
 	knownFiles := responseValueForProperty(t, resp.Data["items"], "Known Release Files")
-	for _, path := range []string{".neko/release.state.json", pluginReleaseVersionFilePath, pluginReleaseManifestPath} {
+	for _, path := range []string{".neko/release.state.json", pluginReleaseManifestPath} {
 		if !strings.Contains(knownFiles, path) {
 			t.Fatalf("expected known release files to include %s, got %q", path, knownFiles)
 		}
@@ -272,14 +271,67 @@ func TestHandleReleasePluginReleaseDryRunMaterializesManifestsWithoutToken(t *te
 	if got := mustReadString(t, ".neko/release.state.json"); got != stateBefore {
 		t.Fatalf("dry-run rewrote state:\n%s", got)
 	}
-	if got := mustReadString(t, pluginReleaseVersionFilePath); got != versionFileBefore {
-		t.Fatalf("dry-run rewrote plugin version file:\n%s", got)
-	}
 	if got := mustReadString(t, pluginReleaseManifestPath); got != manifestBefore {
 		t.Fatalf("dry-run rewrote plugin manifest:\n%s", got)
 	}
 	if statusAfter := strings.TrimSpace(gitOutput(t, root, "status", "--porcelain")); statusAfter != statusBefore {
 		t.Fatalf("dry-run changed git status: before %q after %q", statusBefore, statusAfter)
+	}
+}
+
+func TestHandleReleasePluginUIDryRunMaterializesOnlyUIManifestWithoutToken(t *testing.T) {
+	root := newPluginUIReleaseMaterializationRepository(t)
+	gitCmd(t, root, "init")
+	gitCmd(t, root, "config", "user.email", "test@example.com")
+	gitCmd(t, root, "config", "user.name", "Test User")
+	gitCmd(t, root, "add", ".")
+	gitCmd(t, root, "commit", "-m", "initial")
+	withWorkingDirectoryRoot(t, root)
+	t.Setenv("GITHUB_TOKEN", "")
+
+	stateBefore := mustReadString(t, ".neko/release.state.json")
+	releaseManifestBefore := mustReadString(t, pluginReleaseManifestPath)
+	uiManifestBefore := mustReadString(t, pluginUIManifestPath)
+
+	resp, err := HandleRelease(plugin.Request{
+		Command: "patch",
+		Flags: map[string]any{
+			"dry-run": true,
+			"unit":    "plugin-ui",
+		},
+	}, Patch)
+	if err != nil {
+		t.Fatalf("HandleRelease: %v", err)
+	}
+	if resp.Status != "success" {
+		t.Fatalf("expected success, got %#v", resp.Error)
+	}
+	if !responseContains(resp.Data["items"], "1.0.1") {
+		t.Fatalf("expected dry-run response to show next version 1.0.1, got %#v", resp.Data["items"])
+	}
+	if !responseContains(resp.Data["items"], "plugin-ui/v1.0.1") {
+		t.Fatalf("expected dry-run response to show planned tag, got %#v", resp.Data["items"])
+	}
+	if materialized := responseValueForProperty(t, resp.Data["items"], "Materialized Files"); materialized != pluginUIManifestPath {
+		t.Fatalf("expected plugin-ui materialized file, got %q", materialized)
+	}
+	knownFiles := responseValueForProperty(t, resp.Data["items"], "Known Release Files")
+	for _, path := range []string{".neko/release.state.json", pluginUIManifestPath} {
+		if !strings.Contains(knownFiles, path) {
+			t.Fatalf("expected known release files to include %s, got %q", path, knownFiles)
+		}
+	}
+	if strings.Contains(knownFiles, pluginReleaseManifestPath) {
+		t.Fatalf("plugin-ui dry-run must not include release manifest, got %q", knownFiles)
+	}
+	if got := mustReadString(t, ".neko/release.state.json"); got != stateBefore {
+		t.Fatalf("dry-run rewrote state:\n%s", got)
+	}
+	if got := mustReadString(t, pluginReleaseManifestPath); got != releaseManifestBefore {
+		t.Fatalf("dry-run rewrote release plugin manifest:\n%s", got)
+	}
+	if got := mustReadString(t, pluginUIManifestPath); got != uiManifestBefore {
+		t.Fatalf("dry-run rewrote ui plugin manifest:\n%s", got)
 	}
 }
 

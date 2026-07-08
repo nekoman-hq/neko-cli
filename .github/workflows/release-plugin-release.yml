@@ -106,11 +106,6 @@ jobs:
             exit 1
           fi
 
-          if ! jq -e --arg version "$RELEASE_VERSION" '.plugins.release == $version' .plugin.release.neko.json > /dev/null; then
-            echo "::error::.plugin.release.neko.json must contain plugins.release == $RELEASE_VERSION"
-            exit 1
-          fi
-
           if ! jq -e --arg version "$RELEASE_VERSION" '.version == $version' plugin/release/manifest.json > /dev/null; then
             echo "::error::plugin/release/manifest.json must contain version == $RELEASE_VERSION"
             exit 1

@@ -33,7 +33,7 @@ V2 is repository-root scoped and uses two files:
 
 V2 can be loaded, strictly parsed, validated, normalized, and used for unit workflows. `history` and `contributors` are unit-aware. `patch`, `minor`, and `major` support V2 dry-run planning with execution context, delivery resolution, version materialization planning, GitHub Actions workflow configuration, and Neko-owned Git release planning.
 
-Nekocli itself now has a `plugin-release` V2 unit. For that unit, `.neko/release.state.json` is authoritative and the release plan materializes `.plugin.release.neko.json` and `plugin/release/manifest.json`; the `ui` plugin version is intentionally not migrated yet.
+Nekocli itself now has `plugin-release` and `plugin-ui` V2 units. `.neko/release.state.json` is authoritative for both plugin versions, and each plugin release plan materializes only that unit's `manifest.json`.
 
 V2 GitHub Actions non-dry-run public release commands are active after Milestone 5C3B. Neko CLI owns materialization, state update, targeted staging, release commit, unit tag, commit push, tag push, execution journal, dispatch journal, and workflow dispatch. GitHub Actions owns build and publish from the pushed tag. V2 local delivery remains blocked.
 

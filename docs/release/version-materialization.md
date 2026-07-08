@@ -22,11 +22,11 @@ Dry runs only plan and validate materialization. They do not write files, stage 
 
 | Executor | Materializer | V2 public status |
 |----------|--------------|-----------------|
-| `goreleaser` | tag/context based by default; Nekocli's `plugin-release` unit materializes plugin manifests | active through GitHub Actions delivery when configured |
+| `goreleaser` | tag/context based by default; Nekocli plugin units materialize their own `manifest.json` files | active through GitHub Actions delivery when configured |
 | `jreleaser` | updates `jreleaser.yml` project version before state staging | blocked until publish-only adapter exists |
 | `release-it` | no real materialization | blocked |
 
-GoReleaser units normally do not need a local version file from Neko CLI. Their release version is anchored by the Neko-created release context and tag. Nekocli's own `plugin-release` unit is the current exception: `.neko/release.state.json` is authoritative, and V2 planning materializes `.plugin.release.neko.json` (`plugins.release`) plus `plugin/release/manifest.json` (`version`) to the planned next version. The unrelated `ui` plugin version in `.plugin.release.neko.json` is preserved and is not migrated yet. `make update-manifests` remains a legacy/manual compatibility path for now.
+GoReleaser units normally do not need a local version file from Neko CLI. Their release version is anchored by the Neko-created release context and tag. Nekocli's plugin units are the current exception: `.neko/release.state.json` is authoritative, and V2 planning materializes the selected plugin manifest to the planned next version. `plugin-release` updates only `plugin/release/manifest.json`; `plugin-ui` updates only `plugin/ui/manifest.json`. `make update-manifests` remains a manual developer helper and reads V2 state.
 
 JReleaser needs `jreleaser.yml` to contain the planned project version. The materializer updates only `project.version`, snapshots the original bytes and mode, writes before state preparation, and marks `jreleaser.yml` as required for the Neko-owned release commit.
 

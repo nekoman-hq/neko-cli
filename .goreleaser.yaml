@@ -8,8 +8,8 @@ before:
     - go mod tidy
     - go generate ./...
 
-# NOTE: For monorepo plugin versioning, PLUGIN_RELEASE_VERSION must be set.
-# The release plugin (goreleaser tool) should set this automatically.
+# NOTE: For monorepo plugin versioning, workflows or callers should pass
+# PLUGIN_RELEASE_VERSION and PLUGIN_UI_VERSION from .neko/release.state.json.
 
 builds:
   # Main CLI binary

@@ -6,6 +6,9 @@
     },
     "plugin-release": {
       "version": "3.0.0"
+    },
+    "plugin-ui": {
+      "version": "1.0.0"
     }
   }
 }

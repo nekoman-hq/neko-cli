@@ -1,0 +1,57 @@
+name: Release Plugin UI
+
+on:
+  workflow_dispatch:
+    inputs:
+      unit:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+      tag:
+        required: true
+        type: string
+      release_sha:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  placeholder:
+    name: Validate plugin-ui dispatch
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_UNIT: ${{ inputs.unit }}
+      RELEASE_VERSION: ${{ inputs.version }}
+      RELEASE_TAG: ${{ inputs.tag }}
+      RELEASE_SHA: ${{ inputs.release_sha }}
+    steps:
+      - name: Validate dispatch inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "$RELEASE_UNIT" != "plugin-ui" ]]; then
+            echo "::error::unit must be plugin-ui, got '$RELEASE_UNIT'"
+            exit 1
+          fi
+
+          expected_tag="plugin-ui/v${RELEASE_VERSION}"
+          if [[ "$RELEASE_TAG" != "$expected_tag" ]]; then
+            echo "::error::tag must be '${expected_tag}', got '$RELEASE_TAG'"
+            exit 1
+          fi
+
+          {
+            echo "## plugin-ui dispatch placeholder"
+            echo ""
+            echo "- unit: \`$RELEASE_UNIT\`"
+            echo "- version: \`$RELEASE_VERSION\`"
+            echo "- tag: \`$RELEASE_TAG\`"
+            echo "- release_sha: \`$RELEASE_SHA\`"
+            echo ""
+            echo "Publishing is intentionally not implemented for plugin-ui yet."
+          } >> "$GITHUB_STEP_SUMMARY"

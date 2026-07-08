@@ -12,7 +12,6 @@ package goreleaser
 */
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -219,7 +218,7 @@ func (g *GoReleaser) runGoReleaserDryRun() error {
 		log.ColorText(log.ColorGreen, "goreleaser release --snapshot --clean")))
 
 	cmd := exec.Command("goreleaser", "release", "--snapshot", "--clean")
-	cmd.Env = append(os.Environ(), getPluginVersionEnvVars()...)
+	cmd.Env = os.Environ()
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		errors.WriteWarning(
@@ -241,7 +240,7 @@ func (g *GoReleaser) runGoReleaserRelease() error {
 		log.ColorText(log.ColorGreen, "goreleaser release --clean")))
 
 	cmd := exec.Command("goreleaser", "release", "--clean")
-	cmd.Env = append(os.Environ(), getPluginVersionEnvVars()...)
+	cmd.Env = os.Environ()
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf(
@@ -253,38 +252,6 @@ func (g *GoReleaser) runGoReleaserRelease() error {
 		log.ColorText(log.ColorGreen, "successful"),
 	)
 	return nil
-}
-
-// pluginVersionConfig represents the structure of .plugin.release.neko.json
-type pluginVersionConfig struct {
-	Plugins map[string]string `json:"plugins"`
-}
-
-// getPluginVersionEnvVars reads .plugin.release.neko.json and returns environment variables
-// for each plugin version (e.g., PLUGIN_RELEASE_VERSION=2.3.1)
-func getPluginVersionEnvVars() []string {
-	var envVars []string
-
-	data, err := os.ReadFile(".plugin.release.neko.json")
-	if err != nil {
-		log.PluginV(log.Exec, "No .plugin.release.neko.json found, skipping plugin version injection")
-		return envVars
-	}
-
-	var cfg pluginVersionConfig
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		log.PluginV(log.Exec, "Failed to parse .plugin.release.neko.json: %v", err)
-		return envVars
-	}
-
-	for name, version := range cfg.Plugins {
-		// Convert plugin name to env var format: release -> PLUGIN_RELEASE_VERSION
-		envName := fmt.Sprintf("PLUGIN_%s_VERSION", strings.ToUpper(name))
-		envVars = append(envVars, fmt.Sprintf("%s=%s", envName, version))
-		log.PluginV(log.Exec, "Setting %s=%s", envName, version)
-	}
-
-	return envVars
 }
 
 func init() {

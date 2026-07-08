@@ -15,12 +15,13 @@ LDFLAGS := -X github.com/nekoman-hq/neko-cli/pkg/version.Version=$(VERSION) \
 # ============================================================================
 # Plugin Configuration
 # ============================================================================
-PLUGIN_CONFIG := .plugin.release.neko.json
+RELEASE_CONFIG := .neko/release.config.json
+RELEASE_STATE := .neko/release.state.json
 PLUGIN_DIR := plugin
 PLUGIN_INSTALL_DIR := $(HOME)/.neko/plugins
 
-# Dynamically read plugins from config file
-PLUGINS := $(shell test -f "$(PLUGIN_CONFIG)" && jq -r '.plugins | keys[]' $(PLUGIN_CONFIG) 2>/dev/null || echo "")
+# Dynamically read plugin directories from V2 release units.
+PLUGINS := $(shell test -f "$(RELEASE_CONFIG)" && jq -r '.units[].id | select(startswith("plugin-")) | sub("^plugin-"; "")' $(RELEASE_CONFIG) 2>/dev/null || echo "")
 
 # ============================================================================
 # Colors for help output
@@ -53,7 +54,7 @@ help: ## Show this help message
 	@echo "  $(COLOR_GREEN)plugin-%-clean$(COLOR_RESET)       Clean specific plugin"
 	@echo "  $(COLOR_GREEN)plugin-%-test$(COLOR_RESET)        Test specific plugin"
 	@echo ""
-	@echo "$(COLOR_BOLD)Note:$(COLOR_RESET) Plugins are read from $(COLOR_CYAN)$(PLUGIN_CONFIG)$(COLOR_RESET)"
+	@echo "$(COLOR_BOLD)Note:$(COLOR_RESET) Plugins are read from $(COLOR_CYAN)$(RELEASE_CONFIG)$(COLOR_RESET)"
 	@echo "      Use $(COLOR_GREEN)make check-plugin-config$(COLOR_RESET) to validate configuration"
 	@echo ""
 	@$(MAKE) --no-print-directory versions
@@ -84,12 +85,16 @@ all: build install-plugins ## Build CLI and install all plugins
 
 .PHONY: install-plugins
 install-plugins: ## Install all plugins (compile binaries and copy to ~/.neko/plugins/<plugin_name>/)
-	@if [ ! -f "$(PLUGIN_CONFIG)" ]; then \
-		echo "$(COLOR_YELLOW)⚠ $(PLUGIN_CONFIG) not found$(COLOR_RESET)"; \
+	@if [ ! -f "$(RELEASE_CONFIG)" ]; then \
+		echo "$(COLOR_YELLOW)⚠ $(RELEASE_CONFIG) not found$(COLOR_RESET)"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(RELEASE_STATE)" ]; then \
+		echo "$(COLOR_YELLOW)⚠ $(RELEASE_STATE) not found$(COLOR_RESET)"; \
 		exit 1; \
 	fi
 	@if [ -z "$(PLUGINS)" ]; then \
-		echo "$(COLOR_YELLOW)⚠ No plugins defined in $(PLUGIN_CONFIG)$(COLOR_RESET)"; \
+		echo "$(COLOR_YELLOW)⚠ No plugin units defined in $(RELEASE_CONFIG)$(COLOR_RESET)"; \
 		exit 1; \
 	fi
 	@echo "$(COLOR_BLUE)Installing all plugins...$(COLOR_RESET)"
@@ -246,21 +251,26 @@ list-installed-plugins: ## List all installed plugins
 # ============================================================================
 
 .PHONY: update-manifests
-update-manifests: ## Update all plugin manifests with versions from plugin config
+update-manifests: ## Update all plugin manifests with versions from V2 release state
 	@echo "$(COLOR_BLUE)Updating all plugin manifests...$(COLOR_RESET)"
-	@if [ ! -f "$(PLUGIN_CONFIG)" ]; then \
-		echo "$(COLOR_YELLOW)⚠ $(PLUGIN_CONFIG) not found$(COLOR_RESET)"; \
+	@if [ ! -f "$(RELEASE_CONFIG)" ]; then \
+		echo "$(COLOR_YELLOW)⚠ $(RELEASE_CONFIG) not found$(COLOR_RESET)"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(RELEASE_STATE)" ]; then \
+		echo "$(COLOR_YELLOW)⚠ $(RELEASE_STATE) not found$(COLOR_RESET)"; \
 		exit 1; \
 	fi
 	@for plugin in $(PLUGINS); do \
 		if [ -d "$(PLUGIN_DIR)/$$plugin" ]; then \
-			version=$$(jq -r ".plugins.$$plugin // \"unknown\"" $(PLUGIN_CONFIG)); \
+			unit="plugin-$$plugin"; \
+			version=$$(jq -r --arg unit "$$unit" '.units[$$unit].version // "unknown"' $(RELEASE_STATE)); \
 			if [ "$$version" != "unknown" ] && [ "$$version" != "null" ]; then \
 				echo "$(COLOR_CYAN)  → Updating $$plugin manifest to version $$version$(COLOR_RESET)"; \
 				cd $(PLUGIN_DIR)/$$plugin && $(MAKE) update-manifest VERSION=$$version || exit 1; \
 				cd ../..; \
 			else \
-				echo "$(COLOR_YELLOW)  ⚠ No version found for $$plugin in $(PLUGIN_CONFIG)$(COLOR_RESET)"; \
+				echo "$(COLOR_YELLOW)  ⚠ No version found for $$unit in $(RELEASE_STATE)$(COLOR_RESET)"; \
 			fi; \
 		fi; \
 	done
@@ -309,13 +319,14 @@ uninstall-plugins: ## Uninstall all plugins from ~/.neko/plugins/
 versions: ## Display version information for CLI and all plugins
 	@echo "$(COLOR_BOLD)Version Information:$(COLOR_RESET)"
 	@echo "  CLI:            $(COLOR_CYAN)$(VERSION)$(COLOR_RESET)"
-	@if [ -f "$(PLUGIN_CONFIG)" ]; then \
+	@if [ -f "$(RELEASE_STATE)" ]; then \
 		for plugin in $(PLUGINS); do \
-			version=$$(jq -r ".plugins.$$plugin // \"unknown\"" $(PLUGIN_CONFIG) 2>/dev/null); \
+			unit="plugin-$$plugin"; \
+			version=$$(jq -r --arg unit "$$unit" '.units[$$unit].version // "unknown"' $(RELEASE_STATE) 2>/dev/null); \
 			printf "  Plugin %-8s $(COLOR_CYAN)%s$(COLOR_RESET)\n" "$$plugin:" "$$version"; \
 		done; \
 	else \
-		echo "  $(COLOR_YELLOW)⚠ Plugin config not found$(COLOR_RESET)"; \
+		echo "  $(COLOR_YELLOW)⚠ Release state not found$(COLOR_RESET)"; \
 	fi
 
 # ============================================================================
@@ -402,14 +413,20 @@ deps: ## Download dependencies
 .PHONY: check-plugin-config
 check-plugin-config: ## Verify plugin configuration file
 	@echo "$(COLOR_BLUE)Checking plugin configuration...$(COLOR_RESET)"
-	@if [ ! -f "$(PLUGIN_CONFIG)" ]; then \
-		echo "$(COLOR_YELLOW)⚠ $(PLUGIN_CONFIG) not found$(COLOR_RESET)"; \
+	@if [ ! -f "$(RELEASE_CONFIG)" ]; then \
+		echo "$(COLOR_YELLOW)⚠ $(RELEASE_CONFIG) not found$(COLOR_RESET)"; \
 		exit 1; \
 	fi
-	@echo "$(COLOR_CYAN)Plugin configuration file: $(PLUGIN_CONFIG)$(COLOR_RESET)"
+	@if [ ! -f "$(RELEASE_STATE)" ]; then \
+		echo "$(COLOR_YELLOW)⚠ $(RELEASE_STATE) not found$(COLOR_RESET)"; \
+		exit 1; \
+	fi
+	@echo "$(COLOR_CYAN)Release configuration file: $(RELEASE_CONFIG)$(COLOR_RESET)"
+	@echo "$(COLOR_CYAN)Release state file: $(RELEASE_STATE)$(COLOR_RESET)"
 	@echo "$(COLOR_CYAN)Configured plugins:$(COLOR_RESET)"
 	@for plugin in $(PLUGINS); do \
-		version=$$(jq -r ".plugins.$$plugin // \"unknown\"" $(PLUGIN_CONFIG) 2>/dev/null); \
+		unit="plugin-$$plugin"; \
+		version=$$(jq -r --arg unit "$$unit" '.units[$$unit].version // "unknown"' $(RELEASE_STATE) 2>/dev/null); \
 		if [ -d "$(PLUGIN_DIR)/$$plugin" ]; then \
 			printf "  $(COLOR_GREEN)✓$(COLOR_RESET) %-15s v%-10s $(COLOR_GREEN)(directory exists)$(COLOR_RESET)\n" "$$plugin" "$$version"; \
 		else \

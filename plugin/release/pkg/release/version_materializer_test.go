@@ -80,7 +80,6 @@ func TestGoReleaserMaterializerSkipsCLIUnit(t *testing.T) {
 func TestPluginReleaseMaterializerPlansManifestFiles(t *testing.T) {
 	root := newPluginReleaseMaterializationRepository(t)
 	ctx := mustBuildTransactionContext(t, root, Patch)
-	versionFileBefore := mustReadString(t, filepath.Join(root, pluginReleaseVersionFilePath))
 	manifestBefore := mustReadString(t, filepath.Join(root, pluginReleaseManifestPath))
 
 	plan, err := GoReleaserMaterializer{}.Plan(ctx)
@@ -90,28 +89,16 @@ func TestPluginReleaseMaterializerPlansManifestFiles(t *testing.T) {
 	if err := (GoReleaserMaterializer{}).Validate(plan); err != nil {
 		t.Fatalf("Validate: %v", err)
 	}
-	if len(plan.Changes) != 2 {
-		t.Fatalf("expected two plugin-release materialization changes, got %#v", plan.Changes)
+	if len(plan.Changes) != 1 {
+		t.Fatalf("expected one plugin-release materialization change, got %#v", plan.Changes)
 	}
-	if !sameStringSet(materializationChangePaths(plan), []string{pluginReleaseVersionFilePath, pluginReleaseManifestPath}) {
+	if !sameStringSet(materializationChangePaths(plan), []string{pluginReleaseManifestPath}) {
 		t.Fatalf("unexpected materialized files: %#v", materializationChangePaths(plan))
 	}
 	for _, change := range plan.Changes {
 		if !change.RequiredForReleaseCommit {
 			t.Fatalf("expected %s to be required for release commit", change.RepositoryRelativePath)
 		}
-	}
-
-	versionChange := materializationChangeByPath(t, plan, pluginReleaseVersionFilePath)
-	var versions pluginReleaseVersionsFile
-	if err := json.Unmarshal(versionChange.AfterContent, &versions); err != nil {
-		t.Fatalf("decode materialized plugin versions: %v", err)
-	}
-	if versions.Plugins["release"] != "3.0.1" {
-		t.Fatalf("expected release plugin version 3.0.1, got %#v", versions.Plugins)
-	}
-	if versions.Plugins["ui"] != "1.0.0" {
-		t.Fatalf("expected ui plugin version to be preserved, got %#v", versions.Plugins)
 	}
 
 	manifestChange := materializationChangeByPath(t, plan, pluginReleaseManifestPath)
@@ -139,11 +126,44 @@ func TestPluginReleaseMaterializerPlansManifestFiles(t *testing.T) {
 		}
 	}
 
-	if got := mustReadString(t, filepath.Join(root, pluginReleaseVersionFilePath)); got != versionFileBefore {
-		t.Fatal("Plan must not write .plugin.release.neko.json")
-	}
 	if got := mustReadString(t, filepath.Join(root, pluginReleaseManifestPath)); got != manifestBefore {
 		t.Fatal("Plan must not write plugin/release/manifest.json")
+	}
+}
+
+func TestPluginUIReleaseMaterializerPlansOnlyUIManifest(t *testing.T) {
+	root := newPluginUIReleaseMaterializationRepository(t)
+	ctx := mustBuildTransactionContext(t, root, Patch)
+	releaseManifestBefore := mustReadString(t, filepath.Join(root, pluginReleaseManifestPath))
+	uiManifestBefore := mustReadString(t, filepath.Join(root, pluginUIManifestPath))
+
+	plan, err := GoReleaserMaterializer{}.Plan(ctx)
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+	if err := (GoReleaserMaterializer{}).Validate(plan); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	if !sameStringSet(materializationChangePaths(plan), []string{pluginUIManifestPath}) {
+		t.Fatalf("unexpected materialized files: %#v", materializationChangePaths(plan))
+	}
+	uiChange := materializationChangeByPath(t, plan, pluginUIManifestPath)
+	var afterManifest map[string]json.RawMessage
+	if err := json.Unmarshal(uiChange.AfterContent, &afterManifest); err != nil {
+		t.Fatalf("decode after manifest: %v", err)
+	}
+	var manifestVersion string
+	if err := json.Unmarshal(afterManifest["version"], &manifestVersion); err != nil {
+		t.Fatalf("decode manifest version: %v", err)
+	}
+	if manifestVersion != "1.0.1" {
+		t.Fatalf("expected ui manifest version 1.0.1, got %s", manifestVersion)
+	}
+	if got := mustReadString(t, filepath.Join(root, pluginReleaseManifestPath)); got != releaseManifestBefore {
+		t.Fatal("plugin-ui plan must not write plugin/release/manifest.json")
+	}
+	if got := mustReadString(t, filepath.Join(root, pluginUIManifestPath)); got != uiManifestBefore {
+		t.Fatal("Plan must not write plugin/ui/manifest.json")
 	}
 }
 
@@ -156,28 +176,16 @@ func TestPluginReleaseMaterializerFailsClearlyForRequiredFiles(t *testing.T) {
 		want       string
 	}{
 		{
-			name:    "malformed version map",
-			path:    pluginReleaseVersionFilePath,
-			content: `{"plugins":`,
-			want:    "parse .plugin.release.neko.json",
-		},
-		{
 			name:    "malformed manifest",
 			path:    pluginReleaseManifestPath,
 			content: `{"version":`,
 			want:    "parse plugin/release/manifest.json",
 		},
 		{
-			name:       "missing version map",
-			path:       pluginReleaseVersionFilePath,
-			removeFile: true,
-			want:       "required plugin-release materialized file .plugin.release.neko.json not found",
-		},
-		{
 			name:       "missing manifest",
 			path:       pluginReleaseManifestPath,
 			removeFile: true,
-			want:       "required plugin-release materialized file plugin/release/manifest.json not found",
+			want:       "required plugin manifest file plugin/release/manifest.json not found for unit plugin-release",
 		},
 	}
 	for _, tt := range tests {
@@ -274,6 +282,16 @@ func newV2MaterializationRepository(t *testing.T, executor string) string {
 
 func newPluginReleaseMaterializationRepository(t *testing.T) string {
 	t.Helper()
+	return newPluginManifestMaterializationRepository(t, pluginReleaseUnitID)
+}
+
+func newPluginUIReleaseMaterializationRepository(t *testing.T) string {
+	t.Helper()
+	return newPluginManifestMaterializationRepository(t, pluginUIUnitID)
+}
+
+func newPluginManifestMaterializationRepository(t *testing.T, unitID string) string {
+	t.Helper()
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, ".neko"), 0755); err != nil {
 		t.Fatalf("mkdir .neko: %v", err)
@@ -284,23 +302,19 @@ func newPluginReleaseMaterializationRepository(t *testing.T) string {
 	if err := os.MkdirAll(filepath.Join(root, "plugin", "release"), 0755); err != nil {
 		t.Fatalf("mkdir plugin/release: %v", err)
 	}
+	if err := os.MkdirAll(filepath.Join(root, "plugin", "ui"), 0755); err != nil {
+		t.Fatalf("mkdir plugin/ui: %v", err)
+	}
 	if err := os.WriteFile(filepath.Join(root, ".goreleaser.yml"), []byte("{}"), 0644); err != nil {
 		t.Fatalf("write goreleaser config: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(root, ".github", "workflows", "release-plugin-release.yml"), []byte("name: release plugin\n"), 0644); err != nil {
 		t.Fatalf("write workflow: %v", err)
 	}
-	versionFile := `{
-  "plugins": {
-    "release": "3.0.0",
-    "ui": "1.0.0"
-  }
-}
-`
-	if err := os.WriteFile(filepath.Join(root, pluginReleaseVersionFilePath), []byte(versionFile), 0644); err != nil {
-		t.Fatalf("write plugin versions: %v", err)
+	if err := os.WriteFile(filepath.Join(root, ".github", "workflows", "release-plugin-ui.yml"), []byte("name: release ui\n"), 0644); err != nil {
+		t.Fatalf("write workflow: %v", err)
 	}
-	manifest := `{
+	releaseManifest := `{
   "name": "release",
   "version": "3.0.0",
   "description": "Release management plugin",
@@ -318,11 +332,36 @@ func newPluginReleaseMaterializationRepository(t *testing.T) string {
   ]
 }
 `
-	if err := os.WriteFile(filepath.Join(root, pluginReleaseManifestPath), []byte(manifest), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, pluginReleaseManifestPath), []byte(releaseManifest), 0644); err != nil {
 		t.Fatalf("write plugin manifest: %v", err)
 	}
-	cfg := `{"schemaVersion":2,"units":[{"id":"plugin-release","paths":["plugin/release/**",".plugin.release.neko.json","docs/release/**","docs/plugins/release.md"],"workingDirectory":".","tagPrefix":"plugin-release/v","executor":{"type":"goreleaser","delivery":"github-actions","workflow":".github/workflows/release-plugin-release.yml"}}]}`
-	state := `{"schemaVersion":2,"units":{"plugin-release":{"version":"3.0.0"}}}`
+	uiManifest := `{
+  "name": "ui",
+  "version": "1.0.0",
+  "description": "UI plugin",
+  "author": "nekoman-hq",
+  "commands": [
+    {
+      "name": "hello",
+      "description": "Say hello"
+    }
+  ],
+  "renderer_types": [
+    "table",
+    "json",
+    "text"
+  ]
+}
+`
+	if err := os.WriteFile(filepath.Join(root, pluginUIManifestPath), []byte(uiManifest), 0644); err != nil {
+		t.Fatalf("write ui manifest: %v", err)
+	}
+	cfg := `{"schemaVersion":2,"units":[{"id":"` + unitID + `","paths":["plugin/**"],"workingDirectory":".","tagPrefix":"` + unitID + `/v","executor":{"type":"goreleaser","delivery":"github-actions","workflow":".github/workflows/release-` + unitID + `.yml"}}]}`
+	version := "3.0.0"
+	if unitID == pluginUIUnitID {
+		version = "1.0.0"
+	}
+	state := `{"schemaVersion":2,"units":{"` + unitID + `":{"version":"` + version + `"}}}`
 	if err := os.WriteFile(releaseconfig.V2ConfigPath(root), []byte(cfg), 0644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}

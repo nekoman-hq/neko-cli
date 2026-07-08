@@ -397,9 +397,9 @@ V2 uses repository-root files:
 
 `neko release validate` can validate V2 now. `history`, `contributors`, dry-run planning, and root V1-to-V2 migration are unit-aware. GitHub Actions delivery is valid V2 configuration when `workflow` points to an existing `.github/workflows/<file>.yml|yaml` file. Dry-run planning builds the execution context, materialization plan, local delivery/executor capabilities, planned release commit, unit tag, known release files, push order, workflow reference, dispatch input contract, dispatch status, and V2 Git ownership. V2 GitHub Actions non-dry-run release commands are active and journaled; `neko release resume --unit <unit>` resumes only existing unresolved execution journals. V2 local `release-it` and standalone public dispatch/retry commands are not active.
 
-In Nekocli itself, `plugin-release` is a V2 unit. `.neko/release.state.json` is authoritative for its version; `.plugin.release.neko.json` and `plugin/release/manifest.json` are materialized release files for that unit. `make update-manifests` remains a legacy/manual compatibility path for now, and the `ui` plugin version in `.plugin.release.neko.json` is not migrated yet. V2 dry-run planning does not require or resolve `GITHUB_TOKEN`; real GitHub Actions release execution still requires it.
+In Nekocli itself, `plugin-release` and `plugin-ui` are V2 units. `.neko/release.state.json` is authoritative for both plugin versions; `plugin/release/manifest.json` and `plugin/ui/manifest.json` are materialized release files for their selected units. `make update-manifests` remains a manual compatibility helper and reads V2 state. V2 dry-run planning does not require or resolve `GITHUB_TOKEN`; real GitHub Actions release execution still requires it.
 
-The `plugin-release` unit uses `plugin-release/vX.Y.Z` tags and `.github/workflows/release-plugin-release.yml`. Neko CLI owns state, materialized files, release commit, tag, push, and workflow dispatch. The workflow checks out the dispatched tag, validates `release_sha`, validates the materialized version files and unit config, runs tests, checks `.goreleaser.plugin-release.yaml`, performs a plugin-release-only snapshot build, and publishes with that dedicated GoReleaser config. The dedicated config must not build or publish the main CLI or `plugin-ui`; it embeds `PLUGIN_RELEASE_VERSION` into the release plugin binary and archives the committed `plugin/release/manifest.json`.
+The `plugin-release` unit uses `plugin-release/vX.Y.Z` tags and `.github/workflows/release-plugin-release.yml`. Neko CLI owns state, materialized files, release commit, tag, push, and workflow dispatch. The workflow checks out the dispatched tag, validates `release_sha`, validates the materialized version files and unit config, runs tests, checks `.goreleaser.plugin-release.yaml`, performs a plugin-release-only snapshot build, and publishes with that dedicated GoReleaser config. The dedicated config must not build or publish the main CLI or `plugin-ui`; it embeds `PLUGIN_RELEASE_VERSION` from the dispatch version into the release plugin binary and archives the committed `plugin/release/manifest.json`. The `plugin-ui` workflow is currently a validation-only placeholder.
 
 `neko release migrate` can convert a root V1 single-unit repository to V2. It archives `.release.neko.json` as `.release.neko.json.v1.bak`, writes V2 config and state atomically, and uses a temporary recovery journal.
 
@@ -440,18 +440,17 @@ Best for: **Go projects**
 **What Neko does:**
 1. Creates release commit with version
 2. Creates and pushes git tag
-3. Injects plugin version environment variables (if `.plugin.release.neko.json` exists)
-4. Runs `goreleaser release` with injected environment variables
+3. Materializes configured version files from release state when required
+4. Runs `goreleaser release`
 5. Handles rollback on failure
 
 **Files managed:**
 - `.goreleaser.yml`
-- `.plugin.release.neko.json` (optional, for plugin-based projects)
 - Git tags
 
 **Plugin-Based Projects:**
 
-For projects using a plugin architecture (like Neko CLI itself), the release plugin automatically injects plugin version information as environment variables during the GoReleaser build process. This allows you to embed plugin versions directly into your binary.
+For projects using a plugin architecture, model each releaseable plugin as its own V2 unit. `.neko/release.state.json` stores the authoritative version, and V2 materialization updates the selected plugin manifest before the Neko-owned release commit.
 
 See the [Plugin Version Injection](#plugin-version-injection) section for details on how to configure this feature.
 
@@ -498,42 +497,43 @@ Best for: **Node.js/Frontend projects**
 
 ---
 
-## Plugin Version Injection
-
-When Neko CLI releases itself, it needs to embed the versions of bundled plugins into the binary. The release plugin handles this through automatic environment variable injection.
+## Plugin Versioning
 
 ### How It Works
 
-The release plugin reads `.plugin.release.neko.json` and converts plugin versions into environment variables that GoReleaser can access during the build process.
+Release V2 stores plugin versions in `.neko/release.state.json`. During a plugin release, Neko materializes the selected plugin's `manifest.json` to the planned next version before creating the release commit. GitHub Actions workflows may pass the dispatched `version` input to GoReleaser as a non-secret environment variable such as `PLUGIN_RELEASE_VERSION`.
 
 **Flow:**
 ```
-.plugin.release.neko.json → Environment Variables → GoReleaser → Binary
+.neko/release.state.json → plugin manifest materialization → release commit → workflow input version → GoReleaser → Binary
 ```
 
-### Configuration File
+### V2 State
 
-Create `.plugin.release.neko.json` in your project root:
+Plugin units are configured in `.neko/release.config.json`, and their versions are stored in `.neko/release.state.json`:
 
 ```json
 {
-  "plugins": {
-    "release": "2.3.1",
-    "deploy": "1.0.5",
-    "test": "0.9.2"
+  "schemaVersion": 2,
+  "units": {
+    "plugin-release": {
+      "version": "3.0.0"
+    },
+    "plugin-ui": {
+      "version": "1.0.0"
+    }
   }
 }
 ```
 
 ### Environment Variable Mapping
 
-Each plugin entry is converted to an environment variable:
+Workflows can map the dispatch `version` input into the environment variable expected by their dedicated GoReleaser config:
 
-| Plugin Entry | Environment Variable |
-|--------------|---------------------|
-| `"release": "2.3.1"` | `PLUGIN_RELEASE_VERSION=2.3.1` |
-| `"deploy": "1.0.5"` | `PLUGIN_DEPLOY_VERSION=1.0.5` |
-| `"test": "0.9.2"` | `PLUGIN_TEST_VERSION=0.9.2` |
+| Unit | Environment Variable |
+|------|----------------------|
+| `plugin-release` | `PLUGIN_RELEASE_VERSION=${{ inputs.version }}` |
+| `plugin-ui` | `PLUGIN_UI_VERSION=${{ inputs.version }}` |
 
 **Pattern:** `PLUGIN_{UPPERCASE_NAME}_VERSION={version}`
 
@@ -551,8 +551,9 @@ builds:
 
 ### Behavior
 
-- **File not found:** Plugin version injection is skipped (optional feature)
-- **Parse error:** Logged but doesn't stop the release process
+- Plugin manifests are committed release-owned files.
+- `update-manifests`, when used manually, reads `.neko/release.state.json`.
+- Missing or malformed materialized manifests fail release planning clearly.
 - **No impact on release:** Works silently in the background
 
 ### Self-Bootstrapping
@@ -621,7 +622,7 @@ Rollback only runs after a mutating release step has been recorded. Dry-run plan
 | Variable | Description |
 |----------|-------------|
 | `GITHUB_TOKEN` | Required for V1 GitHub releases and V2 GitHub Actions dispatch attempts with repository Actions write permission |
-| `PLUGIN_{NAME}_VERSION` | Auto-injected plugin versions (from `.plugin.release.neko.json`) |
+| `PLUGIN_{NAME}_VERSION` | Optional workflow-provided plugin version for dedicated GoReleaser configs |
 
 Custom token naming options are not currently supported but may be added in the future.
 
@@ -669,23 +670,15 @@ neko release history --output json | jq '.data.items'
 # 1. Initialize release configuration
 neko release init --project-type=backend --release-system=goreleaser
 
-# 2. Create plugin version configuration
-cat > .plugin.release.neko.json << EOF
-{
-  "plugins": {
-    "release": "2.3.1",
-    "deploy": "1.0.5"
-  }
-}
-EOF
+# 2. Add plugin units to .neko/release.config.json and .neko/release.state.json
 
 # 3. Configure GoReleaser to use plugin versions
 # Edit .goreleaser.yml and add to ldflags:
 # - -X main.ReleasePluginVersion={{ .Env.PLUGIN_RELEASE_VERSION }}
 # - -X main.DeployPluginVersion={{ .Env.PLUGIN_DEPLOY_VERSION }}
 
-# 4. Release with embedded plugin versions
-neko release patch
+# 4. Release the selected plugin unit
+neko release patch --unit plugin-release
 ```
 
 ---

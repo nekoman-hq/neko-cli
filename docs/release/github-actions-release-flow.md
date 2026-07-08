@@ -30,7 +30,7 @@ GitHub Actions workflow dispatch
 handoff-ready
 ```
 
-The release commit contains exactly `.neko/release.state.json` plus materialized files marked `RequiredForReleaseCommit`. For Nekocli's `plugin-release` unit, those materialized files are `.plugin.release.neko.json` and `plugin/release/manifest.json`. Journals live under the Git common directory and never enter the release commit.
+The release commit contains exactly `.neko/release.state.json` plus materialized files marked `RequiredForReleaseCommit`. For Nekocli plugin units, the materialized file is the selected plugin manifest: `plugin/release/manifest.json` for `plugin-release`, or `plugin/ui/manifest.json` for `plugin-ui`. Journals live under the Git common directory and never enter the release commit.
 
 ## Token Preflight
 
@@ -42,7 +42,7 @@ Dry-run does not require or resolve a token.
 
 `accepted` marks the execution journal `handoff-ready`. GitHub Actions owns build and publish from the pushed tag.
 
-For Nekocli's own `plugin-release` unit, `.github/workflows/release-plugin-release.yml` accepts the canonical dispatch inputs `unit`, `version`, `tag`, and `release_sha`. It checks out `inputs.tag`, verifies that `unit == plugin-release`, verifies that `tag == plugin-release/v<version>`, and verifies that both checked-out `HEAD` and the tag resolve to `release_sha`. It also validates `.neko/release.state.json`, `.plugin.release.neko.json`, `plugin/release/manifest.json`, and the V2 unit config before publishing. The workflow does not calculate versions, commit, tag, push, or modify tracked repository files.
+For Nekocli's own `plugin-release` unit, `.github/workflows/release-plugin-release.yml` accepts the canonical dispatch inputs `unit`, `version`, `tag`, and `release_sha`. It checks out `inputs.tag`, verifies that `unit == plugin-release`, verifies that `tag == plugin-release/v<version>`, and verifies that both checked-out `HEAD` and the tag resolve to `release_sha`. It also validates `.neko/release.state.json`, `plugin/release/manifest.json`, and the V2 unit config before publishing. The workflow does not calculate versions, commit, tag, push, or modify tracked repository files.
 
 `plugin-release` publishes with `.goreleaser.plugin-release.yaml`, a dedicated config that contains only the `plugin-release` build and archive. The workflow sets `PLUGIN_RELEASE_VERSION` from the dispatch input so the binary metadata, archive names, and GitHub Release name use the materialized V2 version from the release commit. The root `.goreleaser.yaml` remains multi-artifact and is not used by this workflow.
 

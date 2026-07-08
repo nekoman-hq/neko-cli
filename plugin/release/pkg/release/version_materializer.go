@@ -33,7 +33,7 @@ type GoReleaserMaterializer struct{}
 
 func (GoReleaserMaterializer) Plan(ctx *ReleaseExecutionContext) (*MaterializationPlan, error) {
 	plan := newMaterializationPlan(ctx)
-	if err := appendPluginReleaseMaterialization(ctx, &plan); err != nil {
+	if err := appendPluginManifestMaterialization(ctx, &plan); err != nil {
 		return nil, err
 	}
 	return &plan, nil

@@ -99,7 +99,7 @@ func TestGitHubActionsReleaseRunnerCommitsPluginReleaseMaterializedFiles(t *test
 		t.Fatalf("Run: %v", err)
 	}
 	changed := sortedNonEmptyLines(gitDirOutput(t, bare, "diff-tree", "--no-commit-id", "--name-only", "-r", result.CommitSHA))
-	want := []string{".neko/release.state.json", ".plugin.release.neko.json", "plugin/release/manifest.json"}
+	want := []string{".neko/release.state.json", "plugin/release/manifest.json"}
 	if !sameStringSet(changed, want) {
 		t.Fatalf("unexpected release commit files: got %#v want %#v", changed, want)
 	}

@@ -200,44 +200,50 @@ func handleHello(req plugin.Request) (*plugin.Response, error) {
 
 ---
 
-## Plugin Version Injection
+## Plugin Versioning
 
 When Neko CLI releases itself, it needs to embed the versions of bundled plugins into the binary. The release plugin handles this through automatic environment variable injection.
 
 ### How It Works
 
-The release plugin reads `.plugin.release.neko.json` and converts plugin versions into environment variables that GoReleaser can access during the build process.
+Nekocli keeps releaseable versions in `.neko/release.state.json`. The release workflows pass the selected unit version to GoReleaser as environment variables so the CLI binary can embed the bundled plugin versions.
 
 **Flow:**
 ```
-.plugin.release.neko.json → Environment Variables → GoReleaser → Binary
+.neko/release.state.json → release workflow → Environment Variables → GoReleaser → Binary
 ```
 
-### Configuration File
+### V2 State
 
-Create `.plugin.release.neko.json` in your project root:
+Plugin units are stored beside the CLI unit:
 
 ```json
 {
-  "plugins": {
-    "release": "2.3.1",
-    "deploy": "1.0.5",
-    "test": "0.9.2"
+  "schemaVersion": 2,
+  "units": {
+    "cli": {
+      "version": "2.2.4"
+    },
+    "plugin-release": {
+      "version": "3.0.0"
+    },
+    "plugin-ui": {
+      "version": "1.0.0"
+    }
   }
 }
 ```
 
 ### Environment Variable Mapping
 
-Each plugin entry is converted to an environment variable:
+Each plugin unit can be passed to GoReleaser as an environment variable:
 
-| Plugin Entry | Environment Variable |
+| Unit | Environment Variable |
 |--------------|---------------------|
-| `"release": "2.3.1"` | `PLUGIN_RELEASE_VERSION=2.3.1` |
-| `"deploy": "1.0.5"` | `PLUGIN_DEPLOY_VERSION=1.0.5` |
-| `"test": "0.9.2"` | `PLUGIN_TEST_VERSION=0.9.2` |
+| `plugin-release` | `PLUGIN_RELEASE_VERSION=3.0.0` |
+| `plugin-ui` | `PLUGIN_UI_VERSION=1.0.0` |
 
-**Pattern:** `PLUGIN_{UPPERCASE_NAME}_VERSION={version}`
+**Pattern:** `PLUGIN_{UPPERCASE_UNIT_NAME}_VERSION={version}`, with dashes converted to underscores and the `plugin-` prefix omitted.
 
 ### Using in GoReleaser
 
@@ -247,23 +253,22 @@ Access these variables in your `.goreleaser.yml`:
 builds:
   - ldflags:
       - -X main.ReleasePluginVersion={{ .Env.PLUGIN_RELEASE_VERSION }}
-      - -X main.DeployPluginVersion={{ .Env.PLUGIN_DEPLOY_VERSION }}
-      - -X main.TestPluginVersion={{ .Env.PLUGIN_TEST_VERSION }}
+      - -X main.UIPluginVersion={{ .Env.PLUGIN_UI_VERSION }}
 ```
 
 ### Behavior
 
-- **File not found:** Plugin version injection is skipped (optional feature)
-- **Parse error:** Logged but doesn't stop the release process
-- **No impact on release:** Works silently in the background
+- **State update:** Version bumps are committed to `.neko/release.state.json`
+- **Manifest materialization:** Plugin releases update only their own `manifest.json`
+- **Workflow input:** GitHub Actions passes the released version to GoReleaser
 
 ### Self-Bootstrapping
 
 This creates an interesting architectural pattern:
 
 1. Neko CLI uses the **release plugin** to release itself
-2. The **release plugin** needs its version embedded in Neko CLI
-3. This **injection system** bridges that gap automatically
+2. Bundled plugins need their versions embedded in Neko CLI
+3. V2 release state and workflow-provided environment variables bridge that gap
 
 It's metadata injection that allows plugins to declare their versions in the host binary.
 

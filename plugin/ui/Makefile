@@ -10,8 +10,8 @@ INSTALL_DIR := $(HOME)/.neko/plugins/$(PLUGIN_NAME)
 # ============================================================================
 # Version Management
 # ============================================================================
-# Read metadata from root .plugin.ui.neko.json
-VERSION ?= $(shell jq -r '.plugins.ui' ../../.plugin.ui.neko.json 2>/dev/null || echo "dev")
+# Read metadata from root V2 release state.
+VERSION ?= $(shell jq -r '.units["plugin-ui"].version' ../../.neko/release.state.json 2>/dev/null || echo "dev")
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
 DATE ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 

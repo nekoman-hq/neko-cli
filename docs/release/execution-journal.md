@@ -63,7 +63,7 @@ required-for-release-commit flag
 reason
 ```
 
-For Nekocli's `plugin-release` unit, the known release file set includes `.neko/release.state.json`, `.plugin.release.neko.json`, and `plugin/release/manifest.json`. The journal records metadata for those files; it does not imply that every plugin manifest is generically discovered or migrated.
+For Nekocli plugin units, the known release file set includes `.neko/release.state.json` plus the selected unit's manifest. `plugin-release` uses `plugin/release/manifest.json`; `plugin-ui` uses `plugin/ui/manifest.json`. The journal records metadata for those files.
 
 Arbitrary file bytes, tokens, authorization headers, secrets, environment values, and GitHub credentials are not stored.
 
