@@ -17,7 +17,7 @@ on:
         type: string
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: release-plugin-release-${{ inputs.tag }}
@@ -147,7 +147,7 @@ jobs:
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: check
+          args: check --config .goreleaser.plugin-release.yaml
 
       - name: Build plugin-release only
         uses: goreleaser/goreleaser-action@v6
@@ -156,7 +156,7 @@ jobs:
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: build --snapshot --clean --single-target --id plugin-release --skip=before
+          args: build --config .goreleaser.plugin-release.yaml --snapshot --clean --single-target
 
       - name: Verify tracked files were not modified
         shell: bash
@@ -165,7 +165,17 @@ jobs:
           git diff --exit-code
           echo "Build validation completed without tracked file changes." >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Publish status
+      - name: Publish plugin-release
+        uses: goreleaser/goreleaser-action@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PLUGIN_RELEASE_VERSION: ${{ inputs.version }}
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --config .goreleaser.plugin-release.yaml --clean
+
+      - name: Publish summary
         shell: bash
         run: |
           set -euo pipefail
@@ -173,17 +183,5 @@ jobs:
             echo ""
             echo "## Publish status"
             echo ""
-            echo "Publishing is intentionally disabled in Self-Migration M3."
-            echo "The current .goreleaser.yaml contains CLI, release-plugin, and UI-plugin build/archive IDs."
-            echo "GoReleaser release in version 2.13.1 does not provide the build-style --id filter, so an unfiltered release could publish unrelated artifacts."
+            echo "Published plugin-release artifacts for \`$RELEASE_TAG\` using \`.goreleaser.plugin-release.yaml\`."
           } >> "$GITHUB_STEP_SUMMARY"
-
-      # TODO(Self-Migration M4): enable publish only after GoReleaser release
-      # configuration can safely publish the plugin-release artifacts without
-      # publishing neko-cli or plugin-ui artifacts from plugin-release/vX.Y.Z tags.
-      #
-      # - name: Publish plugin-release
-      #   env:
-      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      #     PLUGIN_RELEASE_VERSION: ${{ inputs.version }}
-      #   run: goreleaser release --clean
