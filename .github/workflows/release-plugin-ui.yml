@@ -137,15 +137,30 @@ jobs:
           set -euo pipefail
           git diff --exit-code
 
-      - name: Publish plugin-ui GitHub Release
+      - name: Package plugin-ui artifacts
         uses: goreleaser/goreleaser-action@v6
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PLUGIN_UI_VERSION: ${{ inputs.version }}
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --config ${{ env.GORELEASER_CONFIG }} --clean
+          args: release --config ${{ env.GORELEASER_CONFIG }} --snapshot --clean --skip=publish
+
+      - name: Publish plugin-ui GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          gh release create "$RELEASE_TAG" \
+            dist/*.tar.gz \
+            dist/*.zip \
+            dist/*_checksums.txt \
+            --target "$RELEASE_SHA" \
+            --title "plugin-ui $RELEASE_VERSION" \
+            --notes "Release plugin-ui $RELEASE_VERSION" \
+            --verify-tag
 
       - name: Publish summary
         shell: bash

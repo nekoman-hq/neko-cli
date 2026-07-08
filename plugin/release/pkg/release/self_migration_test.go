@@ -147,8 +147,14 @@ func TestRepositorySelfMigrationWorkflowsUseDedicatedGoReleaserConfigs(t *testin
 			if !strings.Contains(workflow, "workflow_dispatch:") {
 				t.Fatalf("%s must use workflow_dispatch", tc.workflow)
 			}
-			if !strings.Contains(workflow, "args: release --config ${{ env.GORELEASER_CONFIG }} --clean") {
+			if tc.unit == "cli" && !strings.Contains(workflow, "args: release --config ${{ env.GORELEASER_CONFIG }} --clean") {
 				t.Fatalf("%s must publish via its dedicated GoReleaser config", tc.workflow)
+			}
+			if strings.HasPrefix(tc.unit, "plugin-") && !strings.Contains(workflow, "args: release --config ${{ env.GORELEASER_CONFIG }} --snapshot --clean --skip=publish") {
+				t.Fatalf("%s must package plugin artifacts with its dedicated GoReleaser config", tc.workflow)
+			}
+			if strings.HasPrefix(tc.unit, "plugin-") && !strings.Contains(workflow, "gh release create \"$RELEASE_TAG\"") {
+				t.Fatalf("%s must create the GitHub Release for the exact prefixed tag", tc.workflow)
 			}
 			if !strings.Contains(workflow, "GORELEASER_CONFIG: "+tc.config) {
 				t.Fatalf("%s must reference %s", tc.workflow, tc.config)

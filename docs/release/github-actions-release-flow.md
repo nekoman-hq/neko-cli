@@ -44,7 +44,7 @@ Dry-run does not require or resolve a token.
 
 For Nekocli's own units, `.github/workflows/release-neko-cli.yml`, `.github/workflows/release-plugin-release.yml`, and `.github/workflows/release-plugin-ui.yml` accept the canonical dispatch inputs `unit`, `version`, `tag`, and `release_sha`. Each workflow checks out `inputs.tag`, verifies that the unit and tag prefix match the configured unit, and verifies that both checked-out `HEAD` and the tag resolve to `release_sha`. It also validates `.neko/release.state.json`, the V2 unit config, and the selected plugin manifest for plugin units before publishing. Workflows do not calculate versions, commit, tag, push, or modify tracked repository files.
 
-Publishing uses dedicated GoReleaser configs: `.goreleaser.cli.yaml`, `.goreleaser.plugin-release.yaml`, and `.goreleaser.plugin-ui.yaml`. Each config contains only that unit's build/archive/release definition. The root `.goreleaser.yaml` remains multi-artifact and is not used by production V2 publishing workflows.
+Publishing uses dedicated GoReleaser configs: `.goreleaser.cli.yaml`, `.goreleaser.plugin-release.yaml`, and `.goreleaser.plugin-ui.yaml`. Each config contains only that unit's build/archive/release definition. The root `.goreleaser.yaml` remains multi-artifact and is not used by production V2 publishing workflows. The `cli` workflow can publish with `goreleaser release` because `vX.Y.Z` is SemVer-compatible. Plugin workflows package with GoReleaser and use GitHub CLI to create the GitHub Release for the exact prefixed tag.
 
 `rejected` keeps the execution journal at `tag-pushed`, preserves the dispatch journal rejection, and does not roll back Git state.
 

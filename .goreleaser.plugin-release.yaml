@@ -41,6 +41,9 @@ archives:
       - goos: windows
         formats: [zip]
 
+checksum:
+  name_template: "plugin-release_{{ if index .Env \"PLUGIN_RELEASE_VERSION\" }}{{ .Env.PLUGIN_RELEASE_VERSION }}{{ else }}{{ .Version }}{{ end }}_checksums.txt"
+
 changelog:
   disable: true
 

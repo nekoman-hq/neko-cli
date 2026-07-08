@@ -161,15 +161,30 @@ jobs:
           git diff --exit-code
           echo "Build validation completed without tracked file changes." >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Publish plugin-release
+      - name: Package plugin-release artifacts
         uses: goreleaser/goreleaser-action@v6
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PLUGIN_RELEASE_VERSION: ${{ inputs.version }}
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --config ${{ env.GORELEASER_CONFIG }} --clean
+          args: release --config ${{ env.GORELEASER_CONFIG }} --snapshot --clean --skip=publish
+
+      - name: Publish plugin-release GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          gh release create "$RELEASE_TAG" \
+            dist/*.tar.gz \
+            dist/*.zip \
+            dist/*_checksums.txt \
+            --target "$RELEASE_SHA" \
+            --title "plugin-release $RELEASE_VERSION" \
+            --notes "Release plugin-release $RELEASE_VERSION" \
+            --verify-tag
 
       - name: Publish summary
         shell: bash

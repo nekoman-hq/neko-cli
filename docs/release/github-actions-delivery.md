@@ -95,4 +95,6 @@ Neko CLI creates the state/materialization commit, creates the unit tag, pushes 
 
 Each workflow checks out the dispatched tag, validates the tag and release SHA, validates `.neko/release.config.json`, validates `.neko/release.state.json`, validates the plugin manifest for plugin units, runs `go test ./...`, checks its dedicated GoReleaser config, performs a snapshot build for only that unit, and then publishes a GitHub Release for the exact pushed tag.
 
+For prefixed plugin tags, the workflow does not run `goreleaser release` as the publisher because the free GoReleaser release command parses the full current tag as SemVer. Instead, GoReleaser packages archives and checksums with the dedicated plugin config, and `gh release create "$RELEASE_TAG"` creates the GitHub Release for the exact `plugin-release/vX.Y.Z` or `plugin-ui/vX.Y.Z` tag.
+
 No workflow calculates versions, commits, tags, pushes, rewrites manifests, or uses the global mixed-artifact `.goreleaser.yaml` for publishing. Plugin workflows receive `PLUGIN_RELEASE_VERSION` or `PLUGIN_UI_VERSION` from the dispatch input. The CLI workflow receives `CLI_VERSION`.
