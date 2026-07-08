@@ -11,8 +11,8 @@ import (
 
 // ReleaseExecutionContext is the schema-neutral release execution input.
 //
-// V2 execution is still blocked in this milestone; dry-run planning builds this
-// context so local delivery and executor ownership are validated early.
+// V2 dry-runs and journaled GitHub Actions releases build this context so
+// delivery, executor ownership, state, tag, and workflow facts stay explicit.
 //
 //nolint:govet // Logical release-domain order is clearer than fieldalignment ordering here.
 type ReleaseExecutionContext struct {
@@ -34,7 +34,7 @@ type ReleaseExecutionContext struct {
 }
 
 // BuildReleaseExecutionContext creates the single context shape shared by V1,
-// V2 dry-runs, and future V2 local execution.
+// V2 dry-runs, journaled V2 GitHub Actions releases, and future V2 local execution.
 func BuildReleaseExecutionContext(repository *releaseconfig.ReleaseRepository, unit releaseconfig.ReleaseUnit, releaseType Type, dryRun bool) (*ReleaseExecutionContext, error) {
 	if repository == nil {
 		return nil, fmt.Errorf("release repository is missing")

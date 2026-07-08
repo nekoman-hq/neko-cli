@@ -22,7 +22,7 @@ V2 with one unit:
 
 V2 with multiple units:
 
-- `--unit` is required for `patch`, `minor`, `major`, `history`, and `contributors`.
+- `--unit` is required for `patch`, `minor`, `major`, `history`, `contributors`, and `resume`.
 - Errors list the available unit IDs.
 
 `validate` is special:
@@ -38,6 +38,7 @@ neko release validate --unit api --show
 neko release history --unit api
 neko release contributors --unit web
 neko release patch --unit api --dry-run
+neko release resume --unit api --dry-run
 ```
 
-V2 non-dry-run release execution remains blocked in this milestone.
+V2 non-dry-run release execution is active only for `delivery: github-actions`. V2 local non-dry-run release execution remains blocked.

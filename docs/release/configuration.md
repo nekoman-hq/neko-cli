@@ -90,7 +90,7 @@ mobile/v
 }
 ```
 
-`github-actions` is valid configuration data and is resolved as a remote delivery contract, but no GitHub Actions dispatch is performed yet. It requires a canonical workflow path:
+`github-actions` is valid configuration data and is resolved as a remote delivery contract. Public V2 GitHub Actions non-dry-run releases are active and dispatch the configured workflow after Neko CLI has committed, tagged, and pushed the selected unit release. It requires a canonical workflow path:
 
 ```text
 .github/workflows/<workflow-file>.yml
@@ -99,7 +99,7 @@ mobile/v
 
 The workflow file must exist in a real repository and must resolve inside `.github/workflows/`. `local` delivery must not configure `workflow`.
 
-For public V2 non-dry-run releases, all executors remain blocked until publish-only adapters exist. Internally, `jreleaser` materializes `jreleaser.yml` before state write and before the Neko-owned release commit boundary. `goreleaser` currently uses a no-op materializer. `release-it` remains valid configuration and dry-run data, but V2 execution is blocked because no publish-only boundary exists.
+For public V2 local non-dry-run releases, all executors remain blocked until publish-only adapters exist. For public V2 GitHub Actions non-dry-run releases, Neko CLI owns version materialization, state, commit, tag, push, journals, and dispatch; the configured GitHub workflow owns build and publish from the pushed tag. `jreleaser` materializes `jreleaser.yml` before state write and before the Neko-owned release commit boundary. `goreleaser` currently uses a no-op materializer. `release-it` remains valid configuration and dry-run data, but V2 local execution is blocked because no publish-only boundary exists.
 
 See [Local delivery](local-delivery.md), [GitHub Actions delivery](github-actions-delivery.md), [Release executors](executors.md), [Version materialization](version-materialization.md), [Local release transaction](local-release-transaction.md), and [Git release coordination](git-coordination.md).
 

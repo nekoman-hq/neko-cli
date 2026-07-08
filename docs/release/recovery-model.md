@@ -48,7 +48,7 @@ corrupted
 
 `interrupted-after-tag-push` means tag push was recorded locally. Dispatch handoff is not confirmed.
 
-`ready-for-dispatch` means the execution journal reached dispatch-journal preparation and future handoff logic may inspect the dispatch journal.
+`ready-for-dispatch` means the execution journal reached dispatch-journal preparation and resume may inspect the dispatch journal.
 
 `already-handed-off` means execution handoff is complete and the dispatch journal is the next source of truth.
 
@@ -58,6 +58,6 @@ corrupted
 
 ## Safety
 
-The assessor prefers `conflicted` or `corrupted` over guessing. Unknown remote state is reported as local evidence only. Future M5C3B resume logic must decide explicitly whether and how to continue from each status.
+The assessor prefers `conflicted` or `corrupted` over guessing. Unknown remote state is reported as local evidence only. Non-dry-run resume decides explicitly whether and how to continue from each status and blocks ambiguous push or dispatch outcomes.
 
 `neko release resume --unit <unit>` exists for V2 GitHub Actions execution journals. No public standalone retry or dispatch command exists.

@@ -1,4 +1,13 @@
 # Release CLI Reference
+## General
+
+```bash
+neko release init --project-type backend --release-system goreleaser
+neko release init-options
+```
+
+`init` creates the legacy V1 configuration and initializes the selected legacy release tool. `init-options` prints the supported init flag values.
+
 ## V1
 
 V1 uses `.release.neko.json` and supports the existing release commands.
@@ -102,6 +111,7 @@ major
 history
 contributors
 validate
+resume
 ```
 
 It is required for unit-bound commands when a V2 repository defines multiple units.
@@ -114,4 +124,4 @@ It is required for unit-bound commands when a V2 repository defines multiple uni
 --dry-run
 ```
 
-It migrates only `.release.neko.json` in the Git root to a V2 `default` unit. It does not migrate nested V1 files, infer multiple units, change tag prefixes, or enable real V2 releases.
+It migrates only `.release.neko.json` in the Git root to a V2 `default` unit. It does not migrate nested V1 files, infer multiple units, change tag prefixes, or run a release.

@@ -66,7 +66,7 @@ Invalid examples:
 
 V2 dry-run output shows the configured workflow, dispatch ref, canonical input names, and pending journal identity. V2 GitHub Actions non-dry-run writes journals, materializes versions, updates V2 state, commits, tags, pushes commit and tag, and dispatches the workflow. V2 local delivery remains blocked.
 
-The future workflow must support `workflow_dispatch` and accept only:
+The configured workflow must support `workflow_dispatch` and accept only:
 
 ```text
 unit

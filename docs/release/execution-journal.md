@@ -103,7 +103,7 @@ push-release-commit
 push-unit-tag
 ```
 
-A pending action cannot be replaced by another pending action. No automatic retry, resume, rollback, restore, reset, clean, push, tag, commit, dispatch, or publish behavior exists in this milestone.
+A pending action cannot be replaced by another pending action. The public `resume` command can continue only exact, unambiguous V2 GitHub Actions execution journals. It does not blindly retry uncertain push or dispatch outcomes, and no automatic rollback, restore, reset, clean, publish, standalone retry, or standalone dispatch command exists.
 
 ## Public Boundary
 

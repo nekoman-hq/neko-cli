@@ -174,7 +174,7 @@ func resumeJournal(ctx context.Context, execCtx *ReleaseExecutionContext, journa
 			RecoveryGuidance:     "Release was already handed off.",
 		}, nil
 	}
-	return nil, fmt.Errorf("resume from state %s requires manual inspection in this milestone", journal.State)
+	return nil, fmt.Errorf("resume from state %s requires manual inspection before continuing", journal.State)
 }
 
 func dispatchFromTagPushed(ctx context.Context, execCtx *ReleaseExecutionContext, journal *ReleaseExecutionJournal, executionPath, dispatchPath, remoteName, remoteURL, token string) (*GitHubActionsReleaseResult, error) {
@@ -261,11 +261,15 @@ func dispatchRequestForResume(execCtx *ReleaseExecutionContext, journal *Release
 }
 
 func executionContextFromJournal(repository *releaseconfig.ReleaseRepository, unit releaseconfig.ReleaseUnit, journal *ReleaseExecutionJournal) (*ReleaseExecutionContext, error) {
+	repositoryRoot, err := absoluteExistingDir(repository.RepositoryRoot, "repository root")
+	if err != nil {
+		return nil, err
+	}
 	tagSpec, err := releaseconfig.NewTagSpec(unit.TagPrefix)
 	if err != nil {
 		return nil, err
 	}
-	unitRoot, err := resolveUnitRoot(repository.RepositoryRoot, repository.SourceFormat, unit)
+	unitRoot, err := resolveUnitRoot(repositoryRoot, repository.SourceFormat, unit)
 	if err != nil {
 		return nil, err
 	}
@@ -278,7 +282,7 @@ func executionContextFromJournal(repository *releaseconfig.ReleaseRepository, un
 		return nil, err
 	}
 	return &ReleaseExecutionContext{
-		RepositoryRoot: repository.RepositoryRoot,
+		RepositoryRoot: repositoryRoot,
 		Unit:           unit,
 		UnitRoot:       unitRoot,
 		CurrentVersion: journal.CurrentVersion,

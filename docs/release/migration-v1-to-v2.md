@@ -133,7 +133,7 @@ Migration fails safely for:
 
 ## Not Migrated
 
-This milestone does not implement:
+This migration path does not implement:
 
 - multi-unit detection;
 - path splitting;

@@ -132,7 +132,7 @@ func TestDispatchJournalStateTransitions(t *testing.T) {
 		t.Fatalf("expected prepared state, got %s", journal.State)
 	}
 	if err := journal.Transition(DispatchJournalAccepted, time.Now(), ""); err == nil {
-		t.Fatal("prepared -> accepted must be invalid in this milestone")
+		t.Fatal("prepared -> accepted must be invalid without request-started evidence")
 	}
 	if err := journal.Transition(DispatchJournalRequestStarted, time.Now(), ""); err != nil {
 		t.Fatalf("prepared -> request-started: %v", err)

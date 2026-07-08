@@ -85,6 +85,7 @@ neko release patch [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--dry-run` | bool | `false` | Preview the release without making changes |
+| `--unit` | string | | Select the release unit. Required when a V2 repository defines multiple units. |
 
 **Examples:**
 ```bash
@@ -124,6 +125,7 @@ neko release minor [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--dry-run` | bool | `false` | Preview the release without making changes |
+| `--unit` | string | | Select the release unit. Required when a V2 repository defines multiple units. |
 
 **Examples:**
 ```bash
@@ -150,6 +152,7 @@ neko release major [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--dry-run` | bool | `false` | Preview the release without making changes |
+| `--unit` | string | | Select the release unit. Required when a V2 repository defines multiple units. |
 
 **Examples:**
 ```bash
@@ -172,6 +175,12 @@ neko release history [flags]
 ```
 
 For V2 repositories with multiple units, pass `--unit <unit-id>`. History then includes only tags owned by that unit and counts commits through the unit paths.
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--unit` | string | | Select the release unit. Required when a V2 repository defines multiple units. |
 
 **Output Formats:**
 - `table` (default) - Clean tabular view
@@ -213,6 +222,12 @@ neko release contributors [flags]
 
 For V2 repositories with multiple units, pass `--unit <unit-id>`. Contributors are calculated through the selected unit paths.
 
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--unit` | string | | Select the release unit. Required when a V2 repository defines multiple units. |
+
 **Examples:**
 ```bash
 # View contributors as table
@@ -246,6 +261,7 @@ neko release validate [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--show` | bool | `false` | Display current configuration details |
+| `--unit` | string | | Focus displayed V2 unit details. Required only for unit-bound release commands in multi-unit repositories. |
 
 **Examples:**
 ```bash
@@ -303,6 +319,45 @@ Overwrite existing config          force           false     true, false
 
 ---
 
+### `neko release migrate`
+
+Safely migrate a root V1 release configuration to V2.
+
+**Usage:**
+```bash
+neko release migrate [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--dry-run` | bool | `false` | Preview the migration without writing files |
+
+`migrate` only converts `.release.neko.json` in the Git root to a single V2 `default` unit. It does not infer multiple units, convert nested V1 files, or run a release.
+
+---
+
+### `neko release resume`
+
+Resume a previously journaled V2 GitHub Actions release.
+
+**Usage:**
+```bash
+neko release resume --unit <unit-id> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--unit` | string | | Select the unit whose existing V2 GitHub Actions journal should be resumed |
+| `--dry-run` | bool | `false` | Assess the existing release journal without writing files, refs, journals, remotes, or dispatching |
+
+`resume` never calculates a fresh version. It requires exactly one unresolved execution journal for the selected unit and blocks ambiguous push or dispatch outcomes. Resume before `commit-created` is intentionally conservative and requires manual inspection after `--dry-run`.
+
+---
+
 ## Configuration
 
 ### V1 Configuration File
@@ -340,7 +395,7 @@ V2 uses repository-root files:
 
 `release.config.json` stores committed repository architecture: units, paths, working directories, tag prefixes, executor type, and delivery. `release.state.json` stores unit versions. Tags are derived from `tagPrefix + version` and are not stored in state.
 
-`neko release validate` can validate V2 now. `history`, `contributors`, dry-run planning, and root V1-to-V2 migration are unit-aware. GitHub Actions delivery is valid V2 configuration when `workflow` points to an existing `.github/workflows/<file>.yml|yaml` file. Dry-run planning builds the execution context, materialization plan, local delivery/executor capabilities, planned release commit, unit tag, known release files, push order, workflow reference, dispatch input contract, dispatch status, and V2 Git ownership. M5C3B activates the journaled V2 GitHub Actions release path and `neko release resume --unit <unit>`. V2 local `release-it` and standalone public dispatch/retry commands are not active yet.
+`neko release validate` can validate V2 now. `history`, `contributors`, dry-run planning, and root V1-to-V2 migration are unit-aware. GitHub Actions delivery is valid V2 configuration when `workflow` points to an existing `.github/workflows/<file>.yml|yaml` file. Dry-run planning builds the execution context, materialization plan, local delivery/executor capabilities, planned release commit, unit tag, known release files, push order, workflow reference, dispatch input contract, dispatch status, and V2 Git ownership. V2 GitHub Actions non-dry-run release commands are active and journaled; `neko release resume --unit <unit>` resumes only existing unresolved execution journals. V2 local `release-it` and standalone public dispatch/retry commands are not active.
 
 `neko release migrate` can convert a root V1 single-unit repository to V2. It archives `.release.neko.json` as `.release.neko.json.v1.bak`, writes V2 config and state atomically, and uses a temporary recovery journal.
 
@@ -542,7 +597,7 @@ Hint: Make sure you have at least one semantic version tag (e.g., v1.0.0)
 
 ## Rollback Behavior
 
-If a release fails, Neko attempts to automatically rollback:
+For V1 legacy release execution, if a release fails after a mutating step, Neko attempts to automatically rollback:
 
 1. **Commit Rollback** - Reverts to the pre-release HEAD
 2. **Tag Rollback** - Deletes local and remote tags if pushed
@@ -561,7 +616,7 @@ Rollback only runs after a mutating release step has been recorded. Dry-run plan
 
 | Variable | Description |
 |----------|-------------|
-| `GITHUB_TOKEN` | Required for V1 GitHub releases and future internal GitHub Actions dispatch attempts with repository Actions write permission |
+| `GITHUB_TOKEN` | Required for V1 GitHub releases and V2 GitHub Actions dispatch attempts with repository Actions write permission |
 | `PLUGIN_{NAME}_VERSION` | Auto-injected plugin versions (from `.plugin.release.neko.json`) |
 
 Custom token naming options are not currently supported but may be added in the future.

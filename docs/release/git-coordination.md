@@ -19,7 +19,7 @@ GitHub Actions later owns:
 
 The coordinator does not load V1 files, start executors, call GitHub APIs, calculate versions, materialize files, write state, or dispatch workflows. It only coordinates known release files that were already prepared by the materialization and state transactions.
 
-For future GitHub Actions dispatch, V2 units validate a canonical workflow path under `.github/workflows/`. The execution journal records the local V2 transaction before materialization, state write, staging, commit, tag, push, and dispatch handoff. The dispatch journal records the later HTTP dispatch attempt.
+For GitHub Actions dispatch, V2 units validate a canonical workflow path under `.github/workflows/`. The execution journal records the local V2 transaction before materialization, state write, staging, commit, tag, push, and dispatch handoff. The dispatch journal records the later HTTP dispatch attempt.
 
 ## Known Release Files
 

@@ -1,6 +1,6 @@
 # Dispatch Contract
 
-Milestone 5C2 defines the immutable local contract used by the internal GitHub Actions workflow-dispatch adapter. Public release commands still do not dispatch workflows.
+This page defines the immutable local contract used by the internal GitHub Actions workflow-dispatch adapter. Public V2 releases dispatch workflows only through the journaled `delivery: github-actions` release flow.
 
 ## Request
 
@@ -76,6 +76,8 @@ with only `ref` and the four canonical inputs. It sets GitHub API headers, uses 
 
 ## Current Boundary
 
-Public V2 non-dry-run releases remain blocked before state write, materialization, staging, commit, tag, push, journal write, GitHub API request, executor start, or publish.
+Public V2 GitHub Actions non-dry-run releases are active. Neko CLI writes the execution journal, materializes known release files, writes state, stages only known release files, creates the release commit, creates the unit tag, pushes commit then tag, prepares the dispatch journal, and sends one workflow-dispatch request for the existing unit tag.
 
-V2 dry-run can show the future dispatch contract shape. Because no release commit exists during dry-run, the real `release_sha`, journal identity, and journal path are reported as pending until Git coordination creates the release commit.
+V2 local non-dry-run releases remain blocked before state write, materialization, staging, commit, tag, push, executor start, or publish.
+
+V2 dry-run shows the dispatch contract shape without writing journals or contacting GitHub. Because no release commit exists during dry-run, the real `release_sha`, journal identity, and journal path are reported as pending until Git coordination creates the release commit.
