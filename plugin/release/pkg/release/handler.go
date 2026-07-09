@@ -36,7 +36,7 @@ func HandleRelease(req plugin.Request, releaseType Type) (*plugin.Response, erro
 				Code:    "CONFIG_NOT_FOUND",
 				Message: err.Error(),
 				Details: map[string]any{
-					"hint": "Run 'neko release init' first to initialize the release configuration",
+					"hint": "Run 'neko release init' to create V2 config/state, or 'neko release migrate' to convert an existing V1 config",
 				},
 			},
 		}, nil

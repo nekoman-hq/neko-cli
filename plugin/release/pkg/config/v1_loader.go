@@ -55,7 +55,7 @@ func V1LoadConfigAt(path string) (*V1ReleaseConfig, error) {
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, errors.New(
-				"configuration not found: No .release.neko.json configuration found. Run 'neko release init' first",
+				"configuration not found: no release configuration found. Run 'neko release init' to create V2 config/state, or 'neko release migrate' to convert an existing V1 config",
 			)
 		} else {
 			return nil, fmt.Errorf(

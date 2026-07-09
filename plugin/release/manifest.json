@@ -13,16 +13,17 @@
       ],
       "flags": [
         {
-          "name": "project-type",
+          "name": "unit",
           "type": "string",
-          "required": true,
-          "description": "Project type (frontend|backend|other)"
+          "required": false,
+          "default": "cli",
+          "description": "Release unit id"
         },
         {
-          "name": "release-system",
+          "name": "display-name",
           "type": "string",
-          "required": true,
-          "description": "Release system (release-it|jreleaser|goreleaser)"
+          "required": false,
+          "description": "Release unit display name"
         },
         {
           "name": "version",
@@ -32,11 +33,50 @@
           "description": "Initial version (semver)"
         },
         {
+          "name": "executor",
+          "type": "string",
+          "required": true,
+          "description": "Release executor (goreleaser|jreleaser|release-it)"
+        },
+        {
+          "name": "delivery",
+          "type": "string",
+          "required": true,
+          "description": "Release delivery mode (local|github-actions)"
+        },
+        {
+          "name": "workflow",
+          "type": "string",
+          "required": false,
+          "description": "GitHub Actions workflow path, required for github-actions delivery"
+        },
+        {
+          "name": "tag-prefix",
+          "type": "string",
+          "required": false,
+          "default": "v",
+          "description": "Release tag prefix"
+        },
+        {
+          "name": "working-directory",
+          "type": "string",
+          "required": false,
+          "default": ".",
+          "description": "Unit working directory"
+        },
+        {
+          "name": "paths",
+          "type": "string",
+          "required": false,
+          "default": "**",
+          "description": "Comma-separated unit path globs"
+        },
+        {
           "name": "force",
           "type": "bool",
           "required": false,
           "default": false,
-          "description": "Overwrite existing configuration"
+          "description": "Overwrite existing V2 config/state"
         }
       ]
     },

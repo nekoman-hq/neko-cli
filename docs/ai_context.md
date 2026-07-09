@@ -41,7 +41,7 @@ neko-cli/
         ├── manifest.json   # Plugin metadata & command definitions
         └── pkg/            # Plugin-specific packages
             ├── init/       # Init command handler
-            ├── config/     # .release.neko.json management
+            ├── config/     # V2 config/state and legacy V1 compatibility
             ├── release/    # Release logic & tool registry
             ├── git/        # Git operations
             └── history/    # Release history
@@ -98,9 +98,9 @@ Data: map[string]any{
 
 ### 4. Config File Naming
 
-Plugin config files follow the pattern: `.{plugin-name}.neko.json`
+Plugin config files usually follow the pattern: `.{plugin-name}.neko.json`
 
-- Release plugin: `.release.neko.json`
+- Release plugin: `.neko/release.config.json` and `.neko/release.state.json`
 - Future deploy plugin: `.deploy.neko.json`
 
 ### 5. No Interactive Prompts in Plugins
@@ -112,7 +112,7 @@ Plugin config files follow the pattern: `.{plugin-name}.neko.json`
 survey.AskOne(&survey.Select{...}, &answer)
 
 // ✅ CORRECT - use flags from request
-projectType := getFlagString(req.Flags, "project-type")
+unitID := getFlagString(req.Flags, "unit")
 ```
 
 ### 6. Manifest Flags
@@ -123,7 +123,8 @@ Define flags in `manifest.json` for automatic CLI flag registration:
 {
   "name": "init",
   "flags": [
-    {"name": "project-type", "type": "string", "required": true, "description": "..."},
+    {"name": "executor", "type": "string", "required": true, "description": "..."},
+    {"name": "delivery", "type": "string", "required": true, "description": "..."},
     {"name": "force", "type": "bool", "required": false, "default": false, "description": "..."}
   ]
 }
@@ -191,7 +192,7 @@ make all
 echo '{"command":"init-options","args":[],"flags":{},"context":{}}' | ./plugin/release/plugin-release
 
 # Test via CLI
-./neko release init --project-type=backend --release-system=goreleaser
+./neko release init --executor=goreleaser --delivery=local
 ./neko release init-options
 ./neko release history --describe
 ```

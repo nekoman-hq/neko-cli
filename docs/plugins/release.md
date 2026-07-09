@@ -29,49 +29,60 @@ The `plugin-release` V2 unit declares `kind: "plugin"` metadata in `.neko/releas
 
 ### `neko release init`
 
-Initialize a new release configuration for your project.
+Initialize a new V2 release configuration for a single non-plugin release unit.
 
 **Usage:**
 ```bash
-neko release init --project-type=<type> --release-system=<system> [flags]
+neko release init --executor=<executor> --delivery=<delivery> [flags]
 ```
 
 **Required Flags:**
 
 | Flag | Type | Description |
 |------|------|-------------|
-| `--project-type` | string | Project type: `frontend`, `backend`, or `other` |
-| `--release-system` | string | Release system: `goreleaser`, `jreleaser`, or `release-it` |
+| `--executor` | string | Release executor: `goreleaser`, `jreleaser`, or `release-it` |
+| `--delivery` | string | Delivery mode: `local` or `github-actions` |
 
 **Optional Flags:**
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--unit` | string | `cli` | Release unit id |
+| `--display-name` | string | unit id | Human-readable unit name |
 | `--version` | string | `0.1.0` | Initial semantic version |
-| `--force` | bool | `false` | Overwrite existing configuration |
+| `--workflow` | string | | Required for `github-actions`; must point to `.github/workflows/*.yml` or `.yaml` |
+| `--tag-prefix` | string | `v` | Release tag prefix |
+| `--working-directory` | string | `.` | Unit working directory |
+| `--paths` | string | `**` | Comma-separated unit path globs |
+| `--force` | bool | `false` | Recreate existing V2 config/state |
 
-`metadata` is accepted only as a deprecated compatibility fallback if old callers still send it. `--version` is the canonical flag.
+`release init` no longer creates `.release.neko.json`. Existing V1 repositories should use `neko release migrate`. Plugin unit metadata and appending units to an existing V2 configuration are not implemented by `init` yet.
 
 **Examples:**
 ```bash
-# Initialize a Go backend project with GoReleaser
-neko release init --project-type=backend --release-system=goreleaser
+# Initialize a local GoReleaser-backed CLI unit
+neko release init --executor=goreleaser --delivery=local
 
-# Initialize a Node.js frontend project
-neko release init --project-type=frontend --release-system=release-it
+# Initialize a GitHub Actions-delivered CLI unit
+neko release init \
+  --unit=cli \
+  --display-name=neko-cli \
+  --executor=goreleaser \
+  --delivery=github-actions \
+  --workflow=.github/workflows/release.yml
 
-# Reinitialize with force
-neko release init --project-type=backend --release-system=goreleaser --force
+# Reinitialize existing V2 config/state
+neko release init --executor=goreleaser --delivery=local --force
 
 # Start with a specific version
-neko release init --project-type=backend --release-system=goreleaser --version=1.0.0
+neko release init --executor=goreleaser --delivery=local --version=1.0.0
 ```
 
 **What it does:**
-1. Creates `.release.neko.json` configuration file
-2. Detects repository owner/name from git remote
-3. Initializes the underlying release system (e.g., creates `.goreleaser.yml`)
-4. Validates the configuration
+1. Creates `.neko/release.config.json`
+2. Creates `.neko/release.state.json`
+3. Validates the generated V2 repository configuration
+4. Leaves executor-specific tool configuration to be added separately
 
 ---
 
@@ -101,13 +112,11 @@ neko release patch --dry-run
 ```
 
 **What it does:**
-1. Loads configuration from `.release.neko.json`
-2. Runs preflight checks (git state, version validation)
-3. Calculates the next patch version
-4. Creates a release commit: `chore(neko-release): x.y.z`
-5. Creates and pushes a git tag
-6. Runs the underlying release system (e.g., `goreleaser release`)
-7. Updates the version in `.release.neko.json`
+1. Loads V2 config/state when `.neko/release.config.json` exists, otherwise falls back to legacy V1 compatibility.
+2. Runs preflight checks (git state, version validation, executor requirements where applicable).
+3. Calculates the next patch version.
+4. For V2 GitHub Actions units, updates state/materialized files, creates the Neko-owned release commit and tag, pushes them, and dispatches the configured workflow.
+5. For legacy V1 repositories, keeps the existing `.release.neko.json` release path.
 
 With `--dry-run`, Neko only calculates and displays the next version. It does not write config, update executor files, run executors, fetch remotes, commit, tag, push, publish, or rollback.
 
@@ -288,7 +297,7 @@ neko release validate
 neko release validate --show
 ```
 
-**Sample Output (with --show):**
+**Sample Output for legacy V1 repositories (with --show):**
 ```
 PROPERTY        VALUE
 ────────────────────────────
@@ -358,13 +367,18 @@ neko release init-options --output json
 
 **Sample Output:**
 ```
-DESCRIPTION                        OPTION          REQUIRED  VALUES
+DESCRIPTION                         OPTION             REQUIRED     VALUES
 ────────────────────────────────────────────────────────────────────────────────────────────────
-Type of project being released     project-type    true      frontend, backend, other
-Release tool to use                release-system  true      release-it, jreleaser, goreleaser
-Initial version (default: 0.1.0)   version         false     semver (e.g. 0.1.0)
-Deprecated fallback for --version  metadata        false     semver (e.g. 0.1.0)
-Overwrite existing config          force           false     true, false
+Release unit id                     unit               false        cli, api, plugin-release, ...
+Release unit display name           display-name       false        string
+Initial version                     version            false        semver, default 0.1.0
+Release executor                    executor           true         goreleaser, jreleaser, release-it
+Release delivery mode               delivery           true         local, github-actions
+GitHub Actions workflow path        workflow           conditional  .github/workflows/*.yml
+Release tag prefix                  tag-prefix         false        v
+Unit working directory              working-directory  false        .
+Unit path scope                     paths              false        comma-separated globs
+Overwrite existing V2 config/state  force              false        true, false
 ```
 
 ---
@@ -487,7 +501,7 @@ Best for: **Go projects**
 
 **Prerequisites:**
 - [GoReleaser](https://goreleaser.com/install/) installed
-- `.goreleaser.yml` configuration (created by `neko release init`)
+- `.goreleaser.yml` or a dedicated GoReleaser configuration. `neko release init` creates V2 release config/state only; tool-specific executor config is added separately.
 
 **What Neko does:**
 1. Creates release commit with version
@@ -628,20 +642,20 @@ The release plugin provides detailed error responses with hints:
 
 **CONFIG_NOT_FOUND**
 ```
-No .release.neko.json configuration found
-Hint: Run 'neko release init' first to initialize the release configuration
+No release configuration found
+Hint: Run 'neko release init' for a new V2 config or 'neko release migrate' for an existing V1 config
 ```
 
 **CONFIG_EXISTS**
 ```
-.release.neko.json already exists
-Hint: Use --force to overwrite
+.neko/release.config.json or .neko/release.state.json already exists
+Hint: Use --force to recreate both V2 files
 ```
 
 **VALIDATION_FAILED**
 ```
-Invalid project type: invalid
-Hint: Must be one of: frontend, backend, other
+Invalid executor: custom
+Hint: Must be one of: goreleaser, jreleaser, release-it
 ```
 
 **VERSION_ERROR**
@@ -686,7 +700,7 @@ Custom token naming options are not currently supported but may be added in the 
 
 ```bash
 # 1. Initialize a new project
-neko release init --project-type=backend --release-system=goreleaser
+neko release init --executor=goreleaser --delivery=local
 
 # 2. Validate the setup
 neko release validate --show
@@ -720,9 +734,10 @@ neko release history --output json | jq '.data.items'
 
 ```bash
 # 1. Initialize release configuration
-neko release init --project-type=backend --release-system=goreleaser
+neko release init --executor=goreleaser --delivery=local
 
-# 2. Add plugin units to .neko/release.config.json and .neko/release.state.json
+# 2. Add plugin units to .neko/release.config.json and .neko/release.state.json manually
+#    Plugin unit init and unit append commands are not implemented yet.
 
 # 3. Configure GoReleaser to use plugin versions
 # Edit .goreleaser.yml and add to ldflags:

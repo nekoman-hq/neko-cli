@@ -497,7 +497,7 @@ These functions write an error response and exit immediately.
 survey.AskOne(&survey.Select{...}, &answer)
 
 // ✅ CORRECT - use flags from request
-projectType := req.Flags["project-type"].(string)
+unitID := req.Flags["unit"].(string)
 ```
 
 ### 2. Config File Naming
@@ -505,10 +505,12 @@ projectType := req.Flags["project-type"].(string)
 Plugin config files should follow the pattern: `.{plugin-name}.neko.json`
 
 ```
-.release.neko.json    # Release plugin config
 .deploy.neko.json     # Deploy plugin config
+.ui.neko.json         # UI plugin config
 .my-plugin.neko.json  # Your plugin config
 ```
+
+The release plugin is the exception: new `neko release init` writes V2 repository files at `.neko/release.config.json` and `.neko/release.state.json`. It no longer creates `.release.neko.json`; existing V1 release projects should use `neko release migrate`.
 
 ### 3. Extract Flags Safely
 

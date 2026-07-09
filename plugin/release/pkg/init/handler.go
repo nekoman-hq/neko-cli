@@ -1,9 +1,5 @@
-// Package init includes the init handler for plugin-based execution
-//
-//nolint:staticcheck // V1 compatibility code intentionally uses deprecated V1 APIs during migration
+// Package init includes the init handler for plugin-based execution.
 package init
-
-//lint:file-ignore SA1019 V1 compatibility commands intentionally use deprecated V1 APIs during migration
 
 /*
 @Author     Benjamin Senekowitsch
@@ -13,14 +9,25 @@ package init
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/nekoman-hq/neko-cli/pkg/log"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
-	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/git"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata"
-	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/release"
+)
+
+const (
+	defaultUnitID           = "cli"
+	defaultInitialVersion   = "0.1.0"
+	defaultTagPrefix        = "v"
+	defaultWorkingDirectory = "."
+	defaultPaths            = "**"
+	legacyV1ConfigFileName  = ".release.neko.json"
 )
 
 // HandleInit handles the init command in plugin mode
@@ -28,122 +35,50 @@ import (
 func HandleInit(req plugin.Request) (*plugin.Response, error) {
 	log.PluginPrint(log.Init, "Starting release initialization")
 
-	// Check for force flag to overwrite existing config
 	force := getFlagBool(req.Flags, "force")
 
-	// Check if config already exists
-	if config.V1Exists() && !force {
-		log.PluginV(log.Init, "Config file already exists, force flag not set")
-		return &plugin.Response{
-			Status: "error",
-			Metadata: plugin.ResponseMetadata{
-				Plugin:    metadata.PluginName,
-				Version:   metadata.Version,
-				Command:   "init",
-				Timestamp: time.Now(),
-			},
-			Error: &plugin.ResponseError{
-				Code:    "CONFIG_EXISTS",
-				Message: fmt.Sprintf("%s already exists. Use --force to overwrite.", metadata.ConfigFileName),
-			},
-		}, nil
+	if err := checkExistingConfig(force); err != nil {
+		log.PluginV(log.Init, "Existing release configuration prevents init: %s", err.message)
+		return initErrorResponse(err.code, err.message, nil), nil
 	}
 
-	// Build config from flags
-	cfg, err := buildConfigFromFlags(req.Flags)
+	initConfig, err := buildV2InitConfigFromFlags(req.Flags)
 	if err != nil {
-		return &plugin.Response{
-			Status: "error",
-			Metadata: plugin.ResponseMetadata{
-				Plugin:    metadata.PluginName,
-				Version:   metadata.Version,
-				Command:   "init",
-				Timestamp: time.Now(),
+		return initErrorResponse("INVALID_FLAGS", err.Error(), map[string]any{
+			"required_flags": []string{"executor", "delivery"},
+			"optional_flags": []string{
+				"unit",
+				"display-name",
+				"version",
+				"workflow",
+				"tag-prefix",
+				"working-directory",
+				"paths",
+				"force",
 			},
-			Error: &plugin.ResponseError{
-				Code:    "INVALID_FLAGS",
-				Message: err.Error(),
-				Details: map[string]any{
-					"required_flags": []string{"project-type", "release-system"},
-					"optional_flags": []string{"version", "metadata (deprecated)", "force"},
-				},
-			},
-		}, nil
+		}), nil
 	}
 
-	// Try to get repo info from git
-	repoInfo, _ := git.Current()
-	if repoInfo != nil {
-		cfg.ProjectOwner = repoInfo.Owner
-		cfg.ProjectName = repoInfo.Repo
-		log.PluginV(log.Init, "Detected repository: %s/%s", repoInfo.Owner, repoInfo.Repo)
+	cfg, state := buildV2Files(initConfig)
+	if err = config.ValidateV2(".", &cfg, &state); err != nil {
+		return initErrorResponse("VALIDATION_ERROR", err.Error(), nil), nil
 	}
 
-	// Validate the config
-	if err = config.V1Validate(&cfg); err != nil {
-		return &plugin.Response{
-			Status: "error",
-			Metadata: plugin.ResponseMetadata{
-				Plugin:    metadata.PluginName,
-				Version:   metadata.Version,
-				Command:   "init",
-				Timestamp: time.Now(),
-			},
-			Error: &plugin.ResponseError{
-				Code:    "VALIDATION_ERROR",
-				Message: err.Error(),
-			},
-		}, nil
-	}
-
-	// Save the config
-	if err = config.V1SaveConfig(cfg); err != nil {
-		return &plugin.Response{
-			Status: "error",
-			Metadata: plugin.ResponseMetadata{
-				Plugin:    metadata.PluginName,
-				Version:   metadata.Version,
-				Command:   "init",
-				Timestamp: time.Now(),
-			},
-			Error: &plugin.ResponseError{
-				Code:    "SAVE_ERROR",
-				Message: fmt.Sprintf("Failed to save configuration: %v", err),
-			},
-		}, nil
-	}
-
-	log.PluginPrint(log.Init, "Configuration saved to %s", metadata.ConfigFileName)
-
-	// Initialize the release system
-	releaser, err := release.Get(string(cfg.ReleaseSystem))
+	configJSON, err := config.CanonicalV2Config(cfg)
 	if err != nil {
-		return &plugin.Response{
-			Status: "error",
-			Metadata: plugin.ResponseMetadata{
-				Plugin:    metadata.PluginName,
-				Version:   metadata.Version,
-				Command:   "init",
-				Timestamp: time.Now(),
-			},
-			Error: &plugin.ResponseError{
-				Code:    "RELEASE_SYSTEM_ERROR",
-				Message: fmt.Sprintf("Release system not found: %v", err),
-			},
-		}, nil
+		return initErrorResponse("VALIDATION_ERROR", err.Error(), nil), nil
+	}
+	stateJSON, err := config.CanonicalV2State(state)
+	if err != nil {
+		return initErrorResponse("VALIDATION_ERROR", err.Error(), nil), nil
+	}
+	if err = writeV2Files(configJSON, stateJSON); err != nil {
+		return initErrorResponse("SAVE_ERROR", fmt.Sprintf("Failed to save V2 release configuration: %v", err), nil), nil
 	}
 
-	if err := releaser.Init(&cfg); err != nil {
-		log.PluginV(log.Init, "Release system initialization failed: %v", err)
-		// Don't fail completely, config is saved
-	} else {
-		log.PluginPrint(log.Init, "Release system %s initialized", cfg.ReleaseSystem)
-	}
-
+	log.PluginPrint(log.Init, "Configuration saved to %s", config.V2ConfigPath("."))
+	log.PluginPrint(log.Init, "State saved to %s", config.V2StatePath("."))
 	log.PluginPrint(log.Init, "Initialization completed successfully")
-
-	// Build next steps based on release system
-	nextSteps := buildNextSteps(cfg)
 
 	return &plugin.Response{
 		Status: "success",
@@ -154,13 +89,19 @@ func HandleInit(req plugin.Request) (*plugin.Response, error) {
 			Timestamp: time.Now(),
 		},
 		Data: map[string]any{
-			"config_file":    metadata.ConfigFileName,
-			"project_name":   cfg.ProjectName,
-			"project_owner":  cfg.ProjectOwner,
-			"project_type":   string(cfg.ProjectType),
-			"release_system": string(cfg.ReleaseSystem),
-			"version":        cfg.Version,
-			"next_steps":     nextSteps,
+			"config_file":       config.V2ConfigPath("."),
+			"state_file":        config.V2StatePath("."),
+			"schema":            "v2",
+			"unit":              initConfig.UnitID,
+			"display_name":      initConfig.DisplayName,
+			"version":           initConfig.Version,
+			"executor":          string(initConfig.Executor),
+			"delivery":          string(initConfig.Delivery),
+			"workflow":          initConfig.Workflow,
+			"tag_prefix":        initConfig.TagPrefix,
+			"working_directory": initConfig.WorkingDirectory,
+			"paths":             initConfig.Paths,
+			"next_steps":        buildV2NextSteps(initConfig),
 		},
 		RendererHint: "text",
 	}, nil
@@ -172,34 +113,64 @@ func GetAvailableOptions() (*plugin.Response, error) {
 	// Build items as a table-friendly format
 	items := []map[string]any{
 		{
-			"option":      "project-type",
-			"values":      "frontend, backend, other",
-			"required":    true,
-			"description": "Type of project being released",
-		},
-		{
-			"option":      "release-system",
-			"values":      "release-it, jreleaser, goreleaser",
-			"required":    true,
-			"description": "Release tool to use",
-		},
-		{
-			"option":      "metadata",
-			"values":      "semver (e.g. 0.1.0)",
+			"option":      "unit",
+			"values":      "cli, api, plugin-release, ...",
 			"required":    false,
-			"description": "Deprecated fallback for --version",
+			"description": "Release unit id",
+		},
+		{
+			"option":      "display-name",
+			"values":      "string",
+			"required":    false,
+			"description": "Release unit display name",
 		},
 		{
 			"option":      "version",
-			"values":      "semver (e.g. 0.1.0)",
+			"values":      "semver, default 0.1.0",
 			"required":    false,
-			"description": "Initial version (default: 0.1.0)",
+			"description": "Initial version",
+		},
+		{
+			"option":      "executor",
+			"values":      "goreleaser, jreleaser, release-it",
+			"required":    true,
+			"description": "Release executor",
+		},
+		{
+			"option":      "delivery",
+			"values":      "local, github-actions",
+			"required":    true,
+			"description": "Release delivery mode",
+		},
+		{
+			"option":      "workflow",
+			"values":      ".github/workflows/*.yml",
+			"required":    "conditional",
+			"description": "GitHub Actions workflow path",
+		},
+		{
+			"option":      "tag-prefix",
+			"values":      "v",
+			"required":    false,
+			"description": "Release tag prefix",
+		},
+		{
+			"option":      "working-directory",
+			"values":      ".",
+			"required":    false,
+			"description": "Unit working directory",
+		},
+		{
+			"option":      "paths",
+			"values":      "comma-separated globs",
+			"required":    false,
+			"description": "Unit path scope",
 		},
 		{
 			"option":      "force",
 			"values":      "true, false",
 			"required":    false,
-			"description": "Overwrite existing config",
+			"description": "Overwrite existing V2 config/state",
 		},
 	}
 
@@ -213,51 +184,161 @@ func GetAvailableOptions() (*plugin.Response, error) {
 		},
 		Data: map[string]any{
 			"items": items,
-			"recommendations": map[string]string{
-				"frontend": string(config.V1ReleaseTypeReleaseIt),
-				"backend":  string(config.V1ReleaseTypeJReleaser),
-				"other":    string(config.V1ReleaseTypeGoReleaser),
-			},
 		},
 		RendererHint: "table",
 	}, nil
 }
 
-func buildConfigFromFlags(flags map[string]any) (config.V1ReleaseConfig, error) {
-	cfg := config.V1ReleaseConfig{}
+type initConfigError struct {
+	code    string
+	message string
+}
 
-	// Get project type (required)
-	projectType := getFlagString(flags, "project-type")
-	if projectType == "" {
-		return cfg, fmt.Errorf("missing required flag: --project-type (frontend|backend|other)")
-	}
-	cfg.ProjectType = config.V1ProjectType(projectType)
-	if !cfg.ProjectType.IsValid() {
-		return cfg, fmt.Errorf("invalid project type: %s (must be: frontend, backend, or other)", projectType)
-	}
+func (err *initConfigError) Error() string {
+	return err.message
+}
 
-	// Get release system (required)
-	releaseSystem := getFlagString(flags, "release-system")
-	if releaseSystem == "" {
-		return cfg, fmt.Errorf("missing required flag: --release-system (release-it|jreleaser|goreleaser)")
-	}
-	cfg.ReleaseSystem = config.V1ReleaseSystem(releaseSystem)
-	if !cfg.ReleaseSystem.IsValid() {
-		return cfg, fmt.Errorf("invalid release system: %s (must be: release-it, jreleaser, or goreleaser)", releaseSystem)
-	}
+type v2InitConfig struct {
+	UnitID           string
+	DisplayName      string
+	Version          string
+	Executor         config.ExecutorType
+	Delivery         config.DeliveryType
+	Workflow         string
+	TagPrefix        string
+	WorkingDirectory string
+	Paths            []string
+}
 
-	// --version is the manifest contract. The old metadata key is accepted only
-	// as a deprecated compatibility fallback for callers that still send it.
-	versionStr := getFlagString(flags, "version")
-	if versionStr == "" {
-		versionStr = getFlagString(flags, "metadata")
-		if versionStr == "" {
-			versionStr = "0.1.0"
+func checkExistingConfig(force bool) *initConfigError {
+	hasV1 := fileExists(legacyV1ConfigFileName)
+	hasV2Config := config.V2ConfigExists(".")
+	hasV2State := config.V2StateExists(".")
+	hasAnyV2 := hasV2Config || hasV2State
+
+	if hasV1 && hasAnyV2 {
+		return &initConfigError{
+			code:    "CONFIG_CONFLICT",
+			message: "release configuration conflict: .release.neko.json and V2 files both exist. Resolve the conflict explicitly before running init.",
 		}
 	}
-	cfg.Version = versionStr
+	if hasV1 {
+		return &initConfigError{
+			code:    "V1_CONFIG_EXISTS",
+			message: ".release.neko.json already exists. Run 'neko release migrate' to convert it to V2; init will not overwrite V1 configs.",
+		}
+	}
+	if hasAnyV2 && !force {
+		return &initConfigError{
+			code:    "CONFIG_EXISTS",
+			message: ".neko/release.config.json or .neko/release.state.json already exists. Use --force to recreate both V2 files.",
+		}
+	}
 
-	return cfg, nil
+	return nil
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func buildV2InitConfigFromFlags(flags map[string]any) (v2InitConfig, error) {
+	if hasAnyFlag(flags, "project-type", "release-system", "metadata") {
+		return v2InitConfig{}, fmt.Errorf("release init is V2-only; use --executor and --delivery instead of legacy project-type/release-system/metadata flags")
+	}
+
+	unitID := defaultString(getFlagString(flags, "unit"), defaultUnitID)
+	displayName := defaultString(getFlagString(flags, "display-name"), unitID)
+	version := defaultString(getFlagString(flags, "version"), defaultInitialVersion)
+	executor := config.ExecutorType(getFlagString(flags, "executor"))
+	delivery := config.DeliveryType(getFlagString(flags, "delivery"))
+	workflow := getFlagString(flags, "workflow")
+	tagPrefix := defaultString(getFlagString(flags, "tag-prefix"), defaultTagPrefix)
+	workingDirectory := defaultString(getFlagString(flags, "working-directory"), defaultWorkingDirectory)
+	paths, err := parsePaths(defaultString(getFlagString(flags, "paths"), defaultPaths))
+	if err != nil {
+		return v2InitConfig{}, err
+	}
+
+	if strings.TrimSpace(displayName) == "" {
+		return v2InitConfig{}, fmt.Errorf("display-name must not be empty")
+	}
+	if version != strings.TrimSpace(version) || strings.HasPrefix(version, "v") {
+		return v2InitConfig{}, fmt.Errorf("version %q must be SemVer without leading v", version)
+	}
+	if _, err := semver.NewVersion(version); err != nil {
+		return v2InitConfig{}, fmt.Errorf("version %q must be valid SemVer: %w", version, err)
+	}
+	if executor == "" {
+		return v2InitConfig{}, fmt.Errorf("missing required flag: --executor (goreleaser|jreleaser|release-it)")
+	}
+	if !executor.IsValid() {
+		return v2InitConfig{}, fmt.Errorf("invalid executor: %s (must be: goreleaser, jreleaser, or release-it)", executor)
+	}
+	if delivery == "" {
+		return v2InitConfig{}, fmt.Errorf("missing required flag: --delivery (local|github-actions)")
+	}
+	if !delivery.IsValid() {
+		return v2InitConfig{}, fmt.Errorf("invalid delivery: %s (must be: local or github-actions)", delivery)
+	}
+	if delivery == config.DeliveryLocal {
+		workflow = ""
+	}
+
+	return v2InitConfig{
+		UnitID:           unitID,
+		DisplayName:      displayName,
+		Version:          version,
+		Executor:         executor,
+		Delivery:         delivery,
+		Workflow:         workflow,
+		TagPrefix:        tagPrefix,
+		WorkingDirectory: workingDirectory,
+		Paths:            paths,
+	}, nil
+}
+
+func buildV2Files(initConfig v2InitConfig) (config.V2ReleaseConfig, config.V2ReleaseState) {
+	cfg := config.V2ReleaseConfig{
+		SchemaVersion: 2,
+		Units: []config.V2Unit{
+			{
+				ID:               initConfig.UnitID,
+				DisplayName:      initConfig.DisplayName,
+				Paths:            initConfig.Paths,
+				WorkingDirectory: initConfig.WorkingDirectory,
+				TagPrefix:        initConfig.TagPrefix,
+				Executor: config.V2Executor{
+					Type:     initConfig.Executor,
+					Delivery: initConfig.Delivery,
+					Workflow: initConfig.Workflow,
+				},
+			},
+		},
+	}
+	state := config.V2ReleaseState{
+		SchemaVersion: 2,
+		Units: map[string]config.V2UnitState{
+			initConfig.UnitID: {Version: initConfig.Version},
+		},
+	}
+	return cfg, state
+}
+
+func writeV2Files(configJSON, stateJSON []byte) error {
+	if err := os.MkdirAll(config.V2Directory, 0755); err != nil {
+		return fmt.Errorf("create %s directory: %w", config.V2Directory, err)
+	}
+	configPath := config.V2ConfigPath(".")
+	statePath := config.V2StatePath(".")
+	if err := config.AtomicWriteFile(configPath, configJSON, 0644); err != nil {
+		return err
+	}
+	if err := config.AtomicWriteFile(statePath, stateJSON, 0644); err != nil {
+		return err
+	}
+	return nil
 }
 
 func getFlagString(flags map[string]any, key string) string {
@@ -278,29 +359,63 @@ func getFlagBool(flags map[string]any, key string) bool {
 	return false
 }
 
-func buildNextSteps(cfg config.V1ReleaseConfig) []string {
+func parsePaths(value string) ([]string, error) {
+	parts := strings.Split(value, ",")
+	paths := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed == "" {
+			return nil, fmt.Errorf("paths must not contain empty entries")
+		}
+		paths = append(paths, filepath.ToSlash(trimmed))
+	}
+	return paths, nil
+}
+
+func defaultString(value, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return strings.TrimSpace(value)
+}
+
+func hasAnyFlag(flags map[string]any, names ...string) bool {
+	for _, name := range names {
+		if _, ok := flags[name]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func initErrorResponse(code, message string, details map[string]any) *plugin.Response {
+	responseError := &plugin.ResponseError{
+		Code:    code,
+		Message: message,
+	}
+	if len(details) > 0 {
+		responseError.Details = details
+	}
+	return &plugin.Response{
+		Status: "error",
+		Metadata: plugin.ResponseMetadata{
+			Plugin:    metadata.PluginName,
+			Version:   metadata.Version,
+			Command:   "init",
+			Timestamp: time.Now(),
+		},
+		Error: responseError,
+	}
+}
+
+func buildV2NextSteps(initConfig v2InitConfig) []string {
 	steps := []string{
-		"Use 'neko release' to create a release",
+		"Use 'neko release validate --show' to inspect the V2 configuration",
 	}
-
-	switch cfg.ReleaseSystem {
-	case config.V1ReleaseTypeReleaseIt:
-		steps = append(steps,
-			"Neko will add metadata in: package.json, .release-it.json",
-		)
-	case config.V1ReleaseTypeJReleaser:
-		steps = append(steps,
-			"Neko will add metadata in: jreleaser.yml, pom.xml / build.gradle",
-		)
-	case config.V1ReleaseTypeGoReleaser:
-		steps = append(steps,
-			"Neko will add metadata in: .goreleaser.yml, Git tags",
-		)
+	if initConfig.Delivery == config.DeliveryGitHubActions {
+		steps = append(steps, fmt.Sprintf("Ensure %s builds and publishes from the dispatched tag", initConfig.Workflow))
+	} else {
+		steps = append(steps, "Add or verify the executor-specific local release configuration before running a real release")
 	}
-
-	steps = append(steps,
-		fmt.Sprintf("The metadata in %s is the single source of truth", metadata.ConfigFileName),
-	)
-
 	return steps
 }

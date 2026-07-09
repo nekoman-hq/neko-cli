@@ -64,7 +64,7 @@ func HandleValidate(req plugin.Request) (*plugin.Response, error) {
 			Code:    "CONFIG_NOT_FOUND",
 			Message: "No release configuration found",
 			Details: map[string]any{
-				"hint": "Run 'neko release init' for V1 or add .neko/release.config.json and .neko/release.state.json for V2",
+				"hint": "Run 'neko release init' to create V2 config/state, or 'neko release migrate' to convert an existing V1 config",
 			},
 		},
 	}, nil

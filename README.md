@@ -140,6 +140,7 @@ This repository releases itself with V2 multi-unit release state:
 - `plugin-release` uses tags like `plugin-release/v4.0.0`.
 - `plugin-ui` uses tags like `plugin-ui/v1.0.0`.
 - All releaseable versions live in `.neko/release.state.json`; the old `.plugin.release.neko.json` map has been removed.
+- `neko release init` creates V2 `.neko/release.config.json` and `.neko/release.state.json` files for one non-plugin unit; it no longer creates `.release.neko.json`. Existing V1 projects should use `neko release migrate`.
 - Plugin units declare `kind: "plugin"` metadata in `.neko/release.config.json`, including public plugin name, manifest path, asset prefix, and binary name. New releaseable plugins are modeled by adding a V2 plugin unit plus matching manifest and state.
 - Neko CLI owns version/materialization/state, release commit, tag, push, and workflow dispatch.
 - GitHub Actions workflows own build, GitHub Release creation, and asset publishing.

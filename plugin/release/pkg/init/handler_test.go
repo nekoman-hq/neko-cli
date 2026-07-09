@@ -3,52 +3,328 @@ package init
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
-func TestBuildConfigFromFlagsUsesVersionFlag(t *testing.T) {
-	cfg, err := buildConfigFromFlags(map[string]any{
-		"project-type":   "backend",
-		"release-system": "goreleaser",
-		"version":        "2.3.4",
-	})
+func TestGetAvailableOptionsExposesV2OnlyInitOptions(t *testing.T) {
+	resp, err := GetAvailableOptions()
 	if err != nil {
-		t.Fatalf("buildConfigFromFlags: %v", err)
+		t.Fatalf("GetAvailableOptions: %v", err)
+	}
+	if resp.Status != "success" {
+		t.Fatalf("expected success, got %#v", resp)
 	}
 
-	if cfg.Version != "2.3.4" {
-		t.Fatalf("expected version 2.3.4, got %s", cfg.Version)
+	options := initOptionNames(t, resp)
+	for _, want := range []string{
+		"unit",
+		"display-name",
+		"version",
+		"executor",
+		"delivery",
+		"workflow",
+		"tag-prefix",
+		"working-directory",
+		"paths",
+		"force",
+	} {
+		if !options[want] {
+			t.Fatalf("init-options missing %q: %#v", want, options)
+		}
+	}
+	for _, legacy := range []string{"project-type", "release-system", "metadata"} {
+		if options[legacy] {
+			t.Fatalf("init-options still exposes legacy option %q", legacy)
+		}
 	}
 }
 
-func TestBuildConfigFromFlagsUsesMetadataOnlyAsFallback(t *testing.T) {
-	cfg, err := buildConfigFromFlags(map[string]any{
-		"project-type":   "backend",
-		"release-system": "goreleaser",
-		"version":        "2.3.4",
-		"metadata":       "9.9.9",
-	})
-	if err != nil {
-		t.Fatalf("buildConfigFromFlags: %v", err)
-	}
-	if cfg.Version != "2.3.4" {
-		t.Fatalf("expected canonical version to win, got %s", cfg.Version)
-	}
-
-	cfg, err = buildConfigFromFlags(map[string]any{
-		"project-type":   "backend",
-		"release-system": "goreleaser",
-		"metadata":       "1.2.3",
-	})
-	if err != nil {
-		t.Fatalf("buildConfigFromFlags fallback: %v", err)
-	}
-	if cfg.Version != "1.2.3" {
-		t.Fatalf("expected metadata fallback version 1.2.3, got %s", cfg.Version)
+func TestBuildV2InitConfigRejectsLegacyFlags(t *testing.T) {
+	for _, legacy := range []string{"project-type", "release-system", "metadata"} {
+		_, err := buildV2InitConfigFromFlags(map[string]any{
+			"executor": "goreleaser",
+			"delivery": "local",
+			legacy:     "legacy",
+		})
+		if err == nil || !strings.Contains(err.Error(), "V2-only") {
+			t.Fatalf("expected V2-only error for %s, got %v", legacy, err)
+		}
 	}
 }
 
-func TestManifestExposesVersionFlag(t *testing.T) {
+func TestHandleInitCreatesV2LocalConfigAndState(t *testing.T) {
+	withWorkingDirectory(t)
+
+	resp, err := HandleInit(plugin.Request{Flags: map[string]any{
+		"unit":              "api",
+		"display-name":      "API",
+		"version":           "1.2.3",
+		"executor":          "goreleaser",
+		"delivery":          "local",
+		"workflow":          ".github/workflows/ignored.yml",
+		"tag-prefix":        "api/v",
+		"working-directory": ".",
+		"paths":             "apps/api/**, platform/** ,docs/**",
+	}})
+	if err != nil {
+		t.Fatalf("HandleInit: %v", err)
+	}
+	if resp.Status != "success" {
+		t.Fatalf("expected success, got %#v", resp.Error)
+	}
+	assertNoFile(t, legacyV1ConfigFileName)
+
+	cfg, state := loadGeneratedV2(t)
+	if cfg.SchemaVersion != 2 || state.SchemaVersion != 2 {
+		t.Fatalf("expected v2 schema, got config=%d state=%d", cfg.SchemaVersion, state.SchemaVersion)
+	}
+	if len(cfg.Units) != 1 {
+		t.Fatalf("expected one unit, got %#v", cfg.Units)
+	}
+	unit := cfg.Units[0]
+	if unit.ID != "api" ||
+		unit.DisplayName != "API" ||
+		unit.TagPrefix != "api/v" ||
+		unit.WorkingDirectory != "." ||
+		unit.Executor.Type != releaseconfig.ExecutorGoReleaser ||
+		unit.Executor.Delivery != releaseconfig.DeliveryLocal {
+		t.Fatalf("unexpected generated unit: %#v", unit)
+	}
+	if unit.Executor.Workflow != "" {
+		t.Fatalf("local delivery must omit workflow, got %#v", unit.Executor)
+	}
+	if got := strings.Join(unit.Paths, ","); got != "apps/api/**,platform/**,docs/**" {
+		t.Fatalf("paths were not normalized: %#v", unit.Paths)
+	}
+	if state.Units["api"].Version != "1.2.3" {
+		t.Fatalf("unexpected state: %#v", state.Units)
+	}
+	if _, err := releaseconfig.LoadV2Repository("."); err != nil {
+		t.Fatalf("generated V2 repository must validate: %v", err)
+	}
+}
+
+func TestHandleInitCreatesV2GitHubActionsConfig(t *testing.T) {
+	withWorkingDirectory(t)
+	mustWrite(t, ".github/workflows/release.yml", "name: release\n")
+
+	resp, err := HandleInit(plugin.Request{Flags: map[string]any{
+		"unit":              "cli",
+		"display-name":      "Neko CLI",
+		"version":           "0.1.0",
+		"executor":          "goreleaser",
+		"delivery":          "github-actions",
+		"workflow":          ".github/workflows/release.yml",
+		"tag-prefix":        "v",
+		"working-directory": ".",
+		"paths":             "**",
+	}})
+	if err != nil {
+		t.Fatalf("HandleInit: %v", err)
+	}
+	if resp.Status != "success" {
+		t.Fatalf("expected success, got %#v", resp.Error)
+	}
+
+	cfg, state := loadGeneratedV2(t)
+	unit := cfg.Units[0]
+	if unit.Executor.Delivery != releaseconfig.DeliveryGitHubActions ||
+		unit.Executor.Workflow != ".github/workflows/release.yml" ||
+		state.Units["cli"].Version != "0.1.0" {
+		t.Fatalf("unexpected generated github-actions config: %#v state=%#v", unit, state)
+	}
+	if _, err := releaseconfig.LoadV2Repository("."); err != nil {
+		t.Fatalf("generated V2 repository must validate: %v", err)
+	}
+}
+
+func TestHandleInitExistingConfigHandling(t *testing.T) {
+	tests := []struct { //nolint:govet // Test table keeps setup and expected behavior grouped for readability.
+		name        string
+		setup       func(t *testing.T)
+		force       bool
+		wantStatus  string
+		wantCode    string
+		wantVersion string
+	}{
+		{
+			name: "V1 only fails",
+			setup: func(t *testing.T) {
+				writeV1(t, "0.1.0")
+			},
+			wantStatus: "error",
+			wantCode:   "V1_CONFIG_EXISTS",
+		},
+		{
+			name: "V1 only force still fails",
+			setup: func(t *testing.T) {
+				writeV1(t, "0.1.0")
+			},
+			force:      true,
+			wantStatus: "error",
+			wantCode:   "V1_CONFIG_EXISTS",
+		},
+		{
+			name: "V2 exists fails without force",
+			setup: func(t *testing.T) {
+				writeV2(t, "old", "1.0.0")
+			},
+			wantStatus: "error",
+			wantCode:   "CONFIG_EXISTS",
+		},
+		{
+			name: "V2 exists force overwrites",
+			setup: func(t *testing.T) {
+				writeV2(t, "old", "1.0.0")
+			},
+			force:       true,
+			wantStatus:  "success",
+			wantVersion: "2.0.0",
+		},
+		{
+			name: "partial V2 fails without force",
+			setup: func(t *testing.T) {
+				mustWrite(t, releaseconfig.V2ConfigPath("."), `{"schemaVersion":2,"units":[]}`)
+			},
+			wantStatus: "error",
+			wantCode:   "CONFIG_EXISTS",
+		},
+		{
+			name: "partial V2 force recreates both",
+			setup: func(t *testing.T) {
+				mustWrite(t, releaseconfig.V2ConfigPath("."), `{"schemaVersion":2,"units":[]}`)
+			},
+			force:       true,
+			wantStatus:  "success",
+			wantVersion: "2.0.0",
+		},
+		{
+			name: "V1 and V2 conflict with force",
+			setup: func(t *testing.T) {
+				writeV1(t, "0.1.0")
+				writeV2(t, "old", "1.0.0")
+			},
+			force:      true,
+			wantStatus: "error",
+			wantCode:   "CONFIG_CONFLICT",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			withWorkingDirectory(t)
+			tt.setup(t)
+
+			flags := validInitFlags()
+			flags["version"] = "2.0.0"
+			if tt.force {
+				flags["force"] = true
+			}
+			resp, err := HandleInit(plugin.Request{Flags: flags})
+			if err != nil {
+				t.Fatalf("HandleInit: %v", err)
+			}
+			if resp.Status != tt.wantStatus {
+				t.Fatalf("expected status %s, got %#v", tt.wantStatus, resp)
+			}
+			if tt.wantCode != "" && (resp.Error == nil || resp.Error.Code != tt.wantCode) {
+				t.Fatalf("expected code %s, got %#v", tt.wantCode, resp.Error)
+			}
+			if tt.wantVersion != "" {
+				_, state := loadGeneratedV2(t)
+				if state.Units["cli"].Version != tt.wantVersion {
+					t.Fatalf("expected overwritten version %s, got %#v", tt.wantVersion, state.Units)
+				}
+			}
+		})
+	}
+}
+
+func TestHandleInitInvalidInputs(t *testing.T) {
+	tests := []struct {
+		name      string
+		mutate    func(map[string]any)
+		wantError string
+	}{
+		{
+			name: "invalid unit",
+			mutate: func(flags map[string]any) {
+				flags["unit"] = "Bad"
+			},
+			wantError: "unit id",
+		},
+		{
+			name: "invalid version",
+			mutate: func(flags map[string]any) {
+				flags["version"] = "v1.2.3"
+			},
+			wantError: "without leading v",
+		},
+		{
+			name: "invalid executor",
+			mutate: func(flags map[string]any) {
+				flags["executor"] = "custom"
+			},
+			wantError: "invalid executor",
+		},
+		{
+			name: "invalid delivery",
+			mutate: func(flags map[string]any) {
+				flags["delivery"] = "ship"
+			},
+			wantError: "invalid delivery",
+		},
+		{
+			name: "github actions without workflow",
+			mutate: func(flags map[string]any) {
+				flags["delivery"] = "github-actions"
+				delete(flags, "workflow")
+			},
+			wantError: "requires workflow",
+		},
+		{
+			name: "github actions workflow outside workflows",
+			mutate: func(flags map[string]any) {
+				flags["delivery"] = "github-actions"
+				flags["workflow"] = "release.yml"
+			},
+			wantError: ".github/workflows",
+		},
+		{
+			name: "empty paths",
+			mutate: func(flags map[string]any) {
+				flags["paths"] = "api/**,,docs/**"
+			},
+			wantError: "empty entries",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			withWorkingDirectory(t)
+			flags := validInitFlags()
+			tt.mutate(flags)
+			resp, err := HandleInit(plugin.Request{Flags: flags})
+			if err != nil {
+				t.Fatalf("HandleInit: %v", err)
+			}
+			if resp.Status != "error" || resp.Error == nil {
+				t.Fatalf("expected error, got %#v", resp)
+			}
+			if !strings.Contains(resp.Error.Message, tt.wantError) {
+				t.Fatalf("expected error containing %q, got %#v", tt.wantError, resp.Error)
+			}
+			assertNoFile(t, legacyV1ConfigFileName)
+		})
+	}
+}
+
+func TestManifestExposesV2InitFlagsOnly(t *testing.T) {
 	data, err := os.ReadFile("../../manifest.json")
 	if err != nil {
 		t.Fatalf("read manifest: %v", err)
@@ -70,13 +346,147 @@ func TestManifestExposesVersionFlag(t *testing.T) {
 		if command.Name != "init" {
 			continue
 		}
+		flags := map[string]bool{}
 		for _, flag := range command.Flags {
-			if flag.Name == "version" {
-				return
+			flags[flag.Name] = true
+		}
+		for _, want := range []string{"unit", "display-name", "version", "executor", "delivery", "workflow", "tag-prefix", "working-directory", "paths", "force"} {
+			if !flags[want] {
+				t.Fatalf("manifest init flags missing %q: %#v", want, flags)
 			}
 		}
-		t.Fatal("init command does not expose version flag")
+		for _, legacy := range []string{"project-type", "release-system", "metadata"} {
+			if flags[legacy] {
+				t.Fatalf("manifest still exposes legacy flag %q", legacy)
+			}
+		}
+		return
 	}
 
 	t.Fatal("init command not found")
+}
+
+func initOptionNames(t *testing.T, resp *plugin.Response) map[string]bool {
+	t.Helper()
+	items, ok := resp.Data["items"].([]map[string]any)
+	if !ok {
+		t.Fatalf("unexpected init-options data: %#v", resp.Data["items"])
+	}
+	options := map[string]bool{}
+	for _, item := range items {
+		option, ok := item["option"].(string)
+		if !ok {
+			t.Fatalf("unexpected option row: %#v", item)
+		}
+		options[option] = true
+	}
+	return options
+}
+
+func validInitFlags() map[string]any {
+	return map[string]any{
+		"unit":              "cli",
+		"display-name":      "CLI",
+		"version":           "0.1.0",
+		"executor":          "goreleaser",
+		"delivery":          "local",
+		"tag-prefix":        "v",
+		"working-directory": ".",
+		"paths":             "**",
+	}
+}
+
+func loadGeneratedV2(t *testing.T) (releaseconfig.V2ReleaseConfig, releaseconfig.V2ReleaseState) {
+	t.Helper()
+	configData, err := os.ReadFile(releaseconfig.V2ConfigPath("."))
+	if err != nil {
+		t.Fatalf("read generated config: %v", err)
+	}
+	stateData, err := os.ReadFile(releaseconfig.V2StatePath("."))
+	if err != nil {
+		t.Fatalf("read generated state: %v", err)
+	}
+	var cfg releaseconfig.V2ReleaseConfig
+	if err := json.Unmarshal(configData, &cfg); err != nil {
+		t.Fatalf("decode generated config: %v\n%s", err, configData)
+	}
+	var state releaseconfig.V2ReleaseState
+	if err := json.Unmarshal(stateData, &state); err != nil {
+		t.Fatalf("decode generated state: %v\n%s", err, stateData)
+	}
+	return cfg, state
+}
+
+func writeV1(t *testing.T, version string) {
+	t.Helper()
+	mustWrite(t, legacyV1ConfigFileName, `{
+  "project-name": "old",
+  "project-owner": "owner",
+  "project-type": "backend",
+  "release-system": "goreleaser",
+  "version": "`+version+`"
+}`)
+}
+
+func writeV2(t *testing.T, unitID, version string) {
+	t.Helper()
+	mustWrite(t, releaseconfig.V2ConfigPath("."), `{
+  "schemaVersion": 2,
+  "units": [
+    {
+      "id": "`+unitID+`",
+      "paths": ["**"],
+      "workingDirectory": ".",
+      "tagPrefix": "v",
+      "executor": {
+        "type": "goreleaser",
+        "delivery": "local"
+      }
+    }
+  ]
+}`)
+	mustWrite(t, releaseconfig.V2StatePath("."), `{
+  "schemaVersion": 2,
+  "units": {
+    "`+unitID+`": {
+      "version": "`+version+`"
+    }
+  }
+}`)
+}
+
+func withWorkingDirectory(t *testing.T) {
+	t.Helper()
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	tempDir := t.TempDir()
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(cwd); err != nil {
+			t.Fatalf("restore cwd: %v", err)
+		}
+	})
+}
+
+func mustWrite(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatalf("mkdir parent for %s: %v", path, err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+func assertNoFile(t *testing.T, path string) {
+	t.Helper()
+	if _, err := os.Stat(path); err == nil {
+		t.Fatalf("unexpected file exists: %s", path)
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("stat %s: %v", path, err)
+	}
 }

@@ -22,10 +22,16 @@ func TestManifestMatchesPublicReleaseContract(t *testing.T) {
 	commands := loadManifestCommands(t)
 	expected := map[string]map[string]string{
 		"init": {
-			"project-type":   "string",
-			"release-system": "string",
-			"version":        "string",
-			"force":          "bool",
+			"unit":              "string",
+			"display-name":      "string",
+			"version":           "string",
+			"executor":          "string",
+			"delivery":          "string",
+			"workflow":          "string",
+			"tag-prefix":        "string",
+			"working-directory": "string",
+			"paths":             "string",
+			"force":             "bool",
 		},
 		"init-options": {},
 		"patch": {

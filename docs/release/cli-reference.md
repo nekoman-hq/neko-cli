@@ -2,11 +2,11 @@
 ## General
 
 ```bash
-neko release init --project-type backend --release-system goreleaser
+neko release init --executor goreleaser --delivery local
 neko release init-options
 ```
 
-`init` creates the legacy V1 configuration and initializes the selected legacy release tool. `init-options` prints the supported init flag values.
+`init` creates V2 `.neko/release.config.json` and `.neko/release.state.json` files for one non-plugin release unit. It no longer creates `.release.neko.json` or initializes executor-specific tool files. Existing V1 repositories should use `neko release migrate`. `github-actions` delivery requires `--workflow .github/workflows/<file>.yml|yaml`; plugin unit init metadata and appending units are not implemented yet.
 
 ## V1
 
