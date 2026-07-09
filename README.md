@@ -41,17 +41,39 @@ make install
 
 ### From Release
 
-Download the latest release from the [releases page](https://github.com/nekoman-hq/neko-cli/releases).
+Download the latest CLI release from the [releases page](https://github.com/nekoman-hq/neko-cli/releases), or use the install script:
 
 ```bash
-# Using the install script (requires GITHUB_TOKEN for private repos)
 ./install.sh
 ```
+
+The script installs the main CLI only. It reads GitHub Releases directly, ignores plugin releases such as `plugin-release/vX.Y.Z`, and selects the newest stable CLI tag matching `vX.Y.Z`. It does not read local release config or state files.
+
+```bash
+# Install a specific CLI release
+NEKO_VERSION=v3.0.4 ./install.sh
+
+# Install to a custom directory
+NEKO_INSTALL_DIR="$HOME/.local/bin" ./install.sh
+
+# Install from a fork or mirror
+NEKO_REPOSITORY=owner/repo ./install.sh
+```
+
+Plugin installation is separate and uses the published `plugin-index.json` registry:
+
+```bash
+neko plugin available
+neko plugin install release
+```
+
+See [Installation](docs/installation.md) for install script details.
 
 ### Requirements
 
 - **Go 1.24+** (for building from source)
 - **Git** (for repository operations)
+- **curl, jq, tar** (for the release install script)
 
 ---
 
