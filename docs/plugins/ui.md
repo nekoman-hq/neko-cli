@@ -18,6 +18,6 @@ Neko CLI materializes only `plugin/ui/manifest.json` for a `plugin-ui` release. 
 
 Plugin installation and updates resolve the newest UI plugin version from plugin-specific V2 unit releases with the tag prefix `plugin-ui/v`. The repository's latest release is not used for UI plugin discovery. The local installed version comes from `~/.neko/plugins/ui/manifest.json`; the remote version comes from the selected `plugin-ui/vX.Y.Z` GitHub Release tag.
 
-The `plugin-ui` V2 unit declares `kind: "plugin"` metadata in `.neko/release.config.json`. `neko release plugin-index` generates the future public `plugin-index.json` from V2 plugin units, `.neko/release.state.json`, and plugin manifests. The generated index is not committed as source; install/update still uses the current registry fallback until the next plugin-registry milestone.
+The `plugin-ui` V2 unit declares `kind: "plugin"` metadata in `.neko/release.config.json`. `neko release plugin-index` generates the public `plugin-index.json` from V2 plugin units, `.neko/release.state.json`, and plugin manifests. Runtime plugin discovery, install, and update use that index as the primary registry source. The index is expected as the `plugin-index.json` asset on the `plugin-registry` GitHub Release and is not committed as source. Until M2D publishes that release, runtime install/update keeps an explicit temporary release-prefix fallback for existing built-in plugins.
 
 `.plugin.release.neko.json` is removed and is not used for UI plugin versioning.

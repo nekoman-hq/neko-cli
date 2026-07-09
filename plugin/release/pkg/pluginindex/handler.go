@@ -14,7 +14,7 @@ import (
 
 const CommandName = "plugin-index"
 
-// HandlePluginIndex generates the future public plugin registry index.
+// HandlePluginIndex generates the public plugin registry index.
 func HandlePluginIndex(req plugin.Request) (*plugin.Response, error) {
 	outputPath := getFlagString(req.Flags, "output")
 	check := getFlagBool(req.Flags, "check")

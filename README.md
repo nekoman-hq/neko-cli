@@ -144,7 +144,7 @@ This repository releases itself with V2 multi-unit release state:
 - Neko CLI owns version/materialization/state, release commit, tag, push, and workflow dispatch.
 - GitHub Actions workflows own build, GitHub Release creation, and asset publishing.
 - Dry-run release planning needs no token and writes nothing.
-- `neko release plugin-index` generates a deterministic future public `plugin-index.json` from V2 plugin units, state, and plugin manifests. The index is not committed as source and install/update continues to use the current registry fallback until the next plugin-registry milestone.
+- Runtime plugin discovery, install, and update use `plugin-index.json` as the primary registry source. The index is expected as the `plugin-index.json` asset on the `plugin-registry` GitHub Release; `/releases/latest` is not used for plugin discovery. Until M2D publishes that release, install/update keeps an explicit temporary release-prefix fallback for the built-in `release` and `ui` plugins.
 - Use `--verbose --describe` to see journal paths, commit/tag, workflow, dispatch state, run URL when resolvable, and recovery guidance.
 
 ### Global Flags

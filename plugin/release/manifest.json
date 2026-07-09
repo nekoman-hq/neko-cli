@@ -213,7 +213,7 @@
     },
     {
       "name": "plugin-index",
-      "description": "Generate the future public plugin registry index from V2 plugin units",
+      "description": "Generate the public plugin registry index from V2 plugin units",
       "outputs": [
         "json",
         "table"

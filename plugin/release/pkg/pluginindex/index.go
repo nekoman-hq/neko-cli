@@ -32,7 +32,7 @@ type WriteOptions struct {
 	Pretty bool
 }
 
-// Index is the future public plugin registry index.
+// Index is the public plugin registry index.
 //
 //nolint:govet // JSON schema order is part of the generated artifact contract.
 type Index struct {
