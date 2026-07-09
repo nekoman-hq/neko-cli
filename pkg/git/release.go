@@ -13,67 +13,62 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/nekoman-hq/neko-cli/pkg/log"
+	"golang.org/x/mod/semver"
 )
 
 var (
 	ErrNoReleases    = stderrors.New("repository has no releases")
 	githubAPIBase    = "https://api.github.com"
 	githubHTTPClient = http.DefaultClient
+	stableCLITagRE   = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+$`)
 )
 
 func LatestRelease(repoInfo *RepoInfo) (*Release, error) {
-	url := fmt.Sprintf("%s/repos/%s/%s/releases/latest", githubAPIBase, repoInfo.Owner, repoInfo.Repo)
-
-	log.PluginV(log.Exec, fmt.Sprintf("Fetching latest release from remote: %s",
-		log.ColorText(log.ColorGreen, url),
-	))
-
-	body, statusCode, err := doGitHubRequest(url)
-	if err == nil {
-		var release Release
-		if unmarshalErr := json.Unmarshal(body, &release); unmarshalErr != nil {
-			return nil, fmt.Errorf(
-				"JSON Parse Failed: %w", unmarshalErr,
-			)
-		}
-
-		log.PluginV(log.Exec, "\uF00C Successfully received release information from remote!")
-		return &release, nil
-	}
-
-	if statusCode != http.StatusNotFound {
-		return nil, err
-	}
-
-	log.PluginV(log.Exec, "Latest release endpoint returned 404, falling back to release list")
-
 	releases, err := listReleases(repoInfo)
 	if err != nil {
 		return nil, err
 	}
 
-	for i := range releases {
-		if releases[i].Draft {
-			continue
-		}
-
-		log.PluginV(log.Exec, "\uF00C Successfully received release information from release list fallback!")
-		return &releases[i], nil
+	release, err := LatestStableCLIRelease(releases)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"%w: repository %s/%s has no stable CLI releases matching vX.Y.Z",
+			ErrNoReleases,
+			repoInfo.Owner,
+			repoInfo.Repo,
+		)
 	}
 
-	return nil, fmt.Errorf(
-		"%w: repository %s/%s has no releases yet",
-		ErrNoReleases,
-		repoInfo.Owner,
-		repoInfo.Repo,
-	)
+	log.PluginV(log.Exec, "\uF00C Successfully resolved latest stable CLI release!")
+	return release, nil
+}
+
+func LatestStableCLIRelease(releases []Release) (*Release, error) {
+	var latest *Release
+
+	for i := range releases {
+		release := &releases[i]
+		if release.Draft || release.PreRelease || !isStableCLITag(release.TagName) {
+			continue
+		}
+		if latest == nil || semver.Compare(release.TagName, latest.TagName) > 0 {
+			latest = release
+		}
+	}
+
+	if latest == nil {
+		return nil, ErrNoReleases
+	}
+
+	return latest, nil
 }
 
 func listReleases(repoInfo *RepoInfo) ([]Release, error) {
-	url := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=10", githubAPIBase, repoInfo.Owner, repoInfo.Repo)
+	url := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=100", githubAPIBase, repoInfo.Owner, repoInfo.Repo)
 
 	log.PluginV(log.Exec, fmt.Sprintf("Fetching release list from remote: %s",
 		log.ColorText(log.ColorGreen, url),
@@ -95,6 +90,10 @@ func listReleases(repoInfo *RepoInfo) ([]Release, error) {
 	}
 
 	return releases, nil
+}
+
+func isStableCLITag(tag string) bool {
+	return stableCLITagRE.MatchString(tag) && semver.IsValid(tag)
 }
 
 func doGitHubRequest(url string) ([]byte, int, error) {

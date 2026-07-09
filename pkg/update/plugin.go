@@ -135,7 +135,7 @@ func updateSinglePlugin(manager *plugin.Manager, registry *plugin.Registry, plug
 		return result
 	}
 
-	// Install using "latest" which will resolve to the CLI tool's latest release tag
+	// Install using "latest" which resolves through the plugin registry index.
 	if err := manager.Install(pluginName, "latest"); err != nil {
 		result.Error = fmt.Errorf("failed to update: %w", err)
 		log.Print(log.Exec, fmt.Sprintf("Failed to update %s: %v", pluginName, err))

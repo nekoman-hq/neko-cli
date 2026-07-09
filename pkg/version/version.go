@@ -39,7 +39,7 @@ func Latest(repoInfo *github.RepoInfo) error {
 			return nil
 		}
 
-		clierrors.Warning("Latest Release Unavailable", err.Error())
+		clierrors.Warning("Latest CLI Release Unavailable", err.Error())
 		return nil
 	}
 
@@ -87,7 +87,7 @@ func displayRelease(repoInfo *github.RepoInfo, release *github.Release) {
 	fmt.Println()
 	fmt.Printf("%s %s\n",
 		log.ColorText(log.ColorPurple, "┌─"),
-		log.ColorText(log.ColorBold, "Latest Release"))
+		log.ColorText(log.ColorBold, "Latest CLI Release"))
 	fmt.Printf("%s\n", log.ColorText(log.ColorPurple, "│"))
 	fmt.Printf("%s %s %s\n",
 		log.ColorText(log.ColorPurple, "├─"),

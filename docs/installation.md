@@ -4,7 +4,7 @@
 
 `install.sh` installs the main `neko` CLI from GitHub Releases. It does not install plugins and does not read repository-local release files such as legacy V1 config or V2 state/config.
 
-By default, the script queries the configured repository's releases, filters for stable CLI tags matching `vX.Y.Z`, ignores plugin releases and the `plugin-registry` release, sorts the CLI tags as semantic versions, and installs the newest one.
+By default, the script queries the configured repository's releases, filters for stable CLI tags matching `vX.Y.Z`, ignores plugin releases and the `plugin-registry` release, sorts the CLI tags as semantic versions, and installs the newest one. The Go implementation used by `neko version` and `neko update` follows the same multi-unit rule for CLI release checks.
 
 ```bash
 ./install.sh
@@ -42,4 +42,4 @@ neko plugin available
 neko plugin install release
 ```
 
-Plugin discovery, install, and update use the published `plugin-index.json` registry asset from the `plugin-registry` GitHub Release. The install script intentionally does not use plugin release tags or plugin registry metadata when selecting the CLI archive.
+Plugin discovery, install, and update use the published `plugin-index.json` registry asset from the `plugin-registry` GitHub Release. CLI install, version, and update checks intentionally do not use plugin release tags or plugin registry metadata when selecting the CLI release or archive.

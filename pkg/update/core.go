@@ -42,7 +42,7 @@ func Core(opts CoreOptions) error {
 		Repo:  "neko-cli",
 	}
 
-	// Get latest release
+	// Get latest stable CLI release
 	release, err := github.LatestRelease(repoInfo)
 	if err != nil {
 		return fmt.Errorf("failed to check for updates: %w", err)

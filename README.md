@@ -47,7 +47,7 @@ Download the latest CLI release from the [releases page](https://github.com/neko
 ./install.sh
 ```
 
-The script installs the main CLI only. It reads GitHub Releases directly, ignores plugin releases such as `plugin-release/vX.Y.Z`, and selects the newest stable CLI tag matching `vX.Y.Z`. It does not read local release config or state files.
+The script installs the main CLI only. It reads GitHub Releases directly, ignores plugin releases such as `plugin-release/vX.Y.Z`, and selects the newest stable CLI tag matching `vX.Y.Z`. The built-in `neko version` and `neko update` commands use the same CLI-aware release rule. None of these paths read local release config or state files.
 
 ```bash
 # Install a specific CLI release
@@ -167,6 +167,7 @@ This repository releases itself with V2 multi-unit release state:
 - Neko CLI owns version/materialization/state, release commit, tag, push, and workflow dispatch.
 - GitHub Actions workflows own build, GitHub Release creation, and asset publishing.
 - Dry-run release planning needs no token and writes nothing.
+- CLI version, update, and install checks use only stable CLI tags matching `vX.Y.Z`; plugin releases and `plugin-registry` are ignored for CLI updates.
 - Runtime plugin discovery, install, and update use `plugin-index.json` as the registry source of truth. The index is published as the `plugin-index.json` asset on the mutable `plugin-registry` GitHub Release after successful plugin releases; `/releases/latest` and release-prefix fallback discovery are not used for plugin discovery.
 - Use `--verbose --describe` to see journal paths, commit/tag, workflow, dispatch state, run URL when resolvable, and recovery guidance.
 
