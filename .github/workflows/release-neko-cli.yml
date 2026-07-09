@@ -1,4 +1,4 @@
-name: Release Nekocli
+name: Release neko-cli
 
 on:
   workflow_dispatch:
