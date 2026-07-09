@@ -57,6 +57,12 @@ func TestManifestMatchesPublicReleaseContract(t *testing.T) {
 			"unit":    "string",
 			"dry-run": "bool",
 		},
+		"plugin-index": {
+			"output":     "string",
+			"check":      "bool",
+			"pretty":     "bool",
+			"repository": "string",
+		},
 	}
 
 	if len(commands) != len(expected) {

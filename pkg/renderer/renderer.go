@@ -46,6 +46,9 @@ func RenderWithOptions(resp *plugin.Response, opts RenderOptions) error {
 	if opts.Describe {
 		return RenderDescribe(resp, opts.Format)
 	}
+	if resp.RendererHint == "raw-json" {
+		return renderRawJSON(resp, os.Stdout)
+	}
 	return Render(resp, opts.Format)
 }
 
@@ -219,6 +222,20 @@ func renderJSON(resp *plugin.Response, w io.Writer) error {
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(resp)
+}
+
+func renderRawJSON(resp *plugin.Response, w io.Writer) error {
+	value := any(resp.Data)
+	if raw, ok := resp.Data["raw"]; ok {
+		if rawString, ok := raw.(string); ok {
+			_, err := io.WriteString(w, rawString)
+			return err
+		}
+		value = raw
+	}
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(value)
 }
 
 // renderTable provides unified kubectl-style output rendering.

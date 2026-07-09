@@ -14,6 +14,7 @@ import (
 	initcmd "github.com/nekoman-hq/neko-cli/plugin/release/pkg/init"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/migrate"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/pluginindex"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/release"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/validate"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
@@ -64,6 +65,8 @@ func main() {
 		resp, err = contributors.HandleContributors(req)
 	case "validate":
 		resp, err = validate.HandleValidate(req)
+	case "plugin-index":
+		resp, err = pluginindex.HandlePluginIndex(req)
 	default:
 		resp, err = nil, fmt.Errorf("unknown command: %s", req.Command)
 	}

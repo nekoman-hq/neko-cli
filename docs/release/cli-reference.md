@@ -50,6 +50,9 @@ neko release minor --unit api
 neko release major --unit api
 neko release resume --unit api
 neko release resume --unit api --dry-run
+neko release plugin-index
+neko release plugin-index --check
+neko release plugin-index --output /tmp/plugin-index.json
 ```
 
 V2 non-dry-run release commands are active only for `delivery: github-actions`. V2 local delivery remains blocked. Dry-run output includes:
@@ -90,6 +93,8 @@ Blocked:
 For `delivery: github-actions`, V2 config must include `workflow: ".github/workflows/<file>.yml"` or `workflow: ".github/workflows/<file>.yaml"`. `neko release validate --show` displays the workflow only after repository-aware validation confirms that the file exists and stays inside `.github/workflows/`.
 
 The execution journal records V2 release phases and recovery evidence under the Git common directory. The dispatch contract targets GitHub.com remotes only, uses `GITHUB_TOKEN` with repository Actions write permission, sends the existing unit tag as `ref`, and sends exactly four inputs: `unit`, `version`, `tag`, and `release_sha`. No public standalone dispatch or retry command exists.
+
+`neko release plugin-index` generates the future public plugin registry index from V2 plugin units, `.neko/release.state.json`, and plugin manifests. The generated `plugin-index.json` is not committed as source and is not published by this command. Runtime `neko plugin available`, `install`, and `update` continue to use the current registry fallback until the registry-consumption milestone.
 
 ## Resume
 

@@ -210,6 +210,43 @@
           "description": "Selects the release unit. Required when a V2 repository defines multiple units."
         }
       ]
+    },
+    {
+      "name": "plugin-index",
+      "description": "Generate the future public plugin registry index from V2 plugin units",
+      "outputs": [
+        "json",
+        "table"
+      ],
+      "flags": [
+        {
+          "name": "output",
+          "type": "string",
+          "required": false,
+          "description": "Optional file path to write plugin-index.json"
+        },
+        {
+          "name": "check",
+          "type": "bool",
+          "required": false,
+          "default": false,
+          "description": "Validate that the plugin index can be generated without writing a file"
+        },
+        {
+          "name": "pretty",
+          "type": "bool",
+          "required": false,
+          "default": true,
+          "description": "Pretty-print generated JSON"
+        },
+        {
+          "name": "repository",
+          "type": "string",
+          "required": false,
+          "default": "nekoman-hq/neko-cli",
+          "description": "Repository identifier to include in the generated index"
+        }
+      ]
     }
   ],
   "renderer_types": [
