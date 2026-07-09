@@ -35,15 +35,21 @@ type ReleaseRepository struct {
 //
 //nolint:govet // Logical domain order is clearer than fieldalignment ordering here.
 type ReleaseUnit struct {
-	ID               string
-	DisplayName      string
-	Paths            []string
-	WorkingDirectory string
-	TagPrefix        string
-	ExecutorType     string
-	Delivery         string
-	Workflow         string
-	Version          string
+	ID                 string
+	DisplayName        string
+	Paths              []string
+	WorkingDirectory   string
+	TagPrefix          string
+	Kind               string
+	IsPlugin           bool
+	PluginName         string
+	PluginManifestPath string
+	PluginAssetPrefix  string
+	PluginBinaryName   string
+	ExecutorType       string
+	Delivery           string
+	Workflow           string
+	Version            string
 }
 
 // NormalizeV1Repository converts the legacy global V1 config into the shared

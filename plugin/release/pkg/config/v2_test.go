@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,6 +33,9 @@ func TestLoadV2RepositoryValidSingleUnit(t *testing.T) {
 	unit := repo.Units[0]
 	if unit.ID != "default" || unit.Version != "2.2.4" || unit.WorkingDirectory != "app" || unit.Delivery != "local" {
 		t.Fatalf("unexpected normalized unit: %#v", unit)
+	}
+	if unit.IsPlugin || unit.Kind != "" || unit.PluginName != "" {
+		t.Fatalf("non-plugin unit must not expose plugin metadata: %#v", unit)
 	}
 }
 
@@ -69,6 +73,65 @@ func TestLoadV2RepositoryValidMultiUnitWithDefaults(t *testing.T) {
 	}
 	if repo.Units[1].Workflow != ".github/workflows/release-web.yml" {
 		t.Fatalf("expected normalized workflow, got %#v", repo.Units[1])
+	}
+}
+
+func TestLoadV2RepositoryValidPluginUnitMetadata(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "plugin", "release", "manifest.json"), `{"name":"release","version":"4.0.2"}`)
+	writeV2Files(t, root, validV2Config(`{
+  "id": "plugin-release",
+  "displayName": "neko-cli release plugin",
+  "paths": ["plugin/release/**"],
+  "workingDirectory": ".",
+  "tagPrefix": "plugin-release/v",
+  "kind": "plugin",
+  "plugin": {
+    "name": "release",
+    "manifest": "plugin/release/manifest.json",
+    "assetPrefix": "plugin-release",
+    "binaryName": "plugin-release"
+  },
+  "executor": {"type": "goreleaser"}
+}`), validV2State(`"plugin-release": {"version": "4.0.2"}`))
+
+	repo, err := LoadV2Repository(root)
+	if err != nil {
+		t.Fatalf("LoadV2Repository: %v", err)
+	}
+	unit := repo.Units[0]
+	if !unit.IsPlugin || unit.Kind != "plugin" {
+		t.Fatalf("expected normalized plugin unit, got %#v", unit)
+	}
+	if unit.PluginName != "release" ||
+		unit.PluginManifestPath != "plugin/release/manifest.json" ||
+		unit.PluginAssetPrefix != "plugin-release" ||
+		unit.PluginBinaryName != "plugin-release" {
+		t.Fatalf("unexpected normalized plugin metadata: %#v", unit)
+	}
+}
+
+func TestValidateV2ReleaseConfigStructureAllowsPluginManifestWithoutRepositoryFile(t *testing.T) {
+	cfg := &V2ReleaseConfig{
+		SchemaVersion: 2,
+		Units: []V2Unit{
+			{
+				ID:        "plugin-release",
+				Paths:     []string{"plugin/release/**"},
+				TagPrefix: "plugin-release/v",
+				Kind:      UnitKindPlugin,
+				Plugin: &V2Plugin{
+					Name:        "release",
+					Manifest:    "plugin/release/manifest.json",
+					AssetPrefix: "plugin-release",
+					BinaryName:  "plugin-release",
+				},
+				Executor: V2Executor{Type: ExecutorGoReleaser},
+			},
+		},
+	}
+	if err := ValidateV2ReleaseConfigStructure(cfg); err != nil {
+		t.Fatalf("ValidateV2ReleaseConfigStructure: %v", err)
 	}
 }
 
@@ -121,6 +184,25 @@ func TestLoadV2RepositoryValidationErrors(t *testing.T) {
 			name:      "unknown config field",
 			config:    `{"schemaVersion":2,"unknown":true,"units":[]}`,
 			state:     validV2State(``),
+			wantError: "unknown field",
+		},
+		{
+			name: "unknown plugin field",
+			config: validV2Config(`{
+  "id": "plugin-release",
+  "paths": ["plugin/release/**"],
+  "tagPrefix": "plugin-release/v",
+  "kind": "plugin",
+  "plugin": {
+    "name": "release",
+    "manifest": "plugin/release/manifest.json",
+    "assetPrefix": "plugin-release",
+    "binaryName": "plugin-release",
+    "extra": true
+  },
+  "executor": {"type": "goreleaser"}
+}`),
+			state:     validV2State(`"plugin-release": {"version": "4.0.2"}`),
 			wantError: "unknown field",
 		},
 		{
@@ -265,6 +347,147 @@ func TestLoadV2RepositoryValidationErrors(t *testing.T) {
 	}
 }
 
+func TestLoadV2RepositoryPluginMetadataValidationErrors(t *testing.T) {
+	tests := []struct {
+		name      string
+		unitID    string
+		tagPrefix string
+		kind      string
+		plugin    string
+		wantError string
+	}{
+		{
+			name:      "plugin metadata without plugin kind",
+			unitID:    "plugin-release",
+			tagPrefix: "plugin-release/v",
+			plugin:    validPluginMetadata("release", "plugin/release/manifest.json", "plugin-release", "plugin-release"),
+			wantError: "requires kind",
+		},
+		{
+			name:      "plugin kind without metadata",
+			unitID:    "plugin-release",
+			tagPrefix: "plugin-release/v",
+			kind:      "plugin",
+			wantError: "requires plugin metadata",
+		},
+		{
+			name:      "unknown kind",
+			unitID:    "plugin-release",
+			tagPrefix: "plugin-release/v",
+			kind:      "service",
+			wantError: "unknown kind",
+		},
+		{
+			name:      "plugin unit id must start plugin",
+			unitID:    "release",
+			tagPrefix: "release/v",
+			kind:      "plugin",
+			plugin:    validPluginMetadata("release", "plugin/release/manifest.json", "release", "plugin-release"),
+			wantError: "id must start with plugin-",
+		},
+		{
+			name:      "tag prefix mismatch",
+			unitID:    "plugin-release",
+			tagPrefix: "release/v",
+			kind:      "plugin",
+			plugin:    validPluginMetadata("release", "plugin/release/manifest.json", "plugin-release", "plugin-release"),
+			wantError: "tagPrefix must be",
+		},
+		{
+			name:      "invalid plugin name",
+			unitID:    "plugin-release",
+			tagPrefix: "plugin-release/v",
+			kind:      "plugin",
+			plugin:    validPluginMetadata("plugin-release", "plugin/release/manifest.json", "plugin-release", "plugin-release"),
+			wantError: "must not start with plugin-",
+		},
+		{
+			name:      "invalid manifest path",
+			unitID:    "plugin-release",
+			tagPrefix: "plugin-release/v",
+			kind:      "plugin",
+			plugin:    validPluginMetadata("release", "../manifest.json", "plugin-release", "plugin-release"),
+			wantError: "clean repository-root-relative path",
+		},
+		{
+			name:      "manifest must end with manifest json",
+			unitID:    "plugin-release",
+			tagPrefix: "plugin-release/v",
+			kind:      "plugin",
+			plugin:    validPluginMetadata("release", "plugin/release/plugin.json", "plugin-release", "plugin-release"),
+			wantError: "must end with manifest.json",
+		},
+		{
+			name:      "missing manifest file",
+			unitID:    "plugin-release",
+			tagPrefix: "plugin-release/v",
+			kind:      "plugin",
+			plugin:    validPluginMetadata("release", "plugin/release/manifest.json", "plugin-release", "plugin-release"),
+			wantError: "does not exist",
+		},
+		{
+			name:      "invalid asset prefix",
+			unitID:    "plugin-release",
+			tagPrefix: "plugin-release/v",
+			kind:      "plugin",
+			plugin:    validPluginMetadata("release", "plugin/release/manifest.json", "plugin.release", "plugin-release"),
+			wantError: "assetPrefix",
+		},
+		{
+			name:      "asset prefix must equal unit id",
+			unitID:    "plugin-release",
+			tagPrefix: "plugin-release/v",
+			kind:      "plugin",
+			plugin:    validPluginMetadata("release", "plugin/release/manifest.json", "release-plugin", "plugin-release"),
+			wantError: "assetPrefix must equal unit id",
+		},
+		{
+			name:      "invalid binary name",
+			unitID:    "plugin-release",
+			tagPrefix: "plugin-release/v",
+			kind:      "plugin",
+			plugin:    validPluginMetadata("release", "plugin/release/manifest.json", "plugin-release", "../plugin-release"),
+			wantError: "binaryName",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			if tt.name != "missing manifest file" {
+				mustWrite(t, filepath.Join(root, "plugin", "release", "manifest.json"), `{"name":"release","version":"4.0.2"}`)
+			}
+			writeV2Files(t, root, validV2Config(pluginUnitJSON(tt.unitID, tt.tagPrefix, tt.kind, tt.plugin)), validV2State(fmt.Sprintf(`%q: {"version": "4.0.2"}`, tt.unitID)))
+
+			_, err := LoadV2Repository(root)
+			if err == nil || !strings.Contains(err.Error(), tt.wantError) {
+				t.Fatalf("expected error containing %q, got %v", tt.wantError, err)
+			}
+		})
+	}
+}
+
+func TestLoadV2RepositoryPluginManifestSymlinkEscapeFails(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	mustWrite(t, filepath.Join(outside, "manifest.json"), `{"name":"release","version":"4.0.2"}`)
+	mustMkdir(t, filepath.Join(root, "plugin", "release"))
+	if err := os.Symlink(filepath.Join(outside, "manifest.json"), filepath.Join(root, "plugin", "release", "manifest.json")); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+	writeV2Files(t, root, validV2Config(pluginUnitJSON(
+		"plugin-release",
+		"plugin-release/v",
+		"plugin",
+		validPluginMetadata("release", "plugin/release/manifest.json", "plugin-release", "plugin-release"),
+	)), validV2State(`"plugin-release": {"version": "4.0.2"}`))
+
+	_, err := LoadV2Repository(root)
+	if err == nil || !strings.Contains(err.Error(), "outside repository root") {
+		t.Fatalf("expected symlink escape error, got %v", err)
+	}
+}
+
 func validV2Config(units string) string {
 	return `{"schemaVersion":2,"units":[` + units + `]}`
 }
@@ -278,6 +501,32 @@ func writeV2Files(t *testing.T, root, cfg, state string) {
 	mustMkdir(t, filepath.Join(root, V2Directory))
 	mustWrite(t, V2ConfigPath(root), cfg)
 	mustWrite(t, V2StatePath(root), state)
+}
+
+func pluginUnitJSON(unitID, tagPrefix, kind, pluginMetadata string) string {
+	kindField := ""
+	if kind != "" {
+		kindField = fmt.Sprintf(`, "kind": %q`, kind)
+	}
+	pluginField := ""
+	if pluginMetadata != "" {
+		pluginField = `, "plugin": ` + pluginMetadata
+	}
+	return fmt.Sprintf(`{
+  "id": %q,
+  "paths": ["plugin/release/**"],
+  "tagPrefix": %q%s%s,
+  "executor": {"type": "goreleaser"}
+}`, unitID, tagPrefix, kindField, pluginField)
+}
+
+func validPluginMetadata(name, manifest, assetPrefix, binaryName string) string {
+	return fmt.Sprintf(`{
+    "name": %q,
+    "manifest": %q,
+    "assetPrefix": %q,
+    "binaryName": %q
+  }`, name, manifest, assetPrefix, binaryName)
 }
 
 func writeV1Config(t *testing.T, root string) {

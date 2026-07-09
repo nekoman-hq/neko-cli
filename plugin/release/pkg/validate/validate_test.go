@@ -63,6 +63,45 @@ func TestHandleValidateV2ShowDisplaysGitHubActionsWorkflow(t *testing.T) {
 	}
 }
 
+func TestHandleValidateV2ShowDisplaysPluginMetadata(t *testing.T) {
+	withWorkingDirectory(t)
+	mustWrite(t, ".github/workflows/release-plugin-release.yml", "name: release plugin\n")
+	mustWrite(t, "plugin/release/manifest.json", `{"name":"release","version":"4.0.2"}`)
+	writeV2(t, `{"schemaVersion":2,"units":[{
+  "id":"plugin-release",
+  "paths":["plugin/release/**"],
+  "workingDirectory":".",
+  "tagPrefix":"plugin-release/v",
+  "kind":"plugin",
+  "plugin":{
+    "name":"release",
+    "manifest":"plugin/release/manifest.json",
+    "assetPrefix":"plugin-release",
+    "binaryName":"plugin-release"
+  },
+  "executor":{"type":"goreleaser","delivery":"github-actions","workflow":".github/workflows/release-plugin-release.yml"}
+}]}`, `{"schemaVersion":2,"units":{"plugin-release":{"version":"4.0.2"}}}`)
+
+	resp, err := HandleValidate(plugin.Request{Flags: map[string]any{"show": true}})
+	if err != nil {
+		t.Fatalf("HandleValidate: %v", err)
+	}
+	if resp.Status != "success" {
+		t.Fatalf("expected success, got %#v", resp.Error)
+	}
+	for _, want := range []string{
+		"kind=plugin",
+		"plugin=release",
+		"pluginManifest=plugin/release/manifest.json",
+		"pluginAssetPrefix=plugin-release",
+		"pluginBinary=plugin-release",
+	} {
+		if !itemsContain(resp.Data["items"], want) {
+			t.Fatalf("expected show output to contain %q, got %#v", want, resp.Data["items"])
+		}
+	}
+}
+
 func TestHandleValidateV2ShowFocusesRequestedUnit(t *testing.T) {
 	withWorkingDirectory(t)
 	writeV2(t, `{"schemaVersion":2,"units":[

@@ -26,7 +26,14 @@ func TestRepositorySelfMigrationUsesV2StateForPluginUnits(t *testing.T) {
 		Units []struct {
 			ID        string `json:"id"`
 			TagPrefix string `json:"tagPrefix"`
-			Executor  struct {
+			Kind      string `json:"kind"`
+			Plugin    struct {
+				Name        string `json:"name"`
+				Manifest    string `json:"manifest"`
+				AssetPrefix string `json:"assetPrefix"`
+				BinaryName  string `json:"binaryName"`
+			} `json:"plugin"`
+			Executor struct {
 				Type     string `json:"type"`
 				Delivery string `json:"delivery"`
 				Workflow string `json:"workflow"`
@@ -42,6 +49,13 @@ func TestRepositorySelfMigrationUsesV2StateForPluginUnits(t *testing.T) {
 	units := map[string]struct {
 		tagPrefix string
 		workflow  string
+		kind      string
+		plugin    struct {
+			Name        string `json:"name"`
+			Manifest    string `json:"manifest"`
+			AssetPrefix string `json:"assetPrefix"`
+			BinaryName  string `json:"binaryName"`
+		}
 	}{}
 	for _, unit := range config.Units {
 		if unit.Executor.Type != "goreleaser" || unit.Executor.Delivery != "github-actions" {
@@ -50,10 +64,34 @@ func TestRepositorySelfMigrationUsesV2StateForPluginUnits(t *testing.T) {
 		units[unit.ID] = struct {
 			tagPrefix string
 			workflow  string
-		}{tagPrefix: unit.TagPrefix, workflow: unit.Executor.Workflow}
+			kind      string
+			plugin    struct {
+				Name        string `json:"name"`
+				Manifest    string `json:"manifest"`
+				AssetPrefix string `json:"assetPrefix"`
+				BinaryName  string `json:"binaryName"`
+			}
+		}{tagPrefix: unit.TagPrefix, workflow: unit.Executor.Workflow, kind: unit.Kind, plugin: unit.Plugin}
 	}
 	if units["plugin-ui"].tagPrefix != "plugin-ui/v" || units["plugin-ui"].workflow != ".github/workflows/release-plugin-ui.yml" {
 		t.Fatalf("unexpected plugin-ui config: %#v", units["plugin-ui"])
+	}
+	if units["plugin-release"].kind != "plugin" ||
+		units["plugin-release"].plugin.Name != "release" ||
+		units["plugin-release"].plugin.Manifest != pluginReleaseManifestPath ||
+		units["plugin-release"].plugin.AssetPrefix != "plugin-release" ||
+		units["plugin-release"].plugin.BinaryName != "plugin-release" {
+		t.Fatalf("unexpected plugin-release metadata: %#v", units["plugin-release"])
+	}
+	if units["plugin-ui"].kind != "plugin" ||
+		units["plugin-ui"].plugin.Name != "ui" ||
+		units["plugin-ui"].plugin.Manifest != pluginUIManifestPath ||
+		units["plugin-ui"].plugin.AssetPrefix != "plugin-ui" ||
+		units["plugin-ui"].plugin.BinaryName != "plugin-ui" {
+		t.Fatalf("unexpected plugin-ui metadata: %#v", units["plugin-ui"])
+	}
+	if units["cli"].kind != "" || units["cli"].plugin.Name != "" {
+		t.Fatalf("cli unit must not carry plugin metadata: %#v", units["cli"])
 	}
 }
 

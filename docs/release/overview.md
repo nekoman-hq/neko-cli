@@ -27,13 +27,13 @@ V2 is repository-root scoped and uses two files:
 .neko/release.state.json
 ```
 
-`release.config.json` is committed architecture: units, paths, working directories, tag prefixes, executor type, and delivery mode.
+`release.config.json` is committed architecture: units, paths, working directories, tag prefixes, executor type, delivery mode, and optional plugin metadata for units with `kind: "plugin"`.
 
 `release.state.json` is the version source of truth for all units. Tags are not stored in state; a tag is derived later from `tagPrefix + version`.
 
 V2 can be loaded, strictly parsed, validated, normalized, and used for unit workflows. `history` and `contributors` are unit-aware. `patch`, `minor`, and `major` support V2 dry-run planning with execution context, delivery resolution, version materialization planning, GitHub Actions workflow configuration, and Neko-owned Git release planning.
 
-Nekocli itself now has `cli`, `plugin-release`, and `plugin-ui` V2 units. `.neko/release.state.json` is authoritative for every releaseable version. `.plugin.release.neko.json` has been removed and must not be reintroduced. Each plugin release plan materializes only that unit's `manifest.json`.
+Nekocli itself now has `cli`, `plugin-release`, and `plugin-ui` V2 units. `.neko/release.state.json` is authoritative for every releaseable version. `.plugin.release.neko.json` has been removed and must not be reintroduced. Each plugin release plan materializes only that unit's `manifest.json`. Plugin units declare `name`, `manifest`, `assetPrefix`, and `binaryName` metadata in V2 config so future plugin index generation does not require registry Go-code edits.
 
 V2 GitHub Actions non-dry-run public release commands are active. Neko CLI owns materialization, state update, targeted staging, release commit, unit tag, commit push, tag push, execution journal, dispatch journal, and workflow dispatch. GitHub Actions owns build, GitHub Release creation, and asset publishing from the pushed tag. V2 local delivery remains blocked.
 
@@ -65,6 +65,7 @@ Implemented now:
 - Public V2 GitHub Actions release execution.
 - Production GitHub Actions publishing workflows for `cli`, `plugin-release`, and `plugin-ui`.
 - Dedicated GoReleaser configs for `cli`, `plugin-release`, and `plugin-ui`.
+- V2 plugin unit metadata validation for future plugin index generation.
 - Public `neko release resume --unit <unit>` and read-only `--dry-run` recovery assessment.
 - Executor capability contracts for `goreleaser`, `jreleaser`, and `release-it`.
 - Executor requirement checks scoped to unit roots.
@@ -78,5 +79,6 @@ Not implemented yet:
 
 - Automatic multi-unit migration.
 - V2 local `release-it` execution.
+- `plugin-index.json` generation and publishing; install/update still uses the current registry behavior until that follow-up milestone.
 - V2 local non-dry-run release execution.
 - Public standalone dispatch and retry commands.

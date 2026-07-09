@@ -13,6 +13,7 @@ package validate
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/nekoman-hq/neko-cli/pkg/log"
@@ -244,18 +245,29 @@ func validateV2Response(req plugin.Request, repository *config.ReleaseRepository
 }
 
 func unitShowRow(unit config.ReleaseUnit) map[string]any {
+	parts := []string{
+		fmt.Sprintf("version=%s", unit.Version),
+		fmt.Sprintf("workingDirectory=%s", unit.WorkingDirectory),
+		fmt.Sprintf("tagPrefix=%s", unit.TagPrefix),
+		fmt.Sprintf("executor=%s", unit.ExecutorType),
+		fmt.Sprintf("delivery=%s", unit.Delivery),
+		fmt.Sprintf("workflow=%s", workflowShowValue(unit)),
+		fmt.Sprintf("paths=%v", unit.Paths),
+	}
+	if unit.Kind != "" {
+		parts = append(parts, fmt.Sprintf("kind=%s", unit.Kind))
+	}
+	if unit.IsPlugin {
+		parts = append(parts,
+			fmt.Sprintf("plugin=%s", unit.PluginName),
+			fmt.Sprintf("pluginManifest=%s", unit.PluginManifestPath),
+			fmt.Sprintf("pluginAssetPrefix=%s", unit.PluginAssetPrefix),
+			fmt.Sprintf("pluginBinary=%s", unit.PluginBinaryName),
+		)
+	}
 	return map[string]any{
 		"property": fmt.Sprintf("Unit %s", unit.ID),
-		"value": fmt.Sprintf(
-			"version=%s workingDirectory=%s tagPrefix=%s executor=%s delivery=%s workflow=%s paths=%v",
-			unit.Version,
-			unit.WorkingDirectory,
-			unit.TagPrefix,
-			unit.ExecutorType,
-			unit.Delivery,
-			workflowShowValue(unit),
-			unit.Paths,
-		),
+		"value":    strings.Join(parts, " "),
 	}
 }
 

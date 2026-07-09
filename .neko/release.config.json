@@ -25,6 +25,13 @@
       ],
       "workingDirectory": ".",
       "tagPrefix": "plugin-release/v",
+      "kind": "plugin",
+      "plugin": {
+        "name": "release",
+        "manifest": "plugin/release/manifest.json",
+        "assetPrefix": "plugin-release",
+        "binaryName": "plugin-release"
+      },
       "executor": {
         "type": "goreleaser",
         "delivery": "github-actions",
@@ -41,6 +48,13 @@
       ],
       "workingDirectory": ".",
       "tagPrefix": "plugin-ui/v",
+      "kind": "plugin",
+      "plugin": {
+        "name": "ui",
+        "manifest": "plugin/ui/manifest.json",
+        "assetPrefix": "plugin-ui",
+        "binaryName": "plugin-ui"
+      },
       "executor": {
         "type": "goreleaser",
         "delivery": "github-actions",
