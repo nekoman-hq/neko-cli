@@ -191,6 +191,412 @@ func TestHandleInitCreatesV2PluginConfigAndState(t *testing.T) {
 	}
 }
 
+func TestHandleUnitAddAppendsNormalUnit(t *testing.T) {
+	withWorkingDirectory(t)
+	writeV2(t, "cli", "0.1.0")
+	mustWrite(t, ".github/workflows/release-api.yml", "name: release api\n")
+
+	resp, err := HandleUnitAdd(plugin.Request{Flags: validUnitAddFlags()})
+	if err != nil {
+		t.Fatalf("HandleUnitAdd: %v", err)
+	}
+	if resp.Status != "success" {
+		t.Fatalf("expected success, got %#v", resp.Error)
+	}
+	assertNoFile(t, legacyV1ConfigFileName)
+
+	cfg, state := loadGeneratedV2(t)
+	if len(cfg.Units) != 2 {
+		t.Fatalf("expected two units, got %#v", cfg.Units)
+	}
+	if cfg.Units[0].ID != "cli" || cfg.Units[1].ID != "api" {
+		t.Fatalf("unit order not preserved/appended: %#v", cfg.Units)
+	}
+	if cfg.Units[0].TagPrefix != "v" || state.Units["cli"].Version != "0.1.0" {
+		t.Fatalf("existing cli unit changed: %#v state=%#v", cfg.Units[0], state.Units)
+	}
+	api := cfg.Units[1]
+	if api.DisplayName != "API" ||
+		api.TagPrefix != "api/v" ||
+		api.Executor.Delivery != releaseconfig.DeliveryGitHubActions ||
+		api.Executor.Workflow != ".github/workflows/release-api.yml" ||
+		api.Kind != "" ||
+		api.Plugin != nil {
+		t.Fatalf("unexpected api unit: %#v", api)
+	}
+	if state.Units["api"].Version != "1.2.3" {
+		t.Fatalf("api state missing: %#v", state.Units)
+	}
+	if _, err := releaseconfig.LoadV2Repository("."); err != nil {
+		t.Fatalf("appended V2 repository must validate: %v", err)
+	}
+}
+
+func TestHandleUnitAddAppendsPluginUnit(t *testing.T) {
+	withWorkingDirectory(t)
+	writeV2(t, "cli", "0.1.0")
+	writeMinimalPluginManifest(t, "plugin/release/manifest.json", "release", "4.0.0")
+	mustWrite(t, ".github/workflows/release-plugin-release.yml", "name: release plugin\n")
+
+	resp, err := HandleUnitAdd(plugin.Request{Flags: validPluginInitFlags()})
+	if err != nil {
+		t.Fatalf("HandleUnitAdd: %v", err)
+	}
+	if resp.Status != "success" {
+		t.Fatalf("expected success, got %#v", resp.Error)
+	}
+	assertNoFile(t, legacyV1ConfigFileName)
+
+	cfg, state := loadGeneratedV2(t)
+	if len(cfg.Units) != 2 || cfg.Units[0].ID != "cli" || cfg.Units[1].ID != "plugin-release" {
+		t.Fatalf("unit order not preserved/appended: %#v", cfg.Units)
+	}
+	unit := cfg.Units[1]
+	if unit.Kind != releaseconfig.UnitKindPlugin || unit.Plugin == nil {
+		t.Fatalf("expected plugin unit, got %#v", unit)
+	}
+	if unit.Plugin.Name != "release" ||
+		unit.Plugin.Manifest != "plugin/release/manifest.json" ||
+		unit.Plugin.AssetPrefix != "plugin-release" ||
+		unit.Plugin.BinaryName != "plugin-release" {
+		t.Fatalf("unexpected plugin metadata: %#v", unit.Plugin)
+	}
+	if state.Units["plugin-release"].Version != "4.0.0" {
+		t.Fatalf("plugin-release state missing: %#v", state.Units)
+	}
+	if _, err := releaseconfig.LoadV2Repository("."); err != nil {
+		t.Fatalf("appended plugin V2 repository must validate: %v", err)
+	}
+}
+
+func TestHandleUnitAddExistingConfigRequirements(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func(t *testing.T)
+		wantCode string
+		wantText string
+	}{
+		{
+			name:     "no V2 files",
+			setup:    func(t *testing.T) {},
+			wantCode: "V2_CONFIG_MISSING",
+			wantText: "release init",
+		},
+		{
+			name: "only config exists",
+			setup: func(t *testing.T) {
+				mustWrite(t, releaseconfig.V2ConfigPath("."), `{"schemaVersion":2,"units":[]}`)
+			},
+			wantCode: "PARTIAL_V2_CONFIG",
+			wantText: "both .neko/release.config.json and .neko/release.state.json",
+		},
+		{
+			name: "only state exists",
+			setup: func(t *testing.T) {
+				mustWrite(t, releaseconfig.V2StatePath("."), `{"schemaVersion":2,"units":{}}`)
+			},
+			wantCode: "PARTIAL_V2_CONFIG",
+			wantText: "both .neko/release.config.json and .neko/release.state.json",
+		},
+		{
+			name: "V1 only",
+			setup: func(t *testing.T) {
+				writeV1(t, "0.1.0")
+			},
+			wantCode: "V1_CONFIG_EXISTS",
+			wantText: "release migrate",
+		},
+		{
+			name: "V1 and V2 conflict",
+			setup: func(t *testing.T) {
+				writeV1(t, "0.1.0")
+				writeV2(t, "cli", "0.1.0")
+			},
+			wantCode: "CONFIG_CONFLICT",
+			wantText: "conflict",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			withWorkingDirectory(t)
+			tt.setup(t)
+
+			resp, err := HandleUnitAdd(plugin.Request{Flags: validUnitAddFlags()})
+			if err != nil {
+				t.Fatalf("HandleUnitAdd: %v", err)
+			}
+			if resp.Status != "error" || resp.Error == nil {
+				t.Fatalf("expected error, got %#v", resp)
+			}
+			if resp.Error.Code != tt.wantCode || !strings.Contains(resp.Error.Message, tt.wantText) {
+				t.Fatalf("expected %s containing %q, got %#v", tt.wantCode, tt.wantText, resp.Error)
+			}
+		})
+	}
+}
+
+func TestHandleUnitAddDuplicateBehavior(t *testing.T) {
+	t.Run("duplicate unit id fails", func(t *testing.T) {
+		withWorkingDirectory(t)
+		writeV2(t, "cli", "0.1.0")
+
+		flags := validUnitAddFlags()
+		flags["unit"] = "cli"
+		flags["tag-prefix"] = "cli/v"
+		resp, err := HandleUnitAdd(plugin.Request{Flags: flags})
+		if err != nil {
+			t.Fatalf("HandleUnitAdd: %v", err)
+		}
+		if resp.Status != "error" || resp.Error == nil || !strings.Contains(resp.Error.Message, "already exists") {
+			t.Fatalf("expected duplicate unit error, got %#v", resp)
+		}
+	})
+
+	t.Run("duplicate state entry fails", func(t *testing.T) {
+		withWorkingDirectory(t)
+		writeV2WithExtraState(t)
+		mustWrite(t, ".github/workflows/release-api.yml", "name: release api\n")
+
+		resp, err := HandleUnitAdd(plugin.Request{Flags: validUnitAddFlags()})
+		if err != nil {
+			t.Fatalf("HandleUnitAdd: %v", err)
+		}
+		if resp.Status != "error" || resp.Error == nil || !strings.Contains(resp.Error.Message, "already exists in state") {
+			t.Fatalf("expected duplicate state error, got %#v", resp)
+		}
+	})
+
+	t.Run("duplicate plugin name fails", func(t *testing.T) {
+		withWorkingDirectory(t)
+		writeExistingPluginV2(t)
+		writeMinimalPluginManifest(t, "plugin/other/manifest.json", "release", "1.0.0")
+		mustWrite(t, ".github/workflows/release-plugin-other.yml", "name: release other\n")
+
+		flags := validPluginInitFlags()
+		flags["unit"] = "plugin-other"
+		flags["display-name"] = "other plugin"
+		flags["version"] = "1.0.0"
+		flags["workflow"] = ".github/workflows/release-plugin-other.yml"
+		flags["tag-prefix"] = "plugin-other/v"
+		flags["paths"] = "plugin/other/**"
+		flags["plugin-manifest"] = "plugin/other/manifest.json"
+		flags["plugin-asset-prefix"] = "plugin-other"
+		flags["plugin-binary-name"] = "plugin-other"
+		resp, err := HandleUnitAdd(plugin.Request{Flags: flags})
+		if err != nil {
+			t.Fatalf("HandleUnitAdd: %v", err)
+		}
+		if resp.Status != "error" || resp.Error == nil || !strings.Contains(resp.Error.Message, "plugin name") {
+			t.Fatalf("expected duplicate plugin name error, got %#v", resp)
+		}
+	})
+}
+
+func TestHandleUnitAddInvalidInputs(t *testing.T) {
+	tests := []struct {
+		name      string
+		setup     func(t *testing.T)
+		mutate    func(map[string]any)
+		wantError string
+	}{
+		{
+			name: "missing unit",
+			mutate: func(flags map[string]any) {
+				delete(flags, "unit")
+			},
+			wantError: "missing required flag: --unit",
+		},
+		{
+			name: "force unsupported",
+			mutate: func(flags map[string]any) {
+				flags["force"] = true
+			},
+			wantError: "does not support --force",
+		},
+		{
+			name: "invalid version",
+			mutate: func(flags map[string]any) {
+				flags["version"] = "v1.2.3"
+			},
+			wantError: "without leading v",
+		},
+		{
+			name: "invalid unit",
+			mutate: func(flags map[string]any) {
+				flags["unit"] = "API"
+			},
+			wantError: "unit id",
+		},
+		{
+			name: "github actions missing workflow",
+			mutate: func(flags map[string]any) {
+				delete(flags, "workflow")
+			},
+			wantError: "requires workflow",
+		},
+		{
+			name: "github actions missing workflow file",
+			setup: func(t *testing.T) {
+				if err := os.Remove(".github/workflows/release-api.yml"); err != nil {
+					t.Fatalf("remove workflow: %v", err)
+				}
+			},
+			wantError: "does not exist",
+		},
+		{
+			name: "plugin flags without plugin kind",
+			mutate: func(flags map[string]any) {
+				flags["plugin-name"] = "release"
+			},
+			wantError: "plugin flags require --kind plugin",
+		},
+		{
+			name: "kind plugin missing plugin-name",
+			mutate: func(flags map[string]any) {
+				flags["kind"] = "plugin"
+			},
+			wantError: "--kind plugin requires --plugin-name",
+		},
+		{
+			name: "kind plugin missing plugin-manifest",
+			mutate: func(flags map[string]any) {
+				pluginFlags := validPluginInitFlags()
+				for key, value := range pluginFlags {
+					flags[key] = value
+				}
+				delete(flags, "plugin-manifest")
+			},
+			wantError: "--kind plugin requires --plugin-manifest",
+		},
+		{
+			name: "kind plugin missing plugin-asset-prefix",
+			mutate: func(flags map[string]any) {
+				pluginFlags := validPluginInitFlags()
+				for key, value := range pluginFlags {
+					flags[key] = value
+				}
+				delete(flags, "plugin-asset-prefix")
+			},
+			wantError: "--kind plugin requires --plugin-asset-prefix",
+		},
+		{
+			name: "kind plugin missing plugin-binary-name",
+			mutate: func(flags map[string]any) {
+				pluginFlags := validPluginInitFlags()
+				for key, value := range pluginFlags {
+					flags[key] = value
+				}
+				delete(flags, "plugin-binary-name")
+			},
+			wantError: "--kind plugin requires --plugin-binary-name",
+		},
+		{
+			name: "plugin manifest missing",
+			mutate: func(flags map[string]any) {
+				pluginFlags := validPluginInitFlags()
+				for key, value := range pluginFlags {
+					flags[key] = value
+				}
+			},
+			wantError: "plugin.manifest \"plugin/release/manifest.json\" does not exist",
+		},
+		{
+			name: "plugin unit id not plugin-prefixed",
+			setup: func(t *testing.T) {
+				writeMinimalPluginManifest(t, "plugin/release/manifest.json", "release", "4.0.0")
+				mustWrite(t, ".github/workflows/release-plugin-release.yml", "name: release plugin\n")
+			},
+			mutate: func(flags map[string]any) {
+				pluginFlags := validPluginInitFlags()
+				for key, value := range pluginFlags {
+					flags[key] = value
+				}
+				flags["unit"] = "release"
+				flags["tag-prefix"] = "release/v"
+				flags["plugin-asset-prefix"] = "release"
+			},
+			wantError: "id must start with plugin-",
+		},
+		{
+			name: "plugin tag prefix mismatch",
+			setup: func(t *testing.T) {
+				writeMinimalPluginManifest(t, "plugin/release/manifest.json", "release", "4.0.0")
+				mustWrite(t, ".github/workflows/release-plugin-release.yml", "name: release plugin\n")
+			},
+			mutate: func(flags map[string]any) {
+				pluginFlags := validPluginInitFlags()
+				for key, value := range pluginFlags {
+					flags[key] = value
+				}
+				flags["tag-prefix"] = "release/v"
+			},
+			wantError: "tagPrefix must be \"plugin-release/v\"",
+		},
+		{
+			name: "plugin asset prefix mismatch",
+			setup: func(t *testing.T) {
+				writeMinimalPluginManifest(t, "plugin/release/manifest.json", "release", "4.0.0")
+				mustWrite(t, ".github/workflows/release-plugin-release.yml", "name: release plugin\n")
+			},
+			mutate: func(flags map[string]any) {
+				pluginFlags := validPluginInitFlags()
+				for key, value := range pluginFlags {
+					flags[key] = value
+				}
+				flags["plugin-asset-prefix"] = "release"
+			},
+			wantError: "assetPrefix must equal unit id",
+		},
+		{
+			name: "invalid paths",
+			mutate: func(flags map[string]any) {
+				flags["paths"] = "apps/api/**,"
+			},
+			wantError: "empty entries",
+		},
+		{
+			name: "invalid executor",
+			mutate: func(flags map[string]any) {
+				flags["executor"] = "custom"
+			},
+			wantError: "invalid executor",
+		},
+		{
+			name: "invalid delivery",
+			mutate: func(flags map[string]any) {
+				flags["delivery"] = "ship"
+			},
+			wantError: "invalid delivery",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			withWorkingDirectory(t)
+			writeV2(t, "cli", "0.1.0")
+			mustWrite(t, ".github/workflows/release-api.yml", "name: release api\n")
+			if tt.setup != nil {
+				tt.setup(t)
+			}
+			flags := validUnitAddFlags()
+			if tt.mutate != nil {
+				tt.mutate(flags)
+			}
+			resp, err := HandleUnitAdd(plugin.Request{Flags: flags})
+			if err != nil {
+				t.Fatalf("HandleUnitAdd: %v", err)
+			}
+			if resp.Status != "error" || resp.Error == nil {
+				t.Fatalf("expected error, got %#v", resp)
+			}
+			if !strings.Contains(resp.Error.Message, tt.wantError) {
+				t.Fatalf("expected error containing %q, got %#v", tt.wantError, resp.Error)
+			}
+		})
+	}
+}
+
 func TestHandleInitExistingConfigHandling(t *testing.T) {
 	tests := []struct { //nolint:govet // Test table keeps setup and expected behavior grouped for readability.
 		name        string
@@ -677,6 +1083,20 @@ func validPluginInitFlags() map[string]any {
 	}
 }
 
+func validUnitAddFlags() map[string]any {
+	return map[string]any{
+		"unit":              "api",
+		"display-name":      "API",
+		"version":           "1.2.3",
+		"executor":          "goreleaser",
+		"delivery":          "github-actions",
+		"workflow":          ".github/workflows/release-api.yml",
+		"tag-prefix":        "api/v",
+		"working-directory": ".",
+		"paths":             "apps/api/**",
+	}
+}
+
 func loadGeneratedV2(t *testing.T) (releaseconfig.V2ReleaseConfig, releaseconfig.V2ReleaseState) {
 	t.Helper()
 	configData, err := os.ReadFile(releaseconfig.V2ConfigPath("."))
@@ -731,6 +1151,73 @@ func writeV2(t *testing.T, unitID, version string) {
   "units": {
     "`+unitID+`": {
       "version": "`+version+`"
+    }
+  }
+}`)
+}
+
+func writeV2WithExtraState(t *testing.T) {
+	t.Helper()
+	mustWrite(t, releaseconfig.V2ConfigPath("."), `{
+  "schemaVersion": 2,
+  "units": [
+    {
+      "id": "cli",
+      "paths": ["**"],
+      "workingDirectory": ".",
+      "tagPrefix": "v",
+      "executor": {
+        "type": "goreleaser",
+        "delivery": "local"
+      }
+    }
+  ]
+}`)
+	mustWrite(t, releaseconfig.V2StatePath("."), `{
+  "schemaVersion": 2,
+  "units": {
+    "cli": {
+      "version": "0.1.0"
+    },
+    "api": {
+      "version": "1.0.0"
+    }
+  }
+}`)
+}
+
+func writeExistingPluginV2(t *testing.T) {
+	t.Helper()
+	writeMinimalPluginManifest(t, "plugin/release/manifest.json", "release", "4.0.0")
+	mustWrite(t, ".github/workflows/release-plugin-release.yml", "name: release plugin\n")
+	mustWrite(t, releaseconfig.V2ConfigPath("."), `{
+  "schemaVersion": 2,
+  "units": [
+    {
+      "id": "plugin-release",
+      "paths": ["plugin/release/**"],
+      "workingDirectory": ".",
+      "tagPrefix": "plugin-release/v",
+      "kind": "plugin",
+      "plugin": {
+        "name": "release",
+        "manifest": "plugin/release/manifest.json",
+        "assetPrefix": "plugin-release",
+        "binaryName": "plugin-release"
+      },
+      "executor": {
+        "type": "goreleaser",
+        "delivery": "github-actions",
+        "workflow": ".github/workflows/release-plugin-release.yml"
+      }
+    }
+  ]
+}`)
+	mustWrite(t, releaseconfig.V2StatePath("."), `{
+  "schemaVersion": 2,
+  "units": {
+    "plugin-release": {
+      "version": "4.0.0"
     }
   }
 }`)

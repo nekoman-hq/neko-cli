@@ -467,6 +467,21 @@ func TestLoadV2RepositoryPluginMetadataValidationErrors(t *testing.T) {
 	}
 }
 
+func TestLoadV2RepositoryRejectsDuplicatePluginNames(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "plugin", "release", "manifest.json"), `{"name":"release","version":"4.0.2"}`)
+	mustWrite(t, filepath.Join(root, "plugin", "other", "manifest.json"), `{"name":"release","version":"1.0.0"}`)
+	writeV2Files(t, root, validV2Config(
+		pluginUnitJSON("plugin-release", "plugin-release/v", "plugin", validPluginMetadata("release", "plugin/release/manifest.json", "plugin-release", "plugin-release"))+","+
+			pluginUnitJSON("plugin-other", "plugin-other/v", "plugin", validPluginMetadata("release", "plugin/other/manifest.json", "plugin-other", "plugin-other")),
+	), validV2State(`"plugin-release": {"version": "4.0.2"}, "plugin-other": {"version": "1.0.0"}`))
+
+	_, err := LoadV2Repository(root)
+	if err == nil || !strings.Contains(err.Error(), "plugin name") {
+		t.Fatalf("expected duplicate plugin name error, got %v", err)
+	}
+}
+
 func TestLoadV2RepositoryPluginManifestSymlinkEscapeFails(t *testing.T) {
 	root := t.TempDir()
 	outside := t.TempDir()

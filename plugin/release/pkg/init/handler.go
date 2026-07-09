@@ -123,6 +123,100 @@ func HandleInit(req plugin.Request) (*plugin.Response, error) {
 	}, nil
 }
 
+// HandleUnitAdd appends one unit to an existing V2 release configuration.
+func HandleUnitAdd(req plugin.Request) (*plugin.Response, error) {
+	log.PluginPrint(log.Init, "Starting release unit append")
+
+	if err := checkUnitAddExistingConfig(); err != nil {
+		log.PluginV(log.Init, "Existing release configuration prevents unit-add: %s", err.message)
+		return initErrorResponse(err.code, err.message, nil), nil
+	}
+	if strings.TrimSpace(getFlagString(req.Flags, "unit")) == "" {
+		return initErrorResponse("INVALID_FLAGS", "missing required flag: --unit", nil), nil
+	}
+	if hasAnyFlag(req.Flags, "force") {
+		return initErrorResponse("INVALID_FLAGS", "unit-add does not support --force; existing units are never overwritten", nil), nil
+	}
+
+	initConfig, err := buildV2InitConfigFromFlags(req.Flags)
+	if err != nil {
+		return initErrorResponse("INVALID_FLAGS", err.Error(), map[string]any{
+			"required_flags": []string{"unit", "executor", "delivery"},
+			"optional_flags": []string{
+				"display-name",
+				"version",
+				"workflow",
+				"tag-prefix",
+				"working-directory",
+				"paths",
+				"kind",
+				"plugin-name",
+				"plugin-manifest",
+				"plugin-asset-prefix",
+				"plugin-binary-name",
+			},
+		}), nil
+	}
+
+	cfg, err := config.LoadV2Config(config.V2ConfigPath("."))
+	if err != nil {
+		return initErrorResponse("LOAD_ERROR", fmt.Sprintf("Failed to load V2 release config: %v", err), nil), nil
+	}
+	state, err := config.LoadV2State(config.V2StatePath("."))
+	if err != nil {
+		return initErrorResponse("LOAD_ERROR", fmt.Sprintf("Failed to load V2 release state: %v", err), nil), nil
+	}
+	if state.Units == nil {
+		return initErrorResponse("VALIDATION_ERROR", "v2 state units must be present", nil), nil
+	}
+
+	unit, unitState := buildV2UnitAndState(initConfig)
+	if _, exists := state.Units[unit.ID]; exists {
+		return initErrorResponse("DUPLICATE_UNIT", fmt.Sprintf("release unit %q already exists in state", unit.ID), nil), nil
+	}
+
+	cfg.Units = append(cfg.Units, unit)
+	state.Units[unit.ID] = unitState
+	if err = config.ValidateV2(".", cfg, state); err != nil {
+		return initErrorResponse("VALIDATION_ERROR", err.Error(), nil), nil
+	}
+
+	configJSON, err := config.CanonicalV2Config(*cfg)
+	if err != nil {
+		return initErrorResponse("VALIDATION_ERROR", err.Error(), nil), nil
+	}
+	stateJSON, err := config.CanonicalV2State(*state)
+	if err != nil {
+		return initErrorResponse("VALIDATION_ERROR", err.Error(), nil), nil
+	}
+	if err = writeV2Files(configJSON, stateJSON); err != nil {
+		return initErrorResponse("SAVE_ERROR", fmt.Sprintf("Failed to save V2 release configuration: %v", err), nil), nil
+	}
+
+	log.PluginPrint(log.Init, "Release unit %s appended to %s", initConfig.UnitID, config.V2ConfigPath("."))
+	log.PluginPrint(log.Init, "State entry saved to %s", config.V2StatePath("."))
+
+	return &plugin.Response{
+		Status: "success",
+		Metadata: plugin.ResponseMetadata{
+			Plugin:    metadata.PluginName,
+			Version:   metadata.Version,
+			Command:   "unit-add",
+			Timestamp: time.Now(),
+		},
+		Data: map[string]any{
+			"status":      "unit appended",
+			"config_file": config.V2ConfigPath("."),
+			"state_file":  config.V2StatePath("."),
+			"unit":        initConfig.UnitID,
+			"version":     initConfig.Version,
+			"kind":        initConfig.Kind,
+			"plugin":      pluginResponseData(initConfig),
+		},
+		RendererHint: "table",
+	}, nil
+}
+
 func pluginResponseData(initConfig v2InitConfig) map[string]any {
 	if initConfig.Kind != pluginKind {
 		return nil
@@ -298,6 +392,39 @@ func checkExistingConfig(force bool) *initConfigError {
 	return nil
 }
 
+func checkUnitAddExistingConfig() *initConfigError {
+	hasV1 := fileExists(legacyV1ConfigFileName)
+	hasV2Config := config.V2ConfigExists(".")
+	hasV2State := config.V2StateExists(".")
+
+	if hasV1 && (hasV2Config || hasV2State) {
+		return &initConfigError{
+			code:    "CONFIG_CONFLICT",
+			message: "release configuration conflict: .release.neko.json and V2 files both exist. Resolve the conflict explicitly before running unit-add.",
+		}
+	}
+	if hasV1 {
+		return &initConfigError{
+			code:    "V1_CONFIG_EXISTS",
+			message: ".release.neko.json exists. Run 'neko release migrate' before adding V2 units.",
+		}
+	}
+	if !hasV2Config && !hasV2State {
+		return &initConfigError{
+			code:    "V2_CONFIG_MISSING",
+			message: ".neko/release.config.json and .neko/release.state.json are missing. Run 'neko release init' first.",
+		}
+	}
+	if !hasV2Config || !hasV2State {
+		return &initConfigError{
+			code:    "PARTIAL_V2_CONFIG",
+			message: "partial V2 configuration: both .neko/release.config.json and .neko/release.state.json are required before unit-add.",
+		}
+	}
+
+	return nil
+}
+
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
@@ -398,6 +525,22 @@ func buildPluginConfigFromFlags(kind string, flags map[string]any) (config.V2Plu
 }
 
 func buildV2Files(initConfig v2InitConfig) (config.V2ReleaseConfig, config.V2ReleaseState) {
+	unit, unitState := buildV2UnitAndState(initConfig)
+
+	cfg := config.V2ReleaseConfig{
+		SchemaVersion: 2,
+		Units:         []config.V2Unit{unit},
+	}
+	state := config.V2ReleaseState{
+		SchemaVersion: 2,
+		Units: map[string]config.V2UnitState{
+			initConfig.UnitID: unitState,
+		},
+	}
+	return cfg, state
+}
+
+func buildV2UnitAndState(initConfig v2InitConfig) (config.V2Unit, config.V2UnitState) {
 	unit := config.V2Unit{
 		ID:               initConfig.UnitID,
 		DisplayName:      initConfig.DisplayName,
@@ -415,17 +558,7 @@ func buildV2Files(initConfig v2InitConfig) (config.V2ReleaseConfig, config.V2Rel
 		unit.Plugin = &initConfig.Plugin
 	}
 
-	cfg := config.V2ReleaseConfig{
-		SchemaVersion: 2,
-		Units:         []config.V2Unit{unit},
-	}
-	state := config.V2ReleaseState{
-		SchemaVersion: 2,
-		Units: map[string]config.V2UnitState{
-			initConfig.UnitID: {Version: initConfig.Version},
-		},
-	}
-	return cfg, state
+	return unit, config.V2UnitState{Version: initConfig.Version}
 }
 
 func writeV2Files(configJSON, stateJSON []byte) error {

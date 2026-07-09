@@ -231,6 +231,7 @@ func validateV2ConfigAndState(repositoryRoot string, cfg *V2ReleaseConfig, state
 
 	ids := make(map[string]struct{}, len(cfg.Units))
 	tagPrefixes := make(map[string]string, len(cfg.Units))
+	pluginNames := make(map[string]string, len(cfg.Units))
 	for _, unit := range cfg.Units {
 		if err := validateV2Unit(repositoryRoot, unit); err != nil {
 			return err
@@ -246,6 +247,12 @@ func validateV2ConfigAndState(repositoryRoot string, cfg *V2ReleaseConfig, state
 			}
 		}
 		tagPrefixes[unit.TagPrefix] = unit.ID
+		if unit.Kind == UnitKindPlugin && unit.Plugin != nil {
+			if previousUnitID, ok := pluginNames[unit.Plugin.Name]; ok {
+				return fmt.Errorf("v2 config plugin name %q is used by both unit %q and unit %q", unit.Plugin.Name, previousUnitID, unit.ID)
+			}
+			pluginNames[unit.Plugin.Name] = unit.ID
+		}
 	}
 
 	if requireState {

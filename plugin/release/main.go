@@ -47,6 +47,8 @@ func main() {
 	switch req.Command {
 	case "init":
 		resp, err = initcmd.HandleInit(req)
+	case "unit-add":
+		resp, err = initcmd.HandleUnitAdd(req)
 	case "init-options":
 		resp, err = initcmd.GetAvailableOptions()
 	case "migrate":

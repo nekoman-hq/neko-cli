@@ -112,6 +112,106 @@
       ]
     },
     {
+      "name": "unit-add",
+      "description": "Add a release unit to an existing V2 release configuration",
+      "outputs": [
+        "table",
+        "json",
+        "text"
+      ],
+      "flags": [
+        {
+          "name": "unit",
+          "type": "string",
+          "required": true,
+          "description": "Release unit id to append"
+        },
+        {
+          "name": "display-name",
+          "type": "string",
+          "required": false,
+          "description": "Release unit display name"
+        },
+        {
+          "name": "version",
+          "type": "string",
+          "required": false,
+          "default": "0.1.0",
+          "description": "Initial version (semver)"
+        },
+        {
+          "name": "executor",
+          "type": "string",
+          "required": true,
+          "description": "Release executor (goreleaser|jreleaser|release-it)"
+        },
+        {
+          "name": "delivery",
+          "type": "string",
+          "required": true,
+          "description": "Release delivery mode (local|github-actions)"
+        },
+        {
+          "name": "workflow",
+          "type": "string",
+          "required": false,
+          "description": "GitHub Actions workflow path, required for github-actions delivery"
+        },
+        {
+          "name": "tag-prefix",
+          "type": "string",
+          "required": false,
+          "default": "v",
+          "description": "Release tag prefix"
+        },
+        {
+          "name": "working-directory",
+          "type": "string",
+          "required": false,
+          "default": ".",
+          "description": "Unit working directory"
+        },
+        {
+          "name": "paths",
+          "type": "string",
+          "required": false,
+          "default": "**",
+          "description": "Comma-separated unit path globs"
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "required": false,
+          "default": "release",
+          "description": "Release unit kind (release|plugin)"
+        },
+        {
+          "name": "plugin-name",
+          "type": "string",
+          "required": false,
+          "description": "Public plugin name, required when kind=plugin"
+        },
+        {
+          "name": "plugin-manifest",
+          "type": "string",
+          "required": false,
+          "description": "Repository-root-relative plugin manifest path, required when kind=plugin"
+        },
+        {
+          "name": "plugin-asset-prefix",
+          "type": "string",
+          "required": false,
+          "description": "Plugin release asset prefix, required when kind=plugin and must match the unit id"
+        },
+        {
+          "name": "plugin-binary-name",
+          "type": "string",
+          "required": false,
+          "description": "Plugin executable name in release archives, required when kind=plugin"
+        }
+      ]
+    },
+    {
       "name": "init-options",
       "description": "Get available options for init command",
       "outputs": [
