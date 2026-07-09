@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "units": {
     "cli": {
-      "version": "3.0.2"
+      "version": "3.0.3"
     },
     "plugin-release": {
       "version": "4.0.3"
