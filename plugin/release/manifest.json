@@ -72,6 +72,37 @@
           "description": "Comma-separated unit path globs"
         },
         {
+          "name": "kind",
+          "type": "string",
+          "required": false,
+          "default": "release",
+          "description": "Release unit kind (release|plugin)"
+        },
+        {
+          "name": "plugin-name",
+          "type": "string",
+          "required": false,
+          "description": "Public plugin name, required when kind=plugin"
+        },
+        {
+          "name": "plugin-manifest",
+          "type": "string",
+          "required": false,
+          "description": "Repository-root-relative plugin manifest path, required when kind=plugin"
+        },
+        {
+          "name": "plugin-asset-prefix",
+          "type": "string",
+          "required": false,
+          "description": "Plugin release asset prefix, required when kind=plugin and must match the unit id"
+        },
+        {
+          "name": "plugin-binary-name",
+          "type": "string",
+          "required": false,
+          "description": "Plugin executable name in release archives, required when kind=plugin"
+        },
+        {
           "name": "force",
           "type": "bool",
           "required": false,

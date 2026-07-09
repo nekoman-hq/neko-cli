@@ -54,9 +54,14 @@ neko release init --executor=<executor> --delivery=<delivery> [flags]
 | `--tag-prefix` | string | `v` | Release tag prefix |
 | `--working-directory` | string | `.` | Unit working directory |
 | `--paths` | string | `**` | Comma-separated unit path globs |
+| `--kind` | string | `release` | Unit kind: `release` or `plugin` |
+| `--plugin-name` | string | | Public plugin name, required when `--kind plugin` |
+| `--plugin-manifest` | string | | Repository-root-relative manifest path, required when `--kind plugin` |
+| `--plugin-asset-prefix` | string | | Release asset prefix, required when `--kind plugin`; must match unit id |
+| `--plugin-binary-name` | string | | Plugin executable name, required when `--kind plugin` |
 | `--force` | bool | `false` | Recreate existing V2 config/state |
 
-`release init` no longer creates `.release.neko.json`. Existing V1 repositories should use `neko release migrate`. Plugin unit metadata and appending units to an existing V2 configuration are not implemented by `init` yet.
+`release init` no longer creates `.release.neko.json`. Existing V1 repositories should use `neko release migrate`. `--kind plugin` creates one plugin unit with V2 plugin metadata. Plugin unit ids must start with `plugin-`, plugin tag prefixes must be `<unit-id>/v`, and plugin asset prefixes must match the unit id. Appending units to an existing V2 configuration, workflow template generation, and executor scaffolding are not implemented by `init` yet.
 
 **Examples:**
 ```bash
@@ -76,6 +81,22 @@ neko release init --executor=goreleaser --delivery=local --force
 
 # Start with a specific version
 neko release init --executor=goreleaser --delivery=local --version=1.0.0
+
+# Initialize one GitHub Actions-delivered plugin unit
+neko release init \
+  --unit=plugin-release \
+  --display-name="neko-cli release plugin" \
+  --version=4.0.0 \
+  --executor=goreleaser \
+  --delivery=github-actions \
+  --workflow=.github/workflows/release-plugin-release.yml \
+  --tag-prefix=plugin-release/v \
+  --paths="plugin/release/**,docs/plugins/release.md" \
+  --kind=plugin \
+  --plugin-name=release \
+  --plugin-manifest=plugin/release/manifest.json \
+  --plugin-asset-prefix=plugin-release \
+  --plugin-binary-name=plugin-release
 ```
 
 **What it does:**
@@ -461,7 +482,7 @@ V2 uses repository-root files:
 
 `neko release validate` can validate V2 now. `history`, `contributors`, dry-run planning, and root V1-to-V2 migration are unit-aware. GitHub Actions delivery is valid V2 configuration when `workflow` points to an existing `.github/workflows/<file>.yml|yaml` file. Dry-run planning builds the execution context, materialization plan, local delivery/executor capabilities, planned release commit, unit tag, known release files, push order, workflow reference, dispatch input contract, dispatch status, and V2 Git ownership. V2 GitHub Actions non-dry-run release commands are active and journaled; `neko release resume --unit <unit>` resumes only existing unresolved execution journals. V2 local `release-it` and standalone public dispatch/retry commands are not active.
 
-In Nekocli itself, `plugin-release` and `plugin-ui` are V2 units. `.neko/release.state.json` is authoritative for both plugin versions; `plugin/release/manifest.json` and `plugin/ui/manifest.json` are materialized release files for their selected units. Both plugin units declare plugin metadata in `.neko/release.config.json`; `neko release plugin-index` uses that metadata so adding a releaseable plugin is a V2 unit-config change, not a registry Go-code edit. Runtime plugin discovery uses the published `plugin-index.json` as its source of truth and does not use `/releases/latest`; the generated index is not committed as source. Plugin workflows publish or replace the `plugin-index.json` asset on the mutable `plugin-registry` GitHub Release only after the plugin GitHub Release succeeds. Release-prefix fallback discovery has been removed. `make update-manifests` remains a manual compatibility helper and reads V2 state. V2 dry-run planning does not require or resolve `GITHUB_TOKEN`; real GitHub Actions release execution still requires it.
+In Nekocli itself, `plugin-release` and `plugin-ui` are V2 units. `.neko/release.state.json` is authoritative for both plugin versions; `plugin/release/manifest.json` and `plugin/ui/manifest.json` are materialized release files for their selected units. Both plugin units declare plugin metadata in `.neko/release.config.json`; `neko release plugin-index` uses that metadata so adding a releaseable plugin is a V2 unit-config change, not a registry Go-code edit. `neko release init --kind plugin` can create one new plugin unit with that metadata when no V2 config exists yet; appending more units is not implemented yet. Runtime plugin discovery uses the published `plugin-index.json` as its source of truth and does not use `/releases/latest`; the generated index is not committed as source. Plugin workflows publish or replace the `plugin-index.json` asset on the mutable `plugin-registry` GitHub Release only after the plugin GitHub Release succeeds. Release-prefix fallback discovery has been removed. `make update-manifests` remains a manual compatibility helper and reads V2 state. V2 dry-run planning does not require or resolve `GITHUB_TOKEN`; real GitHub Actions release execution still requires it.
 
 The `plugin-release` unit uses `plugin-release/vX.Y.Z` tags and `.github/workflows/release-plugin-release.yml`. Neko CLI owns state, materialized files, release commit, tag, push, and workflow dispatch. The workflow checks out the dispatched tag, validates `release_sha`, validates the materialized version files and unit config, runs tests, checks `.goreleaser.plugin-release.yaml`, performs a plugin-release-only snapshot build, packages plugin-release archives with that dedicated GoReleaser config, and creates the GitHub Release for the exact prefixed tag with GitHub CLI. After that publish succeeds, it generates and validates `plugin-index.json`, then uploads/replaces that single asset on the mutable `plugin-registry` release. The dedicated config must not build or publish the main CLI or `plugin-ui`; it embeds `PLUGIN_RELEASE_VERSION` from the dispatch version into the release plugin binary and archives the committed `plugin/release/manifest.json`.
 

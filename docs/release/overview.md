@@ -65,8 +65,9 @@ Implemented now:
 - Public V2 GitHub Actions release execution.
 - Production GitHub Actions publishing workflows for `cli`, `plugin-release`, and `plugin-ui`.
 - Dedicated GoReleaser configs for `cli`, `plugin-release`, and `plugin-ui`.
-- V2-only `neko release init` for one non-plugin release unit, writing `.neko/release.config.json` and `.neko/release.state.json`.
-- V2 plugin unit metadata validation for future plugin index generation.
+- V2-only `neko release init` for one release unit, writing `.neko/release.config.json` and `.neko/release.state.json`.
+- Plugin unit metadata support in `neko release init` with `--kind plugin`.
+- V2 plugin unit metadata validation for plugin index generation.
 - Deterministic `plugin-index.json` generation from V2 plugin units, state, and manifests.
 - Runtime plugin registry reads `plugin-index.json` as its source of truth; release-prefix fallback discovery has been removed.
 - Plugin release workflows publish/update the mutable `plugin-registry` release asset after successful plugin releases.
@@ -82,9 +83,9 @@ Implemented now:
 Not implemented yet:
 
 - Automatic multi-unit migration.
-- Plugin unit metadata support in `neko release init`.
 - Appending units to an existing V2 repository from `neko release init`.
 - Workflow template generation from `neko release init`.
+- Executor scaffolding from `neko release init`.
 - V2 local `release-it` execution.
 - End-to-end install/update smoke testing against the published plugin registry.
 - V2 local non-dry-run release execution.

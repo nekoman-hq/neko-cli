@@ -263,7 +263,7 @@ builds:
 - **Workflow input:** GitHub Actions passes the released version to GoReleaser
 - **Registry index:** `neko release plugin-index` generates the public `plugin-index.json` from V2 plugin units, state, and manifests. Runtime plugin discovery, install, and update use that index as their source of truth. Plugin release workflows publish it as the `plugin-index.json` asset on the mutable `plugin-registry` GitHub Release after successful plugin releases; the index is not committed as source. Release-prefix fallback discovery has been removed, so new plugins become available through the published index rather than registry Go-code mappings.
 
-To make a new plugin eligible for the generated index, add a V2 unit with `kind: "plugin"`, provide `plugin.name`, `plugin.manifest`, `plugin.assetPrefix`, and `plugin.binaryName`, add the matching state entry, and keep the manifest name/version synchronized with that state.
+To make a new plugin eligible for the generated index, create a V2 plugin unit with `neko release init --kind plugin` or add equivalent V2 config/state by hand. Plugin units require a `plugin-` unit id, `tagPrefix` set to `<unit-id>/v`, `plugin.assetPrefix` matching the unit id, and plugin metadata for `plugin.name`, `plugin.manifest`, `plugin.assetPrefix`, and `plugin.binaryName`. Keep the manifest name/version synchronized with that state. `release init` still creates one unit only; appending units, workflow template generation, and executor scaffolding are not implemented yet.
 
 ### Self-Bootstrapping
 
@@ -510,7 +510,7 @@ Plugin config files should follow the pattern: `.{plugin-name}.neko.json`
 .my-plugin.neko.json  # Your plugin config
 ```
 
-The release plugin is the exception: new `neko release init` writes V2 repository files at `.neko/release.config.json` and `.neko/release.state.json`. It no longer creates `.release.neko.json`; existing V1 release projects should use `neko release migrate`.
+The release plugin is the exception: new `neko release init` writes V2 repository files at `.neko/release.config.json` and `.neko/release.state.json`. It can initialize one normal unit or one plugin unit with `--kind plugin` and the plugin metadata flags. It no longer creates `.release.neko.json`; existing V1 release projects should use `neko release migrate`.
 
 ### 3. Extract Flags Safely
 
