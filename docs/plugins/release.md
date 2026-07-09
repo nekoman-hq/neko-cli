@@ -5,7 +5,7 @@ The **release** plugin is the core plugin for Neko CLI, providing comprehensive 
 ## Overview
 
 - **Plugin Name:** `release`
-- **Last Change:** v2.4.0
+- **Current Version:** v4.1.0
 - **Author:** nekoman-hq
 - **Config Files:** `.release.neko.json` (V1 legacy), `.neko/release.config.json` and `.neko/release.state.json` (V2)
 
@@ -22,6 +22,8 @@ This installs the plugin to `~/.neko/plugins/release/`.
 Plugin installation and updates resolve the newest release plugin version from the published `plugin-index.json` registry asset on the mutable `plugin-registry` GitHub Release. The repository's latest release and release-prefix fallback discovery are not used for release plugin discovery. The local installed version comes from `~/.neko/plugins/release/manifest.json`; the remote version, release tag, and asset names come from the index entry.
 
 The `plugin-release` V2 unit declares `kind: "plugin"` metadata in `.neko/release.config.json`: public name `release`, manifest `plugin/release/manifest.json`, asset prefix `plugin-release`, and binary name `plugin-release`. `neko release plugin-index` generates the public `plugin-index.json` from this metadata, `.neko/release.state.json`, and plugin manifests. Runtime plugin discovery, install, and update use that index as the registry source of truth. Plugin release workflows publish it as the `plugin-index.json` asset on the mutable `plugin-registry` GitHub Release after successful plugin releases; the index is not committed as source.
+
+Copy-ready Release V2 and plugin registry examples live in [Release V2 Examples](../release/examples.md).
 
 ---
 
@@ -739,28 +741,24 @@ Custom token naming options are not currently supported but may be added in the 
 
 ## Examples
 
-### Complete Workflow
+### Release V2 Workflow
 
 ```bash
-# 1. Initialize a new project
-neko release init --executor=goreleaser --delivery=local
+# 1. Initialize a first V2 unit
+neko release init --unit cli --executor=goreleaser --delivery=github-actions --workflow .github/workflows/release-cli.yml
 
-# 2. Validate the setup
+# 2. Append additional units when needed
+neko release unit-add --unit api --executor=goreleaser --delivery=github-actions --workflow .github/workflows/release-api.yml --tag-prefix api/v --paths "apps/api/**"
+
+# 3. Validate the setup
 neko release validate --show
 
-# 3. Check current history
-neko release history
-
-# 4. Create your first release
-neko release patch --dry-run  # Preview first
-neko release patch            # Execute
-
-# 5. Create a minor release with new features
-neko release minor
-
-# 6. Create a major release for breaking changes
-neko release major
+# 4. Preview and release a selected unit
+neko release patch --unit api --dry-run --verbose --describe
+neko release patch --unit api --verbose --describe
 ```
+
+See [Release V2 Examples](../release/examples.md) for full CLI, service, plugin unit, plugin registry, and temp plugin smoke examples.
 
 ### Scripting with JSON Output
 
@@ -776,8 +774,8 @@ neko release history --output json | jq '.data.items'
 ### Plugin-Based Project Setup
 
 ```bash
-# 1. Initialize release configuration
-neko release init --executor=goreleaser --delivery=local
+# 1. Initialize release configuration for the first unit
+neko release init --unit cli --executor=goreleaser --delivery=github-actions --workflow .github/workflows/release-cli.yml
 
 # 2. Append plugin units to .neko/release.config.json and .neko/release.state.json
 neko release unit-add --unit plugin-release --kind plugin --plugin-name release --plugin-manifest plugin/release/manifest.json --plugin-asset-prefix plugin-release --plugin-binary-name plugin-release --executor goreleaser --delivery github-actions --workflow .github/workflows/release-plugin-release.yml --tag-prefix plugin-release/v

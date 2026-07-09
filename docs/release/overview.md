@@ -16,7 +16,7 @@ V1 is the legacy format stored in `.release.neko.json`. It describes one global 
 }
 ```
 
-V1 remains supported. Existing `patch`, `minor`, `major`, `history`, `contributors`, `validate`, and `init` flows continue to use this file.
+V1 remains supported for existing release repositories. Existing `patch`, `minor`, `major`, `history`, `contributors`, and `validate` flows continue to use this file when no V2 config exists. New `neko release init` is V2-only; use `neko release migrate` to convert a root V1 repository.
 
 ## V2
 
@@ -31,11 +31,34 @@ V2 is repository-root scoped and uses two files:
 
 `release.state.json` is the version source of truth for all units. Tags are not stored in state; a tag is derived later from `tagPrefix + version`.
 
+Core V2 terms:
+
+| Term | Meaning |
+| --- | --- |
+| `unit` | Independently releasable object such as `cli`, `api`, or `plugin-release` |
+| `tagPrefix` | Namespace used to derive tags for a unit, such as `v`, `api/v`, or `plugin-release/v` |
+| `executor` | Release tool: `goreleaser`, `jreleaser`, or `release-it` |
+| `delivery` | Release handoff mode: `local` or `github-actions` |
+
 V2 can be loaded, strictly parsed, validated, normalized, and used for unit workflows. `history` and `contributors` are unit-aware. `patch`, `minor`, and `major` support V2 dry-run planning with execution context, delivery resolution, version materialization planning, GitHub Actions workflow configuration, and Neko-owned Git release planning.
 
 Nekocli itself now has `cli`, `plugin-release`, and `plugin-ui` V2 units. `.neko/release.state.json` is authoritative for every releaseable version. `.plugin.release.neko.json` has been removed and must not be reintroduced. Each plugin release plan materializes only that unit's `manifest.json`. Plugin units declare `name`, `manifest`, `assetPrefix`, and `binaryName` metadata in V2 config so `neko release plugin-index` can generate the public registry contract without registry Go-code edits. CLI install, version, and update checks use only stable CLI tags matching `vX.Y.Z`; plugin releases and `plugin-registry` are ignored for CLI updates. Runtime plugin discovery, install, and update use `plugin-index.json` as the source of truth from the `plugin-registry` GitHub Release asset; `/releases/latest` and release-prefix fallback discovery are not used for plugin discovery. Plugin release workflows publish or replace that asset after successful plugin releases.
 
 V2 GitHub Actions non-dry-run public release commands are active. Neko CLI owns materialization, state update, targeted staging, release commit, unit tag, commit push, tag push, execution journal, dispatch journal, and workflow dispatch. GitHub Actions owns build, GitHub Release creation, and asset publishing from the pushed tag. V2 local delivery remains blocked.
+
+The stable V2 lifecycle is:
+
+```bash
+neko release init ...
+neko release unit-add ...
+neko release validate --show
+neko release patch --unit <unit>
+neko release history --unit <unit>
+neko release contributors --unit <unit>
+neko release resume --unit <unit> --dry-run
+```
+
+Multi-unit repositories require `--unit` for unit-scoped commands. See [Release V2 Examples](examples.md) for copy-ready CLI, service, plugin, release, registry, and install/update examples.
 
 ## Safety
 
@@ -87,6 +110,6 @@ Not implemented yet:
 - Workflow template generation from `neko release init`.
 - Executor scaffolding from `neko release init`.
 - V2 local `release-it` execution.
-- End-to-end install/update smoke testing against the published plugin registry.
+- Automated cross-platform install/update smoke testing against the published plugin registry.
 - V2 local non-dry-run release execution.
 - Public standalone dispatch and retry commands.

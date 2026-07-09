@@ -171,6 +171,8 @@ This repository releases itself with V2 multi-unit release state:
 - Runtime plugin discovery, install, and update use `plugin-index.json` as the registry source of truth. The index is published as the `plugin-index.json` asset on the mutable `plugin-registry` GitHub Release after successful plugin releases; `/releases/latest` and release-prefix fallback discovery are not used for plugin discovery.
 - Use `--verbose --describe` to see journal paths, commit/tag, workflow, dispatch state, run URL when resolvable, and recovery guidance.
 
+Copy-ready Release V2 and plugin registry examples live in [Release V2 Examples](docs/release/examples.md).
+
 ### Global Flags
 
 All plugins inherit these global flags:

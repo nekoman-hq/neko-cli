@@ -103,6 +103,8 @@ Plugin config files usually follow the pattern: `.{plugin-name}.neko.json`
 - Release plugin: `.neko/release.config.json` and `.neko/release.state.json`
 - Future deploy plugin: `.deploy.neko.json`
 
+Release V2 uses `.neko/release.config.json` for static unit architecture and `.neko/release.state.json` for authoritative unit versions. `neko release init` creates the first V2 unit, `neko release unit-add` appends additional normal or plugin units, and `neko release migrate` converts a root legacy `.release.neko.json` repository. Plugin registry discovery uses `plugin-index.json` from the mutable `plugin-registry` GitHub Release, not `/releases/latest`. See [Release V2 Examples](release/examples.md) for copy-ready command flows.
+
 ### 5. No Interactive Prompts in Plugins
 
 **Plugins cannot use interactive prompts (survey, stdin reading)** because stdin is used for the JSON request. All user input must come via flags.

@@ -48,6 +48,18 @@ Rules:
 - `delivery` defaults internally to `local`.
 - Supported delivery values are `local` and `github-actions`.
 
+Field roles:
+
+| Field | Role |
+| --- | --- |
+| `units[].id` | Stable release unit identifier used by `--unit` |
+| `units[].paths` | Repository path globs owned by the unit |
+| `units[].workingDirectory` | Unit root for executor requirement checks |
+| `units[].tagPrefix` | Prefix used to derive tags from state versions |
+| `units[].executor.type` | Release tool: `goreleaser`, `jreleaser`, or `release-it` |
+| `units[].executor.delivery` | Handoff mode: `local` or `github-actions` |
+| `units[].kind` | Optional unit kind; `plugin` enables registry metadata |
+
 Allowed tag prefix examples:
 
 ```text
@@ -107,7 +119,7 @@ Plugin release units can declare registry metadata directly in `.neko/release.co
 
 Nekocli no longer has a plugin version map. `.plugin.release.neko.json` was removed; all releaseable versions live in `.neko/release.state.json`.
 
-See [Local delivery](local-delivery.md), [GitHub Actions delivery](github-actions-delivery.md), [Release executors](executors.md), [Version materialization](version-materialization.md), [Local release transaction](local-release-transaction.md), and [Git release coordination](git-coordination.md).
+See [Release V2 examples](examples.md), [Local delivery](local-delivery.md), [GitHub Actions delivery](github-actions-delivery.md), [Release executors](executors.md), [Version materialization](version-materialization.md), [Local release transaction](local-release-transaction.md), and [Git release coordination](git-coordination.md).
 
 ## Migration
 

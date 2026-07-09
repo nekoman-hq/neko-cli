@@ -59,6 +59,8 @@ neko release plugin-index --check
 neko release plugin-index --output /tmp/plugin-index.json
 ```
 
+See [Release V2 Examples](examples.md) for copy-ready init, unit-add, release, plugin-index, and plugin install/update flows.
+
 V2 non-dry-run release commands are active only for `delivery: github-actions`. V2 local delivery remains blocked. Dry-run output includes:
 
 ```text

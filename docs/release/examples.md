@@ -1,0 +1,206 @@
+# Release V2 Examples
+
+This page contains copy-ready examples for Release V2 repositories and the
+plugin registry. Reference docs stay concise; use this page when bootstrapping a
+new repository or adding units to an existing one.
+
+## Mental Model
+
+Release V2 has two committed repository-root files:
+
+```text
+.neko/release.config.json
+.neko/release.state.json
+```
+
+`release.config.json` is static release architecture: units, path ownership,
+working directories, tag prefixes, executor type, delivery mode, workflow path,
+and optional plugin metadata.
+
+`release.state.json` is authoritative version state. Tags are not stored in
+state; each tag is derived from `tagPrefix + version`.
+
+Core terms:
+
+| Term | Meaning |
+| --- | --- |
+| `unit` | Independently releasable object such as `cli`, `api`, or `plugin-foo` |
+| `tagPrefix` | Namespace used to derive tags for a unit, such as `v` or `api/v` |
+| `executor` | Release tool: `goreleaser`, `jreleaser`, or `release-it` |
+| `delivery` | Release handoff mode: `local` or `github-actions` |
+| `kind: plugin` | Marks a V2 unit as a public plugin registry entry |
+
+Multi-unit repositories require `--unit` for unit-scoped commands.
+
+## Stable Lifecycle
+
+```bash
+neko release init ...
+neko release unit-add ...
+neko release validate --show
+neko release patch --unit <unit>
+neko release history --unit <unit>
+neko release contributors --unit <unit>
+neko release resume --unit <unit> --dry-run
+```
+
+Use `neko release migrate` for a legacy root `.release.neko.json` repository
+before adding V2 units.
+
+## Example A: Initialize A CLI Project
+
+```bash
+neko release init \
+  --unit cli \
+  --display-name my-cli \
+  --version 0.1.0 \
+  --executor goreleaser \
+  --delivery github-actions \
+  --workflow .github/workflows/release-cli.yml \
+  --tag-prefix v \
+  --working-directory . \
+  --paths "**"
+```
+
+Generated files:
+
+```text
+.neko/release.config.json
+.neko/release.state.json
+```
+
+Not generated yet:
+
+- workflow files
+- GoReleaser configs
+- plugin manifests
+- source files or directories
+
+For `github-actions` delivery, the workflow file must already exist below
+`.github/workflows/`.
+
+## Example B: Add A Backend Or Service Unit
+
+```bash
+neko release unit-add \
+  --unit api \
+  --display-name api \
+  --version 0.1.0 \
+  --executor goreleaser \
+  --delivery github-actions \
+  --workflow .github/workflows/release-api.yml \
+  --tag-prefix api/v \
+  --working-directory . \
+  --paths "apps/api/**,docs/api/**"
+```
+
+`unit-add` appends to existing V2 config/state, preserves existing units in
+order, and never overwrites an existing unit.
+
+## Example C: Add A Plugin Unit
+
+```bash
+neko release unit-add \
+  --unit plugin-foo \
+  --display-name "foo plugin" \
+  --version 0.1.0 \
+  --executor goreleaser \
+  --delivery github-actions \
+  --workflow .github/workflows/release-plugin-foo.yml \
+  --tag-prefix plugin-foo/v \
+  --working-directory . \
+  --paths "plugin/foo/**,docs/plugins/foo.md" \
+  --kind plugin \
+  --plugin-name foo \
+  --plugin-manifest plugin/foo/manifest.json \
+  --plugin-asset-prefix plugin-foo \
+  --plugin-binary-name plugin-foo
+```
+
+Prerequisites:
+
+- workflow file already exists
+- plugin manifest already exists
+- GoReleaser config already exists or is created manually
+- plugin unit id starts with `plugin-`
+- plugin tag prefix is `<unit-id>/v`
+- plugin asset prefix equals the unit id
+
+Plugin metadata lives on the V2 unit. `neko release plugin-index` reads unit
+metadata, `.neko/release.state.json`, and plugin manifests to generate the
+public registry index.
+
+## Example D: Release A Unit
+
+```bash
+neko release patch --unit plugin-foo --verbose --describe
+```
+
+Expected output fields for a real GitHub Actions handoff:
+
+```text
+Unit
+Version
+Tag
+Release Commit
+Workflow
+Execution Journal
+Dispatch Journal
+Execution State
+Dispatch State
+Dispatch Run
+Status
+```
+
+Dry-run is read-only and does not require `GITHUB_TOKEN`:
+
+```bash
+neko release patch --unit plugin-foo --dry-run --verbose --describe
+```
+
+## Example E: Generate The Plugin Registry Index
+
+```bash
+neko release plugin-index --check
+neko release plugin-index --output /tmp/plugin-index.json
+```
+
+The generated `plugin-index.json` is not committed to the repository and this
+command does not publish it. Plugin release workflows generate and publish the
+index automatically after successful plugin releases by uploading or replacing
+the `plugin-index.json` asset on the mutable `plugin-registry` GitHub Release.
+
+## Example F: Discover, Install, And Update Plugins
+
+```bash
+neko plugin available
+neko plugin install release
+neko plugin update release
+```
+
+Temp-safe smoke usage:
+
+```bash
+NEKO_PLUGIN_DIR=/private/tmp/neko-plugin-smoke neko plugin available
+```
+
+Runtime plugin discovery, install, and update read the published
+`plugin-index.json` asset from the `plugin-registry` GitHub Release. They do not
+use `/releases/latest` or release-prefix fallback discovery.
+
+## GitHub Release Categories
+
+| Category | Tag | Assets | Notes |
+| --- | --- | --- | --- |
+| CLI | `vX.Y.Z` | `neko-cli_...` | Used by `install.sh`, `neko version`, and `neko update` |
+| Release plugin | `plugin-release/vX.Y.Z` | `plugin-release_...` | Plugin unit with `kind: plugin` |
+| UI plugin | `plugin-ui/vX.Y.Z` | `plugin-ui_...` | Plugin unit with `kind: plugin` |
+| Plugin registry | `plugin-registry` | `plugin-index.json` | Mutable registry release, not a product release unit |
+
+Important boundaries:
+
+- `plugin-index.json` is not committed to the repository.
+- `plugin-index.json` is not attached to CLI releases.
+- `plugin-index.json` lives as an asset on `plugin-registry`.
+- `/releases/latest` is not used for plugin discovery.
+- CLI install/update/version resolves only stable CLI tags matching `vX.Y.Z`.

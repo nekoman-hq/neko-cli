@@ -43,3 +43,9 @@ neko plugin install release
 ```
 
 Plugin discovery, install, and update use the published `plugin-index.json` registry asset from the `plugin-registry` GitHub Release. CLI install, version, and update checks intentionally do not use plugin release tags or plugin registry metadata when selecting the CLI release or archive.
+
+For temp-safe plugin smoke checks, override the plugin directory:
+
+```bash
+NEKO_PLUGIN_DIR=/private/tmp/neko-plugin-smoke neko plugin available
+```
