@@ -9,8 +9,11 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
+	"text/tabwriter"
 
 	"github.com/nekoman-hq/neko-cli/pkg/dispatcher"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
@@ -43,12 +46,22 @@ func init() {
 func CreatePluginCommand(manifest plugin.Manifest) *cobra.Command {
 	// Main command for every plugin e.g., "release", "deploy"
 	cmd := &cobra.Command{
-		Use:   manifest.Name,
-		Short: manifest.Description,
+		Use:          manifest.Name,
+		Short:        manifest.Description,
+		SilenceUsage: true,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				return unknownPluginCommandError(manifest, args[0])
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return executePlugin(manifest.Name, cmd, args)
+			return renderPluginOverview(cmd.OutOrStdout(), manifest)
 		},
 	}
+	cmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		_ = renderPluginOverview(cmd.OutOrStdout(), manifest)
+	})
 
 	// Subcommands for each plugin command e.g., "release init", "release create"
 	for _, pluginCmd := range manifest.Commands {
@@ -70,12 +83,16 @@ func CreatePluginCommand(manifest plugin.Manifest) *cobra.Command {
 // Returns a configured cobra.Command for the subcommand.
 func createSubCommand(pluginName string, pluginCmd plugin.Command) *cobra.Command {
 	subCmd := &cobra.Command{
-		Use:   pluginCmd.Name,
-		Short: pluginCmd.Description,
+		Use:          pluginCmd.Name,
+		Short:        pluginCmd.Description,
+		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return executePlugin(pluginName, cmd, args)
 		},
 	}
+	subCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		_ = renderPluginCommandHelp(cmd.OutOrStdout(), pluginName, pluginCmd)
+	})
 
 	// Add flags from the plugin manifest
 	for _, flag := range pluginCmd.Flags {
@@ -83,6 +100,123 @@ func createSubCommand(pluginName string, pluginCmd plugin.Command) *cobra.Comman
 	}
 
 	return subCmd
+}
+
+func renderPluginOverview(w io.Writer, manifest plugin.Manifest) error {
+	if _, err := fmt.Fprintf(w, "Plugin: %s\n", manifest.Name); err != nil {
+		return err
+	}
+	if manifest.Version != "" {
+		if _, err := fmt.Fprintf(w, "Version: %s\n", manifest.Version); err != nil {
+			return err
+		}
+	}
+	if manifest.Description != "" {
+		if _, err := fmt.Fprintf(w, "Description: %s\n", manifest.Description); err != nil {
+			return err
+		}
+	}
+
+	if _, err := fmt.Fprintln(w); err != nil {
+		return err
+	}
+	if len(manifest.Commands) == 0 {
+		_, err := fmt.Fprintln(w, "No commands declared in plugin manifest.")
+		return err
+	}
+
+	if _, err := fmt.Fprintln(w, "Available Commands:"); err != nil {
+		return err
+	}
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	for _, command := range manifest.Commands {
+		if _, err := fmt.Fprintf(tw, "  %s\t%s\n", command.Name, command.Description); err != nil {
+			return err
+		}
+	}
+	if err := tw.Flush(); err != nil {
+		return err
+	}
+
+	_, err := fmt.Fprintf(w, "\nUse \"neko %s <command> --help\" for command details.\n", manifest.Name)
+	return err
+}
+
+func renderPluginCommandHelp(w io.Writer, pluginName string, pluginCmd plugin.Command) error {
+	if _, err := fmt.Fprintf(w, "Plugin: %s\n", pluginName); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "Command: %s\n", pluginCmd.Name); err != nil {
+		return err
+	}
+	if pluginCmd.Description != "" {
+		if _, err := fmt.Fprintf(w, "Description: %s\n", pluginCmd.Description); err != nil {
+			return err
+		}
+	}
+
+	if len(pluginCmd.Outputs) > 0 {
+		if _, err := fmt.Fprintf(w, "\nOutputs: %s\n", strings.Join(pluginCmd.Outputs, ", ")); err != nil {
+			return err
+		}
+	}
+
+	if _, err := fmt.Fprintln(w, "\nFlags:"); err != nil {
+		return err
+	}
+	if len(pluginCmd.Flags) == 0 {
+		if _, err := fmt.Fprintln(w, "  No command-specific flags declared."); err != nil {
+			return err
+		}
+	} else {
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		for _, flag := range pluginCmd.Flags {
+			required := ""
+			if flag.Required {
+				required = " required"
+			}
+			defaultValue := formatFlagDefault(flag)
+			if defaultValue != "" {
+				defaultValue = " default=" + defaultValue
+			}
+			if _, err := fmt.Fprintf(tw, "  --%s\t%s%s%s\t%s\n", flag.Name, flag.Type, required, defaultValue, flag.Description); err != nil {
+				return err
+			}
+		}
+		if err := tw.Flush(); err != nil {
+			return err
+		}
+	}
+
+	_, err := fmt.Fprintf(w, "\nUsage: neko %s %s [flags]\n", pluginName, pluginCmd.Name)
+	return err
+}
+
+func formatFlagDefault(flag plugin.Flag) string {
+	if flag.Default == nil {
+		return ""
+	}
+	return fmt.Sprintf("%v", flag.Default)
+}
+
+func unknownPluginCommandError(manifest plugin.Manifest, commandName string) error {
+	return fmt.Errorf("unknown command %q for plugin %q\n\nAvailable commands:\n%s", commandName, manifest.Name, formatAvailablePluginCommands(manifest))
+}
+
+func formatAvailablePluginCommands(manifest plugin.Manifest) string {
+	if len(manifest.Commands) == 0 {
+		return "  (none declared in plugin manifest)"
+	}
+
+	lines := make([]string, 0, len(manifest.Commands))
+	for _, command := range manifest.Commands {
+		if command.Description == "" {
+			lines = append(lines, "  "+command.Name)
+			continue
+		}
+		lines = append(lines, "  "+command.Name+"\t"+command.Description)
+	}
+	return strings.Join(lines, "\n") + "\n"
 }
 
 // addFlagToCommand adds a flag to a cobra command based on the plugin's flag definition.
@@ -180,11 +314,12 @@ func executePlugin(pluginName string, cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Validate required flags if we found the command definition
-	if cmdDef != nil {
-		if validationErr := validateRequiredFlagsFromManifest(cmd, cmdDef.Flags); validationErr != nil {
-			return validationErr
-		}
+	if cmdDef == nil {
+		return unknownPluginCommandError(*manifest, commandName)
+	}
+
+	if validationErr := validateRequiredFlagsFromManifest(cmd, cmdDef.Flags); validationErr != nil {
+		return validationErr
 	}
 
 	req := plugin.Request{

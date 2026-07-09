@@ -123,6 +123,13 @@ Once installed, plugin commands are available as subcommands:
 # Format: neko <plugin> <command> [flags]
 neko release patch
 neko release history --output json
+
+# Show installed plugin overview from its manifest
+neko release
+neko release --help
+
+# Show command-specific manifest help, including flags
+neko release patch --help
 ```
 
 ### Release V2 Dogfood
@@ -160,6 +167,8 @@ neko version
 # Show help
 neko --help
 neko plugin --help
+neko <plugin>
+neko <plugin> --help
 neko <plugin> <command> --help
 ```
 

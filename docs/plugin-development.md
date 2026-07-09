@@ -279,6 +279,7 @@ It's metadata injection that allows plugins to declare their versions in the hos
 The `manifest.json` file describes your plugin and its commands. The CLI uses this to:
 - Register subcommands automatically
 - Parse and validate flags
+- Render `neko <plugin>`, `neko <plugin> --help`, and `neko <plugin> <command> --help` without starting the plugin binary
 - Determine available output formats
 
 ### Manifest Schema
