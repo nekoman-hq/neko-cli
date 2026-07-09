@@ -85,18 +85,14 @@ func (m *Manager) Install(pluginName, version string) error {
 		return fmt.Errorf("failed to create plugin directory: %w", err)
 	}
 
-	// Determine metadata to install
-	actualVersion := version
-	if version == "latest" || version == "" {
-		latestVersion, err := m.registry.GetLatestVersion()
-		if err != nil {
-			return fmt.Errorf("failed to get latest version: %w", err)
-		}
-		actualVersion = latestVersion
+	// Resolve plugin versions to V2 unit release tags such as plugin-release/v4.0.2.
+	releaseTag, err := m.registry.ResolveReleaseTag(pluginName, version)
+	if err != nil {
+		return fmt.Errorf("failed to resolve plugin release: %w", err)
 	}
 
 	// Build download URL
-	downloadURL, err := m.getPluginDownloadURL(pluginName, actualVersion)
+	downloadURL, err := m.getPluginDownloadURL(pluginName, releaseTag)
 	if err != nil {
 		// Check if plugin exists at all
 		available, listErr := m.GetAvailablePlugins()

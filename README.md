@@ -105,9 +105,15 @@ neko plugin available
 # Install a plugin
 neko plugin install <plugin-name>
 
+# Update installed plugins
+neko plugin update <plugin-name>
+neko plugin update --all
+
 # Uninstall a plugin
 neko plugin uninstall <plugin-name>
 ```
+
+Plugin install and update discovery uses plugin-specific V2 unit releases, not the repository's latest release. The `release` plugin is discovered from `plugin-release/vX.Y.Z` tags, and the `ui` plugin is discovered from `plugin-ui/vX.Y.Z` tags. Local installed versions are read from each installed `manifest.json`; remote versions are read from the selected plugin-specific release tag.
 
 ### Using Plugins
 

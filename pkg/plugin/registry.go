@@ -11,14 +11,20 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"sort"
 	"strings"
+
+	"golang.org/x/mod/semver"
 )
 
 const (
 	// DefaultRegistry is the default GitHub releases API URL for fetching plugins.
 	// This points to the neko-cli repository's releases endpoint.
 	DefaultRegistry = "https://api.github.com/repos/nekoman-hq/neko-cli/releases"
+
+	maxReleasePages = 10
 )
 
 // AvailablePlugin represents a plugin that is available for installation
@@ -33,6 +39,44 @@ type AvailablePlugin struct {
 // and download URLs.
 type Registry struct {
 	baseURL string
+}
+
+type pluginReleaseIdentity struct {
+	PublicName  string
+	UnitID      string
+	TagPrefix   string
+	AssetPrefix string
+	BinaryName  string
+}
+
+type registryAsset struct {
+	Name               string `json:"name"`
+	BrowserDownloadURL string `json:"browser_download_url"`
+	ID                 int    `json:"id"`
+}
+
+type registryRelease struct {
+	TagName    string          `json:"tag_name"`
+	Assets     []registryAsset `json:"assets"`
+	Draft      bool            `json:"draft"`
+	PreRelease bool            `json:"prerelease"`
+}
+
+var pluginReleaseIdentities = []pluginReleaseIdentity{
+	{
+		PublicName:  "release",
+		UnitID:      "plugin-release",
+		TagPrefix:   "plugin-release/v",
+		AssetPrefix: "plugin-release",
+		BinaryName:  "plugin-release",
+	},
+	{
+		PublicName:  "ui",
+		UnitID:      "plugin-ui",
+		TagPrefix:   "plugin-ui/v",
+		AssetPrefix: "plugin-ui",
+		BinaryName:  "plugin-ui",
+	},
 }
 
 // NewRegistry creates a new registry client using the default registry URL.
@@ -58,112 +102,73 @@ func NewRegistryWithURL(url string) *Registry {
 	}
 }
 
-// FetchAvailablePlugins retrieves the list of all plugins available in the registry.
-// It fetches the latest release and parses plugin information from the release assets.
-//
-// Plugin assets are expected to follow the naming pattern:
-// plugin-{name}_{version}_{OS}_{Arch}.tar.gz
-//
-// Returns:
-//   - A slice of AvailablePlugin structs containing plugin names and versions
-//   - An error if:
-//   - The latest version cannot be determined
-//   - The HTTP request fails
-//   - The response cannot be decoded
+// FetchAvailablePlugins retrieves the list of all known plugins available in the registry.
+// It lists repository releases, filters them by each plugin's V2 unit tag prefix,
+// and returns the highest semantic version for each plugin.
 func (r *Registry) FetchAvailablePlugins() ([]AvailablePlugin, error) {
-	latestVersion, err := r.GetLatestVersion()
+	releases, err := r.listReleases()
 	if err != nil {
 		return nil, err
-	}
-
-	// Get release assets
-	url := fmt.Sprintf("%s/tags/%s", r.baseURL, latestVersion)
-
-	resp, err := r.httpGetWithAuth(url)
-	if err != nil {
-		return nil, err
-	}
-	defer func(Body io.ReadCloser) {
-		_ = Body.Close()
-	}(resp.Body)
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to fetch release: %s", resp.Status)
-	}
-
-	var release struct {
-		Assets []struct {
-			Name string `json:"name"`
-		} `json:"assets"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		return nil, err
-	}
-
-	// Parse plugin names and versions from assets
-	// Pattern: plugin-{name}_{version}_{OS}_{Arch}.tar.gz
-	pluginMap := make(map[string]string) // name -> version
-	for _, asset := range release.Assets {
-		if strings.HasPrefix(asset.Name, "plugin-") && strings.HasSuffix(asset.Name, ".tar.gz") {
-			// Remove extension
-			name := strings.TrimSuffix(asset.Name, ".tar.gz")
-			// Split: plugin-release_2.3.0_Darwin_arm64 -> [plugin-release, 2.3.0, Darwin, arm64]
-			parts := strings.Split(name, "_")
-			if len(parts) >= 2 {
-				pluginName := strings.TrimPrefix(parts[0], "plugin-")
-				pluginVersion := parts[1]
-				// Only store if we haven't seen this plugin yet
-				if _, exists := pluginMap[pluginName]; !exists {
-					pluginMap[pluginName] = pluginVersion
-				}
-			}
-		}
 	}
 
 	var plugins []AvailablePlugin
-	for name, version := range pluginMap {
-		plugins = append(plugins, AvailablePlugin{
-			Name:    name,
-			Version: version,
-		})
+	for _, identity := range pluginReleaseIdentities {
+		if _, version, ok := selectLatestPluginRelease(releases, identity); ok {
+			plugins = append(plugins, AvailablePlugin{
+				Name:    identity.PublicName,
+				Version: version,
+			})
+		}
 	}
+
+	sort.Slice(plugins, func(i, j int) bool {
+		return plugins[i].Name < plugins[j].Name
+	})
 
 	return plugins, nil
 }
 
-// GetLatestVersion retrieves the tag name of the latest release from the registry.
+// GetLatestVersion retrieves the tag name of the latest release for a plugin.
 //
 // Returns:
-//   - The tag name string (e.g., "v1.2.3")
+//   - The tag name string (e.g., "plugin-release/v4.0.2")
 //   - An error if:
-//   - The HTTP request fails
-//   - The response status is not 200 OK
-//   - The response body cannot be decoded
-func (r *Registry) GetLatestVersion() (string, error) {
-	url := fmt.Sprintf("%s/latest", r.baseURL)
-
-	resp, err := r.httpGetWithAuth(url)
+//   - the plugin is unknown
+//   - the HTTP request fails
+//   - no matching plugin-specific release exists
+func (r *Registry) GetLatestVersion(pluginName string) (string, error) {
+	release, _, err := r.latestPluginRelease(pluginName)
 	if err != nil {
 		return "", err
 	}
-	defer func(Body io.ReadCloser) {
-		_ = Body.Close()
-	}(resp.Body)
+	return release.TagName, nil
+}
 
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("failed to fetch latest release: %s", resp.Status)
+// ResolveReleaseTag maps a user-supplied plugin version to the V2 unit release tag.
+// It accepts "latest", "4.0.2", "v4.0.2", or the exact unit tag.
+func (r *Registry) ResolveReleaseTag(pluginName, version string) (string, error) {
+	if version == "" || version == "latest" {
+		return r.GetLatestVersion(pluginName)
 	}
 
-	var release struct {
-		TagName string `json:"tag_name"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+	identity, err := pluginIdentity(pluginName)
+	if err != nil {
 		return "", err
 	}
 
-	return release.TagName, nil
+	if strings.HasPrefix(version, identity.TagPrefix) {
+		suffix := strings.TrimPrefix(version, identity.TagPrefix)
+		if !semver.IsValid("v" + suffix) {
+			return "", fmt.Errorf("invalid version %q for plugin %q", version, pluginName)
+		}
+		return version, nil
+	}
+
+	suffix := strings.TrimPrefix(version, "v")
+	if !semver.IsValid("v" + suffix) {
+		return "", fmt.Errorf("invalid version %q for plugin %q", version, pluginName)
+	}
+	return identity.TagPrefix + suffix, nil
 }
 
 // GetDownloadURL constructs the browser download URL for a specific plugin version.
@@ -186,7 +191,12 @@ func (r *Registry) GetLatestVersion() (string, error) {
 //   - The response cannot be decoded
 //   - No matching asset is found for the given OS/architecture combination
 func (r *Registry) GetDownloadURL(pluginName, releaseTag, osName, archName string) (string, error) {
-	url := fmt.Sprintf("%s/tags/%s", r.baseURL, releaseTag)
+	identity, err := pluginIdentity(pluginName)
+	if err != nil {
+		return "", err
+	}
+
+	url := fmt.Sprintf("%s/tags/%s", r.baseURL, url.PathEscape(releaseTag))
 	resp, err := r.httpGetWithAuth(url)
 	if err != nil {
 		return "", err
@@ -195,20 +205,17 @@ func (r *Registry) GetDownloadURL(pluginName, releaseTag, osName, archName strin
 		_ = Body.Close()
 	}(resp.Body)
 
-	var release struct {
-		Assets []struct {
-			Name               string `json:"name"`
-			BrowserDownloadURL string `json:"browser_download_url"`
-			ID                 int    `json:"id"`
-		} `json:"assets"`
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to fetch release %s for plugin %q: %s", releaseTag, pluginName, resp.Status)
 	}
 
+	var release registryRelease
 	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
 		return "", err
 	}
 
-	// Find asset matching pattern: plugin-{name}_{version}_{OS}_{Arch}.tar.gz
-	prefix := fmt.Sprintf("plugin-%s_", pluginName)
+	// Find asset matching pattern: plugin-{unit}_{version}_{OS}_{Arch}.tar.gz
+	prefix := fmt.Sprintf("%s_", identity.AssetPrefix)
 	suffix := fmt.Sprintf("_%s_%s.tar.gz", osName, archName)
 
 	for _, asset := range release.Assets {
@@ -227,15 +234,15 @@ func (r *Registry) GetDownloadURL(pluginName, releaseTag, osName, archName strin
 	}
 
 	if pluginExists {
-		return "", fmt.Errorf("plugin '%s' is not available for %s/%s (only available for other platforms)",
-			pluginName, osName, archName)
+		return "", fmt.Errorf("plugin %q in release %s is not available for %s/%s; available assets: %s",
+			pluginName, releaseTag, osName, archName, formatAssetNames(release.Assets))
 	}
 
-	return "", fmt.Errorf("plugin '%s' does not exist in release %s", pluginName, releaseTag)
+	return "", fmt.Errorf("plugin %q does not exist in release %s for %s/%s; available assets: %s",
+		pluginName, releaseTag, osName, archName, formatAssetNames(release.Assets))
 }
 
-// GetPluginVersion retrieves the version of a specific plugin from the latest release.
-// It reuses the plugin parsing logic from FetchAvailablePlugins.
+// GetPluginVersion retrieves the version of a specific plugin from its latest V2 unit release.
 //
 // Args:
 //   - pluginName: The name of the plugin to get the version for
@@ -244,18 +251,143 @@ func (r *Registry) GetDownloadURL(pluginName, releaseTag, osName, archName strin
 //   - The plugin version string (e.g., "2.3.0")
 //   - An error if the plugin cannot be found
 func (r *Registry) GetPluginVersion(pluginName string) (string, error) {
-	availablePlugins, err := r.FetchAvailablePlugins()
+	_, version, err := r.latestPluginRelease(pluginName)
+	return version, err
+}
+
+func (r *Registry) latestPluginRelease(pluginName string) (registryRelease, string, error) {
+	identity, err := pluginIdentity(pluginName)
 	if err != nil {
-		return "", err
+		return registryRelease{}, "", err
 	}
 
-	for _, plugin := range availablePlugins {
-		if plugin.Name == pluginName {
-			return plugin.Version, nil
+	releases, err := r.listReleases()
+	if err != nil {
+		return registryRelease{}, "", err
+	}
+
+	release, version, ok := selectLatestPluginRelease(releases, identity)
+	if !ok {
+		return registryRelease{}, "", fmt.Errorf("no plugin-specific release found for plugin %q with tag prefix %q",
+			pluginName, identity.TagPrefix)
+	}
+
+	return release, version, nil
+}
+
+func pluginIdentity(pluginName string) (pluginReleaseIdentity, error) {
+	for _, identity := range pluginReleaseIdentities {
+		if identity.PublicName == pluginName {
+			return identity, nil
+		}
+	}
+	return pluginReleaseIdentity{}, fmt.Errorf("unknown plugin %q; known plugins: %s", pluginName, knownPluginNames())
+}
+
+func knownPluginNames() string {
+	names := make([]string, 0, len(pluginReleaseIdentities))
+	for _, identity := range pluginReleaseIdentities {
+		names = append(names, identity.PublicName)
+	}
+	sort.Strings(names)
+	return strings.Join(names, ", ")
+}
+
+func (r *Registry) listReleases() ([]registryRelease, error) {
+	nextURL := fmt.Sprintf("%s?per_page=100", r.baseURL)
+	var releases []registryRelease
+
+	for page := 0; page < maxReleasePages && nextURL != ""; page++ {
+		resp, err := r.httpGetWithAuth(nextURL)
+		if err != nil {
+			return nil, err
+		}
+
+		pageReleases, linkHeader, err := decodeReleaseListResponse(resp)
+		if err != nil {
+			return nil, err
+		}
+		releases = append(releases, pageReleases...)
+		nextURL = nextPageURL(linkHeader)
+	}
+
+	return releases, nil
+}
+
+func decodeReleaseListResponse(resp *http.Response) ([]registryRelease, string, error) {
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", fmt.Errorf("failed to fetch releases: %s", resp.Status)
+	}
+
+	var releases []registryRelease
+	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
+		return nil, "", err
+	}
+
+	return releases, resp.Header.Get("Link"), nil
+}
+
+func selectLatestPluginRelease(releases []registryRelease, identity pluginReleaseIdentity) (registryRelease, string, bool) {
+	var selected registryRelease
+	var selectedSemver string
+	var selectedVersion string
+
+	for _, release := range releases {
+		if release.Draft || release.PreRelease {
+			continue
+		}
+		if !strings.HasPrefix(release.TagName, identity.TagPrefix) {
+			continue
+		}
+
+		version := strings.TrimPrefix(release.TagName, identity.TagPrefix)
+		versionSemver := "v" + version
+		if !semver.IsValid(versionSemver) {
+			continue
+		}
+
+		if selectedSemver == "" || semver.Compare(versionSemver, selectedSemver) > 0 {
+			selected = release
+			selectedSemver = versionSemver
+			selectedVersion = version
 		}
 	}
 
-	return "", fmt.Errorf("plugin '%s' not found in latest release", pluginName)
+	return selected, selectedVersion, selectedSemver != ""
+}
+
+func nextPageURL(linkHeader string) string {
+	for _, link := range strings.Split(linkHeader, ",") {
+		link = strings.TrimSpace(link)
+		if !strings.Contains(link, `rel="next"`) {
+			continue
+		}
+
+		start := strings.Index(link, "<")
+		end := strings.Index(link, ">")
+		if start >= 0 && end > start {
+			return link[start+1 : end]
+		}
+	}
+
+	return ""
+}
+
+func formatAssetNames(assets []registryAsset) string {
+	if len(assets) == 0 {
+		return "none"
+	}
+
+	names := make([]string, 0, len(assets))
+	for _, asset := range assets {
+		names = append(names, asset.Name)
+	}
+	sort.Strings(names)
+	return strings.Join(names, ", ")
 }
 
 // httpGetWithAuth performs an HTTP GET request with optional GitHub authentication.

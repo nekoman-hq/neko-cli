@@ -19,6 +19,8 @@ neko plugin install release
 
 This installs the plugin to `~/.neko/plugins/release/`.
 
+Plugin installation and updates resolve the newest release plugin version from plugin-specific V2 unit releases with the tag prefix `plugin-release/v`. The repository's latest release is not used for release plugin discovery. The local installed version comes from `~/.neko/plugins/release/manifest.json`; the remote version comes from the selected `plugin-release/vX.Y.Z` GitHub Release tag.
+
 ---
 
 ## Commands
