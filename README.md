@@ -113,7 +113,7 @@ neko plugin update --all
 neko plugin uninstall <plugin-name>
 ```
 
-Plugin install and update discovery uses plugin-specific V2 unit releases, not the repository's latest release. The `release` plugin is discovered from `plugin-release/vX.Y.Z` tags, and the `ui` plugin is discovered from `plugin-ui/vX.Y.Z` tags. Local installed versions are read from each installed `manifest.json`; remote versions are read from the selected plugin-specific release tag.
+Plugin available/install/update discovery uses the published `plugin-index.json` registry as its primary source, not the repository's latest release. Local installed versions are read from each installed `manifest.json`; remote plugin versions, release tags, and asset names come from the `plugin-registry` release asset. Until M2E removes it, a temporary fallback can still discover the built-in `release` and `ui` plugins from their plugin-specific V2 unit releases.
 
 ### Using Plugins
 
@@ -144,7 +144,7 @@ This repository releases itself with V2 multi-unit release state:
 - Neko CLI owns version/materialization/state, release commit, tag, push, and workflow dispatch.
 - GitHub Actions workflows own build, GitHub Release creation, and asset publishing.
 - Dry-run release planning needs no token and writes nothing.
-- Runtime plugin discovery, install, and update use `plugin-index.json` as the primary registry source. The index is expected as the `plugin-index.json` asset on the `plugin-registry` GitHub Release; `/releases/latest` is not used for plugin discovery. Until M2D publishes that release, install/update keeps an explicit temporary release-prefix fallback for the built-in `release` and `ui` plugins.
+- Runtime plugin discovery, install, and update use `plugin-index.json` as the primary registry source. The index is published as the `plugin-index.json` asset on the mutable `plugin-registry` GitHub Release after successful plugin releases; `/releases/latest` is not used for plugin discovery. Until M2E removes it, install/update keeps an explicit temporary release-prefix fallback for the built-in `release` and `ui` plugins.
 - Use `--verbose --describe` to see journal paths, commit/tag, workflow, dispatch state, run URL when resolvable, and recovery guidance.
 
 ### Global Flags

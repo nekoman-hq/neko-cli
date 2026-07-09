@@ -162,6 +162,25 @@ jobs:
             --notes "Release plugin-ui $RELEASE_VERSION" \
             --verify-tag
 
+      - name: Generate plugin registry index
+        shell: bash
+        env:
+          INDEX_OUTPUT: ${{ runner.temp }}/plugin-index.json
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_UNIT: ${{ inputs.unit }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: .github/scripts/generate-plugin-index.sh
+
+      - name: Publish plugin registry index
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          INDEX_PATH: ${{ runner.temp }}/plugin-index.json
+          PLUGIN_REGISTRY_TARGET_SHA: ${{ inputs.release_sha }}
+        run: .github/scripts/publish-plugin-index.sh
+
       - name: Publish summary
         shell: bash
         run: |
@@ -174,4 +193,5 @@ jobs:
             echo "- tag: \`$RELEASE_TAG\`"
             echo "- release_sha: \`$RELEASE_SHA\`"
             echo "- goreleaser_config: \`$GORELEASER_CONFIG\`"
+            echo "- plugin_registry: \`plugin-index.json\` published to \`plugin-registry\`"
           } >> "$GITHUB_STEP_SUMMARY"

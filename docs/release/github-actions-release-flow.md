@@ -46,6 +46,8 @@ For Nekocli's own units, `.github/workflows/release-neko-cli.yml`, `.github/work
 
 Publishing uses dedicated GoReleaser configs: `.goreleaser.cli.yaml`, `.goreleaser.plugin-release.yaml`, and `.goreleaser.plugin-ui.yaml`. Each config contains only that unit's build/archive/release definition. The root `.goreleaser.yaml` remains multi-artifact and is not used by production V2 publishing workflows. The `cli` workflow can publish with `goreleaser release` because `vX.Y.Z` is SemVer-compatible. Plugin workflows package with GoReleaser and use GitHub CLI to create the GitHub Release for the exact prefixed tag.
 
+After a plugin workflow successfully publishes its plugin GitHub Release, it generates and validates `plugin-index.json` from the checked-out release tag and publishes or replaces that asset on the mutable `plugin-registry` GitHub Release. `plugin-registry` is not a V2 release unit or product release; it is only the stable registry release that hosts the latest plugin index. Existing `plugin-registry` tags/releases are not moved or recreated, and plugin workflows do not use `/releases/latest` for plugin discovery or index publishing.
+
 `rejected` keeps the execution journal at `tag-pushed`, preserves the dispatch journal rejection, and does not roll back Git state.
 
 `unknown` also keeps the execution journal at `tag-pushed`. Neko CLI does not automatically retry uncertain dispatch or push outcomes.
