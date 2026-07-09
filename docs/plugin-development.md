@@ -261,7 +261,7 @@ builds:
 - **State update:** Version bumps are committed to `.neko/release.state.json`
 - **Manifest materialization:** Plugin releases update only their own `manifest.json`
 - **Workflow input:** GitHub Actions passes the released version to GoReleaser
-- **Registry index:** `neko release plugin-index` generates the public `plugin-index.json` from V2 plugin units, state, and manifests. Runtime plugin discovery, install, and update use that index as their primary source. Plugin release workflows publish it as the `plugin-index.json` asset on the mutable `plugin-registry` GitHub Release after successful plugin releases; the index is not committed as source. Until M2E removes it, runtime install/update keeps an explicit temporary release-prefix fallback for existing built-in plugins.
+- **Registry index:** `neko release plugin-index` generates the public `plugin-index.json` from V2 plugin units, state, and manifests. Runtime plugin discovery, install, and update use that index as their source of truth. Plugin release workflows publish it as the `plugin-index.json` asset on the mutable `plugin-registry` GitHub Release after successful plugin releases; the index is not committed as source. Release-prefix fallback discovery has been removed, so new plugins become available through the published index rather than registry Go-code mappings.
 
 To make a new plugin eligible for the generated index, add a V2 unit with `kind: "plugin"`, provide `plugin.name`, `plugin.manifest`, `plugin.assetPrefix`, and `plugin.binaryName`, add the matching state entry, and keep the manifest name/version synchronized with that state.
 

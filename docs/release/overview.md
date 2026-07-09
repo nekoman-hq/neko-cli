@@ -33,7 +33,7 @@ V2 is repository-root scoped and uses two files:
 
 V2 can be loaded, strictly parsed, validated, normalized, and used for unit workflows. `history` and `contributors` are unit-aware. `patch`, `minor`, and `major` support V2 dry-run planning with execution context, delivery resolution, version materialization planning, GitHub Actions workflow configuration, and Neko-owned Git release planning.
 
-Nekocli itself now has `cli`, `plugin-release`, and `plugin-ui` V2 units. `.neko/release.state.json` is authoritative for every releaseable version. `.plugin.release.neko.json` has been removed and must not be reintroduced. Each plugin release plan materializes only that unit's `manifest.json`. Plugin units declare `name`, `manifest`, `assetPrefix`, and `binaryName` metadata in V2 config so `neko release plugin-index` can generate the public registry contract without registry Go-code edits. Runtime plugin discovery, install, and update use `plugin-index.json` as the primary source from the `plugin-registry` GitHub Release asset; `/releases/latest` is not used for plugin discovery. Plugin release workflows publish or replace that asset after successful plugin releases. Until M2E removes it, an explicit temporary release-prefix fallback supports existing built-in plugins.
+Nekocli itself now has `cli`, `plugin-release`, and `plugin-ui` V2 units. `.neko/release.state.json` is authoritative for every releaseable version. `.plugin.release.neko.json` has been removed and must not be reintroduced. Each plugin release plan materializes only that unit's `manifest.json`. Plugin units declare `name`, `manifest`, `assetPrefix`, and `binaryName` metadata in V2 config so `neko release plugin-index` can generate the public registry contract without registry Go-code edits. Runtime plugin discovery, install, and update use `plugin-index.json` as the source of truth from the `plugin-registry` GitHub Release asset; `/releases/latest` and release-prefix fallback discovery are not used for plugin discovery. Plugin release workflows publish or replace that asset after successful plugin releases.
 
 V2 GitHub Actions non-dry-run public release commands are active. Neko CLI owns materialization, state update, targeted staging, release commit, unit tag, commit push, tag push, execution journal, dispatch journal, and workflow dispatch. GitHub Actions owns build, GitHub Release creation, and asset publishing from the pushed tag. V2 local delivery remains blocked.
 
@@ -67,7 +67,7 @@ Implemented now:
 - Dedicated GoReleaser configs for `cli`, `plugin-release`, and `plugin-ui`.
 - V2 plugin unit metadata validation for future plugin index generation.
 - Deterministic `plugin-index.json` generation from V2 plugin units, state, and manifests.
-- Runtime plugin registry reads `plugin-index.json` as its primary source with an explicit temporary release-prefix fallback.
+- Runtime plugin registry reads `plugin-index.json` as its source of truth; release-prefix fallback discovery has been removed.
 - Plugin release workflows publish/update the mutable `plugin-registry` release asset after successful plugin releases.
 - Public `neko release resume --unit <unit>` and read-only `--dry-run` recovery assessment.
 - Executor capability contracts for `goreleaser`, `jreleaser`, and `release-it`.
@@ -82,6 +82,6 @@ Not implemented yet:
 
 - Automatic multi-unit migration.
 - V2 local `release-it` execution.
-- Removing the temporary plugin registry release-prefix fallback.
+- End-to-end install/update smoke testing against the published plugin registry.
 - V2 local non-dry-run release execution.
 - Public standalone dispatch and retry commands.

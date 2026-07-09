@@ -8,7 +8,6 @@ package plugin
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -27,8 +26,6 @@ const (
 
 	DefaultPluginIndexReleaseTag = "plugin-registry"
 	DefaultPluginIndexAssetName  = "plugin-index.json"
-
-	maxReleasePages = 10
 )
 
 // AvailablePlugin represents a plugin that is available for installation
@@ -71,14 +68,6 @@ type pluginIndexEntry struct {
 	Description string `json:"description"`
 }
 
-type temporaryBuiltinPluginFallback struct {
-	PublicName  string
-	UnitID      string
-	TagPrefix   string
-	AssetPrefix string
-	BinaryName  string
-}
-
 type registryAsset struct {
 	Name               string `json:"name"`
 	BrowserDownloadURL string `json:"browser_download_url"`
@@ -90,32 +79,6 @@ type registryRelease struct {
 	Assets     []registryAsset `json:"assets"`
 	Draft      bool            `json:"draft"`
 	PreRelease bool            `json:"prerelease"`
-}
-
-type pluginIndexUnavailableError struct {
-	message string
-}
-
-func (err pluginIndexUnavailableError) Error() string {
-	return err.message
-}
-
-// TODO(M2E): remove after plugin-index publishing is enabled and release/plugin-ui are available through plugin-registry.
-var temporaryBuiltinPluginFallbacks = []temporaryBuiltinPluginFallback{
-	{
-		PublicName:  "release",
-		UnitID:      "plugin-release",
-		TagPrefix:   "plugin-release/v",
-		AssetPrefix: "plugin-release",
-		BinaryName:  "plugin-release",
-	},
-	{
-		PublicName:  "ui",
-		UnitID:      "plugin-ui",
-		TagPrefix:   "plugin-ui/v",
-		AssetPrefix: "plugin-ui",
-		BinaryName:  "plugin-ui",
-	},
 }
 
 // NewRegistry creates a new registry client using the default registry URL.
@@ -153,29 +116,24 @@ func NewRegistryWithHTTPClient(client *http.Client) *Registry {
 }
 
 // FetchAvailablePlugins retrieves available plugins from plugin-index.json.
-// If the index has not been published yet, it uses the explicit temporary
-// release-prefix fallback.
 func (r *Registry) FetchAvailablePlugins() ([]AvailablePlugin, error) {
 	index, err := r.loadPluginIndex()
-	if err == nil {
-		plugins := make([]AvailablePlugin, 0, len(index.Plugins))
-		for _, entry := range index.Plugins {
-			plugins = append(plugins, AvailablePlugin{
-				Name:        entry.Name,
-				Version:     entry.Version,
-				Description: entry.Description,
-			})
-		}
-		sort.Slice(plugins, func(i, j int) bool {
-			return plugins[i].Name < plugins[j].Name
-		})
-		return plugins, nil
-	}
-	if !isPluginIndexUnavailable(err) {
+	if err != nil {
 		return nil, err
 	}
 
-	return r.fetchAvailablePluginsFromTemporaryFallback()
+	plugins := make([]AvailablePlugin, 0, len(index.Plugins))
+	for _, entry := range index.Plugins {
+		plugins = append(plugins, AvailablePlugin{
+			Name:        entry.Name,
+			Version:     entry.Version,
+			Description: entry.Description,
+		})
+	}
+	sort.Slice(plugins, func(i, j int) bool {
+		return plugins[i].Name < plugins[j].Name
+	})
+	return plugins, nil
 }
 
 // GetLatestVersion retrieves the latest release tag for a plugin from the index.
@@ -261,36 +219,18 @@ func (r *Registry) GetPluginVersion(pluginName string) (string, error) {
 
 func (r *Registry) pluginMetadata(pluginName string) (pluginIndexEntry, error) {
 	index, err := r.loadPluginIndex()
-	if err == nil {
-		return index.entry(pluginName)
-	}
-	if !isPluginIndexUnavailable(err) {
-		return pluginIndexEntry{}, err
-	}
-
-	fallback, err := temporaryFallback(pluginName)
 	if err != nil {
 		return pluginIndexEntry{}, err
 	}
-	return pluginIndexEntry{
-		Name:        fallback.PublicName,
-		Unit:        fallback.UnitID,
-		TagPrefix:   fallback.TagPrefix,
-		AssetPrefix: fallback.AssetPrefix,
-		BinaryName:  fallback.BinaryName,
-	}, nil
+	return index.entry(pluginName)
 }
 
 func (r *Registry) pluginEntry(pluginName string) (pluginIndexEntry, error) {
 	index, err := r.loadPluginIndex()
-	if err == nil {
-		return index.entry(pluginName)
-	}
-	if !isPluginIndexUnavailable(err) {
+	if err != nil {
 		return pluginIndexEntry{}, err
 	}
-
-	return r.pluginEntryFromTemporaryFallback(pluginName)
+	return index.entry(pluginName)
 }
 
 func (idx *pluginIndex) entry(pluginName string) (pluginIndexEntry, error) {
@@ -354,10 +294,10 @@ func (r *Registry) pluginIndexDownloadURL() (string, error) {
 		_ = Body.Close()
 	}(resp.Body)
 
-	if resp.StatusCode == http.StatusNotFound {
-		return "", pluginIndexUnavailableError{message: fmt.Sprintf("failed to load plugin index from plugin-registry release: %s", resp.Status)}
-	}
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusNotFound {
+			return "", fmt.Errorf("failed to load plugin index from plugin-registry release: release or asset not found")
+		}
 		return "", fmt.Errorf("failed to load plugin index from plugin-registry release: %s", resp.Status)
 	}
 
@@ -370,7 +310,7 @@ func (r *Registry) pluginIndexDownloadURL() (string, error) {
 			return asset.BrowserDownloadURL, nil
 		}
 	}
-	return "", pluginIndexUnavailableError{message: fmt.Sprintf("failed to load plugin index from plugin-registry release: asset %q not found", r.indexAssetName)}
+	return "", fmt.Errorf("failed to load plugin index from plugin-registry release: release or asset not found")
 }
 
 func validatePluginIndex(index *pluginIndex) error {
@@ -414,11 +354,6 @@ func validIndexVersion(version string) bool {
 	return version != "" && !strings.HasPrefix(version, "v") && semver.IsValid("v"+version)
 }
 
-func isPluginIndexUnavailable(err error) bool {
-	var unavailable pluginIndexUnavailableError
-	return errors.As(err, &unavailable)
-}
-
 func (r *Registry) fetchReleaseByTag(releaseTag string) (registryRelease, error) {
 	releaseURL := fmt.Sprintf("%s/tags/%s", r.baseURL, neturl.PathEscape(releaseTag))
 	resp, err := r.httpGetWithAuth(releaseURL)
@@ -438,153 +373,6 @@ func (r *Registry) fetchReleaseByTag(releaseTag string) (registryRelease, error)
 		return registryRelease{}, err
 	}
 	return release, nil
-}
-
-func (r *Registry) fetchAvailablePluginsFromTemporaryFallback() ([]AvailablePlugin, error) {
-	releases, err := r.listReleases()
-	if err != nil {
-		return nil, err
-	}
-
-	var plugins []AvailablePlugin
-	for _, fallback := range temporaryBuiltinPluginFallbacks {
-		if _, version, ok := selectLatestTemporaryFallbackRelease(releases, fallback); ok {
-			plugins = append(plugins, AvailablePlugin{Name: fallback.PublicName, Version: version})
-		}
-	}
-	sort.Slice(plugins, func(i, j int) bool {
-		return plugins[i].Name < plugins[j].Name
-	})
-	return plugins, nil
-}
-
-func (r *Registry) pluginEntryFromTemporaryFallback(pluginName string) (pluginIndexEntry, error) {
-	fallback, err := temporaryFallback(pluginName)
-	if err != nil {
-		return pluginIndexEntry{}, err
-	}
-
-	releases, err := r.listReleases()
-	if err != nil {
-		return pluginIndexEntry{}, err
-	}
-	_, version, ok := selectLatestTemporaryFallbackRelease(releases, fallback)
-	if !ok {
-		return pluginIndexEntry{}, fmt.Errorf("temporary plugin-index fallback found no plugin-specific release for plugin %q with tag prefix %q",
-			pluginName, fallback.TagPrefix)
-	}
-
-	return pluginIndexEntry{
-		Name:        fallback.PublicName,
-		Unit:        fallback.UnitID,
-		Version:     version,
-		Tag:         fallback.TagPrefix + version,
-		TagPrefix:   fallback.TagPrefix,
-		AssetPrefix: fallback.AssetPrefix,
-		BinaryName:  fallback.BinaryName,
-	}, nil
-}
-
-func temporaryFallback(pluginName string) (temporaryBuiltinPluginFallback, error) {
-	for _, fallback := range temporaryBuiltinPluginFallbacks {
-		if fallback.PublicName == pluginName {
-			return fallback, nil
-		}
-	}
-	return temporaryBuiltinPluginFallback{}, fmt.Errorf("unknown plugin %q; available plugins: %s", pluginName, temporaryFallbackPluginNames())
-}
-
-func temporaryFallbackPluginNames() string {
-	names := make([]string, 0, len(temporaryBuiltinPluginFallbacks))
-	for _, fallback := range temporaryBuiltinPluginFallbacks {
-		names = append(names, fallback.PublicName)
-	}
-	sort.Strings(names)
-	return strings.Join(names, ", ")
-}
-
-func (r *Registry) listReleases() ([]registryRelease, error) {
-	nextURL := fmt.Sprintf("%s?per_page=100", r.baseURL)
-	var releases []registryRelease
-
-	for page := 0; page < maxReleasePages && nextURL != ""; page++ {
-		resp, err := r.httpGetWithAuth(nextURL)
-		if err != nil {
-			return nil, err
-		}
-
-		pageReleases, linkHeader, err := decodeReleaseListResponse(resp)
-		if err != nil {
-			return nil, err
-		}
-		releases = append(releases, pageReleases...)
-		nextURL = nextPageURL(linkHeader)
-	}
-
-	return releases, nil
-}
-
-func decodeReleaseListResponse(resp *http.Response) ([]registryRelease, string, error) {
-	defer func(Body io.ReadCloser) {
-		_ = Body.Close()
-	}(resp.Body)
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, "", fmt.Errorf("failed to fetch releases: %s", resp.Status)
-	}
-
-	var releases []registryRelease
-	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
-		return nil, "", err
-	}
-
-	return releases, resp.Header.Get("Link"), nil
-}
-
-func selectLatestTemporaryFallbackRelease(releases []registryRelease, fallback temporaryBuiltinPluginFallback) (registryRelease, string, bool) {
-	var selected registryRelease
-	var selectedSemver string
-	var selectedVersion string
-
-	for _, release := range releases {
-		if release.Draft || release.PreRelease {
-			continue
-		}
-		if !strings.HasPrefix(release.TagName, fallback.TagPrefix) {
-			continue
-		}
-
-		version := strings.TrimPrefix(release.TagName, fallback.TagPrefix)
-		versionSemver := "v" + version
-		if !semver.IsValid(versionSemver) {
-			continue
-		}
-
-		if selectedSemver == "" || semver.Compare(versionSemver, selectedSemver) > 0 {
-			selected = release
-			selectedSemver = versionSemver
-			selectedVersion = version
-		}
-	}
-
-	return selected, selectedVersion, selectedSemver != ""
-}
-
-func nextPageURL(linkHeader string) string {
-	for _, link := range strings.Split(linkHeader, ",") {
-		link = strings.TrimSpace(link)
-		if !strings.Contains(link, `rel="next"`) {
-			continue
-		}
-
-		start := strings.Index(link, "<")
-		end := strings.Index(link, ">")
-		if start >= 0 && end > start {
-			return link[start+1 : end]
-		}
-	}
-
-	return ""
 }
 
 func formatAssetNames(assets []registryAsset) string {
