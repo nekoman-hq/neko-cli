@@ -1,6 +1,6 @@
 {
   "name": "ui",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "With this plugin you can add UI components from the neko-ui library to your react-native project.",
   "author": "nekoman-hq",
   "commands": [
