@@ -13,8 +13,9 @@ type manifestCommand struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Flags       []struct {
-		Name string `json:"name"`
-		Type string `json:"type"`
+		Name        string `json:"name"`
+		Type        string `json:"type"`
+		Description string `json:"description"`
 	} `json:"flags"`
 }
 
@@ -118,6 +119,26 @@ func TestManifestMatchesPublicReleaseContract(t *testing.T) {
 	}
 }
 
+func TestManifestClarifiesReleaseAndPluginUnitFlagDescriptions(t *testing.T) {
+	commands := loadManifestCommands(t)
+	initDescriptions := flagDescriptions(commands["init"])
+
+	for _, commandName := range []string{"init", "unit-add"} {
+		descriptions := flagDescriptions(commands[commandName])
+		for _, flagName := range []string{"kind", "plugin-name", "plugin-manifest", "plugin-asset-prefix", "plugin-binary-name"} {
+			if descriptions[flagName] != initDescriptions[flagName] {
+				t.Fatalf("%s description for %s is not consistent with init", commandName, flagName)
+			}
+		}
+
+		assertManifestDescriptionContains(t, commandName, "kind", descriptions["kind"], "release (default)", "normal", "services", "Neko CLI plugins")
+		for _, flagName := range []string{"plugin-name", "plugin-manifest", "plugin-asset-prefix", "plugin-binary-name"} {
+			assertManifestDescriptionContains(t, commandName, flagName, descriptions[flagName], "Neko CLI plugin", "--kind plugin", "required")
+		}
+		assertManifestDescriptionContains(t, commandName, "plugin-asset-prefix", descriptions["plugin-asset-prefix"], "must equal unit id")
+	}
+}
+
 func TestManifestCommandsRouteInMain(t *testing.T) {
 	commands := loadManifestCommands(t)
 	data, err := os.ReadFile("main.go")
@@ -164,6 +185,26 @@ func TestReleaseDocsMentionManifestCommandsAndNoUnsupportedCommands(t *testing.T
 	for _, unsupported := range []string{"neko release dispatch", "neko release retry"} {
 		if strings.Contains(combined, unsupported) {
 			t.Fatalf("docs mention unsupported public command %q", unsupported)
+		}
+	}
+}
+
+func flagDescriptions(command manifestCommand) map[string]string {
+	descriptions := map[string]string{}
+	for _, flag := range command.Flags {
+		descriptions[flag.Name] = flag.Description
+	}
+	return descriptions
+}
+
+func assertManifestDescriptionContains(t *testing.T, commandName, flagName, description string, fragments ...string) {
+	t.Helper()
+	if strings.TrimSpace(description) == "" {
+		t.Fatalf("%s flag %s has empty description", commandName, flagName)
+	}
+	for _, fragment := range fragments {
+		if !strings.Contains(description, fragment) {
+			t.Fatalf("%s flag %s description %q does not contain %q", commandName, flagName, description, fragment)
 		}
 	}
 }

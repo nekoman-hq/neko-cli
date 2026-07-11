@@ -169,27 +169,57 @@ func renderPluginCommandHelp(w io.Writer, pluginName string, pluginCmd plugin.Co
 			return err
 		}
 	} else {
-		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-		for _, flag := range pluginCmd.Flags {
-			required := ""
-			if flag.Required {
-				required = " required"
-			}
-			defaultValue := formatFlagDefault(flag)
-			if defaultValue != "" {
-				defaultValue = " default=" + defaultValue
-			}
-			if _, err := fmt.Fprintf(tw, "  --%s\t%s%s%s\t%s\n", flag.Name, flag.Type, required, defaultValue, flag.Description); err != nil {
+		generalFlags, pluginFlags := splitPluginUnitFlags(pluginCmd.Flags)
+		if len(generalFlags) == 0 {
+			if _, err := fmt.Fprintln(w, "  No general command-specific flags declared."); err != nil {
 				return err
 			}
-		}
-		if err := tw.Flush(); err != nil {
+		} else if err := renderPluginFlagTable(w, generalFlags); err != nil {
 			return err
+		}
+		if len(pluginFlags) > 0 {
+			if _, err := fmt.Fprintln(w, "\nNeko CLI plugin unit flags (only with --kind plugin):"); err != nil {
+				return err
+			}
+			if err := renderPluginFlagTable(w, pluginFlags); err != nil {
+				return err
+			}
 		}
 	}
 
 	_, err := fmt.Fprintf(w, "\nUsage: neko %s %s [flags]\n", pluginName, pluginCmd.Name)
 	return err
+}
+
+func splitPluginUnitFlags(flags []plugin.Flag) ([]plugin.Flag, []plugin.Flag) {
+	generalFlags := make([]plugin.Flag, 0, len(flags))
+	pluginFlags := make([]plugin.Flag, 0)
+	for _, flag := range flags {
+		if strings.HasPrefix(flag.Name, "plugin-") {
+			pluginFlags = append(pluginFlags, flag)
+			continue
+		}
+		generalFlags = append(generalFlags, flag)
+	}
+	return generalFlags, pluginFlags
+}
+
+func renderPluginFlagTable(w io.Writer, flags []plugin.Flag) error {
+	tw := tabwriter.NewWriter(w, 0, 0, 2, 32, 0)
+	for _, flag := range flags {
+		required := ""
+		if flag.Required {
+			required = " required"
+		}
+		defaultValue := formatFlagDefault(flag)
+		if defaultValue != "" {
+			defaultValue = " default=" + defaultValue
+		}
+		if _, err := fmt.Fprintf(tw, "  --%s\t%s%s%s\t%s\n", flag.Name, flag.Type, required, defaultValue, flag.Description); err != nil {
+			return err
+		}
+	}
+	return tw.Flush()
 }
 
 func formatFlagDefault(flag plugin.Flag) string {

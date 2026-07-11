@@ -32,6 +32,67 @@ Core terms:
 
 Multi-unit repositories require `--unit` for unit-scoped commands.
 
+## Normal Release Units Vs Neko CLI Plugin Units
+
+Normal release units are the default for services, apps, CLIs, SDKs,
+libraries, and backend modules. CLI commands use `--kind release` by default,
+but V2 JSON omits `kind` for normal units. Normal units do not have a `plugin`
+block, do not contribute to `plugin-index.json`, and do not use the
+`plugin-registry` GitHub Release.
+
+Neko CLI plugin units are only for plugins distributed through
+`neko plugin install` and `neko plugin update`. They use `kind: "plugin"` in
+V2 JSON, require the `plugin` metadata block, are included in
+`plugin-index.json`, and that index is published as an asset on the mutable
+`plugin-registry` GitHub Release.
+
+Do I need plugin fields in a normal repository? No. A repository can contain
+only normal release units and needs no plugin metadata or plugin registry.
+
+When do I use `kind=plugin`? Only when publishing an actual Neko CLI plugin.
+Plugin flags without `--kind plugin` are invalid.
+
+Normal release unit JSON:
+
+```json
+{
+  "id": "api",
+  "displayName": "Onetake API",
+  "paths": ["apps/api/**"],
+  "workingDirectory": ".",
+  "tagPrefix": "api/v",
+  "executor": {
+    "type": "jreleaser",
+    "delivery": "github-actions",
+    "workflow": ".github/workflows/release-api.yml"
+  }
+}
+```
+
+Neko CLI plugin unit JSON:
+
+```json
+{
+  "id": "plugin-release",
+  "displayName": "neko-cli release plugin",
+  "paths": ["plugin/release/**", "docs/plugins/release.md"],
+  "workingDirectory": ".",
+  "tagPrefix": "plugin-release/v",
+  "kind": "plugin",
+  "plugin": {
+    "name": "release",
+    "manifest": "plugin/release/manifest.json",
+    "assetPrefix": "plugin-release",
+    "binaryName": "plugin-release"
+  },
+  "executor": {
+    "type": "goreleaser",
+    "delivery": "github-actions",
+    "workflow": ".github/workflows/release-plugin-release.yml"
+  }
+}
+```
+
 ## Stable Lifecycle
 
 ```bash

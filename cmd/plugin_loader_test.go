@@ -76,6 +76,61 @@ func TestPluginCommandHelpRendersManifestFlags(t *testing.T) {
 	assertContains(t, output, "--dry-run")
 	assertContains(t, output, "bool default=false")
 	assertContains(t, output, "Usage: neko release patch [flags]")
+	assertNotContains(t, output, "Neko CLI plugin unit flags")
+}
+
+func TestPluginCommandHelpGroupsPluginUnitFlags(t *testing.T) {
+	manifest := plugin.Manifest{
+		Name:        "release",
+		Version:     "4.0.1",
+		Description: "Release management plugin",
+		Commands: []plugin.Command{
+			{
+				Name:        "init",
+				Description: "Initialize release configuration",
+				Outputs:     []string{"text", "json"},
+				Flags: []plugin.Flag{
+					{Name: "unit", Type: "string", Description: "Release unit id", Required: false, Default: "cli"},
+					{Name: "kind", Type: "string", Description: "Unit kind", Required: false, Default: "release"},
+					{Name: "plugin-name", Type: "string", Description: "Public Neko CLI plugin name; only for --kind plugin", Required: false},
+					{Name: "plugin-manifest", Type: "string", Description: "Neko CLI plugin manifest path; only for --kind plugin", Required: false},
+				},
+			},
+		},
+	}
+	cmd := CreatePluginCommand(manifest)
+
+	output, err := executeTestCommand(cmd, "init", "--help")
+	if err != nil {
+		t.Fatalf("expected command help to render without error: %v", err)
+	}
+
+	flagsIndex := strings.Index(output, "\nFlags:\n")
+	pluginIndex := strings.Index(output, "\nNeko CLI plugin unit flags (only with --kind plugin):\n")
+	if flagsIndex < 0 || pluginIndex < 0 || flagsIndex >= pluginIndex {
+		t.Fatalf("expected plugin flags after normal flags section, got:\n%s", output)
+	}
+	normalSection := output[flagsIndex:pluginIndex]
+	pluginSection := output[pluginIndex:]
+	assertContains(t, normalSection, "--unit")
+	assertContains(t, normalSection, "--kind")
+	assertContains(t, normalSection, "string default=release")
+	assertNotContains(t, normalSection, "--plugin-name")
+	assertContains(t, pluginSection, "--plugin-name")
+	assertContains(t, pluginSection, "Public Neko CLI plugin name")
+	assertContains(t, pluginSection, "--plugin-manifest")
+	assertContains(t, pluginSection, "only for --kind plugin")
+	assertContains(t, output, "Usage: neko release init [flags]")
+
+	initCmd, _, err := cmd.Find([]string{"init"})
+	if err != nil {
+		t.Fatalf("find init command: %v", err)
+	}
+	for _, name := range []string{"unit", "kind", "plugin-name", "plugin-manifest"} {
+		if initCmd.Flags().Lookup(name) == nil {
+			t.Fatalf("expected registered flag %q", name)
+		}
+	}
 }
 
 func TestUnknownPluginCommandReturnsManifestScopedError(t *testing.T) {
@@ -260,5 +315,12 @@ func assertContains(t *testing.T, haystack, needle string) {
 	t.Helper()
 	if !strings.Contains(haystack, needle) {
 		t.Fatalf("expected output to contain %q\noutput:\n%s", needle, haystack)
+	}
+}
+
+func assertNotContains(t *testing.T, haystack, needle string) {
+	t.Helper()
+	if strings.Contains(haystack, needle) {
+		t.Fatalf("expected output not to contain %q\noutput:\n%s", needle, haystack)
 	}
 }

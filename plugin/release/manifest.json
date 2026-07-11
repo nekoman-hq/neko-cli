@@ -76,31 +76,31 @@
           "type": "string",
           "required": false,
           "default": "release",
-          "description": "Release unit kind (release|plugin)"
+          "description": "Unit kind: release (default) for normal services, apps, CLIs, SDKs, libraries, and backend modules; plugin only for Neko CLI plugins"
         },
         {
           "name": "plugin-name",
           "type": "string",
           "required": false,
-          "description": "Public plugin name, required when kind=plugin"
+          "description": "Public Neko CLI plugin name; only for --kind plugin and required there"
         },
         {
           "name": "plugin-manifest",
           "type": "string",
           "required": false,
-          "description": "Repository-root-relative plugin manifest path, required when kind=plugin"
+          "description": "Neko CLI plugin manifest path relative to repository root; only for --kind plugin and required there"
         },
         {
           "name": "plugin-asset-prefix",
           "type": "string",
           "required": false,
-          "description": "Plugin release asset prefix, required when kind=plugin and must match the unit id"
+          "description": "Neko CLI plugin release asset prefix; only for --kind plugin, required there, and must equal unit id"
         },
         {
           "name": "plugin-binary-name",
           "type": "string",
           "required": false,
-          "description": "Plugin executable name in release archives, required when kind=plugin"
+          "description": "Neko CLI plugin executable name in release archives; only for --kind plugin and required there"
         },
         {
           "name": "force",
@@ -183,31 +183,31 @@
           "type": "string",
           "required": false,
           "default": "release",
-          "description": "Release unit kind (release|plugin)"
+          "description": "Unit kind: release (default) for normal services, apps, CLIs, SDKs, libraries, and backend modules; plugin only for Neko CLI plugins"
         },
         {
           "name": "plugin-name",
           "type": "string",
           "required": false,
-          "description": "Public plugin name, required when kind=plugin"
+          "description": "Public Neko CLI plugin name; only for --kind plugin and required there"
         },
         {
           "name": "plugin-manifest",
           "type": "string",
           "required": false,
-          "description": "Repository-root-relative plugin manifest path, required when kind=plugin"
+          "description": "Neko CLI plugin manifest path relative to repository root; only for --kind plugin and required there"
         },
         {
           "name": "plugin-asset-prefix",
           "type": "string",
           "required": false,
-          "description": "Plugin release asset prefix, required when kind=plugin and must match the unit id"
+          "description": "Neko CLI plugin release asset prefix; only for --kind plugin, required there, and must equal unit id"
         },
         {
           "name": "plugin-binary-name",
           "type": "string",
           "required": false,
-          "description": "Plugin executable name in release archives, required when kind=plugin"
+          "description": "Neko CLI plugin executable name in release archives; only for --kind plugin and required there"
         }
       ]
     },

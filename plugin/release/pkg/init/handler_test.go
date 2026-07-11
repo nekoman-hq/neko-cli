@@ -49,6 +49,41 @@ func TestGetAvailableOptionsExposesV2OnlyInitOptions(t *testing.T) {
 	}
 }
 
+func TestGetAvailableOptionsClarifiesPluginOnlyOptions(t *testing.T) {
+	resp, err := GetAvailableOptions()
+	if err != nil {
+		t.Fatalf("GetAvailableOptions: %v", err)
+	}
+	rows := initOptionRows(t, resp)
+	for _, row := range rows {
+		for _, key := range []string{"option", "values", "required", "description"} {
+			if _, ok := row[key]; !ok {
+				t.Fatalf("init-options row missing %s: %#v", key, row)
+			}
+		}
+	}
+
+	byName := map[string]map[string]any{}
+	for _, row := range rows {
+		byName[rowString(t, row, "option")] = row
+	}
+	kindDescription := rowString(t, byName["kind"], "description")
+	assertInitOptionContains(t, "kind", kindDescription, "release is the default", "normal release units", "Neko CLI plugins", "invalid unless kind=plugin")
+
+	for _, option := range []string{"plugin-name", "plugin-manifest", "plugin-asset-prefix", "plugin-binary-name"} {
+		row := byName[option]
+		if rowString(t, row, "required") != "when kind=plugin" {
+			t.Fatalf("%s required value = %#v", option, row["required"])
+		}
+		description := rowString(t, row, "description")
+		assertInitOptionContains(t, option, description, "Only with kind=plugin", "Neko CLI plugin")
+		if strings.Contains(strings.ToLower(description), "ignored") {
+			t.Fatalf("%s must not say plugin fields are ignored: %q", option, description)
+		}
+	}
+	assertInitOptionContains(t, "plugin-name", rowString(t, byName["plugin-name"], "description"), "Normal repositories do not use plugin fields")
+}
+
 func TestBuildV2InitConfigRejectsLegacyFlags(t *testing.T) {
 	for _, legacy := range []string{"project-type", "release-system", "metadata"} {
 		_, err := buildV2InitConfigFromFlags(map[string]any{
@@ -1032,6 +1067,33 @@ func TestManifestExposesV2InitFlagsOnly(t *testing.T) {
 	}
 
 	t.Fatal("init command not found")
+}
+
+func initOptionRows(t *testing.T, resp *plugin.Response) []map[string]any {
+	t.Helper()
+	items, ok := resp.Data["items"].([]map[string]any)
+	if !ok {
+		t.Fatalf("unexpected init-options data: %#v", resp.Data["items"])
+	}
+	return items
+}
+
+func rowString(t *testing.T, row map[string]any, key string) string {
+	t.Helper()
+	value, ok := row[key].(string)
+	if !ok {
+		t.Fatalf("row key %s is not a string: %#v", key, row)
+	}
+	return value
+}
+
+func assertInitOptionContains(t *testing.T, option, description string, fragments ...string) {
+	t.Helper()
+	for _, fragment := range fragments {
+		if !strings.Contains(description, fragment) {
+			t.Fatalf("init-options %s description %q does not contain %q", option, description, fragment)
+		}
+	}
 }
 
 func initOptionNames(t *testing.T, resp *plugin.Response) map[string]bool {

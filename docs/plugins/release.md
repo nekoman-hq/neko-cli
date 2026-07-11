@@ -31,7 +31,7 @@ Copy-ready Release V2 and plugin registry examples live in [Release V2 Examples]
 
 ### `neko release init`
 
-Initialize a new V2 release configuration for a single non-plugin release unit.
+Initialize a new V2 release configuration for a normal release unit by default. Use `--kind plugin` only for Neko CLI plugins.
 
 **Usage:**
 ```bash
@@ -56,14 +56,14 @@ neko release init --executor=<executor> --delivery=<delivery> [flags]
 | `--tag-prefix` | string | `v` | Release tag prefix |
 | `--working-directory` | string | `.` | Unit working directory |
 | `--paths` | string | `**` | Comma-separated unit path globs |
-| `--kind` | string | `release` | Unit kind: `release` or `plugin` |
-| `--plugin-name` | string | | Public plugin name, required when `--kind plugin` |
-| `--plugin-manifest` | string | | Repository-root-relative manifest path, required when `--kind plugin` |
-| `--plugin-asset-prefix` | string | | Release asset prefix, required when `--kind plugin`; must match unit id |
-| `--plugin-binary-name` | string | | Plugin executable name, required when `--kind plugin` |
+| `--kind` | string | `release` | `release` is the default for normal services, apps, CLIs, SDKs, libraries, and backend modules; `plugin` is only for Neko CLI plugins |
+| `--plugin-name` | string | | Public Neko CLI plugin name; only for `--kind plugin` and required there |
+| `--plugin-manifest` | string | | Repository-root-relative Neko CLI plugin manifest path; only for `--kind plugin` and required there |
+| `--plugin-asset-prefix` | string | | Neko CLI plugin release asset prefix; only for `--kind plugin`, required there, and must match unit id |
+| `--plugin-binary-name` | string | | Neko CLI plugin executable name in release archives; only for `--kind plugin` and required there |
 | `--force` | bool | `false` | Recreate existing V2 config/state |
 
-`release init` no longer creates `.release.neko.json`. Existing V1 repositories should use `neko release migrate`. `--kind plugin` creates one plugin unit with V2 plugin metadata. Plugin unit ids must start with `plugin-`, plugin tag prefixes must be `<unit-id>/v`, and plugin asset prefixes must match the unit id. Use `neko release unit-add` to append units to an existing V2 configuration. Workflow template generation and executor scaffolding are not implemented by `init` or `unit-add` yet.
+`release init` no longer creates `.release.neko.json`. Existing V1 repositories should use `neko release migrate`. `--kind release` is the CLI default for normal release units; V2 JSON omits `kind` for those units, and they do not use plugin metadata or the plugin registry. `--kind plugin` creates one Neko CLI plugin unit with V2 plugin metadata. Plugin flags without `--kind plugin` are invalid. Plugin unit ids must start with `plugin-`, plugin tag prefixes must be `<unit-id>/v`, and plugin asset prefixes must match the unit id. Use `neko release unit-add` to append units to an existing V2 configuration. Workflow template generation and executor scaffolding are not implemented by `init` or `unit-add` yet. See [Normal release units vs Neko CLI plugin units](../release/examples.md#normal-release-units-vs-neko-cli-plugin-units).
 
 **Examples:**
 ```bash
@@ -125,7 +125,7 @@ neko release unit-add \
   --paths="apps/api/**"
 ```
 
-`unit-add` uses the same unit flags as `release init`, including `--kind plugin` plus `--plugin-name`, `--plugin-manifest`, `--plugin-asset-prefix`, and `--plugin-binary-name` for plugin units. It requires existing V2 config/state, preserves existing units in order, appends the new unit at the end, and fails for duplicate unit ids, duplicate plugin names, overlapping tag prefixes, missing workflows, or missing plugin manifests.
+`unit-add` uses the same unit flags as `release init`. The plugin metadata flags are only for `--kind plugin` Neko CLI plugin units; normal repositories can contain only normal release units and need no plugin metadata or plugin registry. It requires existing V2 config/state, preserves existing units in order, appends the new unit at the end, and fails for duplicate unit ids, duplicate plugin names, overlapping tag prefixes, missing workflows, or missing plugin manifests.
 
 It does not generate workflow files, GoReleaser config files, plugin manifests, source directories, tags, releases, or release assets. V1 repositories should use `neko release migrate` first.
 
@@ -412,18 +412,23 @@ neko release init-options --output json
 
 **Sample Output:**
 ```
-DESCRIPTION                         OPTION             REQUIRED     VALUES
-────────────────────────────────────────────────────────────────────────────────────────────────
-Release unit id                     unit               false        cli, api, plugin-release, ...
-Release unit display name           display-name       false        string
-Initial version                     version            false        semver, default 0.1.0
-Release executor                    executor           true         goreleaser, jreleaser, release-it
-Release delivery mode               delivery           true         local, github-actions
-GitHub Actions workflow path        workflow           conditional  .github/workflows/*.yml
-Release tag prefix                  tag-prefix         false        v
-Unit working directory              working-directory  false        .
-Unit path scope                     paths              false        comma-separated globs
-Overwrite existing V2 config/state  force              false        true, false
+DESCRIPTION                                                                                                 OPTION                REQUIRED          VALUES
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+Release unit id                                                                                             unit                  false             cli, api, plugin-release, ...
+Release unit display name                                                                                   display-name          false             string
+Initial version                                                                                             version               false             semver, default 0.1.0
+Release executor                                                                                            executor              true              goreleaser, jreleaser, release-it
+Release delivery mode                                                                                       delivery              true              local, github-actions
+GitHub Actions workflow path                                                                                workflow              conditional       .github/workflows/*.yml
+Release tag prefix                                                                                          tag-prefix            false             v
+Unit working directory                                                                                      working-directory     false             .
+Unit path scope                                                                                             paths                 false             comma-separated globs
+release is the default for normal release units; plugin is only for Neko CLI plugins. Plugin fields are invalid unless kind=plugin.  kind                  false             release, plugin
+Only with kind=plugin; public Neko CLI plugin name. Normal repositories do not use plugin fields.            plugin-name           when kind=plugin  release, ui, ...
+Only with kind=plugin; repository-root-relative Neko CLI plugin manifest path.                               plugin-manifest       when kind=plugin  plugin/<name>/manifest.json
+Only with kind=plugin; Neko CLI plugin asset prefix, required there and must match unit id.                  plugin-asset-prefix   when kind=plugin  plugin-<name>
+Only with kind=plugin; Neko CLI plugin executable name in release archives.                                  plugin-binary-name    when kind=plugin  plugin-<name>
+Overwrite existing V2 config/state                                                                          force                 false             true, false
 ```
 
 ---
