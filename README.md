@@ -44,7 +44,7 @@ make install
 Download the latest CLI release from the [releases page](https://github.com/nekoman-hq/neko-cli/releases), or use the install script:
 
 ```bash
-./install.sh
+curl -fsSL https://raw.githubusercontent.com/nekoman-hq/neko-cli/main/install.sh | bash
 ```
 
 The script installs the main CLI only. It reads GitHub Releases directly, ignores plugin releases such as `plugin-release/vX.Y.Z`, and selects the newest stable CLI tag matching `vX.Y.Z`. The built-in `neko version` and `neko update` commands use the same CLI-aware release rule. None of these paths read local release config or state files.
