@@ -644,6 +644,21 @@ Keep disk schema unchanged. Revert the use-case/persistence commits together if 
 
 Stage 2 response patterns are helpful but not mandatory. Do not duplicate Stage 2 mapping abstractions.
 
+### Completion record
+
+Stage 6 was completed on 2026-07-14.
+
+- `parseInitCommandRequest` and `parseUnitAddCommandRequest` now produce distinct typed requests. The raw plugin flag map remains at the command boundary, including explicit presence facts required to preserve legacy, plugin, and unit-add `force` behavior.
+- `constructV2Unit` owns shared normalization and selects focused normal-unit or plugin-unit construction by typed kind. No boolean selects the construction workflow; local delivery still clears workflow, and the existing internal `buildV2InitConfigFromFlags` entry remains a narrow compatibility wrapper.
+- `evaluateV2InitializationPolicy` and `evaluateV2UnitAdditionPolicy` are pure file-presence policies. `newV2ReleasePair` and `appendV2ReleaseUnit` produce complete typed config/state values without mutating their inputs.
+- `initializeV2RepositoryUseCase` and `addV2ReleaseUnitUseCase` own their separate application intentions. Each validates a complete pair before handing it to one pair writer; application code does not construct `plugin.Response`.
+- `HandleInit` and `HandleUnitAdd` now perform parse -> one use-case invocation -> shared response mapping. Public flags, defaults, error codes, renderer hints, data keys, next steps, nil Go-error behavior, force/duplicate policy, and item order remain unchanged. The characterized unit-add error metadata command remains `init`; changing it requires a later explicit compatibility decision.
+- `v2ReleasePairPersister` captures exact config/state bytes, modes, and existence in memory; creates and writes/fsyncs both temporary files before either target changes; then replaces config followed by state. A returned replace failure attempts restoration of both snapshots, removes targets that were previously absent, attempts both restorations even after one fails, discards temporary files, creates no backup files, and reports `manual recovery required` if restoration is incomplete.
+- The guarantee is bounded rollback, not cross-file atomicity. A process, kernel, machine, or filesystem failure between successful renames can still expose a mixed pair, and a failed new-pair attempt may leave an empty `.neko` directory. No generic transaction, lifecycle engine, state machine, or multi-file persistence framework was introduced.
+- Focused characterization covers policy precedence, exact response metadata, canonical bytes/modes, typed parsing/defaults, normal/plugin construction, pure policy and mutation, validate-before-persist order, load-once/stop behavior, directory/snapshot/config-temp/config-write/state-temp/state-write/first-replace/second-replace failures, new/update rollback, restoration failure, and temporary-file cleanup.
+
+Next exact stage: **Stage 7: Extract read-only query use cases and plugin-index output persistence.**
+
 ## Stage 7: Extract read-only query use cases and plugin-index output persistence
 
 ### Goal

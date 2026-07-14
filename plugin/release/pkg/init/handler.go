@@ -8,13 +8,8 @@ package init
 */
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
-	"github.com/Masterminds/semver/v3"
 	"github.com/nekoman-hq/neko-cli/pkg/log"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
@@ -39,200 +34,56 @@ var pluginInitFlagNames = []string{
 	"plugin-binary-name",
 }
 
-// HandleInit handles the init command in plugin mode
-// It accepts configuration via flags instead of interactive prompts
+// HandleInit handles the init command in plugin mode.
 func HandleInit(req plugin.Request) (*plugin.Response, error) {
 	log.PluginPrint(log.Init, "Starting release initialization")
-
-	force := getFlagBool(req.Flags, "force")
-
-	if err := checkExistingConfig(force); err != nil {
-		log.PluginV(log.Init, "Existing release configuration prevents init: %s", err.message)
-		return initErrorResponse(err.code, err.message, nil), nil
+	repository := newV2Repository(".")
+	useCase := initializeV2RepositoryUseCase{
+		presenceReader: repository,
+		validator:      repository,
+		writer:         repository,
 	}
-
-	initConfig, err := buildV2InitConfigFromFlags(req.Flags)
-	if err != nil {
-		return initErrorResponse("INVALID_FLAGS", err.Error(), map[string]any{
-			"required_flags": []string{"executor", "delivery"},
-			"optional_flags": []string{
-				"unit",
-				"display-name",
-				"version",
-				"workflow",
-				"tag-prefix",
-				"working-directory",
-				"paths",
-				"kind",
-				"plugin-name",
-				"plugin-manifest",
-				"plugin-asset-prefix",
-				"plugin-binary-name",
-				"force",
-			},
-		}), nil
-	}
-
-	cfg, state := buildV2Files(initConfig)
-	if err = config.ValidateV2(".", &cfg, &state); err != nil {
-		return initErrorResponse("VALIDATION_ERROR", err.Error(), nil), nil
-	}
-
-	configJSON, err := config.CanonicalV2Config(cfg)
-	if err != nil {
-		return initErrorResponse("VALIDATION_ERROR", err.Error(), nil), nil
-	}
-	stateJSON, err := config.CanonicalV2State(state)
-	if err != nil {
-		return initErrorResponse("VALIDATION_ERROR", err.Error(), nil), nil
-	}
-	if err = writeV2Files(configJSON, stateJSON); err != nil {
-		return initErrorResponse("SAVE_ERROR", fmt.Sprintf("Failed to save V2 release configuration: %v", err), nil), nil
+	result, failure := useCase.Execute(parseInitCommandRequest(req.Flags))
+	response := mapInitializeV2Response(result, failure, time.Now())
+	if failure != nil {
+		if failure.origin == commandFailureFromPresencePolicy {
+			log.PluginV(log.Init, "Existing release configuration prevents init: %s", failure.message)
+		}
+		return response, nil
 	}
 
 	log.PluginPrint(log.Init, "Configuration saved to %s", config.V2ConfigPath("."))
 	log.PluginPrint(log.Init, "State saved to %s", config.V2StatePath("."))
 	log.PluginPrint(log.Init, "Initialization completed successfully")
-
-	return &plugin.Response{
-		Status: "success",
-		Metadata: plugin.ResponseMetadata{
-			Plugin:    metadata.PluginName,
-			Version:   metadata.Version,
-			Command:   "init",
-			Timestamp: time.Now(),
-		},
-		Data: map[string]any{
-			"config_file":       config.V2ConfigPath("."),
-			"state_file":        config.V2StatePath("."),
-			"schema":            "v2",
-			"unit":              initConfig.UnitID,
-			"display_name":      initConfig.DisplayName,
-			"version":           initConfig.Version,
-			"executor":          string(initConfig.Executor),
-			"delivery":          string(initConfig.Delivery),
-			"workflow":          initConfig.Workflow,
-			"tag_prefix":        initConfig.TagPrefix,
-			"working_directory": initConfig.WorkingDirectory,
-			"paths":             initConfig.Paths,
-			"kind":              initConfig.Kind,
-			"plugin":            pluginResponseData(initConfig),
-			"next_steps":        buildV2NextSteps(initConfig),
-		},
-		RendererHint: "text",
-	}, nil
+	return response, nil
 }
 
 // HandleUnitAdd appends one unit to an existing V2 release configuration.
 func HandleUnitAdd(req plugin.Request) (*plugin.Response, error) {
 	log.PluginPrint(log.Init, "Starting release unit append")
-
-	if err := checkUnitAddExistingConfig(); err != nil {
-		log.PluginV(log.Init, "Existing release configuration prevents unit-add: %s", err.message)
-		return initErrorResponse(err.code, err.message, nil), nil
+	repository := newV2Repository(".")
+	useCase := addV2ReleaseUnitUseCase{
+		presenceReader: repository,
+		loader:         repository,
+		validator:      repository,
+		writer:         repository,
 	}
-	if strings.TrimSpace(getFlagString(req.Flags, "unit")) == "" {
-		return initErrorResponse("INVALID_FLAGS", "missing required flag: --unit", nil), nil
-	}
-	if hasAnyFlag(req.Flags, "force") {
-		return initErrorResponse("INVALID_FLAGS", "unit-add does not support --force; existing units are never overwritten", nil), nil
-	}
-
-	initConfig, err := buildV2InitConfigFromFlags(req.Flags)
-	if err != nil {
-		return initErrorResponse("INVALID_FLAGS", err.Error(), map[string]any{
-			"required_flags": []string{"unit", "executor", "delivery"},
-			"optional_flags": []string{
-				"display-name",
-				"version",
-				"workflow",
-				"tag-prefix",
-				"working-directory",
-				"paths",
-				"kind",
-				"plugin-name",
-				"plugin-manifest",
-				"plugin-asset-prefix",
-				"plugin-binary-name",
-			},
-		}), nil
+	result, failure := useCase.Execute(parseUnitAddCommandRequest(req.Flags))
+	response := mapAddV2UnitResponse(result, failure, time.Now())
+	if failure != nil {
+		if failure.origin == commandFailureFromPresencePolicy {
+			log.PluginV(log.Init, "Existing release configuration prevents unit-add: %s", failure.message)
+		}
+		return response, nil
 	}
 
-	cfg, err := config.LoadV2Config(config.V2ConfigPath("."))
-	if err != nil {
-		return initErrorResponse("LOAD_ERROR", fmt.Sprintf("Failed to load V2 release config: %v", err), nil), nil
-	}
-	state, err := config.LoadV2State(config.V2StatePath("."))
-	if err != nil {
-		return initErrorResponse("LOAD_ERROR", fmt.Sprintf("Failed to load V2 release state: %v", err), nil), nil
-	}
-	if state.Units == nil {
-		return initErrorResponse("VALIDATION_ERROR", "v2 state units must be present", nil), nil
-	}
-
-	unit, unitState := buildV2UnitAndState(initConfig)
-	if _, exists := state.Units[unit.ID]; exists {
-		return initErrorResponse("DUPLICATE_UNIT", fmt.Sprintf("release unit %q already exists in state", unit.ID), nil), nil
-	}
-
-	cfg.Units = append(cfg.Units, unit)
-	state.Units[unit.ID] = unitState
-	if err = config.ValidateV2(".", cfg, state); err != nil {
-		return initErrorResponse("VALIDATION_ERROR", err.Error(), nil), nil
-	}
-
-	configJSON, err := config.CanonicalV2Config(*cfg)
-	if err != nil {
-		return initErrorResponse("VALIDATION_ERROR", err.Error(), nil), nil
-	}
-	stateJSON, err := config.CanonicalV2State(*state)
-	if err != nil {
-		return initErrorResponse("VALIDATION_ERROR", err.Error(), nil), nil
-	}
-	if err = writeV2Files(configJSON, stateJSON); err != nil {
-		return initErrorResponse("SAVE_ERROR", fmt.Sprintf("Failed to save V2 release configuration: %v", err), nil), nil
-	}
-
-	log.PluginPrint(log.Init, "Release unit %s appended to %s", initConfig.UnitID, config.V2ConfigPath("."))
+	log.PluginPrint(log.Init, "Release unit %s appended to %s", result.Unit.UnitID, config.V2ConfigPath("."))
 	log.PluginPrint(log.Init, "State entry saved to %s", config.V2StatePath("."))
-
-	return &plugin.Response{
-		Status: "success",
-		Metadata: plugin.ResponseMetadata{
-			Plugin:    metadata.PluginName,
-			Version:   metadata.Version,
-			Command:   "unit-add",
-			Timestamp: time.Now(),
-		},
-		Data: map[string]any{
-			"status":      "unit appended",
-			"config_file": config.V2ConfigPath("."),
-			"state_file":  config.V2StatePath("."),
-			"unit":        initConfig.UnitID,
-			"version":     initConfig.Version,
-			"kind":        initConfig.Kind,
-			"plugin":      pluginResponseData(initConfig),
-		},
-		RendererHint: "table",
-	}, nil
+	return response, nil
 }
 
-func pluginResponseData(initConfig v2InitConfig) map[string]any {
-	if initConfig.Kind != pluginKind {
-		return nil
-	}
-	return map[string]any{
-		"name":         initConfig.Plugin.Name,
-		"manifest":     initConfig.Plugin.Manifest,
-		"asset_prefix": initConfig.Plugin.AssetPrefix,
-		"binary_name":  initConfig.Plugin.BinaryName,
-	}
-}
-
-// GetAvailableOptions returns the available options for init configuration
-// This can be used by the CLI to show help or provide autocomplete
+// GetAvailableOptions returns the available options for init configuration.
 func GetAvailableOptions() (*plugin.Response, error) {
-	// Build items as a table-friendly format
 	items := []map[string]any{
 		{
 			"option":      "unit",
@@ -339,321 +190,4 @@ func GetAvailableOptions() (*plugin.Response, error) {
 		},
 		RendererHint: "table",
 	}, nil
-}
-
-type initConfigError struct {
-	code    string
-	message string
-}
-
-func (err *initConfigError) Error() string {
-	return err.message
-}
-
-type v2InitConfig struct { //nolint:govet // Init config keeps CLI/domain option order for readability.
-	UnitID           string
-	DisplayName      string
-	Version          string
-	Executor         config.ExecutorType
-	Delivery         config.DeliveryType
-	Workflow         string
-	TagPrefix        string
-	WorkingDirectory string
-	Paths            []string
-	Kind             string
-	Plugin           config.V2Plugin
-}
-
-func checkExistingConfig(force bool) *initConfigError {
-	hasV1 := fileExists(legacyV1ConfigFileName)
-	hasV2Config := config.V2ConfigExists(".")
-	hasV2State := config.V2StateExists(".")
-	hasAnyV2 := hasV2Config || hasV2State
-
-	if hasV1 && hasAnyV2 {
-		return &initConfigError{
-			code:    "CONFIG_CONFLICT",
-			message: "release configuration conflict: .release.neko.json and V2 files both exist. Resolve the conflict explicitly before running init.",
-		}
-	}
-	if hasV1 {
-		return &initConfigError{
-			code:    "V1_CONFIG_EXISTS",
-			message: ".release.neko.json already exists. Run 'neko release migrate' to convert it to V2; init will not overwrite V1 configs.",
-		}
-	}
-	if hasAnyV2 && !force {
-		return &initConfigError{
-			code:    "CONFIG_EXISTS",
-			message: ".neko/release.config.json or .neko/release.state.json already exists. Use --force to recreate both V2 files.",
-		}
-	}
-
-	return nil
-}
-
-func checkUnitAddExistingConfig() *initConfigError {
-	hasV1 := fileExists(legacyV1ConfigFileName)
-	hasV2Config := config.V2ConfigExists(".")
-	hasV2State := config.V2StateExists(".")
-
-	if hasV1 && (hasV2Config || hasV2State) {
-		return &initConfigError{
-			code:    "CONFIG_CONFLICT",
-			message: "release configuration conflict: .release.neko.json and V2 files both exist. Resolve the conflict explicitly before running unit-add.",
-		}
-	}
-	if hasV1 {
-		return &initConfigError{
-			code:    "V1_CONFIG_EXISTS",
-			message: ".release.neko.json exists. Run 'neko release migrate' before adding V2 units.",
-		}
-	}
-	if !hasV2Config && !hasV2State {
-		return &initConfigError{
-			code:    "V2_CONFIG_MISSING",
-			message: ".neko/release.config.json and .neko/release.state.json are missing. Run 'neko release init' first.",
-		}
-	}
-	if !hasV2Config || !hasV2State {
-		return &initConfigError{
-			code:    "PARTIAL_V2_CONFIG",
-			message: "partial V2 configuration: both .neko/release.config.json and .neko/release.state.json are required before unit-add.",
-		}
-	}
-
-	return nil
-}
-
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
-}
-
-func buildV2InitConfigFromFlags(flags map[string]any) (v2InitConfig, error) {
-	if hasAnyFlag(flags, "project-type", "release-system", "metadata") {
-		return v2InitConfig{}, fmt.Errorf("release init is V2-only; use --executor and --delivery instead of legacy project-type/release-system/metadata flags")
-	}
-
-	unitID := defaultString(getFlagString(flags, "unit"), defaultUnitID)
-	displayName := defaultString(getFlagString(flags, "display-name"), unitID)
-	version := defaultString(getFlagString(flags, "version"), defaultInitialVersion)
-	executor := config.ExecutorType(getFlagString(flags, "executor"))
-	delivery := config.DeliveryType(getFlagString(flags, "delivery"))
-	workflow := getFlagString(flags, "workflow")
-	tagPrefix := defaultString(getFlagString(flags, "tag-prefix"), defaultTagPrefix)
-	workingDirectory := defaultString(getFlagString(flags, "working-directory"), defaultWorkingDirectory)
-	paths, err := parsePaths(defaultString(getFlagString(flags, "paths"), defaultPaths))
-	if err != nil {
-		return v2InitConfig{}, err
-	}
-	kind := defaultString(getFlagString(flags, "kind"), defaultKind)
-	pluginConfig, err := buildPluginConfigFromFlags(kind, flags)
-	if err != nil {
-		return v2InitConfig{}, err
-	}
-
-	if strings.TrimSpace(displayName) == "" {
-		return v2InitConfig{}, fmt.Errorf("display-name must not be empty")
-	}
-	if version != strings.TrimSpace(version) || strings.HasPrefix(version, "v") {
-		return v2InitConfig{}, fmt.Errorf("version %q must be SemVer without leading v", version)
-	}
-	if _, err := semver.NewVersion(version); err != nil {
-		return v2InitConfig{}, fmt.Errorf("version %q must be valid SemVer: %w", version, err)
-	}
-	if executor == "" {
-		return v2InitConfig{}, fmt.Errorf("missing required flag: --executor (goreleaser|jreleaser|release-it)")
-	}
-	if !executor.IsValid() {
-		return v2InitConfig{}, fmt.Errorf("invalid executor: %s (must be: goreleaser, jreleaser, or release-it)", executor)
-	}
-	if delivery == "" {
-		return v2InitConfig{}, fmt.Errorf("missing required flag: --delivery (local|github-actions)")
-	}
-	if !delivery.IsValid() {
-		return v2InitConfig{}, fmt.Errorf("invalid delivery: %s (must be: local or github-actions)", delivery)
-	}
-	if delivery == config.DeliveryLocal {
-		workflow = ""
-	}
-
-	return v2InitConfig{
-		UnitID:           unitID,
-		DisplayName:      displayName,
-		Version:          version,
-		Executor:         executor,
-		Delivery:         delivery,
-		Workflow:         workflow,
-		TagPrefix:        tagPrefix,
-		WorkingDirectory: workingDirectory,
-		Paths:            paths,
-		Kind:             kind,
-		Plugin:           pluginConfig,
-	}, nil
-}
-
-func buildPluginConfigFromFlags(kind string, flags map[string]any) (config.V2Plugin, error) {
-	switch kind {
-	case defaultKind:
-		if hasAnyFlag(flags, pluginInitFlagNames...) {
-			return config.V2Plugin{}, fmt.Errorf("plugin flags require --kind plugin")
-		}
-		return config.V2Plugin{}, nil
-	case pluginKind:
-		pluginConfig := config.V2Plugin{
-			Name:        getFlagString(flags, "plugin-name"),
-			Manifest:    filepath.ToSlash(getFlagString(flags, "plugin-manifest")),
-			AssetPrefix: getFlagString(flags, "plugin-asset-prefix"),
-			BinaryName:  getFlagString(flags, "plugin-binary-name"),
-		}
-		required := map[string]string{
-			"plugin-name":         pluginConfig.Name,
-			"plugin-manifest":     pluginConfig.Manifest,
-			"plugin-asset-prefix": pluginConfig.AssetPrefix,
-			"plugin-binary-name":  pluginConfig.BinaryName,
-		}
-		for _, flagName := range pluginInitFlagNames {
-			if strings.TrimSpace(required[flagName]) == "" {
-				return config.V2Plugin{}, fmt.Errorf("--kind plugin requires --%s", flagName)
-			}
-		}
-		return pluginConfig, nil
-	default:
-		return config.V2Plugin{}, fmt.Errorf("invalid kind: %s (must be: release or plugin)", kind)
-	}
-}
-
-func buildV2Files(initConfig v2InitConfig) (config.V2ReleaseConfig, config.V2ReleaseState) {
-	unit, unitState := buildV2UnitAndState(initConfig)
-
-	cfg := config.V2ReleaseConfig{
-		SchemaVersion: 2,
-		Units:         []config.V2Unit{unit},
-	}
-	state := config.V2ReleaseState{
-		SchemaVersion: 2,
-		Units: map[string]config.V2UnitState{
-			initConfig.UnitID: unitState,
-		},
-	}
-	return cfg, state
-}
-
-func buildV2UnitAndState(initConfig v2InitConfig) (config.V2Unit, config.V2UnitState) {
-	unit := config.V2Unit{
-		ID:               initConfig.UnitID,
-		DisplayName:      initConfig.DisplayName,
-		Paths:            initConfig.Paths,
-		WorkingDirectory: initConfig.WorkingDirectory,
-		TagPrefix:        initConfig.TagPrefix,
-		Executor: config.V2Executor{
-			Type:     initConfig.Executor,
-			Delivery: initConfig.Delivery,
-			Workflow: initConfig.Workflow,
-		},
-	}
-	if initConfig.Kind == pluginKind {
-		unit.Kind = config.UnitKindPlugin
-		unit.Plugin = &initConfig.Plugin
-	}
-
-	return unit, config.V2UnitState{Version: initConfig.Version}
-}
-
-func writeV2Files(configJSON, stateJSON []byte) error {
-	if err := os.MkdirAll(config.V2Directory, 0755); err != nil {
-		return fmt.Errorf("create %s directory: %w", config.V2Directory, err)
-	}
-	configPath := config.V2ConfigPath(".")
-	statePath := config.V2StatePath(".")
-	if err := config.AtomicWriteFile(configPath, configJSON, 0644); err != nil {
-		return err
-	}
-	if err := config.AtomicWriteFile(statePath, stateJSON, 0644); err != nil {
-		return err
-	}
-	return nil
-}
-
-func getFlagString(flags map[string]any, key string) string {
-	if val, ok := flags[key]; ok {
-		if str, ok := val.(string); ok {
-			return str
-		}
-	}
-	return ""
-}
-
-func getFlagBool(flags map[string]any, key string) bool {
-	if val, ok := flags[key]; ok {
-		if b, ok := val.(bool); ok {
-			return b
-		}
-	}
-	return false
-}
-
-func parsePaths(value string) ([]string, error) {
-	parts := strings.Split(value, ",")
-	paths := make([]string, 0, len(parts))
-	for _, part := range parts {
-		trimmed := strings.TrimSpace(part)
-		if trimmed == "" {
-			return nil, fmt.Errorf("paths must not contain empty entries")
-		}
-		paths = append(paths, filepath.ToSlash(trimmed))
-	}
-	return paths, nil
-}
-
-func defaultString(value, fallback string) string {
-	if strings.TrimSpace(value) == "" {
-		return fallback
-	}
-	return strings.TrimSpace(value)
-}
-
-func hasAnyFlag(flags map[string]any, names ...string) bool {
-	for _, name := range names {
-		if _, ok := flags[name]; ok {
-			return true
-		}
-	}
-	return false
-}
-
-func initErrorResponse(code, message string, details map[string]any) *plugin.Response {
-	responseError := &plugin.ResponseError{
-		Code:    code,
-		Message: message,
-	}
-	if len(details) > 0 {
-		responseError.Details = details
-	}
-	return &plugin.Response{
-		Status: "error",
-		Metadata: plugin.ResponseMetadata{
-			Plugin:    metadata.PluginName,
-			Version:   metadata.Version,
-			Command:   "init",
-			Timestamp: time.Now(),
-		},
-		Error: responseError,
-	}
-}
-
-func buildV2NextSteps(initConfig v2InitConfig) []string {
-	steps := []string{
-		"Use 'neko release validate --show' to inspect the V2 configuration",
-	}
-	if initConfig.Kind == pluginKind {
-		steps = append(steps, "Use 'neko release plugin-index --check' after adding plugin units to verify registry metadata")
-	}
-	if initConfig.Delivery == config.DeliveryGitHubActions {
-		steps = append(steps, fmt.Sprintf("Ensure %s builds and publishes from the dispatched tag", initConfig.Workflow))
-	} else {
-		steps = append(steps, "Add or verify the executor-specific local release configuration before running a real release")
-	}
-	return steps
 }

@@ -25,6 +25,36 @@ func TestAtomicWriteFileSuccess(t *testing.T) {
 	assertNoAtomicTemps(t, root)
 }
 
+func TestPrepareAtomicFileDoesNotReplaceUntilRequested(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "release.state.json")
+	if err := os.WriteFile(target, []byte("old"), 0600); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+
+	prepared, err := PrepareAtomicFile(target, []byte("new"), 0644)
+	if err != nil {
+		t.Fatalf("PrepareAtomicFile: %v", err)
+	}
+	data, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("read unchanged target: %v", err)
+	}
+	if string(data) != "old" {
+		t.Fatalf("prepare changed target to %q", data)
+	}
+
+	prepared.Discard()
+	assertNoAtomicTemps(t, root)
+	data, err = os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("read discarded target: %v", err)
+	}
+	if string(data) != "old" {
+		t.Fatalf("discard changed target to %q", data)
+	}
+}
+
 func TestAtomicWriteFileRenameErrorKeepsExistingTarget(t *testing.T) {
 	root := t.TempDir()
 	target := filepath.Join(root, "state")

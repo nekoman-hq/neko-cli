@@ -28,7 +28,7 @@ The public command contract is duplicated between `manifest.json` and the switch
 | `main` | Plugin protocol entry, workspace change, command routing, fatal error fallback | `main` | Uses a command switch rather than a command registry. |
 | `pkg/workspace` | Select V2 Git root or legacy nearest-V1 root, then change process cwd | `ResolveProjectRoot`, `ChangeToProjectRoot` | Process-global `os.Chdir` is an implicit dependency of every handler. |
 | `pkg/config` | V1/V2 disk models, strict loading, validation, normalization, unit and tag selection, atomic file writes | `ReleaseRepository`, `ReleaseUnit`, `LoadReleaseRepository`, `ValidateV2`, `ResolveReleaseUnit`, `TagSpec`, `AtomicWriteFile` | `ReleaseRepository` is the shared normalized model. V1 remains a compatibility source. |
-| `pkg/init` | Parse init/unit-add flags, validate, construct V2 config/state, write both files, build responses | `HandleInit`, `HandleUnitAdd`, `buildV2InitConfigFromFlags`, `writeV2Files` | Parsing, use-case logic, two-file persistence, and presentation are in one file. |
+| `pkg/init` | Typed init/unit-add command boundaries, focused initialization use cases, pure unit/pair construction, explicit file policy, and rollback-backed pair persistence | `HandleInit`, `HandleUnitAdd`, `initializeV2RepositoryUseCase`, `addV2ReleaseUnitUseCase`, `v2ReleasePairPersister` | Handlers parse, invoke one use case, and map a typed result/failure; persistence prepares both targets and has a bounded restore contract. |
 | `pkg/migrate` | Plan, execute, journal, recover, and present root V1-to-V2 migration | `ResolvePlan`, `Run`, `executePlan`, `HandleMigrate` | Uses a worktree migration journal distinct from release journals. |
 | `pkg/validate` | Load V1/V2, validate requirements, render config rows | `HandleValidate`, `validateV1Response`, `validateV2Response` | V1 validation resolves `GITHUB_TOKEN`; V2 config validation does not. |
 | `pkg/history` | Unit selection, unit tag discovery, path-filtered commit counts, response mapping | `HandleHistory`, `handleV2History` | V1 uses every tag; V2 uses exact `TagSpec` matches. |
@@ -50,22 +50,23 @@ The public command contract is duplicated between `manifest.json` and the switch
 ### `init`
 
 - Entry: `main.main` -> `init.HandleInit`.
-- Request parsing: `getFlagBool` and `buildV2InitConfigFromFlags` read untyped flag values.
-- Domain decisions: existing V1/V2 conflict rules, defaults, executor/delivery/kind rules, and plugin metadata are selected inside `pkg/init/handler.go`.
-- Side effects: `writeV2Files` creates `.neko`, atomically writes config, then atomically writes state.
+- Request parsing: `parseInitCommandRequest` is the only init path that reads the untyped flag map and produces `initCommandRequest`; wrong raw types retain the prior zero-value/default behavior.
+- Application boundary: `initializeV2RepositoryUseCase.Execute` applies the pure V1/V2/force policy, constructs one normal or plugin unit, creates a complete config/state pair, validates it, and passes it to the pair writer.
+- Domain ownership: `unit_constructor.go` owns defaults and normal/plugin construction; `policy.go` owns side-effect-free file-presence decisions; `repository.go` owns complete pair creation and repository validation.
+- Side effects: `v2ReleasePairPersister` snapshots both targets, creates and writes both temporary files, then replaces config followed by state. Returned replace failures trigger restoration of both snapshots.
 - State mutations: replaces both V2 files when permitted; `--force` never overwrites V1.
-- Output: handler constructs text-oriented success data or `initErrorResponse`.
+- Output: `response_mapper.go` constructs the text-oriented success response or stable structured failure from a typed result/failure.
 - Error behavior: stable codes include `CONFIG_CONFLICT`, `V1_CONFIG_EXISTS`, `CONFIG_EXISTS`, `INVALID_FLAGS`, `VALIDATION_ERROR`, and `SAVE_ERROR`.
-- Existing tests: `pkg/init/handler_test.go` covers options, local/GitHub Actions/plugin creation, conflicts, force, and many invalid inputs.
-- Missing characterization: failure between the config and state atomic writes, exact preservation behavior after that failure, response metadata for `unit-add` errors, and injected filesystem failures.
+- Existing tests: handler characterization plus focused parser, constructor, policy, mutation, use-case, response-boundary, temp-create/write/replace, rollback, restoration-failure, exact byte/mode, and cleanup tests.
 
 ### `unit-add`
 
 - Entry: `main.main` -> `init.HandleUnitAdd`.
-- Orchestration: loads both V2 files, constructs a unit and state entry, validates the combined target, serializes, then calls the same two-file writer as init.
-- State mutation: appends one config unit and one state map entry; existing units must not be overwritten.
-- Existing tests: normal/plugin append, partial/missing configuration, duplicate unit/state/plugin name, and invalid inputs in `pkg/init/handler_test.go`.
-- Missing characterization: crash/failure atomicity across the two files and preservation of byte formatting for existing unrelated units.
+- Request parsing: `parseUnitAddCommandRequest` produces a distinct typed request and records unsupported `force` presence without retaining the raw flag map.
+- Application boundary: `addV2ReleaseUnitUseCase.Execute` applies the pure V1/V2 presence policy, preserves required-unit/force precedence, constructs the unit, loads the pair once, rejects duplicate state identity, produces an appended copy, validates it, and invokes the same pair writer.
+- State mutation: `appendV2ReleaseUnit` clones existing slices, plugin metadata, and the state map before appending one config unit and one state entry; existing units are not overwritten or mutated.
+- Output: the shared mapper preserves the success command `unit-add`, table renderer, data keys, and the characterized compatibility value `init` on error metadata.
+- Existing tests: normal/plugin append, partial/missing configuration, duplicate unit/state/plugin name, invalid inputs, load-once/order, no input mutation, pair rollback, and exact restoration are covered.
 
 ### `init-options`
 
@@ -252,7 +253,7 @@ prepared -> config-written -> state-written -> v1-archived -> validated -> journ
 | Dependency | Current access | Test seam | Risk |
 | --- | --- | --- | --- |
 | Working directory | `workspace.ChangeToProjectRoot`, `ToolBase.InUnitRoot`, many relative paths | temp dirs plus `os.Chdir` | Process-global state prevents parallel handler tests and hides path dependencies. |
-| Filesystem | direct `os.*` across config/init/migrate/release/pluginindex/tools | temp directories; a few transaction abstractions | Most handlers cannot inject read/write/rename failures. |
+| Filesystem | focused init pair repository/disk boundaries; direct `os.*` remain across config/migrate/release/pluginindex/tools | init pair temp/create/write/replace/restore seams, temp directories, and a few release/migration abstractions | Init pair failures are isolated; most other handlers still cannot inject every read/write/rename failure. |
 | Git | active V2 release/resume use one `GitReleaseCoordinator`; `pkg/git` and direct Git remain in V1, migration, inactive transaction, and tools | coordinator runner, focused consumer ports, and real temp Git repositories | Legacy flows still expose different error and logging semantics; Stage 5 does not rewrite them. |
 | Environment/token | V1 `pkg/config.GetPAT`; V2 `EnvironmentGitHubActionsDispatchTokenResolver` returning `GitHubActionsDispatchToken` | `t.Setenv`, typed token resolver interfaces | V1 and V2 intentionally retain different token messages and behavior. |
 | Network | V1 `http.DefaultClient` GitHub deletion; V2 injected `RoundTripper` dispatch client | strong V2 client seam; weak V1 seam | V1 rollback network behavior is hard to isolate. |
@@ -293,6 +294,7 @@ The following are current behavior. They are not statements that every behavior 
 | INV-24 | Public response status/error schemas and error codes are command contracts, but they are currently constructed in multiple packages. Unexpected handler errors become fatal top-level `EXECUTION_ERROR`. | `plugin.Response`, `main.main`, handler response helpers | focused V2 release/resume status, code, metadata, renderer, and ordered-item contracts; other public commands remain incomplete |
 | INV-25 | Root V1 migration writes a content-hashed journal before V2 files, archives byte-identical V1 content, validates the final V2 repository, and removes the journal only after success. | `migrate.executePlan`, `archiveV1`, `validateFinal` | all migration and interruption recovery tests |
 | INV-26 | V2 local non-dry-run execution is blocked. GitHub Actions owns build and publish after accepted handoff; local release tools are not invoked by that V2 path. | `releaseStartOperation`, `GitHubActionsReleaseRunner.Run` | V2 block tests and runner fake dispatch tests |
+| INV-27 | Init and unit-add validate one complete V2 config/state pair before persistence. Both temporary files are created, written, chmodded, and fsynced before config then state replacement; a returned replace failure attempts exact restoration of both prior byte/mode/existence snapshots. | `initializeV2RepositoryUseCase`, `addV2ReleaseUnitUseCase`, `v2ReleasePairPersister` | focused new/update, temp-create/write, first/second replace, exact restore, restore-failure, cleanup, byte, and mode tests |
 
 ## Architecture strengths
 
@@ -324,7 +326,11 @@ The following are current behavior. They are not statements that every behavior 
 
 ### Init and configuration persistence
 
-`pkg/init/handler.go` contains command metadata, untyped flag parsing, domain defaults/validation, state construction, two-file persistence, logging, next-step guidance, and response creation. Each file write is atomic, but the config/state pair is not a transaction: a second-write failure can leave a partial target.
+`HandleInit` and `HandleUnitAdd` are command boundaries: each parses one distinct typed request, invokes one focused use case, and maps one typed result or failure. Raw flags stop in `command_request.go`; pure normal/plugin unit construction, file-presence policy, and complete pair creation/append are separate. `buildV2InitConfigFromFlags` remains only as a narrow compatibility seam over the typed parser and constructor.
+
+`v2ReleasePairPersister` is the sole init pair writer. It canonicalizes both values, creates `.neko`, captures exact bytes/modes/existence for both targets in memory, creates and fully writes/fsyncs both temporary files, then renames config followed by state. A returned error from either rename triggers restoration of both snapshots: an existing target is atomically restored with its exact bytes and mode, while a previously absent target is removed. Both restoration attempts run even when the first fails, temporary files are discarded, and any restoration failure is surfaced with `manual recovery required`. No backup files are created.
+
+This is bounded rollback, not cross-file atomicity. A process, kernel, machine, or filesystem failure between successful renames can still leave a mixed pair because no single cross-file atomic primitive exists. A failed new-pair attempt may leave an empty `.neko` directory. Successful config/state files retain mode `0644`.
 
 ### Plugin manifest ownership
 
@@ -332,7 +338,7 @@ V2 config validation and normalized `ReleaseUnit` metadata own plugin manifest i
 
 ### Response and error duplication
 
-Release start and resume now centralize typed failures and exact response mapping in `command_response.go`, with explicit timestamps supplied by their handler clocks. Other command packages still create timestamps, metadata, table rows, and error structures independently. `history` and `contributors` duplicate the same helpers. `initErrorResponse` always labels its command as `init`, including errors returned from `unit-add`. `plugin-index` often returns Go errors, unlike handlers that return structured error responses. Stable contracts outside release start/resume therefore remain distributed.
+Release start and resume centralize typed failures and exact response mapping in `command_response.go`, with explicit timestamps supplied by their handler clocks. Init and unit-add now share `response_mapper.go`, but intentionally retain the characterized compatibility value `init` for unit-add error metadata; correcting that value is a later explicit public-contract decision. Other command packages still create timestamps, metadata, table rows, and error structures independently. `history` and `contributors` duplicate the same helpers. `plugin-index` often returns Go errors, unlike handlers that return structured error responses. Stable contracts outside release start/resume/init therefore remain distributed.
 
 ### Multiple side-effect adapters
 
@@ -344,6 +350,7 @@ The suite is package-local and predominantly uses temporary real files and real 
 
 Existing replaceable seams include:
 
+- init/unit-add `v2PresenceReader`, `v2PairLoader`, `v2PairValidator`, and `v2PairWriter` consumer ports, plus config/state-specific temp-create/write/replace/restore operations inside the focused pair persister;
 - `gitCommandRunner` inside the single active `GitReleaseCoordinator` and shared journal common-dir mechanics.
 - `GitHubActionsWorkflowDispatchClient` and injected HTTP transport.
 - `GitHubActionsDispatchTokenResolver`.
@@ -354,7 +361,7 @@ Existing replaceable seams include:
 
 Important missing seams include:
 
-- filesystem/config/state repositories for flows outside active release; active release transaction factories and journal operation ports now permit failure injection without changing production stores;
+- filesystem/config/state repositories for flows outside init and active release; active release transaction factories and journal operation ports permit failure injection without changing production stores;
 - replaceable facade construction inside `releaseStartOperation`; release and resume composition itself now injects focused coordinator, store, dispatch, token, and clock dependencies;
 - one Git port used by all Release Plugin flows;
 - subprocess runners for V1 tools;
@@ -363,13 +370,12 @@ Important missing seams include:
 
 ## Missing characterization coverage, prioritized
 
-1. Stable command contracts outside V2 release/resume: exact error code/message/details, response metadata command, renderer hint, and deterministic item order for every other public command.
-2. Init/unit-add paired-file failure behavior and exact preservation of pre-existing config/state.
-3. V1 executor order and rollback characterization with fake subprocess/network adapters before any extraction.
-4. Remaining secret non-disclosure and filesystem/journal failure paths outside the active release operation seams.
-5. Completed release behavior after exclusion: subsequent active version planning from the committed V2 state.
-6. Migration injected failure at every unsafe filesystem boundary and unknown/corrupt journal stage handling.
-7. History, contributors, validate, and plugin-index Git/filesystem error mapping and stable output ordering.
+1. Stable command contracts outside V2 release/resume/init/unit-add: exact error code/message/details, response metadata command, renderer hint, and deterministic item order for every other public command.
+2. V1 executor order and rollback characterization with fake subprocess/network adapters before any extraction.
+3. Remaining secret non-disclosure and filesystem/journal failure paths outside the active release operation seams.
+4. Completed release behavior after exclusion: subsequent active version planning from the committed V2 state.
+5. Migration injected failure at every unsafe filesystem boundary and unknown/corrupt journal stage handling.
+6. History, contributors, validate, and plugin-index Git/filesystem error mapping and stable output ordering.
 
 ## Compatibility constraints for future work
 
@@ -384,4 +390,4 @@ Important missing seams include:
 - Do not activate V2 local execution, standalone dispatch/retry, or a new publication adapter as an incidental refactor.
 - Do not rename or move public symbols until callers and contract tests make that change explicit.
 
-Active release and resume now share canonical metadata-driven release files, focused Git capabilities, store-specific journals over common secure file mechanics, one typed V2 token, and one explicit clock without an infrastructure bag or broad manager. The exact next refactor stage is Stage 6: extract init and unit-add use cases with paired persistence.
+Active release and resume share canonical metadata-driven release files, focused Git capabilities, store-specific journals over common secure file mechanics, one typed V2 token, and one explicit clock. Init and unit-add now have typed boundaries, focused application use cases, pure policy/construction/mutation, and bounded rollback-backed pair persistence without a generic transaction framework. The exact next refactor stage is Stage 7: extract read-only query use cases and plugin-index output persistence.
