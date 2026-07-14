@@ -9,18 +9,6 @@ import (
 	"strings"
 )
 
-const (
-	pluginReleaseUnitID       = "plugin-release"
-	pluginUIUnitID            = "plugin-ui"
-	pluginReleaseManifestPath = "plugin/release/manifest.json"
-	pluginUIManifestPath      = "plugin/ui/manifest.json"
-)
-
-var pluginManifestPathsByUnit = map[string]string{
-	pluginReleaseUnitID: pluginReleaseManifestPath,
-	pluginUIUnitID:      pluginUIManifestPath,
-}
-
 func appendPluginManifestMaterialization(ctx *ReleaseExecutionContext, plan *MaterializationPlan) error {
 	if ctx == nil {
 		return fmt.Errorf("release execution context is missing")
@@ -28,9 +16,12 @@ func appendPluginManifestMaterialization(ctx *ReleaseExecutionContext, plan *Mat
 	if plan == nil {
 		return fmt.Errorf("materialization plan is missing")
 	}
-	manifestPath, ok := pluginManifestPathsByUnit[ctx.Unit.ID]
-	if !ok {
+	if !ctx.Unit.IsPlugin {
 		return nil
+	}
+	manifestPath := ctx.Unit.PluginManifestPath
+	if strings.TrimSpace(manifestPath) == "" {
+		return fmt.Errorf("plugin manifest path is missing for unit %s", ctx.Unit.ID)
 	}
 
 	change, err := planPluginManifest(ctx, manifestPath)

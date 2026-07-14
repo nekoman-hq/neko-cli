@@ -11,6 +11,13 @@ import (
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
+const (
+	pluginReleaseUnitID       = "plugin-release"
+	pluginUIUnitID            = "plugin-ui"
+	pluginReleaseManifestPath = "plugin/release/manifest.json"
+	pluginUIManifestPath      = "plugin/ui/manifest.json"
+)
+
 func TestJReleaserMaterializerPlansOnlyJReleaserYML(t *testing.T) {
 	root := newV2MaterializationRepository(t, "jreleaser")
 	ctx := mustBuildTransactionContext(t, root, Minor)
@@ -167,6 +174,48 @@ func TestPluginUIReleaseMaterializerPlansOnlyUIManifest(t *testing.T) {
 	}
 }
 
+func TestGoReleaserMaterializerUsesConfiguredManifestForArbitraryPluginUnit(t *testing.T) {
+	root := newPluginReleaseMaterializationRepository(t)
+	manifestPath := "extensions/audit/manifest.json"
+	manifest := "{\n  \"name\": \"audit\",\n  \"version\": \"2.4.6\",\n  \"description\": \"Audit plugin\"\n}\n"
+	if err := os.MkdirAll(filepath.Join(root, "extensions", "audit"), 0755); err != nil {
+		t.Fatalf("mkdir arbitrary plugin: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, manifestPath), []byte(manifest), 0644); err != nil {
+		t.Fatalf("write arbitrary plugin manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".github", "workflows", "release-plugin-audit.yml"), []byte("name: release audit\n"), 0644); err != nil {
+		t.Fatalf("write arbitrary plugin workflow: %v", err)
+	}
+	config := `{"schemaVersion":2,"units":[{"id":"plugin-audit","paths":["extensions/audit/**"],"workingDirectory":".","tagPrefix":"plugin-audit/v","kind":"plugin","plugin":{"name":"audit","manifest":"extensions/audit/manifest.json","assetPrefix":"plugin-audit","binaryName":"plugin-audit"},"executor":{"type":"goreleaser","delivery":"github-actions","workflow":".github/workflows/release-plugin-audit.yml"}}]}`
+	state := `{"schemaVersion":2,"units":{"plugin-audit":{"version":"2.4.6"}}}`
+	if err := os.WriteFile(releaseconfig.V2ConfigPath(root), []byte(config), 0644); err != nil {
+		t.Fatalf("write arbitrary plugin config: %v", err)
+	}
+	if err := os.WriteFile(releaseconfig.V2StatePath(root), []byte(state), 0644); err != nil {
+		t.Fatalf("write arbitrary plugin state: %v", err)
+	}
+
+	ctx := mustBuildTransactionContext(t, root, Patch)
+	plan, err := GoReleaserMaterializer{}.Plan(ctx)
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+	if err := (GoReleaserMaterializer{}).Validate(plan); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	if !sameStringSet(materializationChangePaths(plan), []string{manifestPath}) {
+		t.Fatalf("unexpected materialized files: %#v", materializationChangePaths(plan))
+	}
+	change := materializationChangeByPath(t, plan, manifestPath)
+	if got := string(change.AfterContent); got != strings.Replace(manifest, `"version": "2.4.6"`, `"version": "2.4.7"`, 1) {
+		t.Fatalf("arbitrary plugin manifest bytes changed unexpectedly:\n%s", got)
+	}
+	if got := mustReadString(t, filepath.Join(root, manifestPath)); got != manifest {
+		t.Fatal("Plan must not write the configured arbitrary plugin manifest")
+	}
+}
+
 func TestPluginReleaseMaterializerFailsClearlyForRequiredFiles(t *testing.T) {
 	tests := []struct { //nolint:govet // Test table order follows failure scenario readability.
 		name       string
@@ -191,6 +240,7 @@ func TestPluginReleaseMaterializerFailsClearlyForRequiredFiles(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			root := newPluginReleaseMaterializationRepository(t)
+			ctx := mustBuildTransactionContext(t, root, Patch)
 			target := filepath.Join(root, tt.path)
 			if tt.removeFile {
 				if err := os.Remove(target); err != nil {
@@ -199,7 +249,6 @@ func TestPluginReleaseMaterializerFailsClearlyForRequiredFiles(t *testing.T) {
 			} else if err := os.WriteFile(target, []byte(tt.content), 0644); err != nil {
 				t.Fatalf("write %s: %v", tt.path, err)
 			}
-			ctx := mustBuildTransactionContext(t, root, Patch)
 			_, err := GoReleaserMaterializer{}.Plan(ctx)
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("expected error containing %q, got %v", tt.want, err)
@@ -356,11 +405,15 @@ func newPluginManifestMaterializationRepository(t *testing.T, unitID string) str
 	if err := os.WriteFile(filepath.Join(root, pluginUIManifestPath), []byte(uiManifest), 0644); err != nil {
 		t.Fatalf("write ui manifest: %v", err)
 	}
-	cfg := `{"schemaVersion":2,"units":[{"id":"` + unitID + `","paths":["plugin/**"],"workingDirectory":".","tagPrefix":"` + unitID + `/v","executor":{"type":"goreleaser","delivery":"github-actions","workflow":".github/workflows/release-` + unitID + `.yml"}}]}`
+	pluginName := "release"
+	manifestPath := pluginReleaseManifestPath
 	version := "3.0.0"
 	if unitID == pluginUIUnitID {
+		pluginName = "ui"
+		manifestPath = pluginUIManifestPath
 		version = "1.0.0"
 	}
+	cfg := `{"schemaVersion":2,"units":[{"id":"` + unitID + `","paths":["plugin/**"],"workingDirectory":".","tagPrefix":"` + unitID + `/v","kind":"plugin","plugin":{"name":"` + pluginName + `","manifest":"` + manifestPath + `","assetPrefix":"` + unitID + `","binaryName":"` + unitID + `"},"executor":{"type":"goreleaser","delivery":"github-actions","workflow":".github/workflows/release-` + unitID + `.yml"}}]}`
 	state := `{"schemaVersion":2,"units":{"` + unitID + `":{"version":"` + version + `"}}}`
 	if err := os.WriteFile(releaseconfig.V2ConfigPath(root), []byte(cfg), 0644); err != nil {
 		t.Fatalf("write config: %v", err)
