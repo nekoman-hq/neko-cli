@@ -12,7 +12,7 @@ func TestReleaseExecutionRecoveryAssessmentStatuses(t *testing.T) {
 	t.Run("fresh prepared is not started", func(t *testing.T) {
 		root := newGitHubActionsDispatchRepository(t)
 		journal := newPreparedExecutionJournal(t, newExecutionJournalContext(t, root))
-		assessment, err := AssessReleaseExecutionRecovery(root, journal)
+		assessment, err := assessReleaseExecutionRecoveryForTest(root, journal)
 		if err != nil {
 			t.Fatalf("AssessReleaseExecutionRecovery: %v", err)
 		}
@@ -39,7 +39,7 @@ func TestReleaseExecutionRecoveryAssessmentStatuses(t *testing.T) {
 		if pendingErr := journal.BeginPending(ReleaseExecutionPendingApplyMaterialization, time.Now()); pendingErr != nil {
 			t.Fatalf("pending materialization: %v", pendingErr)
 		}
-		assessment, err := AssessReleaseExecutionRecovery(root, journal)
+		assessment, err := assessReleaseExecutionRecoveryForTest(root, journal)
 		if err != nil {
 			t.Fatalf("AssessReleaseExecutionRecovery: %v", err)
 		}
@@ -55,7 +55,7 @@ func TestReleaseExecutionRecoveryAssessmentStatuses(t *testing.T) {
 		writePlannedStateForRecoveryTest(t, ctx)
 		commitSHA := strings.TrimSpace(gitOutput(t, root, "rev-parse", "HEAD"))
 		advanceExecutionJournalToCommitCreated(t, journal, commitSHA, time.Now())
-		assessment, err := AssessReleaseExecutionRecovery(root, journal)
+		assessment, err := assessReleaseExecutionRecoveryForTest(root, journal)
 		if err != nil {
 			t.Fatalf("AssessReleaseExecutionRecovery: %v", err)
 		}
@@ -78,7 +78,7 @@ func TestReleaseExecutionRecoveryAssessmentStatuses(t *testing.T) {
 		if err := journal.ConfirmPhase(ReleaseExecutionTagCreated, ReleaseExecutionJournalUpdate{TagTargetSHA: commitSHA}, time.Now()); err != nil {
 			t.Fatalf("tag: %v", err)
 		}
-		assessment, err := AssessReleaseExecutionRecovery(root, journal)
+		assessment, err := assessReleaseExecutionRecoveryForTest(root, journal)
 		if err != nil {
 			t.Fatalf("AssessReleaseExecutionRecovery: %v", err)
 		}
@@ -96,7 +96,7 @@ func TestReleaseExecutionRecoveryAssessmentConflicts(t *testing.T) {
 		if err := os.WriteFile(statePath, []byte("changed"), 0644); err != nil {
 			t.Fatalf("write divergent state: %v", err)
 		}
-		assessment, err := AssessReleaseExecutionRecovery(root, journal)
+		assessment, err := assessReleaseExecutionRecoveryForTest(root, journal)
 		if err != nil {
 			t.Fatalf("AssessReleaseExecutionRecovery: %v", err)
 		}
@@ -121,7 +121,7 @@ func TestReleaseExecutionRecoveryAssessmentConflicts(t *testing.T) {
 		if err := journal.ConfirmPhase(ReleaseExecutionTagCreated, ReleaseExecutionJournalUpdate{TagTargetSHA: commitSHA}, time.Now()); err != nil {
 			t.Fatalf("tag: %v", err)
 		}
-		assessment, err := AssessReleaseExecutionRecovery(root, journal)
+		assessment, err := assessReleaseExecutionRecoveryForTest(root, journal)
 		if err != nil {
 			t.Fatalf("AssessReleaseExecutionRecovery: %v", err)
 		}
@@ -131,7 +131,7 @@ func TestReleaseExecutionRecoveryAssessmentConflicts(t *testing.T) {
 	})
 
 	t.Run("malformed journal object is corrupted", func(t *testing.T) {
-		assessment, err := AssessReleaseExecutionRecovery(t.TempDir(), &ReleaseExecutionJournal{SchemaVersion: releaseExecutionJournalSchemaVersion, State: "bad"})
+		assessment, err := assessReleaseExecutionRecoveryForTest(t.TempDir(), &ReleaseExecutionJournal{SchemaVersion: releaseExecutionJournalSchemaVersion, State: "bad"})
 		if err != nil {
 			t.Fatalf("AssessReleaseExecutionRecovery: %v", err)
 		}
@@ -156,11 +156,15 @@ func TestReleaseExecutionRecoveryDoesNotMutateRepository(t *testing.T) {
 	root := newGitHubActionsDispatchRepository(t)
 	journal := newPreparedExecutionJournal(t, newExecutionJournalContext(t, root))
 	before := strings.TrimSpace(gitOutput(t, root, "status", "--porcelain", "--untracked-files=all"))
-	if _, err := AssessReleaseExecutionRecovery(root, journal); err != nil {
+	if _, err := assessReleaseExecutionRecoveryForTest(root, journal); err != nil {
 		t.Fatalf("AssessReleaseExecutionRecovery: %v", err)
 	}
 	after := strings.TrimSpace(gitOutput(t, root, "status", "--porcelain", "--untracked-files=all"))
 	if before != after {
 		t.Fatalf("assessment mutated repository: before=%q after=%q", before, after)
 	}
+}
+
+func assessReleaseExecutionRecoveryForTest(repositoryRoot string, journal *ReleaseExecutionJournal) (*ReleaseExecutionRecoveryAssessment, error) {
+	return AssessReleaseExecutionRecovery(repositoryRoot, journal, resumeGitAdapter{coordinator: NewGitReleaseCoordinator()})
 }

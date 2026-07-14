@@ -129,10 +129,12 @@ func (locator locateResumableExecution) Find(unitID string) (*resumableExecution
 	}, nil
 }
 
-type assessResumableExecution struct{}
+type assessResumableExecution struct {
+	tags resumeReleaseTagInspector
+}
 
-func (assessResumableExecution) Assess(execution *resumableExecution) (*ReleaseExecutionRecoveryAssessment, *CommandFailure) {
-	assessment, err := AssessReleaseExecutionRecovery(execution.repository.RepositoryRoot, execution.resolution.Journal)
+func (assessor assessResumableExecution) Assess(execution *resumableExecution) (*ReleaseExecutionRecoveryAssessment, *CommandFailure) {
+	assessment, err := AssessReleaseExecutionRecovery(execution.repository.RepositoryRoot, execution.resolution.Journal, assessor.tags)
 	if err != nil {
 		return nil, failureFromError("RECOVERY_ASSESSMENT_FAILED", err)
 	}
@@ -273,21 +275,26 @@ func (selector resumeReleaseOperationSelector) Select(kind resumeReleaseOperatio
 }
 
 func newResumeReleaseUseCase(repositoryPath string) resumeReleaseUseCase {
-	runner := NewGitHubActionsReleaseRunner()
-	executionJournal := NewReleaseExecutionJournalStore(repositoryPath)
-	dispatchJournal := NewDispatchJournalStore(repositoryPath)
+	return newResumeReleaseUseCaseWithRunner(repositoryPath, NewGitHubActionsReleaseRunner())
+}
+
+func newResumeReleaseUseCaseWithRunner(repositoryPath string, runner *GitHubActionsReleaseRunner) resumeReleaseUseCase {
+	executionJournal := newReleaseExecutionJournalStore(repositoryPath, runner.coordinator.runner, runner.clock)
+	dispatchJournal := newDispatchJournalStore(repositoryPath, runner.coordinator.runner, runner.clock)
 	activeGit := githubActionsReleaseGitAdapter{coordinator: runner.coordinator}
 	resumeGit := resumeGitAdapter{coordinator: runner.coordinator}
+	dispatchVerifier := gitReleaseDispatchVerifier{coordinator: runner.coordinator}
 	preparer := prepareResumeRelease{git: resumeGit}
-	dispatchAssessor := assessGitHubActionsResumeDispatch{journal: dispatchJournal, requests: verifiedReleaseDispatchRequestBuilder{}}
+	dispatchAssessor := assessGitHubActionsResumeDispatch{journal: dispatchJournal, requests: verifiedReleaseDispatchRequestBuilder{git: dispatchVerifier}}
 	handoff := confirmGitHubActionsReleaseHandoff{journal: executionJournal}
 	dispatchSelector := resumeDispatchOperationSelector{
 		fresh: requestFreshGitHubActionsResumeDispatch{
 			tokens: runner.tokenResolver,
 			dispatcher: dispatchGitHubActionsReleaseWorkflow{
-				repositoryRoot: repositoryPath,
-				client:         runner.dispatchClient,
-				journal:        executionJournal,
+				client:  runner.dispatchClient,
+				journal: executionJournal,
+				store:   dispatchJournal,
+				clock:   runner.clock,
 			},
 			handoff: handoff,
 		},
@@ -301,14 +308,14 @@ func newResumeReleaseUseCase(repositoryPath string) resumeReleaseUseCase {
 	fromTagCreated := &resumeFromTagCreatedOperation{
 		preparer:         preparer,
 		dispatches:       dispatchAssessor,
-		dispatchPreparer: prepareGitHubActionsReleaseDispatch{journal: executionJournal, dispatch: dispatchJournal, requests: verifiedReleaseDispatchRequestBuilder{}},
+		dispatchPreparer: prepareGitHubActionsReleaseDispatch{journal: executionJournal, dispatch: dispatchJournal, requests: verifiedReleaseDispatchRequestBuilder{git: dispatchVerifier}},
 		commitPusher:     pushGitHubActionsReleaseCommit{journal: executionJournal, git: activeGit},
 		tagPusher:        pushGitHubActionsReleaseTag{journal: executionJournal, git: activeGit},
 		continuation:     fromTagPushed,
 	}
 	return resumeReleaseUseCase{
 		locator:  locateResumableExecution{repositoryPath: repositoryPath, remotes: resumeGit, journal: executionJournal},
-		assessor: assessResumableExecution{},
+		assessor: assessResumableExecution{tags: resumeGit},
 		contexts: reconstructResumeExecutionContext{},
 		resolver: explicitResumeRecoveryResolver{},
 		selector: resumeReleaseOperationSelector{

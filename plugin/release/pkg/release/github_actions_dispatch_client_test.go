@@ -3,12 +3,40 @@ package release
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestEnvironmentGitHubActionsDispatchTokenResolverUsesOnlyGitHubTokenAndRedactsFormatting(t *testing.T) {
+	t.Setenv("GH_TOKEN", "ignored-gh-token")
+	t.Setenv("GITHUB_PAT", "ignored-github-pat")
+	t.Setenv("GITHUB_TOKEN", "  canonical-github-token  ")
+
+	token, err := (EnvironmentGitHubActionsDispatchTokenResolver{}).ResolveGitHubActionsDispatchToken(context.Background())
+	if err != nil {
+		t.Fatalf("ResolveGitHubActionsDispatchToken: %v", err)
+	}
+	if got := token.secretValue(); got != "canonical-github-token" {
+		t.Fatalf("resolved token = %q, want trimmed GITHUB_TOKEN", got)
+	}
+	formatted := fmt.Sprintf("%s %v %+v %#v", token, token, token, token)
+	if strings.Contains(formatted, token.secretValue()) || !strings.Contains(formatted, "[redacted]") {
+		t.Fatalf("typed token formatting was not redacted: %s", formatted)
+	}
+}
+
+func TestEnvironmentGitHubActionsDispatchTokenResolverPreservesMissingTokenError(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", " \t ")
+
+	_, err := (EnvironmentGitHubActionsDispatchTokenResolver{}).ResolveGitHubActionsDispatchToken(context.Background())
+	if err == nil || err.Error() != "GitHub Actions dispatch requires GITHUB_TOKEN with the appropriate repository Actions write permission" {
+		t.Fatalf("missing-token error changed: %v", err)
+	}
+}
 
 func TestGitHubActionsDispatchClientBuildsWorkflowDispatchRequest(t *testing.T) {
 	request := newDispatchClientTestRequest(t)
@@ -33,7 +61,7 @@ func TestGitHubActionsDispatchClientBuildsWorkflowDispatchRequest(t *testing.T) 
 	}
 	target := GitHubRepositoryTarget{Owner: "neko man", Repository: "repo.one", APIBaseURL: server.URL}
 
-	result, err := client.Dispatch(context.Background(), target, request, "super-secret-token")
+	result, err := client.Dispatch(context.Background(), target, request, GitHubActionsDispatchToken{secret: "super-secret-token"})
 	if err != nil {
 		t.Fatalf("Dispatch: %v", err)
 	}
@@ -91,7 +119,7 @@ func TestGitHubActionsDispatchClientClassifiesResponses(t *testing.T) {
 			if err != nil {
 				t.Fatalf("NewGitHubActionsDispatchClient: %v", err)
 			}
-			result, err := client.Dispatch(context.Background(), GitHubRepositoryTarget{Owner: "owner", Repository: "repo", APIBaseURL: server.URL}, request, "secret-token")
+			result, err := client.Dispatch(context.Background(), GitHubRepositoryTarget{Owner: "owner", Repository: "repo", APIBaseURL: server.URL}, request, GitHubActionsDispatchToken{secret: "secret-token"})
 			if err != nil {
 				t.Fatalf("Dispatch: %v", err)
 			}
@@ -123,7 +151,7 @@ func TestGitHubActionsDispatchClientDoesNotFollowRedirects(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewGitHubActionsDispatchClient: %v", err)
 	}
-	result, err := client.Dispatch(context.Background(), GitHubRepositoryTarget{Owner: "owner", Repository: "repo", APIBaseURL: server.URL}, request, "secret-token")
+	result, err := client.Dispatch(context.Background(), GitHubRepositoryTarget{Owner: "owner", Repository: "repo", APIBaseURL: server.URL}, request, GitHubActionsDispatchToken{secret: "secret-token"})
 	if err != nil {
 		t.Fatalf("Dispatch: %v", err)
 	}
@@ -146,7 +174,7 @@ func TestGitHubActionsDispatchClientTimeoutIsUnknown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewGitHubActionsDispatchClient: %v", err)
 	}
-	result, err := client.Dispatch(context.Background(), GitHubRepositoryTarget{Owner: "owner", Repository: "repo", APIBaseURL: server.URL}, request, "secret-token")
+	result, err := client.Dispatch(context.Background(), GitHubRepositoryTarget{Owner: "owner", Repository: "repo", APIBaseURL: server.URL}, request, GitHubActionsDispatchToken{secret: "secret-token"})
 	if err != nil {
 		t.Fatalf("Dispatch: %v", err)
 	}

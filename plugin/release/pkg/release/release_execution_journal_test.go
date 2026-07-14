@@ -2,6 +2,7 @@ package release
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,6 +99,95 @@ func TestReleaseExecutionJournalStoreCreatesAndReusesUnderGitCommonDir(t *testin
 	}
 }
 
+func TestReleaseExecutionJournalStorePersistsExactCanonicalBytesAndMode(t *testing.T) {
+	root := newGitHubActionsDispatchRepository(t)
+	timestamp := time.Date(2026, 7, 14, 10, 11, 12, 0, time.UTC)
+	store := NewReleaseExecutionJournalStore(root)
+	store.clock = fixedReleaseClock{timestamp: timestamp}
+	journal := &ReleaseExecutionJournal{
+		SchemaVersion: releaseExecutionJournalSchemaVersion,
+		Identity: ReleaseExecutionIdentity{
+			RepositoryRemote: "https://github.com/nekoman/repo.git",
+			BaseCommitSHA:    strings.Repeat("a", 40),
+			UnitID:           "api",
+			CurrentVersion:   "1.2.3",
+			NextVersion:      "1.2.4",
+			Tag:              "api/v1.2.4",
+			Executor:         "goreleaser",
+			Delivery:         "github-actions",
+			WorkflowPath:     ".github/workflows/release-api.yml",
+			SHA256:           strings.Repeat("b", 64),
+		},
+		RepositoryRemote:  "https://github.com/nekoman/repo.git",
+		BaseCommitSHA:     strings.Repeat("a", 40),
+		UnitID:            "api",
+		CurrentVersion:    "1.2.3",
+		NextVersion:       "1.2.4",
+		Tag:               "api/v1.2.4",
+		Executor:          "goreleaser",
+		Delivery:          "github-actions",
+		WorkflowPath:      ".github/workflows/release-api.yml",
+		KnownReleaseFiles: []ReleaseExecutionFileMetadata{},
+		State:             ReleaseExecutionPrepared,
+		PendingAction:     ReleaseExecutionPendingNone,
+	}
+
+	resolution, err := store.Prepare(journal)
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+	want := `{
+  "schemaVersion": 1,
+  "identity": {
+    "repositoryRemote": "https://github.com/nekoman/repo.git",
+    "baseCommitSHA": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "unit": "api",
+    "currentVersion": "1.2.3",
+    "nextVersion": "1.2.4",
+    "tag": "api/v1.2.4",
+    "executor": "goreleaser",
+    "delivery": "github-actions",
+    "workflowPath": ".github/workflows/release-api.yml",
+    "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "repositoryRemote": "https://github.com/nekoman/repo.git",
+  "baseCommitSHA": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "unit": "api",
+  "currentVersion": "1.2.3",
+  "nextVersion": "1.2.4",
+  "tag": "api/v1.2.4",
+  "executor": "goreleaser",
+  "delivery": "github-actions",
+  "workflowPath": ".github/workflows/release-api.yml",
+  "knownReleaseFiles": [],
+  "state": "prepared",
+  "pendingAction": "none",
+  "createdAt": "2026-07-14T10:11:12Z",
+  "updatedAt": "2026-07-14T10:11:12Z",
+  "recoveryMetadata": {
+    "lastAssessmentAt": "0001-01-01T00:00:00Z"
+  }
+}
+`
+	if got := mustReadString(t, resolution.Path); got != want {
+		t.Fatalf("execution journal bytes changed:\n%s", got)
+	}
+	info, err := os.Stat(resolution.Path)
+	if err != nil {
+		t.Fatalf("stat execution journal: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0600 {
+		t.Fatalf("execution journal mode = %04o, want 0600", got)
+	}
+	directory, err := os.Stat(filepath.Dir(resolution.Path))
+	if err != nil {
+		t.Fatalf("stat execution journal directory: %v", err)
+	}
+	if got := directory.Mode().Perm(); got != 0700 {
+		t.Fatalf("execution journal directory mode = %04o, want 0700", got)
+	}
+}
+
 func TestReleaseExecutionJournalStoreSupportsLinkedWorktreeCommonDir(t *testing.T) {
 	root := newGitHubActionsDispatchRepository(t)
 	worktreeRoot := filepath.Join(t.TempDir(), "linked")
@@ -140,6 +230,20 @@ func TestReleaseExecutionJournalStoreRejectsCorruptAndImmutableMismatch(t *testi
 	}
 	if _, err := store.Load(journal.Identity); err == nil || !strings.Contains(err.Error(), "parse release execution journal") {
 		t.Fatalf("expected corrupt journal failure, got %v", err)
+	}
+}
+
+func TestReleaseExecutionJournalStoreReportsPrivatePersistenceFailure(t *testing.T) {
+	root := newGitHubActionsDispatchRepository(t)
+	journal := newPreparedExecutionJournal(t, newExecutionJournalContext(t, root))
+	store := NewReleaseExecutionJournalStore(root)
+	store.files.replaceFile = func(string, []byte, os.FileMode) error {
+		return errors.New("injected atomic execution journal write failure")
+	}
+
+	_, err := store.Prepare(journal)
+	if err == nil || !strings.Contains(err.Error(), "write release execution journal") || !strings.Contains(err.Error(), "injected atomic execution journal write failure") {
+		t.Fatalf("persistence failure contract changed: %v", err)
 	}
 }
 
@@ -242,7 +346,7 @@ func TestReleaseExecutionJournalOnceOnlyMetadataCannotChange(t *testing.T) {
 
 func mustBuildExecutionJournal(t *testing.T, ctx *ReleaseExecutionContext, files KnownReleaseFiles, baseSHA, remote string) *ReleaseExecutionJournal {
 	t.Helper()
-	journal, err := BuildReleaseExecutionJournal(ctx, BuildReleasePlan(ctx), files, baseSHA, remote)
+	journal, err := BuildReleaseExecutionJournal(ctx, BuildReleasePlan(ctx), files, baseSHA, remote, systemReleaseClock{}.Now())
 	if err != nil {
 		t.Fatalf("BuildReleaseExecutionJournal: %v", err)
 	}

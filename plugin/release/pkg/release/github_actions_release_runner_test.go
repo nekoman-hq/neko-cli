@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
@@ -60,6 +61,41 @@ func TestGitHubActionsReleaseRunnerCompletesJournaledRelease(t *testing.T) {
 	dispatchJournal := loadDispatchJournalForReleaseTest(t, result.DispatchJournalPath)
 	if dispatchJournal.State != DispatchJournalAccepted {
 		t.Fatalf("unexpected dispatch journal: %#v", dispatchJournal)
+	}
+}
+
+func TestGitHubActionsReleaseRunnerUsesInjectedClockForPersistedTimestamps(t *testing.T) {
+	root := newGitHubActionsDispatchRepository(t)
+	bare := filepath.Join(t.TempDir(), "origin.git")
+	gitCmd(t, root, "init", "--bare", bare)
+	gitCmd(t, root, "remote", "set-url", "--push", "origin", bare)
+	repository, err := releaseconfig.LoadV2Repository(root)
+	if err != nil {
+		t.Fatalf("LoadV2Repository: %v", err)
+	}
+	ctx, err := BuildReleaseExecutionContext(repository, repository.Units[0], Patch, false)
+	if err != nil {
+		t.Fatalf("BuildReleaseExecutionContext: %v", err)
+	}
+	timestamp := time.Date(2026, 7, 14, 10, 11, 12, 0, time.UTC)
+	runner := NewGitHubActionsReleaseRunner(
+		WithGitHubActionsReleaseTokenResolver(staticDispatchTokenResolver{token: "secret-token"}),
+		WithGitHubActionsReleaseDispatchClient(&recordingWorkflowDispatchClient{response: GitHubActionsDispatchResponse{State: DispatchJournalAccepted, HTTPStatus: 204}}),
+		WithGitHubActionsReleaseClock(fixedReleaseClock{timestamp: timestamp}),
+	)
+
+	result, err := runner.Run(context.Background(), ctx)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	execution := loadReleaseExecutionJournalForTest(t, result.ExecutionJournalPath)
+	if !execution.CreatedAt.Equal(timestamp) || !execution.UpdatedAt.Equal(timestamp) {
+		t.Fatalf("execution journal timestamps = %s/%s, want %s", execution.CreatedAt, execution.UpdatedAt, timestamp)
+	}
+	dispatch := loadDispatchJournalForTest(t, result.DispatchJournalPath)
+	if !dispatch.CreatedAt.Equal(timestamp) || !dispatch.UpdatedAt.Equal(timestamp) ||
+		!dispatch.DispatchMetadata.RequestStartedAt.Equal(timestamp) || !dispatch.DispatchMetadata.RequestFinishedAt.Equal(timestamp) {
+		t.Fatalf("dispatch journal did not use injected clock: %#v", dispatch)
 	}
 }
 
@@ -334,7 +370,7 @@ type recordingWorkflowDispatchClient struct {
 	calls    int
 }
 
-func (client *recordingWorkflowDispatchClient) Dispatch(_ context.Context, _ GitHubRepositoryTarget, request *ReleaseDispatchRequest, _ string) (GitHubActionsDispatchResponse, error) {
+func (client *recordingWorkflowDispatchClient) Dispatch(_ context.Context, _ GitHubRepositoryTarget, request *ReleaseDispatchRequest, _ GitHubActionsDispatchToken) (GitHubActionsDispatchResponse, error) {
 	client.calls++
 	client.request = request
 	return client.response, client.err

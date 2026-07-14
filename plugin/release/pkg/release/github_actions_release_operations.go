@@ -207,10 +207,11 @@ func (operation validateGitHubActionsReleasePreflight) Validate(execCtx *Release
 
 type prepareGitHubActionsReleaseExecution struct {
 	journal releaseExecutionJournalPreparation
+	clock   ReleaseClock
 }
 
 func (operation prepareGitHubActionsReleaseExecution) Prepare(execCtx *ReleaseExecutionContext, files KnownReleaseFiles, preflight validatedGitHubActionsReleasePreflight) (preparedGitHubActionsReleaseExecution, error) {
-	journal, err := BuildReleaseExecutionJournal(execCtx, BuildReleasePlan(execCtx), files, preflight.BaseCommitSHA, preflight.RemoteURL)
+	journal, err := BuildReleaseExecutionJournal(execCtx, BuildReleasePlan(execCtx), files, preflight.BaseCommitSHA, preflight.RemoteURL, operation.clock.Now())
 	if err != nil {
 		return preparedGitHubActionsReleaseExecution{}, err
 	}
@@ -386,10 +387,12 @@ type releaseDispatchRequestBuilder interface {
 	Build(execCtx *ReleaseExecutionContext, result *GitReleaseResult) (*ReleaseDispatchRequest, error)
 }
 
-type verifiedReleaseDispatchRequestBuilder struct{}
+type verifiedReleaseDispatchRequestBuilder struct {
+	git releaseDispatchGitVerifier
+}
 
-func (verifiedReleaseDispatchRequestBuilder) Build(execCtx *ReleaseExecutionContext, result *GitReleaseResult) (*ReleaseDispatchRequest, error) {
-	return BuildReleaseDispatchRequest(execCtx, result)
+func (builder verifiedReleaseDispatchRequestBuilder) Build(execCtx *ReleaseExecutionContext, result *GitReleaseResult) (*ReleaseDispatchRequest, error) {
+	return BuildReleaseDispatchRequest(execCtx, result, builder.git)
 }
 
 func createdGitHubActionsReleaseResult(execCtx *ReleaseExecutionContext, preflight validatedGitHubActionsReleasePreflight, files KnownReleaseFiles, commitSHA string) *GitReleaseResult {
@@ -493,21 +496,23 @@ func (operation pushGitHubActionsReleaseTag) Push(execCtx *ReleaseExecutionConte
 }
 
 type dispatchGitHubActionsReleaseWorkflow struct {
-	client         GitHubActionsWorkflowDispatchClient
-	journal        releaseExecutionErrorRecorder
-	repositoryRoot string
+	client  GitHubActionsWorkflowDispatchClient
+	journal releaseExecutionErrorRecorder
+	store   *DispatchJournalStore
+	clock   ReleaseClock
 }
 
-func (operation dispatchGitHubActionsReleaseWorkflow) Dispatch(ctx context.Context, execCtx *ReleaseExecutionContext, execution preparedGitHubActionsReleaseExecution, dispatch preparedGitHubActionsReleaseDispatch, token string) (*GitHubActionsDispatchResult, error) {
-	dispatcher, err := NewGitHubActionsDispatcher(operation.repositoryRoot,
+func (operation dispatchGitHubActionsReleaseWorkflow) Dispatch(ctx context.Context, execCtx *ReleaseExecutionContext, execution preparedGitHubActionsReleaseExecution, dispatch preparedGitHubActionsReleaseDispatch, token GitHubActionsDispatchToken) (*GitHubActionsDispatchResult, error) {
+	dispatcher, err := NewGitHubActionsDispatcher(operation.store.RepositoryRoot,
 		WithGitHubActionsDispatcherClient(operation.client),
-		WithGitHubActionsDispatcherTokenResolver(staticGitHubActionsDispatchTokenResolver{token: token}),
+		WithGitHubActionsDispatcherStore(operation.store),
+		WithGitHubActionsDispatcherClock(operation.clock),
 	)
 	if err != nil {
 		return nil, err
 	}
 	log.PluginPrint(log.Exec, "Dispatching workflow %s for ref %s", execCtx.Workflow, execCtx.Tag)
-	result, err := dispatcher.Dispatch(ctx, dispatch.Request)
+	result, err := dispatcher.dispatchWithToken(ctx, dispatch.Request, token)
 	if err != nil {
 		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
 		return nil, err
@@ -530,14 +535,15 @@ func (operation confirmGitHubActionsReleaseHandoff) Confirm(execution preparedGi
 }
 
 func (runner *GitHubActionsReleaseRunner) newUseCase(repositoryRoot string) *githubActionsReleaseUseCase {
-	executionJournal := NewReleaseExecutionJournalStore(repositoryRoot)
-	dispatchJournal := NewDispatchJournalStore(repositoryRoot)
+	executionJournal := newReleaseExecutionJournalStore(repositoryRoot, runner.coordinator.runner, runner.clock)
+	dispatchJournal := newDispatchJournalStore(repositoryRoot, runner.coordinator.runner, runner.clock)
 	git := githubActionsReleaseGitAdapter{coordinator: runner.coordinator}
+	dispatchVerifier := gitReleaseDispatchVerifier{coordinator: runner.coordinator}
 	return &githubActionsReleaseUseCase{
 		tokenResolver:      runner.tokenResolver,
 		planner:            versionMaterializationReleasePlanner{},
 		preflightValidator: validateGitHubActionsReleasePreflight{git: git, unresolvedExecutions: executionJournal},
-		executionPreparer:  prepareGitHubActionsReleaseExecution{journal: executionJournal},
+		executionPreparer:  prepareGitHubActionsReleaseExecution{journal: executionJournal, clock: runner.clock},
 		materialization: applyGitHubActionsReleaseMaterialization{
 			journal:      executionJournal,
 			transactions: defaultReleaseMaterializationTransactionFactory{},
@@ -549,13 +555,14 @@ func (runner *GitHubActionsReleaseRunner) newUseCase(repositoryRoot string) *git
 		fileStager:       stageGitHubActionsReleaseFiles{journal: executionJournal, git: git},
 		commitCreator:    createGitHubActionsReleaseCommit{journal: executionJournal, git: git},
 		tagCreator:       createGitHubActionsReleaseTag{journal: executionJournal, git: git},
-		dispatchPreparer: prepareGitHubActionsReleaseDispatch{journal: executionJournal, dispatch: dispatchJournal, requests: verifiedReleaseDispatchRequestBuilder{}},
+		dispatchPreparer: prepareGitHubActionsReleaseDispatch{journal: executionJournal, dispatch: dispatchJournal, requests: verifiedReleaseDispatchRequestBuilder{git: dispatchVerifier}},
 		commitPusher:     pushGitHubActionsReleaseCommit{journal: executionJournal, git: git},
 		tagPusher:        pushGitHubActionsReleaseTag{journal: executionJournal, git: git},
 		workflowDispatcher: dispatchGitHubActionsReleaseWorkflow{
-			repositoryRoot: repositoryRoot,
-			client:         runner.dispatchClient,
-			journal:        executionJournal,
+			client:  runner.dispatchClient,
+			journal: executionJournal,
+			store:   dispatchJournal,
+			clock:   runner.clock,
 		},
 		handoffConfirmer: confirmGitHubActionsReleaseHandoff{journal: executionJournal},
 	}
@@ -568,15 +575,4 @@ func sanitizeRemoteForLog(raw string) string {
 	}
 	parsed.User = nil
 	return parsed.String()
-}
-
-type staticGitHubActionsDispatchTokenResolver struct {
-	token string
-}
-
-func (resolver staticGitHubActionsDispatchTokenResolver) ResolveGitHubActionsDispatchToken(_ context.Context) (string, error) {
-	if strings.TrimSpace(resolver.token) == "" {
-		return "", missingGitHubActionsDispatchTokenError()
-	}
-	return resolver.token, nil
 }

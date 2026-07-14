@@ -7,9 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
-
-	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
 // ReleaseExecutionJournalStore stores execution journals below the Git common
@@ -18,8 +15,8 @@ import (
 //nolint:govet // Fields are grouped by construction dependency, not memory layout.
 type ReleaseExecutionJournalStore struct {
 	RepositoryRoot string
-	runner         gitCommandRunner
-	now            func() time.Time
+	files          releaseJournalFiles
+	clock          ReleaseClock
 }
 
 //nolint:govet // Resolution fields follow caller decision order.
@@ -32,10 +29,14 @@ type ReleaseExecutionJournalResolution struct {
 }
 
 func NewReleaseExecutionJournalStore(repositoryRoot string) *ReleaseExecutionJournalStore {
+	return newReleaseExecutionJournalStore(repositoryRoot, execGitRunner{}, systemReleaseClock{})
+}
+
+func newReleaseExecutionJournalStore(repositoryRoot string, git gitCommandRunner, clock ReleaseClock) *ReleaseExecutionJournalStore {
 	return &ReleaseExecutionJournalStore{
 		RepositoryRoot: repositoryRoot,
-		runner:         execGitRunner{},
-		now:            func() time.Time { return time.Now().UTC() },
+		files:          newReleaseJournalFiles(repositoryRoot, git),
+		clock:          clock,
 	}
 }
 
@@ -43,11 +44,7 @@ func (store *ReleaseExecutionJournalStore) JournalPath(identity ReleaseExecution
 	if !isSafeDispatchIdentityHash(identity.SHA256) {
 		return "", fmt.Errorf("release execution identity hash %q is not safe", identity.SHA256)
 	}
-	commonDir, err := store.gitCommonDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(commonDir, "neko", "release", "executions", identity.SHA256+".json"), nil
+	return store.files.executionPath(identity.SHA256)
 }
 
 func (store *ReleaseExecutionJournalStore) Prepare(expected *ReleaseExecutionJournal) (*ReleaseExecutionJournalResolution, error) {
@@ -74,7 +71,7 @@ func (store *ReleaseExecutionJournalStore) Prepare(expected *ReleaseExecutionJou
 		}, nil
 	}
 	copy := *expected
-	copy.CreatedAt = store.now()
+	copy.CreatedAt = store.clock.Now().UTC()
 	copy.UpdatedAt = copy.CreatedAt
 	if err := store.writeAtomic(path, &copy); err != nil {
 		return nil, err
@@ -111,11 +108,10 @@ func (store *ReleaseExecutionJournalStore) Load(identity ReleaseExecutionIdentit
 }
 
 func (store *ReleaseExecutionJournalStore) FindUnresolved(repositoryRemote, unitID string) ([]ReleaseExecutionJournalResolution, error) {
-	commonDir, err := store.gitCommonDir()
+	dir, err := store.files.executionDirectory()
 	if err != nil {
 		return nil, err
 	}
-	dir := filepath.Join(commonDir, "neko", "release", "executions")
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -154,7 +150,7 @@ func (store *ReleaseExecutionJournalStore) BeginPending(identity ReleaseExecutio
 	if err != nil {
 		return nil, err
 	}
-	if err := journal.BeginPending(action, store.now()); err != nil {
+	if err := journal.BeginPending(action, store.clock.Now()); err != nil {
 		return nil, err
 	}
 	if err := store.writeAtomic(path, journal); err != nil {
@@ -170,7 +166,7 @@ func (store *ReleaseExecutionJournalStore) ConfirmPhase(identity ReleaseExecutio
 	if err != nil {
 		return nil, err
 	}
-	if err := journal.ConfirmPhase(next, update, store.now()); err != nil {
+	if err := journal.ConfirmPhase(next, update, store.clock.Now()); err != nil {
 		return nil, err
 	}
 	if err := store.writeAtomic(path, journal); err != nil {
@@ -185,7 +181,7 @@ func (store *ReleaseExecutionJournalStore) RecordLastError(identity ReleaseExecu
 		return nil, err
 	}
 	journal.LastError = capDispatchText(message)
-	journal.touch(store.now())
+	journal.touch(store.clock.Now())
 	if err := store.writeAtomic(path, journal); err != nil {
 		return nil, err
 	}
@@ -208,25 +204,6 @@ func (store *ReleaseExecutionJournalStore) loadExisting(identity ReleaseExecutio
 		return "", nil, fmt.Errorf("release execution journal %s identity mismatch", path)
 	}
 	return path, journal, nil
-}
-
-func (store *ReleaseExecutionJournalStore) gitCommonDir() (string, error) {
-	output, err := store.runner.Run(store.RepositoryRoot, "rev-parse", "--git-common-dir")
-	if err != nil {
-		return "", fmt.Errorf("resolve git common dir: %w", err)
-	}
-	commonDir := strings.TrimSpace(output)
-	if commonDir == "" {
-		return "", fmt.Errorf("git common dir is empty")
-	}
-	if !filepath.IsAbs(commonDir) {
-		commonDir = filepath.Join(store.RepositoryRoot, commonDir)
-	}
-	absolute, err := filepath.Abs(commonDir)
-	if err != nil {
-		return "", fmt.Errorf("resolve git common dir %q: %w", commonDir, err)
-	}
-	return absolute, nil
 }
 
 func (store *ReleaseExecutionJournalStore) loadAt(path string) (*ReleaseExecutionJournal, error) {
@@ -256,15 +233,14 @@ func (store *ReleaseExecutionJournalStore) loadAt(path string) (*ReleaseExecutio
 }
 
 func (store *ReleaseExecutionJournalStore) writeAtomic(path string, journal *ReleaseExecutionJournal) error {
-	data, err := json.MarshalIndent(journal, "", "  ")
+	data, err := marshalCanonicalReleaseJournal(journal)
 	if err != nil {
 		return fmt.Errorf("marshal release execution journal: %w", err)
 	}
-	data = append(data, '\n')
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+	if err := store.files.createPrivateDirectory(filepath.Dir(path)); err != nil {
 		return fmt.Errorf("create release execution journal directory %s: %w", filepath.Dir(path), err)
 	}
-	if err := releaseconfig.AtomicWriteFile(path, data, 0600); err != nil {
+	if err := store.files.writePrivateAtomic(path, data); err != nil {
 		return fmt.Errorf("write release execution journal %s: %w", path, err)
 	}
 	return nil

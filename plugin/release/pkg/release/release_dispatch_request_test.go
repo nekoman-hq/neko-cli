@@ -1,6 +1,7 @@
 package release
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,11 +10,40 @@ import (
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
+func TestBuildReleaseDispatchRequestUsesInjectedGitVerifier(t *testing.T) {
+	root := newGitHubActionsDispatchRepository(t)
+	ctx, result := prepareDispatchRequestContext(t, root, Patch)
+	verifier := &recordingReleaseDispatchGitVerifier{}
+
+	request, err := BuildReleaseDispatchRequest(ctx, result, verifier)
+	if err != nil {
+		t.Fatalf("BuildReleaseDispatchRequest: %v", err)
+	}
+	if verifier.calls != 1 || request.ReleaseCommitSHA != result.CommitSHA {
+		t.Fatalf("verifier calls=%d request=%#v", verifier.calls, request)
+	}
+
+	verifier.err = errors.New("injected read-only Git verification failure")
+	if _, err := BuildReleaseDispatchRequest(ctx, result, verifier); !errors.Is(err, verifier.err) {
+		t.Fatalf("verification error = %v, want injected failure", err)
+	}
+}
+
+type recordingReleaseDispatchGitVerifier struct {
+	err   error
+	calls int
+}
+
+func (verifier *recordingReleaseDispatchGitVerifier) VerifyRelease(*ReleaseExecutionContext, *GitReleaseResult) error {
+	verifier.calls++
+	return verifier.err
+}
+
 func TestBuildReleaseDispatchRequestCreatesDeterministicRequest(t *testing.T) {
 	root := newGitHubActionsDispatchRepository(t)
 	ctx, result := prepareDispatchRequestContext(t, root, Patch)
 
-	request, err := BuildReleaseDispatchRequest(ctx, result)
+	request, err := buildReleaseDispatchRequestForTest(ctx, result)
 	if err != nil {
 		t.Fatalf("BuildReleaseDispatchRequest: %v", err)
 	}
@@ -33,7 +63,7 @@ func TestBuildReleaseDispatchRequestCreatesDeterministicRequest(t *testing.T) {
 		t.Fatalf("unexpected inputs: %#v", request.Inputs)
 	}
 
-	again, err := BuildReleaseDispatchRequest(ctx, result)
+	again, err := buildReleaseDispatchRequestForTest(ctx, result)
 	if err != nil {
 		t.Fatalf("BuildReleaseDispatchRequest again: %v", err)
 	}
@@ -49,7 +79,7 @@ func TestBuildReleaseDispatchRequestRejectsInvalidInputs(t *testing.T) {
 	t.Run("v1", func(t *testing.T) {
 		v1 := *ctx
 		v1.SourceFormat = releaseconfig.SourceFormatV1
-		if _, err := BuildReleaseDispatchRequest(&v1, result); err == nil {
+		if _, err := buildReleaseDispatchRequestForTest(&v1, result); err == nil {
 			t.Fatal("expected V1 rejection")
 		}
 	})
@@ -57,7 +87,7 @@ func TestBuildReleaseDispatchRequestRejectsInvalidInputs(t *testing.T) {
 	t.Run("local", func(t *testing.T) {
 		local := *ctx
 		local.Delivery = "local"
-		if _, err := BuildReleaseDispatchRequest(&local, result); err == nil {
+		if _, err := buildReleaseDispatchRequestForTest(&local, result); err == nil {
 			t.Fatal("expected local delivery rejection")
 		}
 	})
@@ -65,7 +95,7 @@ func TestBuildReleaseDispatchRequestRejectsInvalidInputs(t *testing.T) {
 	t.Run("missing workflow", func(t *testing.T) {
 		missing := *ctx
 		missing.Workflow = ""
-		if _, err := BuildReleaseDispatchRequest(&missing, result); err == nil {
+		if _, err := buildReleaseDispatchRequestForTest(&missing, result); err == nil {
 			t.Fatal("expected missing workflow rejection")
 		}
 	})
@@ -73,7 +103,7 @@ func TestBuildReleaseDispatchRequestRejectsInvalidInputs(t *testing.T) {
 	t.Run("bad tag spec", func(t *testing.T) {
 		bad := *ctx
 		bad.Tag = "web/v0.2.1"
-		if _, err := BuildReleaseDispatchRequest(&bad, result); err == nil {
+		if _, err := buildReleaseDispatchRequestForTest(&bad, result); err == nil {
 			t.Fatal("expected tag spec rejection")
 		}
 	})
@@ -82,7 +112,7 @@ func TestBuildReleaseDispatchRequestRejectsInvalidInputs(t *testing.T) {
 		otherRoot := newGitHubActionsDispatchRepository(t)
 		otherCtx, otherResult := prepareDispatchRequestContext(t, otherRoot, Patch)
 		gitCmd(t, otherRoot, "tag", "-f", otherCtx.Tag, "HEAD~1")
-		if _, err := BuildReleaseDispatchRequest(otherCtx, otherResult); err == nil || !strings.Contains(err.Error(), "points to") {
+		if _, err := buildReleaseDispatchRequestForTest(otherCtx, otherResult); err == nil || !strings.Contains(err.Error(), "points to") {
 			t.Fatalf("expected tag mismatch, got %v", err)
 		}
 	})
@@ -91,7 +121,7 @@ func TestBuildReleaseDispatchRequestRejectsInvalidInputs(t *testing.T) {
 func TestDispatchIdentityChangesOnReleaseFieldsButNotRepositoryPath(t *testing.T) {
 	root := newGitHubActionsDispatchRepository(t)
 	ctx, result := prepareDispatchRequestContext(t, root, Patch)
-	request, err := BuildReleaseDispatchRequest(ctx, result)
+	request, err := buildReleaseDispatchRequestForTest(ctx, result)
 	if err != nil {
 		t.Fatalf("BuildReleaseDispatchRequest: %v", err)
 	}
@@ -161,6 +191,10 @@ func TestDispatchIdentityChangesOnReleaseFieldsButNotRepositoryPath(t *testing.T
 	if sameRemote.SHA256 != request.Identity.SHA256 {
 		t.Fatalf("same remote identity should produce same hash")
 	}
+}
+
+func buildReleaseDispatchRequestForTest(ctx *ReleaseExecutionContext, result *GitReleaseResult) (*ReleaseDispatchRequest, error) {
+	return BuildReleaseDispatchRequest(ctx, result, gitReleaseDispatchVerifier{coordinator: NewGitReleaseCoordinator()})
 }
 
 func newGitHubActionsDispatchRepository(t *testing.T) string {

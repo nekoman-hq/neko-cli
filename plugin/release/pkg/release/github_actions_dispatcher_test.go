@@ -225,7 +225,7 @@ type journalInspectingDispatchClient struct {
 	observedState DispatchJournalState
 }
 
-func (client *journalInspectingDispatchClient) Dispatch(_ context.Context, _ GitHubRepositoryTarget, request *ReleaseDispatchRequest, _ string) (GitHubActionsDispatchResponse, error) {
+func (client *journalInspectingDispatchClient) Dispatch(_ context.Context, _ GitHubRepositoryTarget, request *ReleaseDispatchRequest, _ GitHubActionsDispatchToken) (GitHubActionsDispatchResponse, error) {
 	resolution, err := client.store.Load(request)
 	if err != nil {
 		return GitHubActionsDispatchResponse{}, err
@@ -236,10 +236,10 @@ func (client *journalInspectingDispatchClient) Dispatch(_ context.Context, _ Git
 	return GitHubActionsDispatchResponse{State: DispatchJournalAccepted, HTTPStatus: 204}, nil
 }
 
-func (client *fakeWorkflowDispatchClient) Dispatch(_ context.Context, target GitHubRepositoryTarget, _ *ReleaseDispatchRequest, token string) (GitHubActionsDispatchResponse, error) {
+func (client *fakeWorkflowDispatchClient) Dispatch(_ context.Context, target GitHubRepositoryTarget, _ *ReleaseDispatchRequest, token GitHubActionsDispatchToken) (GitHubActionsDispatchResponse, error) {
 	client.calls++
 	client.target = target
-	if strings.Contains(fmt.Sprint(client.response), token) {
+	if strings.Contains(fmt.Sprint(client.response), token.secretValue()) {
 		return GitHubActionsDispatchResponse{}, fmt.Errorf("fake response contains token")
 	}
 	return client.response, client.err
@@ -251,11 +251,11 @@ type staticDispatchTokenResolver struct {
 	err   error
 }
 
-func (resolver staticDispatchTokenResolver) ResolveGitHubActionsDispatchToken(_ context.Context) (string, error) {
+func (resolver staticDispatchTokenResolver) ResolveGitHubActionsDispatchToken(_ context.Context) (GitHubActionsDispatchToken, error) {
 	if resolver.err != nil {
-		return "", resolver.err
+		return GitHubActionsDispatchToken{}, resolver.err
 	}
-	return resolver.token, nil
+	return NewGitHubActionsDispatchToken(resolver.token)
 }
 
 func loadDispatchJournalForTest(t *testing.T, path string) *DispatchJournal {

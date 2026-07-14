@@ -554,6 +554,20 @@ Each adapter consolidation is a separate commit. Revert the affected commit; per
 
 Stages 3 and 4. The plugin metadata sub-step may follow Stage 1 independently if kept isolated.
 
+### Completion record
+
+Stage 5 was completed on 2026-07-14.
+
+- Plugin materialization now uses validated `ReleaseUnit.IsPlugin` and `ReleaseUnit.PluginManifestPath`; the production unit-to-path map was removed, and arbitrary validated plugin metadata is characterized alongside byte-identical self-release manifests.
+- `releaseJournalFiles` owns only Git common-directory resolution, fixed execution/dispatch locations, canonical indented JSON serialization, private directory creation, and atomic private writes. Execution and dispatch stores retain their distinct schemas, validation, mutations, lookup rules, and error messages.
+- Active release and resume composition create one `GitReleaseCoordinator` and expose it through consumer-owned capabilities. Dispatch-request building and recovery no longer construct Git infrastructure; they receive focused read-only verification/tag-inspection capabilities.
+- `GitHubActionsDispatchToken` is the single active V2 secret-bearing value from `GITHUB_TOKEN` resolution through the dispatcher/client boundary, with redacted formatting and no static re-wrapping resolver.
+- `ReleaseClock` supplies release/resume response timestamps and all active V2 persisted execution/dispatch timestamps. Deterministic end-to-end timestamp tests cover the composed runner.
+- Existing public constructors remain compatibility entry points with production Git, environment-token, and system-clock defaults. V1 tools, inactive V2 transaction/convenience paths, and their direct adapters were not rewritten.
+- Exact journal byte fixtures, modes, linked-worktree paths, injected atomic-write failures, focused verifier injection, token source/redaction, architecture boundaries, and Stage 1-4 compatibility are covered without schema, output, or release-order changes.
+
+Next exact stage: **Stage 6: Extract init and unit-add use cases with paired persistence.**
+
 ## Stage 6: Extract init and unit-add use cases with paired persistence
 
 ### Goal
@@ -904,6 +918,6 @@ CI-facing read-only planning or validation features can begin after Stage 3 if t
 
 Features that change active release execution, journal/recovery semantics, dispatch, or retry must wait until Stages 3 and 4 are complete and the full failure matrix passes.
 
-Features that add arbitrary plugin units to release materialization should wait for the Stage 5 metadata-driven materializer sub-step.
+Features that consume arbitrary validated plugin units may now reuse the Stage 5 metadata-driven materializer; changing plugin-index policy or adding release behavior still requires its own authorized stage.
 
 V2 local execution must not begin until Stages 3 through 5 are complete and a separate design explicitly resolves executor ownership, state-in-commit guarantees, unsafe-operation journaling, and recovery. Release-it remains blocked unless that design proves the root state can be included safely.

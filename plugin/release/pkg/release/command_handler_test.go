@@ -18,7 +18,7 @@ func TestReleaseCommandHandlerParsesInvokesOnceAndMapsOutcome(t *testing.T) {
 			ReleaseSystem:  "goreleaser",
 		},
 	}
-	handler := releaseCommandHandler{starter: starter, clock: fixedResponseClock{timestamp}, releaseType: Minor}
+	handler := releaseCommandHandler{starter: starter, clock: fixedReleaseClock{timestamp}, releaseType: Minor}
 
 	resp, err := handler.Handle(context.Background(), plugin.Request{Flags: map[string]any{"unit": "api", "dry-run": true}})
 
@@ -42,7 +42,7 @@ func TestReleaseCommandHandlerMapsTypedFailureWithoutGoError(t *testing.T) {
 			Details: map[string]any{"hint": "initialize release config"},
 		},
 	}
-	handler := releaseCommandHandler{starter: starter, clock: fixedResponseClock{timestamp}, releaseType: Patch}
+	handler := releaseCommandHandler{starter: starter, clock: fixedReleaseClock{timestamp}, releaseType: Patch}
 
 	resp, err := handler.Handle(context.Background(), plugin.Request{})
 
@@ -71,7 +71,7 @@ func TestResumeCommandHandlerParsesInvokesOnceAndMapsOutcome(t *testing.T) {
 			Guidance:             "Inspect before continuing.",
 		},
 	}
-	handler := resumeCommandHandler{resumer: resumer, clock: fixedResponseClock{timestamp}}
+	handler := resumeCommandHandler{resumer: resumer, clock: fixedReleaseClock{timestamp}}
 
 	resp, err := handler.Handle(context.Background(), plugin.Request{Flags: map[string]any{"unit": "api", "dry-run": true}})
 
@@ -86,11 +86,11 @@ func TestResumeCommandHandlerParsesInvokesOnceAndMapsOutcome(t *testing.T) {
 	}
 }
 
-type fixedResponseClock struct {
+type fixedReleaseClock struct {
 	timestamp time.Time
 }
 
-func (clock fixedResponseClock) Now() time.Time {
+func (clock fixedReleaseClock) Now() time.Time {
 	return clock.timestamp
 }
 

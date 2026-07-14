@@ -81,7 +81,7 @@ type githubActionsReleaseTagPusher interface {
 }
 
 type githubActionsReleaseWorkflowDispatcher interface {
-	Dispatch(ctx context.Context, execCtx *ReleaseExecutionContext, execution preparedGitHubActionsReleaseExecution, dispatch preparedGitHubActionsReleaseDispatch, token string) (*GitHubActionsDispatchResult, error)
+	Dispatch(ctx context.Context, execCtx *ReleaseExecutionContext, execution preparedGitHubActionsReleaseExecution, dispatch preparedGitHubActionsReleaseDispatch, token GitHubActionsDispatchToken) (*GitHubActionsDispatchResult, error)
 }
 
 type githubActionsReleaseHandoffConfirmer interface {

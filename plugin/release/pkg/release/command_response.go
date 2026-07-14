@@ -10,16 +10,6 @@ import (
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata"
 )
 
-type responseClock interface {
-	Now() time.Time
-}
-
-type systemResponseClock struct{}
-
-func (systemResponseClock) Now() time.Time {
-	return time.Now()
-}
-
 // MapCommandFailure maps an expected application failure using an explicitly
 // supplied timestamp.
 func MapCommandFailure(command string, failure *CommandFailure, timestamp time.Time) *plugin.Response {
@@ -210,5 +200,5 @@ func V2ExecutionUnavailableResponse(command string) *plugin.Response {
 		"V2_EXECUTION_UNAVAILABLE",
 		"release schema v2 has Local Delivery and ExecutorContext prepared, but actual V2 release execution is not available until the next milestone",
 	)
-	return MapCommandFailure(command, failure, systemResponseClock{}.Now())
+	return MapCommandFailure(command, failure, systemReleaseClock{}.Now())
 }

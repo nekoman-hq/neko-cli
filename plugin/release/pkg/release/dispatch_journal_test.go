@@ -2,6 +2,7 @@ package release
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,6 +41,104 @@ func TestDispatchJournalStoreCreatesPreparedJournalUnderGitCommonDir(t *testing.
 		if strings.Contains(data, forbidden) {
 			t.Fatalf("journal contains forbidden token-like value %q:\n%s", forbidden, data)
 		}
+	}
+}
+
+func TestDispatchJournalStorePersistsExactCanonicalBytesAndMode(t *testing.T) {
+	root := newGitHubActionsDispatchRepository(t)
+	timestamp := time.Date(2026, 7, 14, 10, 11, 12, 0, time.UTC)
+	store := NewDispatchJournalStore(root)
+	store.clock = fixedReleaseClock{timestamp: timestamp}
+	request := &ReleaseDispatchRequest{
+		RepositoryRemoteName: "origin",
+		UnitID:               "api",
+		Version:              "1.2.4",
+		Tag:                  "api/v1.2.4",
+		ReleaseCommitSHA:     strings.Repeat("c", 40),
+		WorkflowPath:         ".github/workflows/release-api.yml",
+		WorkflowFileName:     "release-api.yml",
+		Delivery:             "github-actions",
+		Executor:             "goreleaser",
+		Inputs: map[string]string{
+			"unit":        "api",
+			"version":     "1.2.4",
+			"tag":         "api/v1.2.4",
+			"release_sha": strings.Repeat("c", 40),
+		},
+		Identity: ReleaseDispatchIdentity{
+			RepositoryRemoteName: "origin",
+			RepositoryRemote:     "https://github.com/nekoman/repo.git",
+			UnitID:               "api",
+			Version:              "1.2.4",
+			Tag:                  "api/v1.2.4",
+			ReleaseCommitSHA:     strings.Repeat("c", 40),
+			WorkflowPath:         ".github/workflows/release-api.yml",
+			Executor:             "goreleaser",
+			Delivery:             "github-actions",
+			SHA256:               strings.Repeat("d", 64),
+		},
+	}
+
+	resolution, err := store.Prepare(request)
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+	want := `{
+  "schemaVersion": 1,
+  "identity": {
+    "repositoryRemoteName": "origin",
+    "repositoryRemote": "https://github.com/nekoman/repo.git",
+    "unit": "api",
+    "version": "1.2.4",
+    "tag": "api/v1.2.4",
+    "releaseCommitSHA": "cccccccccccccccccccccccccccccccccccccccc",
+    "workflowPath": ".github/workflows/release-api.yml",
+    "executor": "goreleaser",
+    "delivery": "github-actions",
+    "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  },
+  "repositoryRemoteName": "origin",
+  "repositoryRemote": "https://github.com/nekoman/repo.git",
+  "unit": "api",
+  "version": "1.2.4",
+  "tag": "api/v1.2.4",
+  "releaseCommitSHA": "cccccccccccccccccccccccccccccccccccccccc",
+  "workflowPath": ".github/workflows/release-api.yml",
+  "workflowFileName": "release-api.yml",
+  "executor": "goreleaser",
+  "delivery": "github-actions",
+  "inputs": {
+    "release_sha": "cccccccccccccccccccccccccccccccccccccccc",
+    "tag": "api/v1.2.4",
+    "unit": "api",
+    "version": "1.2.4"
+  },
+  "state": "prepared",
+  "createdAt": "2026-07-14T10:11:12Z",
+  "updatedAt": "2026-07-14T10:11:12Z",
+  "dispatchMetadata": {
+    "requestStartedAt": "0001-01-01T00:00:00Z",
+    "requestFinishedAt": "0001-01-01T00:00:00Z"
+  },
+  "recoveryGuidance": "Dispatch request is prepared locally. No HTTP request has been attempted."
+}
+`
+	if got := mustReadString(t, resolution.Path); got != want {
+		t.Fatalf("dispatch journal bytes changed:\n%s", got)
+	}
+	info, err := os.Stat(resolution.Path)
+	if err != nil {
+		t.Fatalf("stat dispatch journal: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0600 {
+		t.Fatalf("dispatch journal mode = %04o, want 0600", got)
+	}
+	directory, err := os.Stat(filepath.Dir(resolution.Path))
+	if err != nil {
+		t.Fatalf("stat dispatch journal directory: %v", err)
+	}
+	if got := directory.Mode().Perm(); got != 0700 {
+		t.Fatalf("dispatch journal directory mode = %04o, want 0700", got)
 	}
 }
 
@@ -85,6 +184,21 @@ func TestDispatchJournalStoreFailsOnCorruptedJournal(t *testing.T) {
 	}
 	if _, err := store.Prepare(request); err == nil || !strings.Contains(err.Error(), "parse dispatch journal") {
 		t.Fatalf("expected parse failure, got %v", err)
+	}
+}
+
+func TestDispatchJournalStoreReportsPrivatePersistenceFailure(t *testing.T) {
+	root := newGitHubActionsDispatchRepository(t)
+	ctx, result := prepareDispatchRequestContext(t, root, Patch)
+	request := mustBuildDispatchRequest(t, ctx, result)
+	store := NewDispatchJournalStore(root)
+	store.files.replaceFile = func(string, []byte, os.FileMode) error {
+		return errors.New("injected atomic dispatch journal write failure")
+	}
+
+	_, err := store.Prepare(request)
+	if err == nil || !strings.Contains(err.Error(), "write dispatch journal") || !strings.Contains(err.Error(), "injected atomic dispatch journal write failure") {
+		t.Fatalf("persistence failure contract changed: %v", err)
 	}
 }
 
@@ -152,19 +266,28 @@ func TestDispatchJournalStoreSupportsGitCommonDirFromWorktree(t *testing.T) {
 	root := newGitHubActionsDispatchRepository(t)
 	ctx, result := prepareDispatchRequestContext(t, root, Patch)
 	request := mustBuildDispatchRequest(t, ctx, result)
-	store := NewDispatchJournalStore(root)
+	worktreeRoot := filepath.Join(t.TempDir(), "linked")
+	gitCmd(t, root, "worktree", "add", worktreeRoot)
+	store := NewDispatchJournalStore(worktreeRoot)
 	path, err := store.JournalPath(request.Identity)
 	if err != nil {
 		t.Fatalf("JournalPath: %v", err)
 	}
-	if strings.Contains(path, filepath.Join(root, ".neko")) {
+	if strings.Contains(path, filepath.Join(worktreeRoot, ".neko")) {
 		t.Fatalf("journal should not be under worktree .neko: %s", path)
+	}
+	commonDir := strings.TrimSpace(gitOutput(t, worktreeRoot, "rev-parse", "--git-common-dir"))
+	if !filepath.IsAbs(commonDir) {
+		commonDir = filepath.Join(worktreeRoot, commonDir)
+	}
+	if !strings.HasPrefix(path, filepath.Join(commonDir, "neko", "release", "dispatches")) {
+		t.Fatalf("journal path %s not under linked worktree common dir %s", path, commonDir)
 	}
 }
 
 func mustBuildDispatchRequest(t *testing.T, ctx *ReleaseExecutionContext, result *GitReleaseResult) *ReleaseDispatchRequest {
 	t.Helper()
-	request, err := BuildReleaseDispatchRequest(ctx, result)
+	request, err := buildReleaseDispatchRequestForTest(ctx, result)
 	if err != nil {
 		t.Fatalf("BuildReleaseDispatchRequest: %v", err)
 	}

@@ -28,7 +28,7 @@ const (
 // GitHubActionsWorkflowDispatchClient sends exactly one workflow_dispatch HTTP
 // request for an already verified immutable dispatch request.
 type GitHubActionsWorkflowDispatchClient interface {
-	Dispatch(ctx context.Context, target GitHubRepositoryTarget, request *ReleaseDispatchRequest, token string) (GitHubActionsDispatchResponse, error)
+	Dispatch(ctx context.Context, target GitHubRepositoryTarget, request *ReleaseDispatchRequest, token GitHubActionsDispatchToken) (GitHubActionsDispatchResponse, error)
 }
 
 // GitHubActionsDispatchClient is the production HTTP implementation of the
@@ -133,12 +133,12 @@ func WithGitHubActionsDispatchTimeout(timeout time.Duration) GitHubActionsDispat
 	}
 }
 
-func (client *GitHubActionsDispatchClient) Dispatch(ctx context.Context, target GitHubRepositoryTarget, request *ReleaseDispatchRequest, token string) (GitHubActionsDispatchResponse, error) {
+func (client *GitHubActionsDispatchClient) Dispatch(ctx context.Context, target GitHubRepositoryTarget, request *ReleaseDispatchRequest, token GitHubActionsDispatchToken) (GitHubActionsDispatchResponse, error) {
 	if request == nil {
 		return GitHubActionsDispatchResponse{}, errDispatchRequestMissing()
 	}
-	token = strings.TrimSpace(token)
-	if token == "" {
+	secret := token.secretValue()
+	if secret == "" {
 		return GitHubActionsDispatchResponse{}, missingGitHubActionsDispatchTokenError()
 	}
 	endpoint, err := client.dispatchEndpoint(target, request.WorkflowFileName)
@@ -160,7 +160,7 @@ func (client *GitHubActionsDispatchClient) Dispatch(ctx context.Context, target 
 		return GitHubActionsDispatchResponse{}, fmt.Errorf("build github actions dispatch request: %w", err)
 	}
 	httpRequest.Header.Set("Accept", "application/vnd.github+json")
-	httpRequest.Header.Set("Authorization", "Bearer "+token)
+	httpRequest.Header.Set("Authorization", "Bearer "+secret)
 	httpRequest.Header.Set("Content-Type", "application/json")
 	httpRequest.Header.Set("X-GitHub-Api-Version", githubAPIVersion)
 	httpRequest.Header.Set("User-Agent", client.userAgent)
@@ -169,12 +169,12 @@ func (client *GitHubActionsDispatchClient) Dispatch(ctx context.Context, target 
 	if err != nil {
 		return GitHubActionsDispatchResponse{
 			State:            DispatchJournalUnknown,
-			Error:            sanitizeDispatchText(classifyTransportError(err), token),
+			Error:            sanitizeDispatchText(classifyTransportError(err), secret),
 			RecoveryGuidance: dispatchJournalRecoveryGuidance(DispatchJournalUnknown),
 		}, nil
 	}
 	defer func() { _ = response.Body.Close() }()
-	return classifyGitHubActionsDispatchResponse(response, token), nil
+	return classifyGitHubActionsDispatchResponse(response, secret), nil
 }
 
 func (client *GitHubActionsDispatchClient) dispatchEndpoint(target GitHubRepositoryTarget, workflowFilename string) (string, error) {
@@ -349,21 +349,45 @@ func githubActionsDispatchUserAgent() string {
 	return "neko-cli/" + version
 }
 
+// GitHubActionsDispatchToken is a validated secret-bearing value. Its string
+// representations are always redacted; only dispatch adapters can unwrap it.
+type GitHubActionsDispatchToken struct {
+	secret string
+}
+
+// NewGitHubActionsDispatchToken validates a token for explicit resolver and
+// client implementations without exposing its value through formatting.
+func NewGitHubActionsDispatchToken(value string) (GitHubActionsDispatchToken, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return GitHubActionsDispatchToken{}, missingGitHubActionsDispatchTokenError()
+	}
+	return GitHubActionsDispatchToken{secret: value}, nil
+}
+
+func (token GitHubActionsDispatchToken) secretValue() string {
+	return token.secret
+}
+
+func (GitHubActionsDispatchToken) String() string {
+	return "[redacted]"
+}
+
+func (GitHubActionsDispatchToken) GoString() string {
+	return "[redacted]"
+}
+
 // GitHubActionsDispatchTokenResolver resolves the production dispatch token.
 type GitHubActionsDispatchTokenResolver interface {
-	ResolveGitHubActionsDispatchToken(ctx context.Context) (string, error)
+	ResolveGitHubActionsDispatchToken(ctx context.Context) (GitHubActionsDispatchToken, error)
 }
 
 // EnvironmentGitHubActionsDispatchTokenResolver resolves GITHUB_TOKEN for real
 // internal dispatch attempts.
 type EnvironmentGitHubActionsDispatchTokenResolver struct{}
 
-func (EnvironmentGitHubActionsDispatchTokenResolver) ResolveGitHubActionsDispatchToken(_ context.Context) (string, error) {
-	token := strings.TrimSpace(os.Getenv("GITHUB_TOKEN"))
-	if token == "" {
-		return "", missingGitHubActionsDispatchTokenError()
-	}
-	return token, nil
+func (EnvironmentGitHubActionsDispatchTokenResolver) ResolveGitHubActionsDispatchToken(_ context.Context) (GitHubActionsDispatchToken, error) {
+	return NewGitHubActionsDispatchToken(os.Getenv("GITHUB_TOKEN"))
 }
 
 func missingGitHubActionsDispatchTokenError() error {

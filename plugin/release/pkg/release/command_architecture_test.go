@@ -87,6 +87,24 @@ func TestResumeOperationsReuseFocusedActiveReleaseCapabilities(t *testing.T) {
 	}
 }
 
+func TestActiveV2BuildersAndRecoveryDoNotConstructGitInfrastructure(t *testing.T) {
+	for _, path := range []string{"release_dispatch_request.go", "release_execution_recovery.go"} {
+		source := readCommandBoundarySource(t, path)
+		for _, forbidden := range []string{"NewGitReleaseCoordinator", "exec.Command"} {
+			if strings.Contains(source, forbidden) {
+				t.Fatalf("%s constructs Git infrastructure through %q", path, forbidden)
+			}
+		}
+	}
+}
+
+func TestActiveV2TokenBoundaryHasNoStaticResolverAdapter(t *testing.T) {
+	source := readCommandBoundarySource(t, "github_actions_release_operations.go")
+	if strings.Contains(source, "staticGitHubActionsDispatchTokenResolver") {
+		t.Fatal("active V2 dispatch wraps its token in a second resolver boundary")
+	}
+}
+
 func readCommandBoundarySource(t *testing.T, path string) string {
 	t.Helper()
 	data, err := os.ReadFile(path)

@@ -173,11 +173,11 @@ type recordingReleaseTokenResolver struct {
 	recording *recordingGitHubActionsReleaseUseCase
 }
 
-func (resolver recordingReleaseTokenResolver) ResolveGitHubActionsDispatchToken(context.Context) (string, error) {
+func (resolver recordingReleaseTokenResolver) ResolveGitHubActionsDispatchToken(context.Context) (GitHubActionsDispatchToken, error) {
 	if err := resolver.recording.call("resolve-token"); err != nil {
-		return "", err
+		return GitHubActionsDispatchToken{}, err
 	}
-	return resolver.recording.token, nil
+	return NewGitHubActionsDispatchToken(resolver.recording.token)
 }
 
 type recordingReleasePlanner struct {
@@ -324,8 +324,8 @@ type recordingReleaseWorkflowDispatcher struct {
 	recording *recordingGitHubActionsReleaseUseCase
 }
 
-func (operation recordingReleaseWorkflowDispatcher) Dispatch(_ context.Context, _ *ReleaseExecutionContext, _ preparedGitHubActionsReleaseExecution, _ preparedGitHubActionsReleaseDispatch, token string) (*GitHubActionsDispatchResult, error) {
-	operation.recording.dispatchedToken = token
+func (operation recordingReleaseWorkflowDispatcher) Dispatch(_ context.Context, _ *ReleaseExecutionContext, _ preparedGitHubActionsReleaseExecution, _ preparedGitHubActionsReleaseDispatch, token GitHubActionsDispatchToken) (*GitHubActionsDispatchResult, error) {
+	operation.recording.dispatchedToken = token.secretValue()
 	if err := operation.recording.call("dispatch-workflow"); err != nil {
 		return nil, err
 	}

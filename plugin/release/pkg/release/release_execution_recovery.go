@@ -39,7 +39,7 @@ type ReleaseExecutionRecoveryAssessment struct {
 // AssessReleaseExecutionRecovery inspects only local Git and file state. It
 // never resumes, retries, restores, resets, cleans, pushes, tags, commits, or
 // dispatches.
-func AssessReleaseExecutionRecovery(repositoryRoot string, journal *ReleaseExecutionJournal) (*ReleaseExecutionRecoveryAssessment, error) {
+func AssessReleaseExecutionRecovery(repositoryRoot string, journal *ReleaseExecutionJournal, tags resumeReleaseTagInspector) (*ReleaseExecutionRecoveryAssessment, error) {
 	if journal == nil {
 		return &ReleaseExecutionRecoveryAssessment{
 			Status:                     ReleaseExecutionRecoveryCorrupted,
@@ -65,7 +65,7 @@ func AssessReleaseExecutionRecovery(repositoryRoot string, journal *ReleaseExecu
 		assessment.Guidance = "Known release files do not match expected journal hashes. Do not resume automatically."
 		return assessment, nil
 	}
-	if conflict := assessLocalTag(repositoryRoot, journal); conflict != "" {
+	if conflict := assessLocalTag(repositoryRoot, journal, tags); conflict != "" {
 		assessment.Status = ReleaseExecutionRecoveryConflicted
 		assessment.RequiresManualIntervention = true
 		assessment.Conflicts = append(assessment.Conflicts, conflict)
@@ -128,11 +128,14 @@ func assessKnownReleaseFileHashes(repositoryRoot string, journal *ReleaseExecuti
 	return conflicts
 }
 
-func assessLocalTag(repositoryRoot string, journal *ReleaseExecutionJournal) string {
+func assessLocalTag(repositoryRoot string, journal *ReleaseExecutionJournal, tags resumeReleaseTagInspector) string {
 	if journal.TagTargetSHA == "" {
 		return ""
 	}
-	tagCommit, err := NewGitReleaseCoordinator().tagCommit(repositoryRoot, journal.Tag)
+	if tags == nil {
+		return "release execution recovery tag inspector is missing"
+	}
+	tagCommit, err := tags.TagCommit(repositoryRoot, journal.Tag)
 	if err != nil {
 		return err.Error()
 	}

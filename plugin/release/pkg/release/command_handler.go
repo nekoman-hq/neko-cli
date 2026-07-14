@@ -16,7 +16,7 @@ type releaseResumer interface {
 
 type releaseCommandHandler struct {
 	starter     releaseCommandStarter
-	clock       responseClock
+	clock       ReleaseClock
 	releaseType Type
 }
 
@@ -32,7 +32,7 @@ func (handler releaseCommandHandler) Handle(ctx context.Context, req plugin.Requ
 
 type resumeCommandHandler struct {
 	resumer releaseResumer
-	clock   responseClock
+	clock   ReleaseClock
 }
 
 func (handler resumeCommandHandler) Handle(ctx context.Context, req plugin.Request) (*plugin.Response, error) {
@@ -49,7 +49,7 @@ func (handler resumeCommandHandler) Handle(ctx context.Context, req plugin.Reque
 func HandleRelease(req plugin.Request, releaseType Type) (*plugin.Response, error) {
 	handler := releaseCommandHandler{
 		starter:     releaseStartOperation{},
-		clock:       systemResponseClock{},
+		clock:       systemReleaseClock{},
 		releaseType: releaseType,
 	}
 	return handler.Handle(context.Background(), req)
@@ -59,7 +59,7 @@ func HandleRelease(req plugin.Request, releaseType Type) (*plugin.Response, erro
 func HandleResume(req plugin.Request) (*plugin.Response, error) {
 	handler := resumeCommandHandler{
 		resumer: newResumeReleaseUseCase("."),
-		clock:   systemResponseClock{},
+		clock:   systemReleaseClock{},
 	}
 	return handler.Handle(context.Background(), req)
 }

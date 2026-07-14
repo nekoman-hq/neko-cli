@@ -350,11 +350,11 @@ type recordingResumeTokenResolver struct {
 	token string
 }
 
-func (resolver recordingResumeTokenResolver) ResolveGitHubActionsDispatchToken(context.Context) (string, error) {
+func (resolver recordingResumeTokenResolver) ResolveGitHubActionsDispatchToken(context.Context) (GitHubActionsDispatchToken, error) {
 	if err := resolver.trace.call("resolve-token"); err != nil {
-		return "", err
+		return GitHubActionsDispatchToken{}, err
 	}
-	return resolver.token, nil
+	return NewGitHubActionsDispatchToken(resolver.token)
 }
 
 type recordingResumeWorkflowDispatcher struct {
@@ -362,7 +362,7 @@ type recordingResumeWorkflowDispatcher struct {
 	result *GitHubActionsDispatchResult
 }
 
-func (dispatcher recordingResumeWorkflowDispatcher) Dispatch(context.Context, *ReleaseExecutionContext, preparedGitHubActionsReleaseExecution, preparedGitHubActionsReleaseDispatch, string) (*GitHubActionsDispatchResult, error) {
+func (dispatcher recordingResumeWorkflowDispatcher) Dispatch(context.Context, *ReleaseExecutionContext, preparedGitHubActionsReleaseExecution, preparedGitHubActionsReleaseDispatch, GitHubActionsDispatchToken) (*GitHubActionsDispatchResult, error) {
 	if err := dispatcher.trace.call("dispatch-workflow"); err != nil {
 		return nil, err
 	}

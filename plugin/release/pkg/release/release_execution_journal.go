@@ -112,7 +112,7 @@ type ReleaseExecutionJournalUpdate struct {
 
 // BuildReleaseExecutionJournal builds a deterministic, non-mutating journal for
 // an intended V2 release transaction.
-func BuildReleaseExecutionJournal(ctx *ReleaseExecutionContext, plan ReleasePlan, files KnownReleaseFiles, baseCommitSHA, repositoryRemote string) (*ReleaseExecutionJournal, error) {
+func BuildReleaseExecutionJournal(ctx *ReleaseExecutionContext, plan ReleasePlan, files KnownReleaseFiles, baseCommitSHA, repositoryRemote string, createdAt time.Time) (*ReleaseExecutionJournal, error) {
 	if ctx == nil {
 		return nil, fmt.Errorf("release execution context is missing")
 	}
@@ -154,7 +154,7 @@ func BuildReleaseExecutionJournal(ctx *ReleaseExecutionContext, plan ReleasePlan
 	if err != nil {
 		return nil, err
 	}
-	now := time.Now().UTC()
+	createdAt = createdAt.UTC()
 	journal := &ReleaseExecutionJournal{
 		SchemaVersion:      releaseExecutionJournalSchemaVersion,
 		Identity:           identity,
@@ -171,8 +171,8 @@ func BuildReleaseExecutionJournal(ctx *ReleaseExecutionContext, plan ReleasePlan
 		KnownReleaseFiles:  metadata,
 		State:              ReleaseExecutionPrepared,
 		PendingAction:      ReleaseExecutionPendingNone,
-		CreatedAt:          now,
-		UpdatedAt:          now,
+		CreatedAt:          createdAt,
+		UpdatedAt:          createdAt,
 	}
 	if err := journal.ValidateImmutable(journal); err != nil {
 		return nil, err

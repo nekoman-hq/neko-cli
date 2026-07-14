@@ -1,7 +1,6 @@
 package release
 
 import (
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"regexp"
@@ -35,8 +34,9 @@ type ReleaseDispatchRequest struct {
 
 // BuildReleaseDispatchRequest builds a deterministic future dispatch request
 // from already validated V2 release context and already completed Git release
-// coordination. It performs only read-only Git inspection.
-func BuildReleaseDispatchRequest(ctx *ReleaseExecutionContext, result *GitReleaseResult) (*ReleaseDispatchRequest, error) {
+// coordination. Its focused verifier supplies the required read-only Git
+// evidence without constructing infrastructure inside the builder.
+func BuildReleaseDispatchRequest(ctx *ReleaseExecutionContext, result *GitReleaseResult, verifier releaseDispatchGitVerifier) (*ReleaseDispatchRequest, error) {
 	if ctx == nil {
 		return nil, fmt.Errorf("release execution context is missing")
 	}
@@ -64,20 +64,11 @@ func BuildReleaseDispatchRequest(ctx *ReleaseExecutionContext, result *GitReleas
 	if parsedVersion, ok := ctx.TagSpec.Parse(ctx.Tag); !ok || parsedVersion != ctx.NextVersion {
 		return nil, fmt.Errorf("dispatch tag %q does not match unit tag spec or next version %q", ctx.Tag, ctx.NextVersion)
 	}
-	coordinator := NewGitReleaseCoordinator()
-	tagCommit, err := coordinator.tagCommit(ctx.RepositoryRoot, ctx.Tag)
-	if err != nil {
+	if verifier == nil {
+		return nil, fmt.Errorf("dispatch request requires verified Git release evidence")
+	}
+	if err := verifier.VerifyRelease(ctx, result); err != nil {
 		return nil, err
-	}
-	if tagCommit != result.CommitSHA {
-		return nil, fmt.Errorf("unit tag %q points to %s, expected release commit %s", ctx.Tag, tagCommit, result.CommitSHA)
-	}
-	committedVersion, err := committedUnitVersion(ctx.RepositoryRoot, result.CommitSHA, ctx.Unit.ID)
-	if err != nil {
-		return nil, err
-	}
-	if committedVersion != ctx.NextVersion {
-		return nil, fmt.Errorf("committed V2 state unit %q version = %q, expected %q", ctx.Unit.ID, committedVersion, ctx.NextVersion)
 	}
 	remoteName := strings.TrimSpace(result.RepositoryRemoteName)
 	remote := strings.TrimSpace(result.RepositoryRemote)
@@ -140,22 +131,6 @@ func BuildReleaseDispatchDryRunSummary(ctx *ReleaseExecutionContext) (*ReleaseDi
 		JournalLocation: "pending release commit",
 		Status:          "planned after release commit and tag push",
 	}, nil
-}
-
-func committedUnitVersion(repositoryRoot, commitSHA, unitID string) (string, error) {
-	stateContent, err := NewGitReleaseCoordinator().gitOutput(repositoryRoot, "show", commitSHA+":"+releaseconfig.V2Directory+"/"+releaseconfig.V2StateFileName)
-	if err != nil {
-		return "", fmt.Errorf("inspect V2 state in release commit %s: %w", commitSHA, err)
-	}
-	var state releaseconfig.V2ReleaseState
-	if err := json.Unmarshal([]byte(stateContent), &state); err != nil {
-		return "", fmt.Errorf("decode V2 state in release commit %s: %w", commitSHA, err)
-	}
-	unitState, ok := state.Units[unitID]
-	if !ok {
-		return "", fmt.Errorf("release commit %s state is missing unit %q", commitSHA, unitID)
-	}
-	return unitState.Version, nil
 }
 
 func sortedDispatchInputKeys(inputs map[string]string) []string {

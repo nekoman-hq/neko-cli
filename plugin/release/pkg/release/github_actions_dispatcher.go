@@ -3,7 +3,6 @@ package release
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/nekoman-hq/neko-cli/pkg/log"
 )
@@ -32,7 +31,7 @@ type GitHubActionsDispatcher struct {
 	store         *DispatchJournalStore
 	client        GitHubActionsWorkflowDispatchClient
 	tokenResolver GitHubActionsDispatchTokenResolver
-	now           func() time.Time
+	clock         ReleaseClock
 }
 
 // GitHubActionsDispatcherOption configures internal dispatch dependencies.
@@ -48,7 +47,7 @@ func NewGitHubActionsDispatcher(repositoryRoot string, options ...GitHubActionsD
 		store:         NewDispatchJournalStore(repositoryRoot),
 		client:        client,
 		tokenResolver: EnvironmentGitHubActionsDispatchTokenResolver{},
-		now:           func() time.Time { return time.Now().UTC() },
+		clock:         systemReleaseClock{},
 	}
 	for _, option := range options {
 		if option == nil {
@@ -59,6 +58,19 @@ func NewGitHubActionsDispatcher(repositoryRoot string, options ...GitHubActionsD
 		}
 	}
 	return dispatcher, nil
+}
+
+// WithGitHubActionsDispatcherClock injects the timestamp source used for
+// request-started, request-finished, and dispatch journal transitions.
+func WithGitHubActionsDispatcherClock(clock ReleaseClock) GitHubActionsDispatcherOption {
+	return func(dispatcher *GitHubActionsDispatcher) error {
+		if clock == nil {
+			return fmt.Errorf("github actions dispatch clock is missing")
+		}
+		dispatcher.clock = clock
+		dispatcher.store.clock = clock
+		return nil
+	}
 }
 
 // WithGitHubActionsDispatcherClient injects a dispatch client for tests.
@@ -90,6 +102,7 @@ func WithGitHubActionsDispatcherStore(store *DispatchJournalStore) GitHubActions
 			return fmt.Errorf("github actions dispatch journal store is missing")
 		}
 		dispatcher.store = store
+		dispatcher.store.clock = dispatcher.clock
 		return nil
 	}
 }
@@ -97,6 +110,17 @@ func WithGitHubActionsDispatcherStore(store *DispatchJournalStore) GitHubActions
 // Dispatch performs one internal workflow_dispatch attempt if the durable
 // journal is still in prepared state.
 func (dispatcher *GitHubActionsDispatcher) Dispatch(ctx context.Context, request *ReleaseDispatchRequest) (*GitHubActionsDispatchResult, error) {
+	return dispatcher.dispatch(ctx, request, GitHubActionsDispatchToken{})
+}
+
+func (dispatcher *GitHubActionsDispatcher) dispatchWithToken(ctx context.Context, request *ReleaseDispatchRequest, token GitHubActionsDispatchToken) (*GitHubActionsDispatchResult, error) {
+	if token.secretValue() == "" {
+		return nil, missingGitHubActionsDispatchTokenError()
+	}
+	return dispatcher.dispatch(ctx, request, token)
+}
+
+func (dispatcher *GitHubActionsDispatcher) dispatch(ctx context.Context, request *ReleaseDispatchRequest, token GitHubActionsDispatchToken) (*GitHubActionsDispatchResult, error) {
 	if request == nil {
 		return nil, errDispatchRequestMissing()
 	}
@@ -117,13 +141,15 @@ func (dispatcher *GitHubActionsDispatcher) Dispatch(ctx context.Context, request
 		log.PluginPrint(log.Exec, "Dispatch blocked by existing journal state: %s", resolution.Journal.State)
 		return dispatchResultFromJournal(resolution.Path, resolution.Journal, false), nil
 	}
-	log.PluginPrint(log.Exec, "Resolving GitHub Actions dispatch token")
-	token, err := dispatcher.tokenResolver.ResolveGitHubActionsDispatchToken(ctx)
-	if err != nil {
-		return dispatchResultFromJournal(resolution.Path, resolution.Journal, false), err
+	if token.secretValue() == "" {
+		log.PluginPrint(log.Exec, "Resolving GitHub Actions dispatch token")
+		token, err = dispatcher.tokenResolver.ResolveGitHubActionsDispatchToken(ctx)
+		if err != nil {
+			return dispatchResultFromJournal(resolution.Path, resolution.Journal, false), err
+		}
 	}
 	log.PluginPrint(log.Exec, "GitHub Actions dispatch token available")
-	startedAt := dispatcher.now()
+	startedAt := dispatcher.clock.Now().UTC()
 	// request-started is persisted before the HTTP request because after this
 	// point a transport failure may hide whether GitHub accepted the dispatch.
 	log.PluginPrint(log.Exec, "Recording dispatch request-started before HTTP call")
@@ -138,7 +164,7 @@ func (dispatcher *GitHubActionsDispatcher) Dispatch(ctx context.Context, request
 	if clientErr != nil {
 		response = GitHubActionsDispatchResponse{
 			State:            DispatchJournalUnknown,
-			Error:            sanitizeDispatchText(clientErr.Error(), token),
+			Error:            sanitizeDispatchText(clientErr.Error(), token.secretValue()),
 			RecoveryGuidance: dispatchJournalRecoveryGuidance(DispatchJournalUnknown),
 		}
 	}
@@ -146,7 +172,7 @@ func (dispatcher *GitHubActionsDispatcher) Dispatch(ctx context.Context, request
 		response.State = DispatchJournalUnknown
 	}
 	log.PluginPrint(log.Exec, "workflow_dispatch response state=%s status=%d", response.State, response.HTTPStatus)
-	finishedAt := dispatcher.now()
+	finishedAt := dispatcher.clock.Now().UTC()
 	metadata := DispatchJournalMetadata{
 		RunID:             response.WorkflowRunID,
 		RunURL:            response.RunURL,
