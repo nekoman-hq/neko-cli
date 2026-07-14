@@ -158,6 +158,19 @@ This is test-only. Revert the commit if the characterization is wrong; no produc
 
 None. This is the first executable milestone.
 
+### Completion record (2026-07-14)
+
+Stage 1 is complete as a test-only milestone with no production Go changes. The retained and added characterization covers:
+
+- V2 patch/minor/major dry-run planning, selected-unit behavior, repository immutability, token independence, ordered response rows, metadata, and renderer hints;
+- request/repository failures for unit selection, malformed or mismatched config/state, V1 resume, local delivery, and dirty worktrees;
+- active-runner unresolved-journal blocking, commit/tag creation failures, commit-before-tag push failures, and accepted/rejected/unknown dispatch outcomes;
+- execution/dispatch pending markers and confirmed metadata at the currently injectable Git/dispatch boundaries, including `request-started` before the outbound dispatch call;
+- resume discovery, assessment ordering, corrupt/conflicting/config-drift handling, supported continuation from `commit-created`, `tag-created`, and `tag-pushed`, completed-journal exclusion, ambiguous-push blocking, no push-state inference, and terminal dispatch no-retry behavior;
+- sentinel-token absence from characterized command responses, runner results/errors, execution journals, and dispatch journals.
+
+The active runner still constructs materialization/state transactions and journal stores internally, and the handlers construct their runner/resume dependencies. Consequently, materialization/state/store-write failures, post-side-effect confirmation failures, captured-log redaction, and a fresh successful resume HTTP dispatch remain unreachable without the narrow production seams planned for later stages. These gaps are recorded in `current-state.md`; Stage 1 does not emulate them with weakened tests.
+
 ## Stage 2: Establish typed command requests and response mapping
 
 ### Goal

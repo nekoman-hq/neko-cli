@@ -5,6 +5,8 @@ package release
 
 import (
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -190,6 +192,14 @@ func TestHandleReleaseV2DryRunAllowsGitHubActionsDelivery(t *testing.T) {
 	if err := os.WriteFile(".neko/release.state.json", []byte(stateContent), 0644); err != nil {
 		t.Fatalf("write v2 state: %v", err)
 	}
+	gitCmd(t, ".", "init")
+	gitCmd(t, ".", "config", "user.email", "test@example.com")
+	gitCmd(t, ".", "config", "user.name", "Test User")
+	gitCmd(t, ".", "add", ".")
+	gitCmd(t, ".", "commit", "-m", "initial")
+	headBefore := strings.TrimSpace(gitOutput(t, ".", "rev-parse", "HEAD"))
+	tagsBefore := strings.TrimSpace(gitOutput(t, ".", "tag", "--list"))
+	stateBefore := mustReadString(t, ".neko/release.state.json")
 
 	resp, err := HandleRelease(plugin.Request{
 		Command: "patch",
@@ -221,6 +231,31 @@ func TestHandleReleaseV2DryRunAllowsGitHubActionsDelivery(t *testing.T) {
 	}
 	if got := responseValueForProperty(t, resp.Data["items"], "Known Release Files"); got != ".neko/release.state.json" {
 		t.Fatalf("expected api dry-run known files to stay state-only, got %q", got)
+	}
+	wantProperties := []string{
+		"Release Type", "Unit", "Current Version", "New Version", "Tag", "Executor", "Delivery", "Workflow",
+		"Dispatch", "Working Directory", "Unit Root", "State Change", "Materialized Files", "Known Release Files",
+		"Planned Release Commit", "Planned Tag", "Planned Push Order", "Tool Ownership", "V2 Git Ownership",
+		"State Commit Guarantee", "Executor Start", "Dry Run", "Status", "Dispatch Ref", "Dispatch Inputs",
+		"Journal Identity", "Journal Location", "Dispatch Status",
+	}
+	if got := responseProperties(t, resp.Data["items"]); !slices.Equal(got, wantProperties) {
+		t.Fatalf("unexpected V2 dry-run response order: got %#v want %#v", got, wantProperties)
+	}
+	if resp.Metadata.Command != "patch" || resp.RendererHint != "table" {
+		t.Fatalf("unexpected V2 dry-run response contract: %#v", resp)
+	}
+	if got := mustReadString(t, ".neko/release.state.json"); got != stateBefore {
+		t.Fatalf("V2 github-actions dry-run rewrote state:\n%s", got)
+	}
+	if headAfter := strings.TrimSpace(gitOutput(t, ".", "rev-parse", "HEAD")); headAfter != headBefore {
+		t.Fatalf("V2 github-actions dry-run created a commit: before=%s after=%s", headBefore, headAfter)
+	}
+	if tagsAfter := strings.TrimSpace(gitOutput(t, ".", "tag", "--list")); tagsAfter != tagsBefore {
+		t.Fatalf("V2 github-actions dry-run changed tags: before=%q after=%q", tagsBefore, tagsAfter)
+	}
+	if _, err := os.Stat(filepath.Join(".git", "neko")); !os.IsNotExist(err) {
+		t.Fatalf("V2 github-actions dry-run created release journals: %v", err)
 	}
 }
 
@@ -363,6 +398,23 @@ func responseValueForProperty(t *testing.T, items any, property string) string {
 	}
 	t.Fatalf("response property %q not found in %#v", property, items)
 	return ""
+}
+
+func responseProperties(t *testing.T, items any) []string {
+	t.Helper()
+	rows, ok := items.([]map[string]any)
+	if !ok {
+		t.Fatalf("unexpected response items: %#v", items)
+	}
+	properties := make([]string, 0, len(rows))
+	for _, row := range rows {
+		property, ok := row["property"].(string)
+		if !ok {
+			t.Fatalf("response item is missing a string property: %#v", row)
+		}
+		properties = append(properties, property)
+	}
+	return properties
 }
 
 func valueAsString(value any) string {

@@ -3,6 +3,7 @@ package release
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -38,6 +39,16 @@ func TestHandleResumeDryRunReadsExistingJournalWithoutTokenOrMutation(t *testing
 	}
 	if !responseContains(resp.Data["items"], "not-started") {
 		t.Fatalf("expected recovery assessment, got %#v", resp.Data["items"])
+	}
+	wantProperties := []string{
+		"Unit", "Version", "Tag", "Execution Journal", "State", "Pending Action", "Recovery Status",
+		"Safe To Continue", "Known Files", "Next Step",
+	}
+	if got := responseProperties(t, resp.Data["items"]); !slices.Equal(got, wantProperties) {
+		t.Fatalf("unexpected resume assessment response order: got %#v want %#v", got, wantProperties)
+	}
+	if resp.Metadata.Command != "resume" || resp.Metadata.Plugin == "" || resp.Metadata.Version == "" || resp.Metadata.Timestamp.IsZero() || resp.RendererHint != "table" {
+		t.Fatalf("unexpected resume assessment response contract: %#v", resp)
 	}
 	if after := mustReadString(t, resolution.Path); after != beforeJournal {
 		t.Fatalf("resume dry-run rewrote journal:\n%s", after)

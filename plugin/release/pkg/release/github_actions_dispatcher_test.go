@@ -48,6 +48,34 @@ func TestGitHubActionsDispatcherCreatesJournalAndPersistsAccepted(t *testing.T) 
 	}
 }
 
+func TestGitHubActionsDispatcherPersistsRequestStartedBeforeOutboundCall(t *testing.T) {
+	root := newGitHubActionsDispatchRepository(t)
+	ctx, gitResult := prepareDispatchRequestContext(t, root, Patch)
+	request := mustBuildDispatchRequest(t, ctx, gitResult)
+	store := NewDispatchJournalStore(root)
+	client := &journalInspectingDispatchClient{store: store}
+	dispatcher, err := NewGitHubActionsDispatcher(root,
+		WithGitHubActionsDispatcherStore(store),
+		WithGitHubActionsDispatcherClient(client),
+		WithGitHubActionsDispatcherTokenResolver(staticDispatchTokenResolver{token: "test-token"}),
+	)
+	if err != nil {
+		t.Fatalf("NewGitHubActionsDispatcher: %v", err)
+	}
+
+	result, err := dispatcher.Dispatch(context.Background(), request)
+
+	if err != nil {
+		t.Fatalf("Dispatch: %v", err)
+	}
+	if client.observedState != DispatchJournalRequestStarted {
+		t.Fatalf("outbound call observed journal state %s, expected %s", client.observedState, DispatchJournalRequestStarted)
+	}
+	if result.State != DispatchJournalAccepted {
+		t.Fatalf("unexpected final dispatch result: %#v", result)
+	}
+}
+
 func TestGitHubActionsDispatcherMissingTokenDoesNotStartRequest(t *testing.T) {
 	root := newGitHubActionsDispatchRepository(t)
 	ctx, gitResult := prepareDispatchRequestContext(t, root, Patch)
@@ -190,6 +218,22 @@ type fakeWorkflowDispatchClient struct {
 	err      error
 	calls    int
 	target   GitHubRepositoryTarget
+}
+
+type journalInspectingDispatchClient struct {
+	store         *DispatchJournalStore
+	observedState DispatchJournalState
+}
+
+func (client *journalInspectingDispatchClient) Dispatch(_ context.Context, _ GitHubRepositoryTarget, request *ReleaseDispatchRequest, _ string) (GitHubActionsDispatchResponse, error) {
+	resolution, err := client.store.Load(request)
+	if err != nil {
+		return GitHubActionsDispatchResponse{}, err
+	}
+	if resolution.Journal != nil {
+		client.observedState = resolution.Journal.State
+	}
+	return GitHubActionsDispatchResponse{State: DispatchJournalAccepted, HTTPStatus: 204}, nil
 }
 
 func (client *fakeWorkflowDispatchClient) Dispatch(_ context.Context, target GitHubRepositoryTarget, _ *ReleaseDispatchRequest, token string) (GitHubActionsDispatchResponse, error) {
