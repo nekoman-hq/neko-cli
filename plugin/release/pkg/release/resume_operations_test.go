@@ -115,6 +115,21 @@ func TestHandleResumeContinuesTagPushedWithoutRepushingOrRedispatching(t *testin
 	assertSecretAbsentFromFiles(t, fixture.executionPath, fixture.dispatchPath)
 }
 
+func TestHandleResumeReusesAcceptedDispatchWithoutToken(t *testing.T) {
+	fixture := newTaggedResumeRelease(t)
+	identity := prepareAcceptedDispatchForResume(t, fixture)
+	persistTagPushedExecution(t, fixture, identity)
+	t.Setenv("GITHUB_TOKEN", "")
+	withWorkingDirectoryRoot(t, fixture.root)
+
+	resp, err := HandleResume(resumeRequest("api", false))
+
+	assertSuccessfulResumeResponse(t, resp, err)
+	if journal := loadReleaseExecutionJournalForTest(t, fixture.executionPath); journal.State != ReleaseExecutionHandoffReady {
+		t.Fatalf("accepted dispatch reuse did not confirm handoff: %#v", journal)
+	}
+}
+
 func TestHandleResumeRejectsAmbiguousPendingCommitPush(t *testing.T) {
 	fixture := newTaggedResumeRelease(t)
 	identity := prepareAcceptedDispatchForResume(t, fixture)

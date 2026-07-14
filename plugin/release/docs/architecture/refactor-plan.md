@@ -262,7 +262,7 @@ One atomic commit. Revert it to restore the existing handlers; no disk/journal s
 ### Residual deferrals
 
 - `releaseStartOperation` still performs repository/unit/context selection and constructs `GitHubActionsReleaseRunner`; the active V2 execution behind that facade is extracted in Stage 3, while broader start-operation selection remains compatibility wiring.
-- The resume application path still constructs repository, Git, token, context, and journal collaborators across its focused discovery/assessment/continuation helpers, while `resumeJournal` retains duplicated continuation policy and boolean mode parameters; that work remains Stage 4 after Stage 3 operations exist.
+- The resume application path originally retained duplicated continuation policy and boolean mode parameters after Stage 2; Stage 4 has since replaced that compatibility path with the explicit resume use case and named operations recorded below.
 - V1 `Service` and tool orchestration remain compatibility code. No V1/V2 consolidation, response cleanup outside release/resume, validation policy change, or new malformed-flag behavior was introduced.
 
 Next exact stage: **Stage 4: Model resume policy and reuse the active release steps.**
@@ -380,6 +380,8 @@ Next exact stage: **Stage 4: Model resume policy and reuse the active release st
 
 ## Stage 4: Model resume policy and reuse the active release steps
 
+Status: completed on 2026-07-14 by `test(release): characterize existing tag resume behavior` and `refactor(release): centralize release resume orchestration`.
+
 ### Goal
 
 Represent resume as an explicit transition policy and reuse Stage 3 operations instead of duplicating tag/push/dispatch orchestration.
@@ -452,6 +454,20 @@ Persisted local evidence may be insufficient for a desired continuation. The saf
 ### Rollback strategy
 
 Revert the resume refactor commit. No persisted schema changes are permitted, so existing journals remain readable by the prior implementation.
+
+### Completion record
+
+- `resumeReleaseUseCase` now coordinates discovery, local recovery assessment, dry-run return, typed policy resolution, context compatibility, one named operation selection, and invocation without Git/HTTP/response details.
+- `resolveResumeRecovery` covers every confirmed execution state and relevant pending action as one typed supported operation or refusal. `resolveResumeDispatch` separately permits a fresh immutable dispatch, reuses accepted dispatch, or refuses request-started/rejected/unknown retry.
+- `resumeFromCommitCreatedOperation`, `resumeFromTagCreatedOperation`, `resumeFromTagPushedOperation`, and `returnCompletedReleaseHandoffOperation` own the supported recovery intentions. The expected-tag-already-present block remains pinned to its pre-refactor behavior.
+- Resume composition reuses Stage 3 tag creation, dispatch-journal preparation, commit push, tag push, workflow dispatch, and accepted-handoff confirmation. No resume flag, load-only mode, pushed mode, generic transition engine, workflow pipeline, or dependency bag was introduced.
+- Dry-run returns before context reconstruction and effects. Corrupt/conflicted recovery and ambiguous pending pushes refuse before continuation. Config compatibility retains its established failure contract.
+- Token resolution is confined to a fresh-dispatch operation. Accepted dispatch reuse and completed handoff require no token, do not redispatch, and only confirm the existing accepted handoff where required.
+- `resumeJournal`, `prepareDispatchJournalForResume`, and `dispatchRequestForResume` were removed. The loaded journal is no longer manually mutated as orchestration control state.
+- Pure policy, selector, use-case, named-operation, push-boundary, token/dispatch/handoff, accepted-reuse, completed-handoff, architecture, and real-repository continuation tests supplement all retained Stage 1-3 tests.
+- Retained limitations remain deliberate: no remote-state probe, automatic retry, journal repair/schema migration, pre-commit continuation, or inference from ambiguous external effects.
+
+Next exact stage: **Stage 5: Consolidate canonical release files, Git, journals, tokens, and clocks.**
 
 ### Dependencies
 

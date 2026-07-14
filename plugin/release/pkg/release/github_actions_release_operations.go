@@ -392,14 +392,8 @@ func (verifiedReleaseDispatchRequestBuilder) Build(execCtx *ReleaseExecutionCont
 	return BuildReleaseDispatchRequest(execCtx, result)
 }
 
-type prepareGitHubActionsReleaseDispatch struct {
-	journal  releaseExecutionJournalMutations
-	dispatch releaseDispatchJournalPreparation
-	requests releaseDispatchRequestBuilder
-}
-
-func (operation prepareGitHubActionsReleaseDispatch) Prepare(execCtx *ReleaseExecutionContext, execution preparedGitHubActionsReleaseExecution, preflight validatedGitHubActionsReleasePreflight, files KnownReleaseFiles, commitSHA string) (preparedGitHubActionsReleaseDispatch, error) {
-	gitResult := &GitReleaseResult{
+func createdGitHubActionsReleaseResult(execCtx *ReleaseExecutionContext, preflight validatedGitHubActionsReleasePreflight, files KnownReleaseFiles, commitSHA string) *GitReleaseResult {
+	return &GitReleaseResult{
 		Unit:                 execCtx.Unit.ID,
 		Version:              execCtx.NextVersion,
 		Tag:                  execCtx.Tag,
@@ -411,7 +405,16 @@ func (operation prepareGitHubActionsReleaseDispatch) Prepare(execCtx *ReleaseExe
 		ReachedPhase:         "tag-created",
 		KnownReleaseFiles:    files.RelativePaths(),
 	}
-	request, err := operation.requests.Build(execCtx, gitResult)
+}
+
+type prepareGitHubActionsReleaseDispatch struct {
+	journal  releaseExecutionJournalMutations
+	dispatch releaseDispatchJournalPreparation
+	requests releaseDispatchRequestBuilder
+}
+
+func (operation prepareGitHubActionsReleaseDispatch) Prepare(execCtx *ReleaseExecutionContext, execution preparedGitHubActionsReleaseExecution, preflight validatedGitHubActionsReleasePreflight, files KnownReleaseFiles, commitSHA string) (preparedGitHubActionsReleaseDispatch, error) {
+	request, err := operation.requests.Build(execCtx, createdGitHubActionsReleaseResult(execCtx, preflight, files, commitSHA))
 	if err != nil {
 		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
 		return preparedGitHubActionsReleaseDispatch{}, err

@@ -58,7 +58,7 @@ func HandleRelease(req plugin.Request, releaseType Type) (*plugin.Response, erro
 // HandleResume handles read-only recovery assessment and conservative resume.
 func HandleResume(req plugin.Request) (*plugin.Response, error) {
 	handler := resumeCommandHandler{
-		resumer: resumeReleaseOperation{},
+		resumer: newResumeReleaseUseCase("."),
 		clock:   systemResponseClock{},
 	}
 	return handler.Handle(context.Background(), req)
