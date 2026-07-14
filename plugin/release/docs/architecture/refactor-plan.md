@@ -56,6 +56,26 @@ The intended boundaries are deliberately small:
 
 The target does not require one package per layer. Boundaries can begin as types and functions in existing packages, then move only if a later change shows clear value.
 
+## Clean-code completion gate for production refactors
+
+This gate applies to every production refactor stage in this plan and to any future production milestone derived from it. Behavior preservation is necessary but not sufficient. Every milestone must demonstrate that:
+
+- it introduces no new god function or procedural playbook;
+- it introduces no generic state machine, workflow interpreter, transition engine, or large phase/status switch;
+- it introduces no boolean parameter that selects a workflow;
+- every extracted function has one clearly nameable responsibility and one primary reason to change;
+- every function operates at one abstraction level;
+- infrastructure dependencies are explicit, narrowly scoped, and replaceable where the operation needs a test seam;
+- application use cases represent focused user-visible intentions rather than vague services, managers, coordinators, or processors;
+- no oversized dependency container or generic step pipeline hides responsibilities or safety order;
+- plugin response mapping remains at the command/presentation boundary, outside application and business logic;
+- safety-critical operation ordering is readable through focused named calls rather than callbacks, generic step lists, shared mutation, or low-level detail inlining;
+- tests prove both preserved behavior and the intended architectural boundary, including that unrelated real infrastructure is not required.
+
+> A refactor milestone is incomplete when behavior is preserved but the resulting code still violates the single-responsibility, abstraction-level, dependency, or control-flow rules.
+
+Moving a large function into several equally mixed functions is not progress under this plan. A stage is also incomplete if extraction only relocates direct infrastructure construction, response mapping, phase branching, or shared mutable workflow state.
+
 ## Stage 1: Characterize active command and failure contracts
 
 ### Goal
@@ -107,6 +127,12 @@ Existing `dry_run_test.go`, runner, journal, dispatcher, and resume suites must 
 - The characterized command matrix records every currently reachable V2 release/resume outcome without modifying production Go files.
 - Assertions cover response ordering, metadata, error codes, dry-run immutability, terminal dispatch handling, and secret absence.
 - Unreachable unsafe boundaries are listed explicitly for Stage 3 rather than represented by weakened tests.
+
+### Clean-code acceptance
+
+- Characterization tests assert externally observable contracts without treating current god-function structure as desirable architecture.
+- Test helpers and fixtures have focused responsibilities; no generic workflow harness or shared mutable phase interpreter is introduced.
+- The tests make command/presentation, application, and infrastructure seams observable enough for Stages 2 and 3 to prove their boundaries.
 
 ### Validation
 
@@ -185,6 +211,13 @@ Stage 1 command contracts plus all existing manifest and dry-run tests.
 - Release and resume handlers parse, invoke one application boundary, and map its typed result without directly ordering Git, filesystem, journal, state, or network work.
 - Characterization tests show no stable response field, item order, code, or timestamp semantics changed.
 - Existing exported command entry points and manifest routes remain unchanged.
+- The result passes the global clean-code completion gate; extraction has not merely moved mixed handler responsibilities into a vague service.
+
+### Clean-code acceptance
+
+- Each handler can be described as parse/validate, create request, invoke one focused use case, and map one result, with no repository, unit, remote, journal, token, execution-context, or phase coordination.
+- Request parsing, application invocation, and response mapping are separate focused functions at one abstraction level; response mappers are pure apart from their explicit clock.
+- No generic command framework, broad result wrapper, boolean workflow selector, or vague `ReleaseService`/`ResumeManager` boundary is added.
 
 ### Validation
 
@@ -218,9 +251,9 @@ Turn the active GitHub Actions release procedure into a testable use case with n
 
 ### Scope
 
-- Add one application dependency set for active V2 release execution.
+- Supply focused dependencies to the operations that need them; compose production wiring at the facade without an oversized dependency container.
 - Wrap existing production implementations; do not rewrite them.
-- Extract named steps for preflight, prepare/apply/confirm, commit/tag, journal handoff, pushes, dispatch, and handoff.
+- Extract focused named operations for preflight, prepare/apply/confirm, commit/tag, journal handoff, pushes, dispatch, and handoff without introducing a generic step abstraction.
 - Make a fake-driven failure matrix possible.
 
 Likely files/symbols:
@@ -256,16 +289,23 @@ The exact active order and pending/confirmed journal boundaries remain unchanged
 
 1. Define narrow ports around existing operations: token, planning/materialization, Git, execution journal, dispatch journal/dispatcher, state/files, and clock where needed.
 2. Build production adapters from current types.
-3. Move one contiguous sequence at a time from `Run` into named use-case methods.
-4. Keep `Run` responsible only for validating facade input, invoking the use case, and returning its result.
+3. Extract one cohesive decision or side effect at a time from `Run`; every extracted function must have one verb-phrase responsibility and one abstraction level.
+4. Keep `Run` responsible only for facade validation, explicit production wiring, invocation of the focused start-release use case, and returning its typed result.
 5. Add fake-driven tests for failure before and after every unsafe operation listed in `RULES.md`.
 6. Assert last phase, pending marker, stopped calls, local/remote evidence policy, and secret absence for every case.
 
 ### Acceptance criteria
 
-- One production V2 GitHub Actions execution path remains, with its safety-critical order readable in one use-case implementation.
+- One production V2 GitHub Actions execution path remains. Its focused start-release use case shows safety-critical order through named application-level calls while delegating each validation, decision, and side effect.
 - Tests can inject a failure on both sides of every unsafe boundary and prove the resulting durable journal state and absence of later calls.
 - Persisted files, journal schemas, Git commands, dispatch inputs, responses, and dry-run behavior match the characterized baseline.
+- The result passes the global clean-code completion gate; no broad runner replacement, dependency bag, callback pipeline, workflow interpreter, or mixed helper becomes the new god function.
+
+### Clean-code acceptance
+
+- The start-release use case, facade, and every extracted operation each have one responsibility and one abstraction level.
+- Operations receive only their explicit required dependencies; store/client construction and plugin response mapping do not occur inside application logic.
+- Safety order remains visible without a generic step list, transition engine, boolean workflow selector, large phase switch, or shared result mutation used as control flow.
 
 ### Validation
 
@@ -304,9 +344,10 @@ Represent resume as an explicit transition policy and reuse Stage 3 operations i
 
 ### Scope
 
-- Define a typed resume decision/action plan from journal plus local assessment.
+- Define a small pure resolver from journal plus local assessment to one supported named operation or one explicit refusal.
 - Separate read-only assessment from mutating continuation.
-- Reuse Stage 3 tag, dispatch-journal, push, dispatch, and handoff steps.
+- Implement focused operations such as resume from commit-created, tag-created, or tag-pushed, completed handoff, ambiguous-push rejection, and uncertain-dispatch rejection.
+- Reuse Stage 3 tag, dispatch-journal, push, dispatch, and handoff capabilities without a generic transition engine.
 - Remove `loadOnly` and `pushed` workflow booleans.
 
 Likely files/symbols:
@@ -322,6 +363,7 @@ Likely files/symbols:
 - No automatic retry for pending pushes or terminal dispatch journals.
 - No remote-state probe unless a later task explicitly designs and authorizes one.
 - No journal repair or schema migration.
+- No universal resume workflow processor, large phase switch, or generic state-machine framework.
 
 ### Behavioral invariants
 
@@ -333,10 +375,10 @@ Add a table covering every confirmed execution state crossed with every relevant
 
 ### Implementation steps
 
-1. Build `ResumeDecision`/`ResumeAction` values from the current state and assessment.
+1. Resolve the current state and assessment to one typed supported operation/refusal without encoding execution in the resolver.
 2. Test the decision table as a pure function.
 3. Route dry-run directly through assessment and presentation.
-4. Route each allowed action through Stage 3 named operations.
+4. Route each allowed case to its focused named use case using only that case's required Stage 3 capabilities.
 5. Remove duplicated side-effect functions only after all call sites use the shared operations.
 
 ### Acceptance criteria
@@ -344,6 +386,7 @@ Add a table covering every confirmed execution state crossed with every relevant
 - Every persisted execution phase/pending-action combination produces one explicit resume action or one explicit refusal.
 - Dry-run assessment performs no token lookup or mutation, and mutating resume reuses the active release operations without boolean workflow selectors.
 - Existing journals remain readable and all uncertain push/dispatch cases remain blocked.
+- The result passes the global clean-code completion gate; no generic resume engine or phase-switch god function replaces `resumeJournal`.
 
 ### Validation
 
@@ -424,6 +467,7 @@ Existing `plugin-release` and `plugin-ui` manifest paths and exact materialized 
 - Any validated plugin unit materializes through its configured manifest path while existing plugin manifests remain byte-identical.
 - Execution and dispatch journal locations, names, permissions, schemas, identities, and validation remain compatible.
 - Active V2 code has one replaceable boundary each for Git, token lookup, and generated time, with deterministic tests.
+- The result passes the global clean-code completion gate; adapter consolidation does not create a broad infrastructure interface or dependency container.
 
 ### Validation
 
@@ -499,6 +543,7 @@ Inject failure at directory creation, config temp/write/rename, state temp/write
 - Init and unit-add handlers are presentation boundaries and the application operations expose typed requests/results.
 - Failure injection proves the documented config/state pair outcome at every write and restore boundary, including exact preservation of pre-existing bytes and modes.
 - JSON schemas, defaults, response contracts, duplicate/force behavior, and command routes remain unchanged.
+- The result passes the global clean-code completion gate; init and unit-add remain separate focused intentions rather than methods on a generic configuration service.
 
 ### Validation
 
@@ -567,6 +612,7 @@ Characterize every Git/filesystem failure mapping, item order, empty result, can
 - Each query handler parses, invokes one typed use case, and maps one typed result while preserving its current structured-versus-fatal error boundary.
 - Read-only use cases can run with fake Git/filesystem dependencies and retain exact selection, sorting, and response behavior.
 - Plugin-index file output is atomically persisted without changing its schema or stdout behavior.
+- The result passes the global clean-code completion gate; shared query code is extracted only for demonstrated cohesive behavior, not into a generic query framework.
 
 ### Validation
 
@@ -620,6 +666,7 @@ Likely files:
 - No nested V1 conversion.
 - No journal relocation or schema bump.
 - No inferred plugin metadata.
+- No generic transition engine or reusable workflow framework for migration phases.
 
 ### Behavioral invariants
 
@@ -641,6 +688,7 @@ Add corrupt/unknown stage cases and injected failures at every persisted boundar
 - Migration stage transitions are typed in code but serialize to the existing strings and schema.
 - Tests inject every journal/write/archive/validate/remove failure and prove the exact recoverable disk state.
 - Dry-run, backup bytes, planned hashes, conflict behavior, and root-only migration scope remain unchanged.
+- The result passes the global clean-code completion gate; typed phases validate persisted data but do not become a generic state-machine executor.
 
 ### Validation
 
@@ -719,6 +767,7 @@ Build fake-driven executor and rollback matrices first. Include no-mutation guar
 - V1 executor command sequences, release ownership, warnings, failures, and guarded rollback effects are pinned by fake-driven tests.
 - V1 orchestration can be tested without real subprocess, Git remote, network, token, or wall-clock access.
 - No V2 local path is activated and no V1 destructive operation becomes reachable under a broader condition.
+- The result passes the global clean-code completion gate; compatibility facades do not become permanent god services or hide destructive ordering behind generic steps.
 
 ### Validation
 
@@ -779,8 +828,11 @@ No rollback for this refactor plan may use `git reset --hard`, rewrite published
 ## First three executable milestones
 
 1. **Characterize V2 release command contracts (Stage 1).** One focused task, normally one test commit. Pin active response/error order, unresolved-journal blocking, dispatch terminal outcomes, resume restrictions, and secret absence.
+   - **Clean-code acceptance:** Test externally visible behavior rather than current function structure; keep fixtures focused and expose the seams needed to reject mixed handler/application/infrastructure responsibilities later.
 2. **Isolate release command presentation (Stage 2).** One focused refactor with typed request/result mapping and an injected response clock. No side-effect code moves.
-3. **Extract the active GitHub Actions release use case (Stage 3).** Add failure-injection ports and named steps, then cut over `GitHubActionsReleaseRunner.Run` atomically. One characterization commit plus one refactor commit is preferred.
+   - **Clean-code acceptance:** Handlers only parse/validate, create a typed request, invoke one focused use case, and map one result. No broad service, generic command framework, boolean workflow selector, or infrastructure access is introduced.
+3. **Extract the active GitHub Actions release use case (Stage 3).** Add failure-injection ports and focused named operations, then cut over `GitHubActionsReleaseRunner.Run` atomically. One characterization commit plus one refactor commit is preferred.
+   - **Clean-code acceptance:** Each operation has one responsibility and one abstraction level, dependencies are explicit and narrowly scoped, response mapping stays outside application logic, and safety order is visible without a god function, dependency bag, generic step pipeline, or state-machine engine.
 
 ## When new features can begin
 

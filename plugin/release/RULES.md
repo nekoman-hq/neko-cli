@@ -12,7 +12,7 @@ Before modifying Release Plugin files:
 4. Inspect the current code and tests. Plans and documents do not override current behavior.
 5. Inspect `git status --short --branch` and preserve all pre-existing work.
 
-Correctness and release safety take precedence over architectural purity. A behavior-preserving refactor must preserve observed release semantics, including awkward legacy behavior, unless the task explicitly authorizes a behavior change.
+Correctness and release safety take precedence over architectural purity. Long-term readability, maintainability, and testability are also mandatory acceptance criteria; safety is not permission to retain or create god functions, hidden state machines, procedural playbooks, mixed abstraction levels, or implicit dependencies. A behavior-preserving refactor must preserve observed release semantics, including awkward legacy behavior, unless the task explicitly authorizes a behavior change, while still introducing focused boundaries around that behavior.
 
 Keep changes inside `plugin/release` unless inspecting or changing a shared contract is explicitly required. Do not use a Release Plugin task as a reason for a repository-wide rewrite. Prefer incremental migration of one flow or boundary at a time.
 
@@ -41,15 +41,16 @@ If a change may affect one of these contracts, add characterization tests before
 
 ## 3. Command boundaries
 
-A command handler should have one presentation-boundary responsibility:
+A command handler has one presentation-boundary responsibility and may only:
 
-1. parse command input;
-2. reject invalid request shape or flag types;
-3. construct one typed application request;
-4. invoke one use case;
-5. map its typed result or classified failure to the established plugin response.
+1. parse and validate command-specific input;
+2. construct one typed application request;
+3. invoke one application use case;
+4. map its typed result or classified failure to the established plugin response.
 
-Handlers may select a use case by command name or release kind. They must not directly coordinate unrelated Git, filesystem, config/state mutation, journal transitions, token resolution, network dispatch, and response construction.
+Handlers may select a use case by command name or release kind. They must not directly load release repositories, resolve units, access Git, inspect remotes, scan journals, assess recovery, resolve tokens, call workflow APIs, mutate state, build execution contexts, or coordinate release phases.
+
+A handler that sequentially performs repository load, format validation, unit resolution, remote resolution, journal scan, recovery assessment, token lookup, context construction, resume execution, and response mapping is prohibited even when its control flow is linear and uses guard clauses. Move those responsibilities into focused application operations with explicit dependencies.
 
 The handler must not:
 
@@ -65,7 +66,11 @@ Keep manifest metadata and route registration synchronized. A public command or 
 
 ## 4. Application orchestration
 
-Each user-visible use case must have explicit input and output types. Inputs contain only the facts required to execute the use case; outputs contain domain/application results, not `plugin.Response` or terminal formatting.
+Each application use case represents one user-visible intention and must have explicit input and output types. Appropriate intentions include `StartGitHubActionsRelease`, `AssessReleaseRecovery`, `ResumeFromCommitCreated`, `ResumeFromTagCreated`, `ValidateReleaseContext`, and `InspectReleaseUnits`. Inputs contain only the facts required to execute that intention; outputs contain domain/application results, not `plugin.Response` or terminal formatting.
+
+Do not create vague dumping grounds named `ReleaseService`, `ResumeManager`, `ReleaseCoordinator`, `WorkflowProcessor`, or similar unless the narrower responsibility is stated precisely by the type and every method remains cohesive. Existing types with broad names are not precedents for new broad responsibilities.
+
+A use-case function may coordinate one intention, but it must delegate every distinct validation, domain decision, and side effect to a focused named operation. Its statements must remain at one abstraction level. Keeping an entire release or resume playbook in one linear function is not acceptable merely because the order is visible.
 
 Safety-critical ordering must be visible in the use case through clearly named steps. For the active V2 GitHub Actions flow, preserve named operations equivalent to:
 
@@ -84,11 +89,11 @@ Safety-critical ordering must be visible in the use case through clearly named s
 13. record dispatch request start before HTTP and classify the result;
 14. confirm handoff only for an accepted dispatch.
 
-Do not hide safety order in generic middleware, callback chains, deferred functions, or a broad transaction helper whose call site does not show the steps.
+Do not hide safety order in generic middleware, callback chains, deferred functions, a generic list of executable steps, or a broad transaction helper whose call site does not show the operations. Visible ordering means readable application code calling focused operations; it does not justify one function owning every low-level detail.
 
 An application use case must not create `plugin.Response`, render tables, color text, or call terminal-formatting helpers. Presentation mapping belongs at the command boundary.
 
-All orchestration dependencies that perform I/O, observe time/environment, or can fail at a release boundary must be replaceable in tests. Prefer one dependency interface per cohesive adapter, not one interface per function and not one all-purpose service.
+All orchestration dependencies that perform I/O, observe time/environment, or can fail at a release boundary must be supplied explicitly and replaceable in tests. Do not construct stores, Git clients, token resolvers, clocks, dispatchers, or executors inside business functions. Each operation receives only the dependencies it needs; do not pass one oversized dependency container through every operation.
 
 Do not use boolean parameters when they select materially different workflows. Replace flags such as “load only,” “already pushed,” or “perform dispatch” with typed requests, named operations, or separate functions.
 
@@ -110,6 +115,8 @@ Use typed states, phases, pending actions, outcomes, and result categories where
 Reject invalid states explicitly. Do not “repair” a corrupt or conflicting journal by guessing, skipping a phase, clearing a pending action, deleting evidence, or overwriting immutable fields.
 
 Do not spread a state machine across handlers, adapters, and response mappers. The state model owns allowed transitions; the use case owns when to request them; the store owns persistence.
+
+Typed persisted journal phases do not justify a generic state-machine framework. Do not introduce transition engines, workflow interpreters, large phase/status switches that execute every recovery workflow, nested phase/pending-action conditionals, or boolean-selected state behavior. A small pure resolver may map one typed phase to one supported operation, but each recovery case must be a focused named use case with its own dependencies and tests, such as `ResumeFromCommitCreated`, `ResumeFromTagCreated`, `ResumeFromTagPushed`, `ReturnCompletedHandoff`, `RejectAmbiguousPush`, or `RejectUncertainDispatch`. Unsupported combinations must be rejected explicitly.
 
 Small value types and named functions are preferred over speculative domain hierarchies. Do not introduce generic Clean Architecture, hexagonal, or domain-driven package trees unless a concrete Release Plugin dependency or test seam requires them.
 
@@ -205,6 +212,8 @@ Do not wrap multiple unrelated unsafe operations in one adapter method. The appl
 
 Use typed or centrally classified application failures. Preserve the original cause with `%w` or an equivalent cause field. Do not flatten an error to a string until the presentation or persistence boundary requires it.
 
+An error represents one meaningful failure owned by the operation that detects it. Do not repeatedly convert errors between generic strings, leak infrastructure-specific formatting into handlers, or return a success value paired with an ambiguous error. Internal application code must not use `nil` Go errors plus error-shaped `plugin.Response` values; preserve that compatibility only at the outer command boundary when required by the plugin protocol.
+
 Stable error codes and response semantics must not change silently. Before extracting a handler, characterize:
 
 - status;
@@ -289,27 +298,148 @@ Each test must assert what did happen, what did not happen, the last durable pha
 
 Inject time and generated IDs where they affect output. Every fixed release bug gets a regression test that fails without the fix. Do not weaken assertions, delete coverage, broaden expected output, add sleeps, or skip tests merely to make a change pass.
 
-## 12. Maintainability rules
+## 12. Clean code and maintainability rules
 
-Give each function one clearly named responsibility. Extraction is indicated when a function:
+### Joint completion standard
 
-- performs multiple unrelated side effects;
-- spans several release phases;
-- mixes command parsing with execution;
-- mixes response construction with business decisions;
-- repeats branching on state strings;
-- uses booleans to choose different workflows;
-- requires real Git, filesystem, network, environment, or wall-clock access in a unit test;
-- duplicates canonical unit/version/tag/workflow/plugin metadata;
-- duplicates safety ordering already implemented elsewhere.
+A Release Plugin change is complete only when it preserves required release behavior and leaves the affected code readable, maintainable, and testable. Passing tests does not excuse a design that violates this section. Moving a large mixed function into several equally mixed functions is not a successful refactor.
 
-Responsibility and testability, not an arbitrary line-count limit, decide whether to extract. A long explicit state transition table can be clearer than several tiny indirections; a short function with three unrelated side effects still needs separation.
+Legacy compatibility constrains observable behavior, not responsibility boundaries. Do not bend one function around multiple legacy/current workflows merely to avoid a focused compatibility adapter, use case, or presentation mapper.
 
-Delete an obsolete parallel path only after production call sites, characterization tests, and documentation prove which path is authoritative. Do not leave two implementations of release ordering active indefinitely.
+### Single responsibility
 
-Avoid package moves and public symbol renames during behavioral extraction unless the task explicitly requires them. First establish seams in place, then move code in a separate reviewable change if movement still helps.
+Every function must have exactly one clearly nameable responsibility and one primary reason to change. Apply these questions during design and review:
 
-Do not add production dependencies when the standard library and existing repository packages provide the required boundary.
+- Can the function be described accurately with one verb phrase?
+- Does every statement operate at the same abstraction level?
+- Does it have only one primary reason to change?
+- Can it be tested without unrelated infrastructure?
+- Can a reader understand its purpose without mentally simulating multiple subsystems?
+
+A function must not combine command parsing, repository discovery, config loading, unit resolution, remote resolution, journal lookup, recovery assessment, token resolution, execution-context construction, Git operations, workflow dispatch, and response mapping. A use case may coordinate one user-visible intention, but each distinct validation, decision, or side effect belongs to a focused dependency or named operation.
+
+Responsibility and testability, not an arbitrary line-count limit, decide whether to extract. A short function with several unrelated side effects is invalid; a longer pure mapping can remain cohesive when every statement serves one responsibility.
+
+### One abstraction level per function
+
+Do not mix application orchestration with filesystem, Git command, JSON, HTTP, environment, clock, or plugin-response details. This is invalid:
+
+```go
+func ExecuteRelease(...) {
+    planRelease()
+    os.WriteFile(...)
+    exec.Command("git", ...)
+    json.Marshal(...)
+    buildPluginResponse(...)
+}
+```
+
+The application-level shape should instead call focused capabilities:
+
+```go
+func StartGitHubActionsRelease(...) {
+    plan := planner.Plan(...)
+    materializer.Materialize(...)
+    commit := git.CreateReleaseCommit(...)
+    dispatcher.Dispatch(...)
+}
+```
+
+Low-level operations own their implementation details and return typed values or classified failures. The application function owns only the readable order for its one intention.
+
+### No god functions or procedural playbooks
+
+A function is a god function when it owns an entire release/resume playbook, crosses several subsystems, or has several independent reasons to change. It remains invalid when it is linear, uses guard clauses, or has many early returns. Do not preserve a large orchestration function merely because its sequence is safety-critical.
+
+Extract cohesive decisions and side effects behind focused operations while keeping their order readable at the application level. Do not replace one god function with a generic pipeline, callback sequence, or collection of vague helper functions.
+
+### No boolean workflow parameters
+
+Boolean parameters must not select materially different behavior. Prohibited forms include `resumeJournal(journal, true, false)`, `loadJournal(path, loadOnly)`, `buildResult(result, pushed)`, and `executeRelease(plan, dryRun)` when the boolean changes the workflow. Prefer separate use cases, named operations, typed request variants, or explicit strategy types. A boolean is acceptable only when it is a simple domain data value and does not select a workflow.
+
+### Focused use cases and names
+
+Use-case and side-effect names must reveal intent. Prefer names such as `AssessReleaseRecovery`, `ResumeFromTagCreated`, `CreateReleaseCommit`, and `PrepareDispatchJournal`. Avoid vague names such as `process`, `handle`, `manage`, `doWork`, `executeStep`, `helper`, `utils`, `common`, `misc`, `data`, `result2`, or `stateInfo` unless the narrower context makes the single responsibility unmistakable.
+
+Do not create a generic release service, manager, coordinator, workflow processor, or common utility package as a destination for unrelated logic. Existing broad types should be narrowed incrementally, not used as justification to enlarge them.
+
+### Explicit dependencies
+
+Supply dependencies through constructors, function inputs, or narrowly scoped operation values. Relevant repository/config loading, unit resolution, Git, filesystem, state, materialization, execution journals, dispatch journals, workflow dispatch, token/environment, clock, and executor invocation must be replaceable in focused tests.
+
+Hidden package globals and direct infrastructure construction inside business functions are prohibited. Do not create one oversized dependency container passed everywhere; each use case or operation receives only the capabilities it actually uses.
+
+### Small interfaces
+
+Interfaces should be owned by their consumer where practical and contain only cohesive capabilities. A broad `ReleaseEnvironment` combining config, state, Git, dispatch, token, and time is prohibited. Prefer focused capabilities such as:
+
+```go
+type ReleaseCommitCreator interface {
+    CreateReleaseCommit(...)
+}
+
+type UnitTagCreator interface {
+    CreateUnitTag(...)
+}
+
+type WorkflowDispatcher interface {
+    Dispatch(...)
+}
+```
+
+Do not create a one-method interface when a concrete dependency is simpler and no substitution or test boundary is required. Small interfaces are a means to clarify a real consumer, not a quota.
+
+### No speculative abstractions
+
+Do not introduce generic pipelines, step frameworks, command frameworks, state-transition engines, result wrappers, or abstractions for hypothetical executors/providers. Extract an abstraction only when it clarifies an existing responsibility, isolates an actual side effect, removes demonstrated duplication, or creates a necessary test seam.
+
+### Simple control flow
+
+Prefer shallow control flow, focused guard clauses, explicit domain errors, immutable value flow, and deterministic operation ordering. Prohibit:
+
+- deeply nested conditionals;
+- branches combining several independent conditions;
+- fallthrough behavior;
+- mutation of shared variables across unrelated phases;
+- combinations of booleans that determine control flow;
+- callbacks or deferred work that conceal safety order;
+- generic lists of executable steps for critical release behavior;
+- large switches or nested conditionals that execute every release/resume phase.
+
+Safety-critical ordering must be readable in application code through calls to focused operations, not inferred by tracing callbacks, shared mutation, or a framework.
+
+### Immutability and value flow
+
+Prefer constructing typed values and returning new results. Avoid passing pointers through many layers for incidental mutation, partially initialized result structs, maps with undocumented keys, mutation used to communicate control flow, and output parameters. Persisted journal changes are intentional and must occur through focused, explicitly named store operations.
+
+### Comments and naming
+
+Code should explain itself through names and structure. Comments document safety invariants, reasons for unusual ordering, external compatibility constraints, or why retry is unsafe. Comments must not narrate confusing control flow or compensate for mixed responsibilities.
+
+### Extraction and migration discipline
+
+Extraction is required when a function performs unrelated side effects, spans several release phases at mixed levels, combines command parsing with execution, builds responses alongside business decisions, repeats branching on phase strings, selects workflows through booleans, requires unrelated real infrastructure in a unit test, or duplicates canonical metadata/safety ordering.
+
+Delete an obsolete parallel path only after production call sites, characterization tests, and documentation prove which path is authoritative. Do not leave two implementations of release ordering active indefinitely. Avoid package moves and public symbol renames during behavioral extraction unless explicitly required; first establish focused seams in place. Do not add production dependencies when the standard library and existing packages provide the required boundary.
+
+### Mandatory review checklist
+
+Before committing any Release Plugin change, answer all of the following:
+
+- Does every changed function have one responsibility and one primary reason to change?
+- Does every changed function operate at one abstraction level?
+- Did the change introduce a boolean workflow selector?
+- Did it introduce or enlarge a phase/status/pending-action switch or hidden state machine?
+- Did it create or enlarge a vague service, manager, coordinator, processor, helper, or utility dumping ground?
+- Are infrastructure dependencies explicit and limited to what each operation needs?
+- Are unsafe side effects obvious from names, dependencies, and tests?
+- Is release order readable without following callbacks, generic steps, or shared mutation?
+- Is response mapping outside business/application logic?
+- Can each changed operation be tested without unrelated real infrastructure?
+- Did the change add an abstraction without a demonstrated current need?
+- Are stable behavior and safety invariants covered by tests?
+
+A change that fails any check must be redesigned before commit unless the deviation is explicitly documented with a concrete compatibility reason, a bounded scope, and a follow-up removal condition. “The tests pass” is not sufficient justification.
 
 ## 13. Documentation rules
 
