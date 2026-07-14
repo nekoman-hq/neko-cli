@@ -36,6 +36,24 @@ func TestHandleResumeContinuesCommitCreatedThroughAcceptedHandoff(t *testing.T) 
 	assertSecretAbsentFromFiles(t, fixture.executionPath, fixture.dispatchPath)
 }
 
+func TestHandleResumeDoesNotAdvanceCommitCreatedWhenExpectedTagAlreadyExists(t *testing.T) {
+	fixture := newCommittedResumeRelease(t)
+	gitCmd(t, fixture.root, "tag", fixture.ctx.Tag, fixture.commitSHA)
+	journalBefore := mustReadString(t, fixture.executionPath)
+	t.Setenv("GITHUB_TOKEN", "test-token")
+	withWorkingDirectoryRoot(t, fixture.root)
+
+	resp, err := HandleResume(resumeRequest("api", false))
+
+	assertResumeCommandError(t, resp, err, "RESUME_FAILED", "resume from state commit-created requires manual inspection")
+	if journalAfter := mustReadString(t, fixture.executionPath); journalAfter != journalBefore {
+		t.Fatalf("existing expected tag changed the commit-created journal:\n%s", journalAfter)
+	}
+	if entries, readErr := os.ReadDir(filepath.Join(fixture.bare, "refs", "heads")); readErr != nil || len(entries) != 0 {
+		t.Fatalf("existing expected tag advanced the remote branch: entries=%d err=%v", len(entries), readErr)
+	}
+}
+
 func TestHandleResumeContinuesTagCreatedWithoutRepeatingCommitOrTag(t *testing.T) {
 	fixture := newTaggedResumeRelease(t)
 	prepareAcceptedDispatchForResume(t, fixture)
