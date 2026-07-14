@@ -37,12 +37,12 @@ The public command contract is duplicated between `manifest.json` and the switch
 | `pkg/git` | Legacy Git queries, V1 preflight, tag/history queries, and destructive V1 rollback helpers | `IsClean`, `LatestTag`, `UnitTagsInHistory`, `DeleteRemoteTag`, `HardResetTo` | Direct `exec.Command` and `http.DefaultClient`; mostly no injected seam. |
 | `pkg/release` planning | Version bump, execution context, delivery/capability descriptions, materialization plan | `PlanUnitVersionBump`, `BuildReleaseExecutionContext`, `ResolveDelivery`, `ResolveExecutorCapabilities`, `ResolveVersionMaterializer` | Useful typed models exist, but some capability data describes inactive V2 local behavior. |
 | `pkg/release` V1 | V1 preflight, version guard, executor registry, local executor execution and rollback | `Service.Run`, `Preflight`, `Tool`, `ToolBase`, `VersionGuard` | Uses global tool registration and direct process/Git/environment dependencies. |
-| `pkg/release` V2 GitHub Actions | Active V2 transaction orchestration | `HandleRelease`, `GitHubActionsReleaseRunner.Run` | The runner coordinates nearly every release phase and journal transition. |
+| `pkg/release` V2 GitHub Actions | Typed command boundary and active V2 transaction orchestration | `releaseCommandHandler`, `releaseStartOperation`, `GitHubActionsReleaseRunner.Run` | The command boundary is isolated; the runner still coordinates nearly every release phase and journal transition. |
 | `pkg/release` V2 Git | Preflight, targeted staging, exact commit verification, tag creation, ordered pushes | `GitReleaseCoordinator` | Has an injectable command runner; its `Coordinate` convenience path is not the active runner path. |
 | `pkg/release` state/files | Plan and apply version files; update and restore V2 state | `MaterializationTransaction`, `StateTransaction`, `KnownReleaseFiles` | Snapshots support bounded local restore before commit uncertainty. |
 | `pkg/release` execution journal | Durable intended-release identity, monotonic phases, pending actions, atomic store | `ReleaseExecutionJournal`, `ReleaseExecutionJournalStore` | Stored below the Git common directory, outside the worktree. |
 | `pkg/release` dispatch | Immutable workflow request, dispatch journal, GitHub target, HTTP client, outcome classification | `ReleaseDispatchRequest`, `DispatchJournal`, `GitHubActionsDispatcher`, `GitHubActionsDispatchClient` | Explicit accepted/rejected/unknown outcomes; tokens are adapter inputs only. |
-| `pkg/release` recovery | Read-only assessment and conservative continuation | `AssessReleaseExecutionRecovery`, `HandleResume`, `resumeJournal` | Resume reimplements portions of the active runner ordering. |
+| `pkg/release` recovery | Typed command boundary, read-only assessment, and conservative continuation | `resumeCommandHandler`, `resumeReleaseOperation`, `AssessReleaseExecutionRecovery`, `resumeJournal` | The command boundary is isolated; continuation still reimplements portions of the active runner ordering. |
 | `pkg/release/tool/*` | GoReleaser, JReleaser, and release-it V1/local adapter behavior | `GoReleaser`, `JReleaser`, `ReleaseIt` | Tools own subprocesses and mutable rollback state. |
 
 ## Command-to-flow map
@@ -87,15 +87,16 @@ The public command contract is duplicated between `manifest.json` and the switch
 
 ### `patch`, `minor`, and `major`
 
-- Entry: `main.main` -> `release.HandleRelease` with a typed `release.Type`.
-- Shared parsing: load repository, read `dry-run` and `unit`, require explicit unit selection for multi-unit repositories.
+- Entry: `main.main` -> `release.HandleRelease` -> `releaseCommandHandler` with a typed `release.Type`.
+- Parsing: `ParseReleaseCommandRequest` is the only release-start code that reads the untyped plugin flag map and produces `ReleaseCommandRequest`. Missing or wrongly typed flags preserve the existing zero-value defaults.
+- Application boundary: the handler invokes `releaseCommandStarter.Start` exactly once. Production wiring uses `releaseStartOperation`, which still loads the repository, resolves the unit, builds execution context, and selects the V1 or V2 compatibility path.
 - Branch: V2 uses `ReleaseExecutionContext`; V1 uses `Service` and the legacy executor registry.
-- Response: `HandleRelease`, `v2DryRunPlanResponse`, and `githubActionsReleaseResponse` construct presentation objects directly.
+- Response: application code returns a sealed `ReleaseCommandOutcome` or typed `CommandFailure`; `MapReleaseCommandOutcome` and `MapCommandFailure` construct the stable response from an explicit handler-supplied timestamp.
 - Tests: planning, context, requirements, dry-run, materialization, V2 Git coordination, active GitHub Actions happy paths, and V1 rollback guard tests are distributed through `pkg/release/*_test.go`.
 
 #### V2 dry-run
 
-- Orchestration: `BuildReleaseExecutionContext` -> `ValidateRequirementsForContext` -> `v2DryRunPlanResponse`.
+- Orchestration: `releaseStartOperation` -> `startV2Release` -> `planV2Release`, retaining `BuildReleaseExecutionContext` -> requirements validation -> materialization/known-file/dispatch planning order.
 - Decisions: calculate next SemVer and tag; resolve delivery and executor capabilities; plan materialization; calculate known release files; build a dispatch summary.
 - Side effects: reads config/state, executor config, manifests, and file hashes; emits logs and a timestamped response. It does not resolve a token or write journals/files/refs/remotes.
 - Tests: all `TestHandleRelease*DryRun*` cases in `dry_run_test.go`, plus materializer and coordinator dry-run tests.
@@ -106,13 +107,13 @@ The public command contract is duplicated between `manifest.json` and the switch
 - Orchestration: `GitHubActionsReleaseRunner.Run`.
 - Ordered side effects: token resolution; materialization planning; Git preflight; execution-journal preparation; materialization; state write; targeted stage; commit; tag; dispatch-journal preparation; commit push; tag push; workflow dispatch; handoff confirmation.
 - State: two journals are updated manually around mutations, while `GitReleaseResult` supplies dispatch request facts.
-- Output: a `GitHubActionsReleaseResult` is mapped to the plugin response in the same file.
-- Existing tests: `github_actions_release_runner_test.go` covers two complete accepted happy paths; lower-level tests cover many components.
-- Missing characterization: end-to-end failure injection before and after every unsafe runner step, journal-write failure after a successful side effect, rejected/unknown dispatch at runner level, unresolved-journal blocking, and no-secret assertions for all returned errors/logs.
+- Output: `GitHubActionsReleaseResult` is a typed command outcome mapped only in `command_response.go`.
+- Existing tests: `github_actions_release_runner_test.go` covers accepted happy paths, unresolved-journal blocking, injectable commit/tag/push failures, rejected/unknown dispatch, durable recovery evidence, and secret absence from characterized result/error/journal surfaces; lower-level tests cover the component contracts.
+- Missing characterization: materialization/state/store-write failures, post-side-effect journal-confirmation failures, and captured-log secret assertions remain unreachable until the Stage 3 dependency seams exist.
 
 #### V2 local execution
 
-- `HandleRelease` returns `V2_LOCAL_DELIVERY_BLOCKED` before executing a local transaction.
+- `releaseStartOperation` returns `V2_LOCAL_DELIVERY_BLOCKED` before executing a local transaction.
 - `ReleaseTransaction.Execute` independently returns `v2GitCoordinationUnavailableMessage` for every V2 non-dry-run call.
 - `prepareReleaseFilesForCoordinator` and executor capabilities are internal preparation code exercised only by tests; they are not the active public local release path.
 - This parallel inactive path is a compatibility constraint during refactoring: it must not be mistaken for production orchestration.
@@ -127,15 +128,16 @@ The public command contract is duplicated between `manifest.json` and the switch
 
 ### `resume`
 
-- Entry: `main.main` -> `release.HandleResume` -> `resumeJournal`.
+- Entry: `main.main` -> `release.HandleResume` -> `resumeCommandHandler` -> `resumeReleaseOperation`; continuation delegates to the existing `resumeJournal` compatibility function.
+- Parsing and response: `ParseResumeCommandRequest` creates the typed request; the handler invokes `releaseResumer.Resume` once and maps a sealed `ResumeCommandOutcome` or `CommandFailure` with its injected response clock.
 - Selection: requires V2; resolves one unit and its current upstream remote; finds exactly one unresolved execution journal matching remote URL and unit.
 - Assessment: `AssessReleaseExecutionRecovery` verifies journal structure, known-file hashes, and local tag evidence without remote access.
 - Dry-run: returns that assessment without requiring `GITHUB_TOKEN` or modifying the journal/worktree.
 - Non-dry-run: blocks corrupt/conflicted journals and pending push actions; reconstructs context from the journal; requires current config to match; then handles only selected journal phases.
 - Continuation: can create a missing tag after confirmed commit, prepare dispatch journal, push commit then tag from the `tag-created` state, or dispatch from a confirmed `tag-pushed` state.
 - Restrictions: it will not calculate a new version, continue before a confirmed commit, prove ambiguous push completion, or redispatch a terminal dispatch journal.
-- Existing tests: dry-run read-only behavior, no-journal behavior, exactly-one selection, and pre-commit blocking in `resume_test.go`; assessment statuses/conflicts in `release_execution_recovery_test.go`.
-- Missing characterization: successful resume from `commit-created`, `tag-created`, and `tag-pushed`; already-existing expected tag behavior; each dispatch terminal state; config drift variants; remote identity drift; and side-effect failure injection.
+- Existing tests: dry-run read-only behavior, ordered assessment output, no/exactly-one journal selection, corrupt/conflicted/config-drift handling, supported continuation from `commit-created`, `tag-created`, and `tag-pushed`, completed-journal exclusion, ambiguous-push blocking, no push-state inference, and terminal dispatch no-retry behavior.
+- Missing characterization: the expected-tag-already-present edge case, fresh accepted HTTP dispatch through an injectable application dependency, remaining config/remote drift variants, and side-effect failure injection.
 
 ### `history`
 
@@ -242,7 +244,7 @@ prepared -> config-written -> state-written -> v1-archived -> validated -> journ
 | Git | `pkg/git` direct subprocesses; `GitReleaseCoordinator` runner; direct Git in migration/transaction/tools | coordinator runner and real temp Git repositories | Multiple adapters expose different error and logging semantics. |
 | Environment/token | `pkg/config.GetPAT` and `EnvironmentGitHubActionsDispatchTokenResolver` | `t.Setenv`, token resolver interfaces | V1 and V2 use different token abstractions and messages. |
 | Network | V1 `http.DefaultClient` GitHub deletion; V2 injected `RoundTripper` dispatch client | strong V2 client seam; weak V1 seam | V1 rollback network behavior is hard to isolate. |
-| Time | direct `time.Now` in handlers/models; injected store/dispatcher clocks; JReleaser init year | partial injected clocks | Response and initial journal timestamps are nondeterministic at some boundaries. |
+| Time | injected release/resume response clock; direct `time.Now` in other handlers/models; injected store/dispatcher clocks; JReleaser init year | partial injected clocks | Release/resume response mapping is deterministic under test; other response and initial journal timestamps remain nondeterministic at some boundaries. |
 | External executables | `git`, `goreleaser`, `jreleaser`, `npm`, `bun`, `npx`, `du` | mostly real executable lookup/subprocess | V1 executor unit tests do not isolate command ordering/failures. |
 | Logging | package-global `log.Verbose` and direct logging throughout domain/orchestration | source assertions and output inspection | Presentation concerns occur inside planning and side-effect code. |
 | Tool registry | global map populated by blank imports | package-global registry | Registration order/state is implicit. |
@@ -268,17 +270,17 @@ The following are current behavior. They are not statements that every behavior 
 | INV-13 | Workflow dispatch inputs are exactly `unit`, `version`, `tag`, and `release_sha`; the ref is the unit tag and the release SHA is the verified commit. | `canonicalWorkflowDispatchInputs`, `BuildReleaseDispatchRequest` | dispatch request/client tests and workflow contract tests |
 | INV-14 | Dispatch persists `request-started` before HTTP. A 2xx response is accepted; 400/401/403/404/422/429 are rejected; transport errors, redirects, 5xx, and unexpected outcomes are unknown. | `GitHubActionsDispatcher.Dispatch`, `classifyGitHubActionsDispatchResponse` | dispatcher/client response, timeout, redirect, and outbound-call journal-observation tests |
 | INV-15 | A terminal dispatch journal (`request-started`, `accepted`, `rejected`, or `unknown`) prevents automatic redispatch. Unknown results are never treated as safe retries. | `DispatchJournalStore.Prepare`, `GitHubActionsDispatcher.Dispatch` | terminal-journal/state-transition tests, active-runner rejected/unknown tests, and resume no-retry tests |
-| INV-16 | An ambiguous pending commit/tag push blocks resume. Resume also refuses to infer completion from `dispatch-journal-prepared` or `commit-pushed`. | `HandleResume`, `resumeJournal` | direct pending commit/tag push tests, no-inference tests, and successful `commit-created`/`tag-created`/`tag-pushed` continuation tests |
-| INV-17 | Resume uses one existing unresolved journal for the selected remote and unit, never calculates a new version, and blocks when zero or multiple journals match. | `FindUnresolved`, `HandleResume`, `executionContextFromJournal` | all four `resume_test.go` tests |
+| INV-16 | An ambiguous pending commit/tag push blocks resume. Resume also refuses to infer completion from `dispatch-journal-prepared` or `commit-pushed`. | `resumeReleaseOperation`, `resumeJournal` | direct pending commit/tag push tests, no-inference tests, and successful `commit-created`/`tag-created`/`tag-pushed` continuation tests |
+| INV-17 | Resume uses one existing unresolved journal for the selected remote and unit, never calculates a new version, and blocks when zero or multiple journals match. | `FindUnresolved`, `resumeReleaseOperation`, `executionContextFromJournal` | all four `resume_test.go` tests |
 | INV-18 | A handoff-ready execution journal is considered resolved and is excluded by `FindUnresolved`; a new release command therefore plans from updated V2 state rather than reopening the completed transaction. | `FindUnresolved` and active runner state update | happy-path runner and explicit completed-journal exclusion tests; a subsequent active release remains uncharacterized |
-| INV-19 | V2 release dry-run does not resolve a token, fetch, write state/manifests/journals, run an executor, commit, tag, push, dispatch, publish, or invoke rollback. It still validates the executor config file and reads planned file content/hashes. | `HandleRelease`, `ValidateRequirementsForContext`, `v2DryRunPlanResponse` | `dry_run_test.go`, materializer tests, coordinator dry-run test |
+| INV-19 | V2 release dry-run does not resolve a token, fetch, write state/manifests/journals, run an executor, commit, tag, push, dispatch, publish, or invoke rollback. It still validates the executor config file and reads planned file content/hashes. | `releaseStartOperation`, `ValidateRequirementsForContext`, `planV2Release` | `dry_run_test.go`, materializer tests, coordinator dry-run test |
 | INV-20 | V1 dry-run does not fetch or rewrite V1 config and reports the calculated version. V1 real release still performs legacy preflight and executor behavior. | `Service.GetNewVersion`, `VersionGuardWithOptions` | `TestDryRunDoesNotFetchOrWriteConfigAndShowsNextVersion` |
 | INV-21 | V1 rollback is reachable only after `Service.Run` enters its mutating phase, and `ToolBase.RevertGitRelease` does nothing when no mutation is recorded. Once mutation is recorded, legacy destructive cleanup remains possible. | `Service.Run`, `GitReleaseState.hasMutatingStep`, `RevertGitRelease` | `TestRevertGitReleaseWithoutMutatingStepIsNoop`; full rollback characterization is missing |
 | INV-22 | V2 code does not perform destructive automatic rollback after commit/tag/push uncertainty. Local snapshots are restored only before the unsafe boundary; later failures preserve evidence. | active runner, `GitReleaseCoordinator`, `ReleaseTransaction.fail` | source assertions plus active-runner commit, tag, commit-push, and tag-push failure tests; state/materialization/store-write boundaries still lack active-runner seams |
 | INV-23 | Execution and dispatch journals contain release facts and hashes, not file bytes or tokens. Dispatch errors are capped and redact the exact token. | journal models, `sanitizeDispatchText`, store permissions | journal/dispatcher tests and sentinel assertions across runner errors, command responses, and both journals; captured-log coverage is still missing |
 | INV-24 | Public response status/error schemas and error codes are command contracts, but they are currently constructed in multiple packages. Unexpected handler errors become fatal top-level `EXECUTION_ERROR`. | `plugin.Response`, `main.main`, handler response helpers | focused V2 release/resume status, code, metadata, renderer, and ordered-item contracts; other public commands remain incomplete |
 | INV-25 | Root V1 migration writes a content-hashed journal before V2 files, archives byte-identical V1 content, validates the final V2 repository, and removes the journal only after success. | `migrate.executePlan`, `archiveV1`, `validateFinal` | all migration and interruption recovery tests |
-| INV-26 | V2 local non-dry-run execution is blocked. GitHub Actions owns build and publish after accepted handoff; local release tools are not invoked by that V2 path. | `HandleRelease`, `GitHubActionsReleaseRunner.Run` | V2 block tests and runner fake dispatch tests |
+| INV-26 | V2 local non-dry-run execution is blocked. GitHub Actions owns build and publish after accepted handoff; local release tools are not invoked by that V2 path. | `releaseStartOperation`, `GitHubActionsReleaseRunner.Run` | V2 block tests and runner fake dispatch tests |
 
 ## Architecture strengths
 
@@ -295,17 +297,13 @@ The following are current behavior. They are not statements that every behavior 
 
 ## Concrete hotspots and mixed abstraction levels
 
-### `GitHubActionsReleaseRunner.Run`
+### `releaseStartOperation` and `GitHubActionsReleaseRunner.Run`
 
-This function owns token policy, plan construction, Git preflight, repository target validation, unresolved-journal policy, journal lifecycle, file transactions, Git mutations, dispatch request construction, pushes, HTTP dispatch, recovery result construction, and logging. High-level use-case decisions alternate with low-level store calls and Git operations. The ordering is safety-critical but is represented by one long procedural function rather than named use-case steps behind an injected dependency set.
+`HandleRelease` is now a presentation boundary: parse a typed request, invoke one starter, and map one typed outcome/failure with an injected clock. The transitional `releaseStartOperation` still loads repository state, selects units, builds execution context, branches between V1 and V2, validates/plans dry-runs, constructs the production runner, and invokes execution. `GitHubActionsReleaseRunner.Run` remains the larger Stage 3 hotspot: it owns token policy, plan construction, Git preflight, repository target validation, unresolved-journal policy, journal lifecycle, file transactions, Git mutations, dispatch request construction, pushes, HTTP dispatch, recovery result construction, and logging.
 
-### `HandleRelease`
+### `resumeReleaseOperation` and `resumeJournal`
 
-This handler parses flags, loads repository state, selects units, branches between V1 and V2, builds execution context, validates requirements, invokes production execution, constructs dry-run plans, and maps multiple response schemas/error codes. Command-boundary work and business orchestration are interleaved.
-
-### `HandleResume` and `resumeJournal`
-
-Resume duplicates runner responsibilities for tag creation, dispatch-journal preparation, push ordering, dispatch, and handoff confirmation. Boolean parameters `loadOnly` and `pushed` select materially different safety behavior in `prepareDispatchJournalForResume` and `dispatchRequestForResume`. The persisted state machine is typed, but its continuation policy is spread across nested conditionals and in-memory state assignments.
+`HandleResume` is likewise a typed presentation boundary. The transitional `resumeReleaseOperation` delegates discovery, assessment, and continuation to `findResumableExecution`, `assessResumableExecution`, and `continueResumableExecution`; those operations still construct the current repositories, token resolver, context, and compatibility invocation. `resumeJournal` duplicates runner responsibilities for tag creation, dispatch-journal preparation, push ordering, dispatch, and handoff confirmation. Boolean parameters `loadOnly` and `pushed` select materially different safety behavior in `prepareDispatchJournalForResume` and `dispatchRequestForResume`. The persisted state machine is typed, but its continuation policy is spread across nested conditionals and in-memory state assignments.
 
 ### Parallel transaction paths
 
@@ -321,7 +319,7 @@ V2 config carries validated `plugin.manifest`, and `ReleaseUnit` exposes it, but
 
 ### Response and error duplication
 
-Every command package creates timestamps, metadata, table rows, and error structures. `history` and `contributors` duplicate the same helpers. `initErrorResponse` always labels its command as `init`, including errors returned from `unit-add`. `plugin-index` often returns Go errors, unlike handlers that return structured error responses. Stable codes and item ordering are therefore distributed rather than centrally classified.
+Release start and resume now centralize typed failures and exact response mapping in `command_response.go`, with explicit timestamps supplied by their handler clocks. Other command packages still create timestamps, metadata, table rows, and error structures independently. `history` and `contributors` duplicate the same helpers. `initErrorResponse` always labels its command as `init`, including errors returned from `unit-add`. `plugin-index` often returns Go errors, unlike handlers that return structured error responses. Stable contracts outside release start/resume therefore remain distributed.
 
 ### Multiple side-effect adapters
 
@@ -345,12 +343,11 @@ Important missing seams include:
 
 - an application-level dependency set for active release and resume;
 - filesystem/config/state repositories with failure injection; the active runner constructs materialization/state transactions and execution/dispatch stores internally, so write and post-effect confirmation failures cannot be injected safely;
-- injectable runner/dispatcher dependencies at `HandleRelease` and `HandleResume`; fresh successful resume dispatch cannot be command-tested without real HTTP, while accepted-journal reuse is testable without a request;
+- replaceable runner/dispatcher/store dependencies inside `releaseStartOperation`, `GitHubActionsReleaseRunner`, and `resumeReleaseOperation`; the command handlers themselves are injectable, but production application operations still construct these collaborators, so fresh successful resume dispatch cannot be tested without real HTTP while accepted-journal reuse remains testable without a request;
 - one Git port used by all Release Plugin flows;
-- an injected response clock;
 - subprocess runners for V1 tools;
 - an HTTP client for V1 GitHub rollback;
-- a command decoder that rejects wrong flag types instead of silently applying defaults.
+- a command-decoding policy for wrong flag types; the Stage 2 parsers deliberately preserve silent defaults because rejection would be a new public behavior.
 
 ## Missing characterization coverage, prioritized
 

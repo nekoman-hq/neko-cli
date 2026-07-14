@@ -1,0 +1,42 @@
+package release
+
+import (
+	"os"
+	"strings"
+	"testing"
+)
+
+func TestCommandHandlersRemainPresentationBoundaries(t *testing.T) {
+	source := readCommandBoundarySource(t, "command_handler.go")
+	for _, forbidden := range []string{
+		"LoadReleaseRepository",
+		"ResolveReleaseUnit",
+		"BuildReleaseExecutionContext",
+		"NewGitHubActionsReleaseRunner",
+		"ReleaseExecutionJournalStore",
+		"resumeJournal",
+		"GITHUB_TOKEN",
+	} {
+		if strings.Contains(source, forbidden) {
+			t.Fatalf("command_handler.go contains application responsibility %q", forbidden)
+		}
+	}
+}
+
+func TestCommandApplicationOperationsDoNotConstructPluginResponses(t *testing.T) {
+	for _, path := range []string{"handler.go", "resume.go", "github_actions_release_runner.go"} {
+		source := readCommandBoundarySource(t, path)
+		if strings.Contains(source, "github.com/nekoman-hq/neko-cli/pkg/plugin") || strings.Contains(source, "plugin.Response") {
+			t.Fatalf("%s depends on plugin response presentation", path)
+		}
+	}
+}
+
+func readCommandBoundarySource(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	return string(data)
+}

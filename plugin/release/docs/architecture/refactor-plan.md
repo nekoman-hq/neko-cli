@@ -173,6 +173,8 @@ The active runner still constructs materialization/state transactions and journa
 
 ## Stage 2: Establish typed command requests and response mapping
 
+Status: completed on 2026-07-14 by `refactor(release): isolate release command presentation`.
+
 ### Goal
 
 Make `patch`, `minor`, `major`, and `resume` handlers presentation boundaries without changing their use-case internals yet.
@@ -247,6 +249,23 @@ The greatest risk is accidental code/message/item-order drift. Golden or structu
 ### Rollback strategy
 
 One atomic commit. Revert it to restore the existing handlers; no disk/journal schema migration is involved.
+
+### Completed implementation
+
+- `ParseReleaseCommandRequest` and `ParseResumeCommandRequest` exclusively translate plugin flag maps into typed requests. Wrongly typed values retain the characterized empty/false defaults; no new parser failure code was introduced.
+- `releaseCommandHandler` and `resumeCommandHandler` each parse, invoke one focused application interface exactly once, and map one sealed typed outcome or `CommandFailure`.
+- Release preview/completion, V2 preview, GitHub Actions handoff, and resume assessment are represented by command-specific outcome types rather than a generic result wrapper.
+- `command_response.go` is the single release/resume presentation mapper. Stable status, metadata, details, renderer, data keys, row values, and row order are constructed with an explicit timestamp supplied by an injected `responseClock`.
+- Exported `HandleRelease`, `HandleResume`, and `V2ExecutionUnavailableResponse` signatures remain intact. `releaseStartOperation`, `resumeReleaseOperation`, `GitHubActionsReleaseRunner.Run`, and `resumeJournal` are compatibility facades around the unchanged execution behavior.
+- Focused parser, handler-boundary, failure-mapping, fixed-timestamp, and ordered-row tests supplement the unchanged Stage 1 command/runner/resume contracts.
+
+### Residual deferrals
+
+- `releaseStartOperation` still performs repository/unit/context selection and constructs `GitHubActionsReleaseRunner`; extracting the active V2 use case and its narrow replaceable dependencies belongs to Stage 3.
+- The resume application path still constructs repository, Git, token, context, and journal collaborators across its focused discovery/assessment/continuation helpers, while `resumeJournal` retains duplicated continuation policy and boolean mode parameters; that work remains Stage 4 after Stage 3 operations exist.
+- V1 `Service` and tool orchestration remain compatibility code. No V1/V2 consolidation, response cleanup outside release/resume, validation policy change, or new malformed-flag behavior was introduced.
+
+Next exact stage: **Stage 3: Extract the active V2 release use case with replaceable dependencies.**
 
 ### Dependencies
 
@@ -842,7 +861,7 @@ No rollback for this refactor plan may use `git reset --hard`, rewrite published
 
 1. **Characterize V2 release command contracts (Stage 1).** One focused task, normally one test commit. Pin active response/error order, unresolved-journal blocking, dispatch terminal outcomes, resume restrictions, and secret absence.
    - **Clean-code acceptance:** Test externally visible behavior rather than current function structure; keep fixtures focused and expose the seams needed to reject mixed handler/application/infrastructure responsibilities later.
-2. **Isolate release command presentation (Stage 2).** One focused refactor with typed request/result mapping and an injected response clock. No side-effect code moves.
+2. **Isolate release command presentation (Stage 2, completed 2026-07-14).** One focused refactor with typed request/result mapping and an injected response clock. No side-effect code moves.
    - **Clean-code acceptance:** Handlers only parse/validate, create a typed request, invoke one focused use case, and map one result. No broad service, generic command framework, boolean workflow selector, or infrastructure access is introduced.
 3. **Extract the active GitHub Actions release use case (Stage 3).** Add failure-injection ports and focused named operations, then cut over `GitHubActionsReleaseRunner.Run` atomically. One characterization commit plus one refactor commit is preferred.
    - **Clean-code acceptance:** Each operation has one responsibility and one abstraction level, dependencies are explicit and narrowly scoped, response mapping stays outside application logic, and safety order is visible without a god function, dependency bag, generic step pipeline, or state-machine engine.

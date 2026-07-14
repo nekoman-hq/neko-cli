@@ -5,12 +5,9 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/nekoman-hq/neko-cli/pkg/log"
-	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
-	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata"
 )
 
 // GitHubActionsReleaseRunner executes the public V2 github-actions release
@@ -377,38 +374,4 @@ func (resolver staticGitHubActionsDispatchTokenResolver) ResolveGitHubActionsDis
 		return "", missingGitHubActionsDispatchTokenError()
 	}
 	return resolver.token, nil
-}
-
-func githubActionsReleaseResponse(command string, result *GitHubActionsReleaseResult) *plugin.Response {
-	items := []map[string]any{
-		{"property": "Unit", "value": result.Unit},
-		{"property": "Version", "value": result.Version},
-		{"property": "Tag", "value": result.Tag},
-		{"property": "Release Commit", "value": result.CommitSHA},
-		{"property": "Workflow", "value": result.Workflow},
-		{"property": "Execution Journal", "value": result.ExecutionJournalPath},
-		{"property": "Dispatch Journal", "value": result.DispatchJournalPath},
-		{"property": "Execution State", "value": string(result.ExecutionState)},
-		{"property": "Dispatch State", "value": string(result.DispatchState)},
-		{"property": "Dispatch Run", "value": emptyFallback(result.DispatchRunURL, "not resolved")},
-		{"property": "Status", "value": result.RecoveryGuidance},
-	}
-	return &plugin.Response{
-		Status: "success",
-		Metadata: plugin.ResponseMetadata{
-			Plugin:    metadata.PluginName,
-			Version:   metadata.Version,
-			Command:   command,
-			Timestamp: time.Now(),
-		},
-		Data:         map[string]any{"items": items},
-		RendererHint: "table",
-	}
-}
-
-func emptyFallback(value, fallback string) string {
-	if strings.TrimSpace(value) == "" {
-		return fallback
-	}
-	return value
 }

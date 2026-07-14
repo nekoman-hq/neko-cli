@@ -1,0 +1,121 @@
+package release
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+)
+
+func TestReleaseCommandHandlerParsesInvokesOnceAndMapsOutcome(t *testing.T) {
+	timestamp := time.Date(2026, time.July, 14, 9, 30, 0, 0, time.UTC)
+	starter := &recordingReleaseCommandStarter{
+		outcome: &LegacyReleasePreview{
+			ReleaseType:    Minor,
+			CurrentVersion: "1.2.3",
+			NextVersion:    "1.3.0",
+			ReleaseSystem:  "goreleaser",
+		},
+	}
+	handler := releaseCommandHandler{starter: starter, clock: fixedResponseClock{timestamp}, releaseType: Minor}
+
+	resp, err := handler.Handle(context.Background(), plugin.Request{Flags: map[string]any{"unit": "api", "dry-run": true}})
+
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if starter.calls != 1 || starter.request != (ReleaseCommandRequest{ReleaseType: Minor, UnitID: "api", DryRun: true}) {
+		t.Fatalf("starter calls=%d request=%#v", starter.calls, starter.request)
+	}
+	if resp.Status != "success" || resp.Metadata.Command != "minor" || !resp.Metadata.Timestamp.Equal(timestamp) {
+		t.Fatalf("unexpected mapped response: %#v", resp)
+	}
+}
+
+func TestReleaseCommandHandlerMapsTypedFailureWithoutGoError(t *testing.T) {
+	timestamp := time.Date(2026, time.July, 14, 10, 0, 0, 0, time.UTC)
+	starter := &recordingReleaseCommandStarter{
+		failure: &CommandFailure{
+			Code:    "CONFIG_NOT_FOUND",
+			Message: "missing release config",
+			Details: map[string]any{"hint": "initialize release config"},
+		},
+	}
+	handler := releaseCommandHandler{starter: starter, clock: fixedResponseClock{timestamp}, releaseType: Patch}
+
+	resp, err := handler.Handle(context.Background(), plugin.Request{})
+
+	if err != nil {
+		t.Fatalf("Handle returned a Go error: %v", err)
+	}
+	if starter.calls != 1 || resp.Status != "error" || resp.Error.Code != "CONFIG_NOT_FOUND" {
+		t.Fatalf("unexpected failure mapping: calls=%d response=%#v", starter.calls, resp)
+	}
+	if resp.Error.Details["hint"] != "initialize release config" || !resp.Metadata.Timestamp.Equal(timestamp) {
+		t.Fatalf("failure details or timestamp changed: %#v", resp)
+	}
+}
+
+func TestResumeCommandHandlerParsesInvokesOnceAndMapsOutcome(t *testing.T) {
+	timestamp := time.Date(2026, time.July, 14, 11, 0, 0, 0, time.UTC)
+	resumer := &recordingReleaseResumer{
+		outcome: &ResumeAssessment{
+			UnitID:               "api",
+			NextVersion:          "1.2.4",
+			Tag:                  "api/v1.2.4",
+			ExecutionJournalPath: ".git/neko/release/executions/example.json",
+			State:                ReleaseExecutionPrepared,
+			RecoveryStatus:       ReleaseExecutionRecoveryNotStarted,
+			KnownFilePaths:       []string{".neko/release.state.json"},
+			Guidance:             "Inspect before continuing.",
+		},
+	}
+	handler := resumeCommandHandler{resumer: resumer, clock: fixedResponseClock{timestamp}}
+
+	resp, err := handler.Handle(context.Background(), plugin.Request{Flags: map[string]any{"unit": "api", "dry-run": true}})
+
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if resumer.calls != 1 || resumer.request != (ResumeCommandRequest{UnitID: "api", DryRun: true}) {
+		t.Fatalf("resumer calls=%d request=%#v", resumer.calls, resumer.request)
+	}
+	if resp.Status != "success" || resp.Metadata.Command != "resume" || !resp.Metadata.Timestamp.Equal(timestamp) {
+		t.Fatalf("unexpected mapped response: %#v", resp)
+	}
+}
+
+type fixedResponseClock struct {
+	timestamp time.Time
+}
+
+func (clock fixedResponseClock) Now() time.Time {
+	return clock.timestamp
+}
+
+type recordingReleaseCommandStarter struct {
+	outcome ReleaseCommandOutcome
+	failure *CommandFailure
+	request ReleaseCommandRequest
+	calls   int
+}
+
+func (starter *recordingReleaseCommandStarter) Start(_ context.Context, request ReleaseCommandRequest) (ReleaseCommandOutcome, *CommandFailure) {
+	starter.calls++
+	starter.request = request
+	return starter.outcome, starter.failure
+}
+
+type recordingReleaseResumer struct {
+	outcome ResumeCommandOutcome
+	failure *CommandFailure
+	request ResumeCommandRequest
+	calls   int
+}
+
+func (resumer *recordingReleaseResumer) Resume(_ context.Context, request ResumeCommandRequest) (ResumeCommandOutcome, *CommandFailure) {
+	resumer.calls++
+	resumer.request = request
+	return resumer.outcome, resumer.failure
+}

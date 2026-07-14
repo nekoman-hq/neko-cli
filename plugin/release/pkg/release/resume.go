@@ -5,74 +5,130 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
-	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
-	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata"
 )
 
-func HandleResume(req plugin.Request) (*plugin.Response, error) {
+type resumeReleaseOperation struct{}
+
+func (resumeReleaseOperation) Resume(ctx context.Context, request ResumeCommandRequest) (ResumeCommandOutcome, *CommandFailure) {
+	execution, failure := findResumableExecution(request.UnitID)
+	if failure != nil {
+		return nil, failure
+	}
+	assessment, failure := assessResumableExecution(execution)
+	if failure != nil {
+		return nil, failure
+	}
+	if request.DryRun {
+		result, err := newResumeAssessment(execution.resolution.Path, execution.resolution.Journal, assessment)
+		if err != nil {
+			return nil, failureFromError("RECOVERY_ASSESSMENT_FAILED", err)
+		}
+		return result, nil
+	}
+	return continueResumableExecution(ctx, execution, assessment)
+}
+
+// resumableExecution holds the discovered facts needed to assess or continue
+// one existing release execution. It does not represent a new workflow state.
+type resumableExecution struct {
+	repository *releaseconfig.ReleaseRepository
+	unit       releaseconfig.ReleaseUnit
+	resolution ReleaseExecutionJournalResolution
+	remoteName string
+	remoteURL  string
+}
+
+func findResumableExecution(unitID string) (*resumableExecution, *CommandFailure) {
 	repository, err := releaseconfig.LoadReleaseRepository(".")
 	if err != nil {
-		return commandErrorResponse("resume", "CONFIG_NOT_FOUND", err.Error()), nil
+		return nil, failureFromError("CONFIG_NOT_FOUND", err)
 	}
 	if repository.SourceFormat != releaseconfig.SourceFormatV2 {
-		return commandErrorResponse("resume", "RESUME_UNSUPPORTED", "release resume supports V2 github-actions releases only"), nil
+		return nil, failureFromMessage("RESUME_UNSUPPORTED", "release resume supports V2 github-actions releases only")
 	}
-	unit, err := releaseconfig.ResolveReleaseUnit(repository, getFlagString(req.Flags, "unit"), releaseconfig.UnitResolutionOptions{RequireExplicitForMulti: true})
+	unit, err := releaseconfig.ResolveReleaseUnit(repository, unitID, releaseconfig.UnitResolutionOptions{RequireExplicitForMulti: true})
 	if err != nil {
-		return commandErrorResponse("resume", "UNIT_RESOLUTION_FAILED", err.Error()), nil
+		return nil, failureFromError("UNIT_RESOLUTION_FAILED", err)
 	}
 	remoteName, remoteURL, err := selectedReleaseRemote(repository.RepositoryRoot)
 	if err != nil {
-		return commandErrorResponse("resume", "REMOTE_RESOLUTION_FAILED", err.Error()), nil
+		return nil, failureFromError("REMOTE_RESOLUTION_FAILED", err)
 	}
 	store := NewReleaseExecutionJournalStore(repository.RepositoryRoot)
 	matches, err := store.FindUnresolved(remoteURL, unit.ID)
 	if err != nil {
-		return commandErrorResponse("resume", "JOURNAL_SCAN_FAILED", err.Error()), nil
+		return nil, failureFromError("JOURNAL_SCAN_FAILED", err)
 	}
 	if len(matches) == 0 {
-		return commandErrorResponse("resume", "NO_RESUMABLE_JOURNAL", fmt.Sprintf("no resumable V2 release execution journal found for unit %s", unit.ID)), nil
+		return nil, failureFromMessage("NO_RESUMABLE_JOURNAL", fmt.Sprintf("no resumable V2 release execution journal found for unit %s", unit.ID))
 	}
 	if len(matches) > 1 {
-		return commandErrorResponse("resume", "MULTIPLE_RESUMABLE_JOURNALS", multipleJournalMessage(unit.ID, matches)), nil
+		return nil, failureFromMessage("MULTIPLE_RESUMABLE_JOURNALS", multipleJournalMessage(unit.ID, matches))
 	}
 	resolution := matches[0]
 	journal := resolution.Journal
 	if journal.Delivery != string(releaseconfig.DeliveryGitHubActions) {
-		return commandErrorResponse("resume", "RESUME_UNSUPPORTED", "release resume supports V2 github-actions releases only"), nil
+		return nil, failureFromMessage("RESUME_UNSUPPORTED", "release resume supports V2 github-actions releases only")
 	}
-	assessment, err := AssessReleaseExecutionRecovery(repository.RepositoryRoot, journal)
+	return &resumableExecution{
+		repository: repository,
+		unit:       *unit,
+		resolution: resolution,
+		remoteName: remoteName,
+		remoteURL:  remoteURL,
+	}, nil
+}
+
+func assessResumableExecution(execution *resumableExecution) (*ReleaseExecutionRecoveryAssessment, *CommandFailure) {
+	assessment, err := AssessReleaseExecutionRecovery(execution.repository.RepositoryRoot, execution.resolution.Journal)
 	if err != nil {
-		return commandErrorResponse("resume", "RECOVERY_ASSESSMENT_FAILED", err.Error()), nil
+		return nil, failureFromError("RECOVERY_ASSESSMENT_FAILED", err)
 	}
-	if getFlagBool(req.Flags, "dry-run") {
-		return resumeAssessmentResponse(resolution.Path, journal, assessment), nil
+	return assessment, nil
+}
+
+func continueResumableExecution(ctx context.Context, execution *resumableExecution, assessment *ReleaseExecutionRecoveryAssessment) (ResumeCommandOutcome, *CommandFailure) {
+	journal := execution.resolution.Journal
+	if failure := validateResumeEligibility(journal, assessment); failure != nil {
+		return nil, failure
 	}
+	token, err := EnvironmentGitHubActionsDispatchTokenResolver{}.ResolveGitHubActionsDispatchToken(ctx)
+	if err != nil {
+		return nil, failureFromError("TOKEN_MISSING", err)
+	}
+	execCtx, failure := resumableExecutionContext(execution)
+	if failure != nil {
+		return nil, failure
+	}
+	result, err := resumeJournal(ctx, execCtx, journal, execution.resolution.Path, execution.remoteName, execution.remoteURL, token)
+	if err != nil {
+		return nil, failureFromError("RESUME_FAILED", err)
+	}
+	return result, nil
+}
+
+func validateResumeEligibility(journal *ReleaseExecutionJournal, assessment *ReleaseExecutionRecoveryAssessment) *CommandFailure {
 	if assessment.Status == ReleaseExecutionRecoveryConflicted || assessment.Status == ReleaseExecutionRecoveryCorrupted {
-		return commandErrorResponse("resume", "RESUME_BLOCKED", assessment.Guidance), nil
+		return failureFromMessage("RESUME_BLOCKED", assessment.Guidance)
 	}
 	if journal.PendingAction == ReleaseExecutionPendingPushReleaseCommit || journal.PendingAction == ReleaseExecutionPendingPushUnitTag {
-		return commandErrorResponse("resume", "RESUME_BLOCKED", "pending push action is ambiguous; manual verification is required before retry"), nil
+		return failureFromMessage("RESUME_BLOCKED", "pending push action is ambiguous; manual verification is required before retry")
 	}
-	token, err := EnvironmentGitHubActionsDispatchTokenResolver{}.ResolveGitHubActionsDispatchToken(context.Background())
+	return nil
+}
+
+func resumableExecutionContext(execution *resumableExecution) (*ReleaseExecutionContext, *CommandFailure) {
+	journal := execution.resolution.Journal
+	execCtx, err := executionContextFromJournal(execution.repository, execution.unit, journal)
 	if err != nil {
-		return commandErrorResponse("resume", "TOKEN_MISSING", err.Error()), nil
+		return nil, failureFromError("JOURNAL_CONTEXT_FAILED", err)
 	}
-	execCtx, err := executionContextFromJournal(repository, *unit, journal)
-	if err != nil {
-		return commandErrorResponse("resume", "JOURNAL_CONTEXT_FAILED", err.Error()), nil
+	if execCtx.Workflow != execution.unit.Workflow || execCtx.Executor != execution.unit.ExecutorType || execCtx.Delivery != execution.unit.Delivery {
+		return nil, failureFromMessage("JOURNAL_CONFLICT", "current V2 config no longer matches the release execution journal")
 	}
-	if execCtx.Workflow != unit.Workflow || execCtx.Executor != unit.ExecutorType || execCtx.Delivery != unit.Delivery {
-		return commandErrorResponse("resume", "JOURNAL_CONFLICT", "current V2 config no longer matches the release execution journal"), nil
-	}
-	result, err := resumeJournal(context.Background(), execCtx, journal, resolution.Path, remoteName, remoteURL, token)
-	if err != nil {
-		return commandErrorResponse("resume", "RESUME_FAILED", err.Error()), nil
-	}
-	return githubActionsReleaseResponse("resume", result), nil
+	return execCtx, nil
 }
 
 func resumeJournal(ctx context.Context, execCtx *ReleaseExecutionContext, journal *ReleaseExecutionJournal, executionPath, remoteName, remoteURL, token string) (*GitHubActionsReleaseResult, error) {
@@ -314,40 +370,6 @@ func selectedReleaseRemote(repositoryRoot string) (string, string, error) {
 		return "", "", err
 	}
 	return remoteName, strings.TrimSpace(remoteURL), nil
-}
-
-func resumeAssessmentResponse(path string, journal *ReleaseExecutionJournal, assessment *ReleaseExecutionRecoveryAssessment) *plugin.Response {
-	items := []map[string]any{
-		{"property": "Unit", "value": journal.UnitID},
-		{"property": "Version", "value": journal.NextVersion},
-		{"property": "Tag", "value": journal.Tag},
-		{"property": "Execution Journal", "value": path},
-		{"property": "State", "value": string(journal.State)},
-		{"property": "Pending Action", "value": string(journal.PendingAction)},
-		{"property": "Recovery Status", "value": string(assessment.Status)},
-		{"property": "Safe To Continue", "value": fmt.Sprintf("%t", assessment.SafeToContinue)},
-		{"property": "Known Files", "value": executionKnownFilesValue(journal.KnownReleaseFiles)},
-		{"property": "Next Step", "value": assessment.Guidance},
-	}
-	return &plugin.Response{
-		Status: "success",
-		Metadata: plugin.ResponseMetadata{
-			Plugin:    metadata.PluginName,
-			Version:   metadata.Version,
-			Command:   "resume",
-			Timestamp: time.Now(),
-		},
-		Data:         map[string]any{"items": items},
-		RendererHint: "table",
-	}
-}
-
-func executionKnownFilesValue(files []ReleaseExecutionFileMetadata) string {
-	values := make([]string, 0, len(files))
-	for _, file := range files {
-		values = append(values, file.RepositoryRelativePath)
-	}
-	return strings.Join(values, ", ")
 }
 
 func multipleJournalMessage(unitID string, matches []ReleaseExecutionJournalResolution) string {
