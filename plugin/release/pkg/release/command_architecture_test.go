@@ -24,10 +24,27 @@ func TestCommandHandlersRemainPresentationBoundaries(t *testing.T) {
 }
 
 func TestCommandApplicationOperationsDoNotConstructPluginResponses(t *testing.T) {
-	for _, path := range []string{"handler.go", "resume.go", "github_actions_release_runner.go"} {
+	for _, path := range []string{"handler.go", "resume.go", "github_actions_release_runner.go", "github_actions_release_use_case.go"} {
 		source := readCommandBoundarySource(t, path)
 		if strings.Contains(source, "github.com/nekoman-hq/neko-cli/pkg/plugin") || strings.Contains(source, "plugin.Response") {
 			t.Fatalf("%s depends on plugin response presentation", path)
+		}
+	}
+}
+
+func TestGitHubActionsReleaseRunnerRemainsFacade(t *testing.T) {
+	source := readCommandBoundarySource(t, "github_actions_release_runner.go")
+	for _, forbidden := range []string{
+		"BeginPending",
+		"ConfirmPhase",
+		"BuildReleaseExecutionJournal",
+		"NewReleaseExecutionJournalStore",
+		"ResolveVersionMaterializer",
+		"PushCommit",
+		"NewGitHubActionsDispatcher",
+	} {
+		if strings.Contains(source, forbidden) {
+			t.Fatalf("github_actions_release_runner.go contains extracted responsibility %q", forbidden)
 		}
 	}
 }

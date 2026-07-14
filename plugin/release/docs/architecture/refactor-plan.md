@@ -261,17 +261,19 @@ One atomic commit. Revert it to restore the existing handlers; no disk/journal s
 
 ### Residual deferrals
 
-- `releaseStartOperation` still performs repository/unit/context selection and constructs `GitHubActionsReleaseRunner`; extracting the active V2 use case and its narrow replaceable dependencies belongs to Stage 3.
+- `releaseStartOperation` still performs repository/unit/context selection and constructs `GitHubActionsReleaseRunner`; the active V2 execution behind that facade is extracted in Stage 3, while broader start-operation selection remains compatibility wiring.
 - The resume application path still constructs repository, Git, token, context, and journal collaborators across its focused discovery/assessment/continuation helpers, while `resumeJournal` retains duplicated continuation policy and boolean mode parameters; that work remains Stage 4 after Stage 3 operations exist.
 - V1 `Service` and tool orchestration remain compatibility code. No V1/V2 consolidation, response cleanup outside release/resume, validation policy change, or new malformed-flag behavior was introduced.
 
-Next exact stage: **Stage 3: Extract the active V2 release use case with replaceable dependencies.**
+Next exact stage: **Stage 4: Model resume policy and reuse the active release steps.**
 
 ### Dependencies
 
 Stage 1.
 
 ## Stage 3: Extract the active V2 release use case with replaceable dependencies
+
+Status: completed on 2026-07-14 by `refactor(release): extract github actions release use case`.
 
 ### Goal
 
@@ -363,6 +365,18 @@ The runner facade and persisted schemas remain stable, so reverting the extracti
 ### Dependencies
 
 Stages 1 and 2.
+
+### Completion record
+
+- `GitHubActionsReleaseRunner.Run` now performs facade validation, request logging, explicit production composition, and one use-case invocation.
+- `githubActionsReleaseUseCase.Run` exposes the exact token, plan, preflight, execution-journal, materialization, state, stage, commit, tag, dispatch-journal, commit-push, tag-push, dispatch, and accepted-handoff order through named calls.
+- Consumer-owned operation interfaces make token, planning, preflight, execution journal, materialization/state transactions, Git mutations, dispatch journal/request construction, workflow dispatch, and handoff confirmation replaceable without a generic dependency bag or step pipeline.
+- Each of the eight unsafe local/remote mutations owns its pending marker, side effect, and confirmed phase. Existing stores, transactions, Git coordinator, dispatcher, journal schemas, Git commands, response mapping, and recovery policy remain unchanged.
+- Fake-driven tests cover the full call order, every use-case dependency failure, cleanup stopping rules, rejected dispatch, token absence from captured logs/results, and failures before and after every journaled mutation. Existing real-repository runner tests remain the behavior baseline.
+- `BuildReleaseDispatchRequest` retains direct construction of a read-only `GitReleaseCoordinator` for tag/committed-state verification. Stage 3 places the builder behind a focused seam; replacing that internal verifier is deferred to later adapter consolidation.
+- The characterization and extraction tests depend on the new operation seams, so Stage 3 is delivered as one reviewable refactor commit as allowed by the stage plan.
+
+Next exact stage: **Stage 4: Model resume policy and reuse the active release steps.**
 
 ## Stage 4: Model resume policy and reuse the active release steps
 
@@ -863,7 +877,7 @@ No rollback for this refactor plan may use `git reset --hard`, rewrite published
    - **Clean-code acceptance:** Test externally visible behavior rather than current function structure; keep fixtures focused and expose the seams needed to reject mixed handler/application/infrastructure responsibilities later.
 2. **Isolate release command presentation (Stage 2, completed 2026-07-14).** One focused refactor with typed request/result mapping and an injected response clock. No side-effect code moves.
    - **Clean-code acceptance:** Handlers only parse/validate, create a typed request, invoke one focused use case, and map one result. No broad service, generic command framework, boolean workflow selector, or infrastructure access is introduced.
-3. **Extract the active GitHub Actions release use case (Stage 3).** Add failure-injection ports and focused named operations, then cut over `GitHubActionsReleaseRunner.Run` atomically. One characterization commit plus one refactor commit is preferred.
+3. **Extract the active GitHub Actions release use case (Stage 3, completed 2026-07-14).** The runner is a facade over one ordered use case; focused operation ports provide failure injection around every journaled mutation in one atomic cutover.
    - **Clean-code acceptance:** Each operation has one responsibility and one abstraction level, dependencies are explicit and narrowly scoped, response mapping stays outside application logic, and safety order is visible without a god function, dependency bag, generic step pipeline, or state-machine engine.
 
 ## When new features can begin

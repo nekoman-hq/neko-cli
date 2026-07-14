@@ -37,7 +37,7 @@ The public command contract is duplicated between `manifest.json` and the switch
 | `pkg/git` | Legacy Git queries, V1 preflight, tag/history queries, and destructive V1 rollback helpers | `IsClean`, `LatestTag`, `UnitTagsInHistory`, `DeleteRemoteTag`, `HardResetTo` | Direct `exec.Command` and `http.DefaultClient`; mostly no injected seam. |
 | `pkg/release` planning | Version bump, execution context, delivery/capability descriptions, materialization plan | `PlanUnitVersionBump`, `BuildReleaseExecutionContext`, `ResolveDelivery`, `ResolveExecutorCapabilities`, `ResolveVersionMaterializer` | Useful typed models exist, but some capability data describes inactive V2 local behavior. |
 | `pkg/release` V1 | V1 preflight, version guard, executor registry, local executor execution and rollback | `Service.Run`, `Preflight`, `Tool`, `ToolBase`, `VersionGuard` | Uses global tool registration and direct process/Git/environment dependencies. |
-| `pkg/release` V2 GitHub Actions | Typed command boundary and active V2 transaction orchestration | `releaseCommandHandler`, `releaseStartOperation`, `GitHubActionsReleaseRunner.Run` | The command boundary is isolated; the runner still coordinates nearly every release phase and journal transition. |
+| `pkg/release` V2 GitHub Actions | Typed command boundary, active release use case, named journaled operations, and production facade | `releaseCommandHandler`, `releaseStartOperation`, `githubActionsReleaseUseCase.Run`, `GitHubActionsReleaseRunner.Run` | The runner validates and composes current adapters; the use case owns the visible safety order and delegates each mutation to a focused operation. |
 | `pkg/release` V2 Git | Preflight, targeted staging, exact commit verification, tag creation, ordered pushes | `GitReleaseCoordinator` | Has an injectable command runner; its `Coordinate` convenience path is not the active runner path. |
 | `pkg/release` state/files | Plan and apply version files; update and restore V2 state | `MaterializationTransaction`, `StateTransaction`, `KnownReleaseFiles` | Snapshots support bounded local restore before commit uncertainty. |
 | `pkg/release` execution journal | Durable intended-release identity, monotonic phases, pending actions, atomic store | `ReleaseExecutionJournal`, `ReleaseExecutionJournalStore` | Stored below the Git common directory, outside the worktree. |
@@ -104,12 +104,12 @@ The public command contract is duplicated between `manifest.json` and the switch
 
 #### V2 GitHub Actions execution
 
-- Orchestration: `GitHubActionsReleaseRunner.Run`.
-- Ordered side effects: token resolution; materialization planning; Git preflight; execution-journal preparation; materialization; state write; targeted stage; commit; tag; dispatch-journal preparation; commit push; tag push; workflow dispatch; handoff confirmation.
-- State: two journals are updated manually around mutations, while `GitReleaseResult` supplies dispatch request facts.
+- Facade: `GitHubActionsReleaseRunner.Run` validates the execution request, logs request facts, composes production operations, and invokes `githubActionsReleaseUseCase.Run`.
+- Orchestration: `githubActionsReleaseUseCase.Run` exposes the ordered story: token resolution; materialization planning; Git/unresolved-journal preflight; execution-journal preparation; materialization; state write; targeted stage; commit; tag; dispatch-journal preparation; commit push; tag push; workflow dispatch; accepted-handoff confirmation.
+- State: each named mutation operation persists its exact pending marker before the side effect and its confirmed phase afterward. The execution and dispatch stores, transactions, Git coordinator, and dispatcher remain the production implementations.
 - Output: `GitHubActionsReleaseResult` is a typed command outcome mapped only in `command_response.go`.
-- Existing tests: `github_actions_release_runner_test.go` covers accepted happy paths, unresolved-journal blocking, injectable commit/tag/push failures, rejected/unknown dispatch, durable recovery evidence, and secret absence from characterized result/error/journal surfaces; lower-level tests cover the component contracts.
-- Missing characterization: materialization/state/store-write failures, post-side-effect journal-confirmation failures, and captured-log secret assertions remain unreachable until the Stage 3 dependency seams exist.
+- Existing tests: `github_actions_release_runner_test.go` preserves real-repository happy paths and durable recovery evidence. `github_actions_release_use_case_test.go` proves the full named order, stopping at every replaceable dependency, cleanup order, rejected-dispatch behavior, and captured-log token absence. `github_actions_release_operations_test.go` injects pending-write, side-effect, and confirmation failures around all eight journaled mutations.
+- Retained limitation: `BuildReleaseDispatchRequest` still constructs `GitReleaseCoordinator` internally for read-only tag and committed-state verification. Stage 3 wraps that builder behind a focused dependency instead of changing its verification behavior; consolidating that read-only Git dependency belongs to later adapter work.
 
 #### V2 local execution
 
@@ -258,7 +258,7 @@ The following are current behavior. They are not statements that every behavior 
 | INV-01 | In V2, config owns unit architecture and state owns unit versions. Tags are derived as `tagPrefix + nextVersion`; they are not stored in state. | `config.V2ReleaseConfig`, `config.V2ReleaseState`, `PlanUnitVersionBump` | `config/v2_test.go`, `planner_test.go`, `state_transaction_test.go` |
 | INV-02 | A V2 release updates only the selected unit's state entry and preserves other entries. | `StateTransaction.WriteUnitVersion` | `TestStateTransactionUpdatesOnlySelectedUnit` |
 | INV-03 | A plugin release materializes the selected plugin manifest before the release commit; today this is restricted to the two hard-coded plugin unit IDs. | `appendPluginManifestMaterialization`, `pluginManifestPathsByUnit` | plugin materializer and dry-run tests; missing coverage for arbitrary validated plugin metadata |
-| INV-04 | V2 non-dry-run GitHub Actions execution resolves `GITHUB_TOKEN` before any journal or repository mutation. | early token resolution in `GitHubActionsReleaseRunner.Run` | `TestHandleReleaseV2GitHubActionsRequiresTokenBeforeMutation`; no full dependency-spy assertion |
+| INV-04 | V2 non-dry-run GitHub Actions execution resolves `GITHUB_TOKEN` before any journal or repository mutation. | first dependency call in `githubActionsReleaseUseCase.Run` | command token-before-mutation test plus the full use-case call-order and dependency-failure matrix |
 | INV-05 | V2 Git preflight requires an attached branch with configured remote/upstream, an exactly clean worktree and index, and an unused target tag. It does not require `main` or `master`. | `GitReleaseCoordinator.Preflight` | `TestGitReleasePreflight*` |
 | INV-06 | After planned writes, V2 stages only `.neko/release.state.json` plus materialized changes marked required for the release commit. Foreign changes block staging and are not silently unstaged. | `KnownReleaseFiles`, `Stage`, `VerifyStagedFiles`, `UnstageKnown` | staging/foreign-file tests in `git_release_coordinator_test.go` |
 | INV-07 | The V2 release commit message is `chore(release): <unit> <tag>`, contains exactly the known release files, and its committed selected-unit version equals the planned next version. | `ReleaseCommitMessage`, `Commit`, `VerifyCommit` | `TestGitReleaseCommitContainsExactFilesMessageAndVersion`, runner plugin materialization test |
@@ -297,9 +297,9 @@ The following are current behavior. They are not statements that every behavior 
 
 ## Concrete hotspots and mixed abstraction levels
 
-### `releaseStartOperation` and `GitHubActionsReleaseRunner.Run`
+### `releaseStartOperation` and the active release use case
 
-`HandleRelease` is now a presentation boundary: parse a typed request, invoke one starter, and map one typed outcome/failure with an injected clock. The transitional `releaseStartOperation` still loads repository state, selects units, builds execution context, branches between V1 and V2, validates/plans dry-runs, constructs the production runner, and invokes execution. `GitHubActionsReleaseRunner.Run` remains the larger Stage 3 hotspot: it owns token policy, plan construction, Git preflight, repository target validation, unresolved-journal policy, journal lifecycle, file transactions, Git mutations, dispatch request construction, pushes, HTTP dispatch, recovery result construction, and logging.
+`HandleRelease` is a presentation boundary: parse a typed request, invoke one starter, and map one typed outcome/failure with an injected clock. The transitional `releaseStartOperation` still loads repository state, selects units, builds execution context, branches between V1 and V2, validates/plans dry-runs, constructs the production runner, and invokes execution. For active V2 GitHub Actions execution, `GitHubActionsReleaseRunner.Run` is now a facade; `githubActionsReleaseUseCase.Run` owns the readable operation order and delegates planning, preflight, journals, state/files, Git, dispatch, and handoff to explicit replaceable operations.
 
 ### `resumeReleaseOperation` and `resumeJournal`
 
@@ -307,7 +307,7 @@ The following are current behavior. They are not statements that every behavior 
 
 ### Parallel transaction paths
 
-`ReleaseTransaction`, `GitReleaseCoordinator.Coordinate`, and the active `GitHubActionsReleaseRunner.Run` overlap in planning, state/materialization, Git, and recovery concepts. `ReleaseTransaction.Execute` is deliberately blocked, while its private preparation logic is tested. `Coordinate` is functional but bypassed by the active runner, which calls coordinator methods directly to interleave journal transitions. These paths create ambiguity about the production orchestration boundary.
+`ReleaseTransaction` and `GitReleaseCoordinator.Coordinate` still overlap with concepts used by the active release use case. `ReleaseTransaction.Execute` is deliberately blocked, while its private preparation logic is tested. `Coordinate` is functional but bypassed by the active use case, whose named operations call coordinator methods directly to interleave journal transitions. The active production boundary is now explicit, but these inactive/convenience paths remain later consolidation work.
 
 ### Init and configuration persistence
 
@@ -341,9 +341,10 @@ Existing replaceable seams include:
 
 Important missing seams include:
 
-- an application-level dependency set for active release and resume;
-- filesystem/config/state repositories with failure injection; the active runner constructs materialization/state transactions and execution/dispatch stores internally, so write and post-effect confirmation failures cannot be injected safely;
-- replaceable runner/dispatcher/store dependencies inside `releaseStartOperation`, `GitHubActionsReleaseRunner`, and `resumeReleaseOperation`; the command handlers themselves are injectable, but production application operations still construct these collaborators, so fresh successful resume dispatch cannot be tested without real HTTP while accepted-journal reuse remains testable without a request;
+- an application-level dependency set for resume; active release now has consumer-owned planning, preflight, transaction, Git, journal, dispatch, token, and handoff seams;
+- filesystem/config/state repositories for flows outside active release; active release transaction factories and journal operation ports now permit failure injection without changing production stores;
+- replaceable runner/dispatcher/store dependencies inside `releaseStartOperation` and `resumeReleaseOperation`; active release composes them at its facade, but fresh successful resume dispatch still cannot be tested without real HTTP while accepted-journal reuse remains testable without a request;
+- a replaceable read-only Git verifier inside `BuildReleaseDispatchRequest`;
 - one Git port used by all Release Plugin flows;
 - subprocess runners for V1 tools;
 - an HTTP client for V1 GitHub rollback;
@@ -351,16 +352,15 @@ Important missing seams include:
 
 ## Missing characterization coverage, prioritized
 
-1. Remaining active V2 runner failure matrix: execution/dispatch journal writes, post-effect confirmation writes, materialization/state writes, snapshot restoration, and staging boundaries that require the Stage 3 dependency seams.
-2. Remaining resume matrix: every persisted phase/pending-action combination, the current expected-tag-already-present edge case, and fresh accepted dispatch through an injected command-level dispatcher.
-3. Stable command contracts outside V2 release/resume: exact error code/message/details, response metadata command, renderer hint, and deterministic item order for every other public command.
-4. Init/unit-add paired-file failure behavior and exact preservation of pre-existing config/state.
-5. V1 executor order and rollback characterization with fake subprocess/network adapters before any extraction.
-6. Arbitrary plugin-unit manifest materialization from validated V2 metadata.
-7. Secret non-disclosure in captured logs and remaining unreachable filesystem/journal failure paths.
-8. Completed release behavior after exclusion: subsequent active version planning from the committed V2 state.
-9. Migration injected failure at every unsafe filesystem boundary and unknown/corrupt journal stage handling.
-10. History, contributors, validate, and plugin-index Git/filesystem error mapping and stable output ordering.
+1. Remaining resume matrix: every persisted phase/pending-action combination, the current expected-tag-already-present edge case, and fresh accepted dispatch through an injected command-level dispatcher.
+2. Stable command contracts outside V2 release/resume: exact error code/message/details, response metadata command, renderer hint, and deterministic item order for every other public command.
+3. Init/unit-add paired-file failure behavior and exact preservation of pre-existing config/state.
+4. V1 executor order and rollback characterization with fake subprocess/network adapters before any extraction.
+5. Arbitrary plugin-unit manifest materialization from validated V2 metadata.
+6. Remaining secret non-disclosure and filesystem/journal failure paths outside the active release operation seams.
+7. Completed release behavior after exclusion: subsequent active version planning from the committed V2 state.
+8. Migration injected failure at every unsafe filesystem boundary and unknown/corrupt journal stage handling.
+9. History, contributors, validate, and plugin-index Git/filesystem error mapping and stable output ordering.
 
 ## Compatibility constraints for future work
 
@@ -375,4 +375,4 @@ Important missing seams include:
 - Do not activate V2 local execution, standalone dispatch/retry, or a new publication adapter as an incidental refactor.
 - Do not rename or move public symbols until callers and contract tests make that change explicit.
 
-The smallest useful target is not a generic architecture package tree. It is a command boundary plus typed use cases whose ordered unsafe steps depend on narrow Git, filesystem/state, journal, dispatch, token, and clock interfaces, while reusing the existing canonical release models.
+The active release now demonstrates the smallest useful target: a command boundary plus a typed use case whose ordered unsafe steps depend on narrow Git, filesystem/state, journal, dispatch, and token capabilities while reusing the existing canonical release models. Resume remains the next path to adopt those operations.
