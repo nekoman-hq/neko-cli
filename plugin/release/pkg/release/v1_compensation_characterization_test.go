@@ -99,8 +99,8 @@ func TestV1RollbackCannotResumeWhenExecutorEvidenceIsLost(t *testing.T) {
 }
 
 type v1CompensationOperationRecorder struct {
-	values   []string
 	failOnce string
+	values   []string
 }
 
 func (recorder *v1CompensationOperationRecorder) record(operation string) error {
