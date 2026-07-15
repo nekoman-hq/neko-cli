@@ -2,8 +2,11 @@ package release
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 type recordingV1PreviewPlans struct { //nolint:govet // Test double fields follow configured behavior order.
@@ -80,6 +83,7 @@ type recordingV1Executor struct {
 	executeErr  error
 	rollbackErr error
 	request     V1ExecutorRequest
+	state       GitReleaseState
 }
 
 func (*recordingV1Executor) Name() string { return "goreleaser" }
@@ -95,9 +99,51 @@ func (executor *recordingV1Executor) Rollback() error {
 	return executor.rollbackErr
 }
 
+func (executor *recordingV1Executor) CompensationState() GitReleaseState { return executor.state }
+
 type recordingV1Reporter struct {
 	events *[]string
 }
+
+type fixedV1CompensationEvidenceStores struct {
+	store V1CompensationEvidenceStore
+}
+
+func (stores fixedV1CompensationEvidenceStores) Open(string) V1CompensationEvidenceStore {
+	return stores.store
+}
+
+type recordingV1CompensationFiles struct {
+	events     *[]string
+	restoreErr error
+	verifyErr  error
+}
+
+func (files *recordingV1CompensationFiles) Read(string) ([]byte, error) {
+	return []byte(`{"version":"1.2.3"}`), nil
+}
+
+func (files *recordingV1CompensationFiles) Restore(string, []byte) error {
+	*files.events = append(*files.events, "restore-config")
+	return files.restoreErr
+}
+
+func (files *recordingV1CompensationFiles) VerifyVersion(string, string) error {
+	return files.verifyErr
+}
+
+type successfulV1CompensationGit struct{}
+
+func (successfulV1CompensationGit) DeleteLocalTag(string, string) error  { return nil }
+func (successfulV1CompensationGit) DeleteRemoteTag(string, string) error { return nil }
+func (successfulV1CompensationGit) RevertCommit(string, string) error    { return nil }
+func (successfulV1CompensationGit) PushCommits(string) error             { return nil }
+func (successfulV1CompensationGit) HardResetTo(string, string) error     { return nil }
+func (successfulV1CompensationGit) CleanUntracked(string) error          { return nil }
+
+type successfulV1CompensationReleaseRemover struct{}
+
+func (successfulV1CompensationReleaseRemover) Delete(string, string) error { return nil }
 
 func (reporter recordingV1Reporter) PlanningStarted() {
 	*reporter.events = append(*reporter.events, "report-planning-started")
@@ -166,6 +212,7 @@ func TestV1ReleaseExecutionUseCasePreservesOperationOrderAndInitialResult(t *tes
 		executors:      &recordingV1ExecutorCatalog{events: &events, executor: executor},
 		reporter:       recordingV1Reporter{events: &events},
 	}
+	configureV1CompensationUseCase(t, &useCase, &events)
 
 	result, failure := useCase.Execute(V1ReleaseExecutionRequest{})
 
@@ -194,6 +241,7 @@ func TestV1ReleaseExecutionStopsBeforeMutationOnRequirementsFailure(t *testing.T
 		requirements: &recordingV1Requirements{events: &events, err: errors.New("token missing")},
 		reporter:     recordingV1Reporter{events: &events},
 	}
+	configureV1CompensationUseCase(t, &useCase, &events)
 
 	_, failure := useCase.Execute(V1ReleaseExecutionRequest{})
 
@@ -214,6 +262,7 @@ func TestV1ReleaseExecutionPropagatesFatalPreflightWithoutMutation(t *testing.T)
 		preflight:    &recordingV1Preflight{events: &events, failure: preflightFailure},
 		reporter:     recordingV1Reporter{events: &events},
 	}
+	configureV1CompensationUseCase(t, &useCase, &events)
 
 	_, failure := useCase.Execute(V1ReleaseExecutionRequest{})
 
@@ -233,10 +282,11 @@ func TestV1ReleaseExecutionRestoresThenRollsBackExecutorFailure(t *testing.T) {
 		executionPlans: &recordingV1ExecutionPlans{events: &events, plan: testV1ReleasePlan("1.2.3", "1.2.4")},
 		requirements:   &recordingV1Requirements{events: &events},
 		preflight:      &recordingV1Preflight{events: &events},
-		materializer:   &recordingV1Materializer{events: &events, restoreErr: errors.New("restore warning")},
+		materializer:   &recordingV1Materializer{events: &events},
 		executors:      &recordingV1ExecutorCatalog{events: &events, executor: executor},
 		reporter:       recordingV1Reporter{events: &events},
 	}
+	configureV1CompensationUseCase(t, &useCase, &events)
 
 	_, failure := useCase.Execute(V1ReleaseExecutionRequest{})
 
@@ -246,18 +296,14 @@ func TestV1ReleaseExecutionRestoresThenRollsBackExecutorFailure(t *testing.T) {
 	assertV1UseCaseEvents(t, events, []string{
 		"report-planning-started", "preview-plan", "report-planning-completed", "requirements", "preflight",
 		"report-planning-started", "execution-plan", "report-planning-completed", "resolve-executor",
-		"report-execution-ready", "write-config", "execute", "restore-config", "report-config-restore-failed",
-		"report-rollback-started", "rollback", "report-rollback-completed",
+		"report-execution-ready", "write-config", "execute", "report-rollback-started", "restore-config",
+		"report-rollback-completed",
 	})
 }
 
 func TestV1ReleaseExecutionClassifiesRollbackFailureWithBothCauses(t *testing.T) {
 	events := []string{}
-	executor := &recordingV1Executor{
-		events:      &events,
-		executeErr:  errors.New("publish failed"),
-		rollbackErr: errors.New("cleanup failed"),
-	}
+	executor := &recordingV1Executor{events: &events, executeErr: errors.New("publish failed")}
 	useCase := v1ReleaseExecutionUseCase{
 		previewPlans:   &recordingV1PreviewPlans{events: &events, plan: testV1ReleasePlan("1.2.3", "1.2.4")},
 		executionPlans: &recordingV1ExecutionPlans{events: &events, plan: testV1ReleasePlan("1.2.3", "1.2.4")},
@@ -267,6 +313,8 @@ func TestV1ReleaseExecutionClassifiesRollbackFailureWithBothCauses(t *testing.T)
 		executors:      &recordingV1ExecutorCatalog{events: &events, executor: executor},
 		reporter:       recordingV1Reporter{events: &events},
 	}
+	files := configureV1CompensationUseCase(t, &useCase, &events)
+	files.restoreErr = errors.New("cleanup failed")
 
 	_, failure := useCase.Execute(V1ReleaseExecutionRequest{})
 
@@ -275,6 +323,27 @@ func TestV1ReleaseExecutionClassifiesRollbackFailureWithBothCauses(t *testing.T)
 		!strings.Contains(failure.Cause.Error(), "Failed undoing changes: cleanup failed") {
 		t.Fatalf("failure = %#v", failure)
 	}
+}
+
+func configureV1CompensationUseCase(
+	t *testing.T,
+	useCase *v1ReleaseExecutionUseCase,
+	events *[]string,
+) *recordingV1CompensationFiles {
+	t.Helper()
+	commonDir := filepath.Join(t.TempDir(), ".git")
+	if err := os.MkdirAll(commonDir, 0700); err != nil {
+		t.Fatalf("create compensation git dir: %v", err)
+	}
+	store := NewV1CompensationEvidenceStore("/repo", fixedV1CompensationGitRunner{commonDir: commonDir})
+	store.clock = fixedV1CompensationClock{now: time.Date(2026, time.July, 15, 16, 0, 0, 0, time.UTC)}
+	files := &recordingV1CompensationFiles{events: events}
+	useCase.compensationStores = fixedV1CompensationEvidenceStores{store: store}
+	useCase.compensationFiles = files
+	useCase.compensationGit = successfulV1CompensationGit{}
+	useCase.compensationReleases = successfulV1CompensationReleaseRemover{}
+	useCase.compensationClock = fixedV1CompensationClock{now: time.Date(2026, time.July, 15, 15, 0, 0, 0, time.UTC)}
+	return files
 }
 
 func testV1ReleasePlan(current, next string) V1ReleasePlan {

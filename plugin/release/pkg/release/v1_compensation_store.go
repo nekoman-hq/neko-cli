@@ -161,9 +161,10 @@ func (store V1CompensationEvidenceStore) RetainUncertainExecution(evidence *V1Co
 	return store.replace(evidence, next)
 }
 
-func (store V1CompensationEvidenceStore) ConfirmReleaseExecution(evidence *V1CompensationEvidence) error {
+func (store V1CompensationEvidenceStore) ConfirmReleaseExecution(evidence *V1CompensationEvidence, state GitReleaseState) error {
 	next := *evidence
 	next.Release.Status = V1ReleaseEffectSucceeded
+	next.Release.Git = v1ReleaseGitEvidence(state)
 	next.Compensation.Status = V1CompensationCompleted
 	next.Compensation.PendingAction = V1CompensationActionNone
 	next.Compensation.Actions.RestoreConfig.Status = V1CompensationActionNotRequired

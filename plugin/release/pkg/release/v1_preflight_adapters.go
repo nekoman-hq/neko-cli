@@ -96,6 +96,21 @@ func (systemV1PreflightRepository) IsUpToDate(root string) error {
 	return inV1Repository(root, legacygit.IsUpToDate)
 }
 
+func inV1Repository(repositoryRoot string, operation func() error) error {
+	if repositoryRoot == "" {
+		return operation()
+	}
+	previous, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to resolve current working directory: %w", err)
+	}
+	if err := os.Chdir(repositoryRoot); err != nil {
+		return fmt.Errorf("failed to enter repository root %s: %w", repositoryRoot, err)
+	}
+	defer func() { _ = os.Chdir(previous) }()
+	return operation()
+}
+
 type legacyV1Preflight struct {
 	requirements v1ReleaseRequirements
 	repository   v1PreflightRepository

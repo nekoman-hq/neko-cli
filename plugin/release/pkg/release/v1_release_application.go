@@ -26,6 +26,7 @@ func newV1ReleaseCommandApplication() v1ReleaseCommandApplication {
 
 func composeV1ReleaseCommandApplication(executors v1ReleaseExecutorCatalog) v1ReleaseCommandApplication {
 	evidence := legacyV1VersionEvidence{}
+	v1GitRunner := newSystemV1GitCommandRunner()
 	planning := v1ReleasePlanningOperation{
 		planner:   pureV1ReleasePlanner{},
 		tags:      evidence,
@@ -49,6 +50,16 @@ func composeV1ReleaseCommandApplication(executors v1ReleaseExecutorCatalog) v1Re
 			materializer: v1ReleaseConfigFileMaterializer{store: systemV1ConfigVersionStore{}},
 			executors:    executors,
 			reporter:     reporter,
+			compensationStores: systemV1CompensationEvidenceStores{
+				git: v1CompensationEvidenceGitRunner{runner: v1GitRunner},
+			},
+			compensationFiles: systemV1CompensationConfigFiles{},
+			compensationGit: systemV1CompensationGit{
+				effects: systemV1RollbackGit{runner: v1GitRunner},
+				runner:  v1GitRunner,
+			},
+			compensationReleases: newSystemV1GitHubReleaseRemover(),
+			compensationClock:    systemV1CompensationClock{},
 		},
 	}
 }

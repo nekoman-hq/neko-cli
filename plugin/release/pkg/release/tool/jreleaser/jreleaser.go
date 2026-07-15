@@ -206,7 +206,11 @@ func (j *JReleaser) release(repositoryRoot string, v *semver.Version) error {
 
 func (j *JReleaser) RevertRelease() error {
 	j.ensureDependencies()
-	return j.rollback.Rollback(j.repositoryRoot, release2.GitReleaseState{
+	return j.rollback.Rollback(j.repositoryRoot, j.CompensationState())
+}
+
+func (j *JReleaser) CompensationState() release2.GitReleaseState {
+	return release2.GitReleaseState{
 		PreHead:              j.State.PreHead,
 		ReleaseHead:          j.State.ReleaseCommitHash,
 		PushedCommit:         j.State.PushedCommit,
@@ -214,7 +218,7 @@ func (j *JReleaser) RevertRelease() error {
 		PushedTag:            j.State.RanJRelease,
 		GitHubReleaseTag:     j.State.TagName,
 		CreatedGitHubRelease: j.State.RanJRelease,
-	})
+	}
 }
 
 func (j *JReleaser) Rollback() error { return j.RevertRelease() }

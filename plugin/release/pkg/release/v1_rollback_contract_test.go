@@ -11,7 +11,9 @@ import (
 
 type v1RollbackRoundTripper struct {
 	requests   []string
+	getCodes   []int
 	getCode    int
+	getCalls   int
 	deleteCode int
 }
 
@@ -19,6 +21,10 @@ func (transport *v1RollbackRoundTripper) RoundTrip(request *http.Request) (*http
 	transport.requests = append(transport.requests, request.Method+" "+request.URL.String())
 	status := transport.getCode
 	body := `{"id":42}`
+	if request.Method == http.MethodGet && transport.getCalls < len(transport.getCodes) {
+		status = transport.getCodes[transport.getCalls]
+		transport.getCalls++
+	}
 	if request.Method == http.MethodDelete {
 		status = transport.deleteCode
 		body = ""
@@ -35,13 +41,13 @@ func TestV1RollbackCompatibilitySequence(t *testing.T) {
 	logPath := installV1FakeGit(t)
 	t.Setenv("GITHUB_TOKEN", "test-token")
 
-	originalClient := http.DefaultClient
-	transport := &v1RollbackRoundTripper{getCode: http.StatusOK, deleteCode: http.StatusNoContent}
-	http.DefaultClient = &http.Client{Transport: transport}
-	t.Cleanup(func() { http.DefaultClient = originalClient })
+	transport := &v1RollbackRoundTripper{
+		getCodes:   []int{http.StatusOK, http.StatusNotFound},
+		deleteCode: http.StatusNoContent,
+	}
 
-	var tool ToolBase
-	err := tool.RevertGitRelease(GitReleaseState{
+	rollback := newV1RollbackWithTransport(transport)
+	err := rollback.Rollback("", GitReleaseState{
 		PreHead:              "before",
 		ReleaseHead:          "release",
 		TagName:              "v1.2.4",
@@ -57,12 +63,12 @@ func TestV1RollbackCompatibilitySequence(t *testing.T) {
 	wantHTTP := []string{
 		"GET https://api.github.com/repos/acme/example/releases/tags/v1.2.4",
 		"DELETE https://api.github.com/repos/acme/example/releases/42",
+		"GET https://api.github.com/repos/acme/example/releases/tags/v1.2.4",
 	}
 	if got := strings.Join(transport.requests, "\n"); got != strings.Join(wantHTTP, "\n") {
 		t.Fatalf("GitHub rollback sequence:\n%s\nwant:\n%s", got, strings.Join(wantHTTP, "\n"))
 	}
 	wantGit := []string{
-		"remote -v",
 		"tag -d v1.2.4",
 		"push origin --delete v1.2.4",
 		"revert --no-edit release",
@@ -207,13 +213,10 @@ func assertV1CommandLog(t *testing.T, path string, want []string) {
 func TestV1RollbackHTTPFailurePrecedesGitDestruction(t *testing.T) {
 	logPath := installV1FakeGit(t)
 	t.Setenv("GITHUB_TOKEN", "test-token")
-	originalClient := http.DefaultClient
 	transport := &v1RollbackRoundTripper{getCode: http.StatusInternalServerError, deleteCode: http.StatusNoContent}
-	http.DefaultClient = &http.Client{Transport: transport}
-	t.Cleanup(func() { http.DefaultClient = originalClient })
 
-	var tool ToolBase
-	err := tool.RevertGitRelease(GitReleaseState{
+	rollback := newV1RollbackWithTransport(transport)
+	err := rollback.Rollback("", GitReleaseState{
 		TagName:              "v1.2.4",
 		GitHubReleaseTag:     "v1.2.4",
 		PushedTag:            true,
@@ -222,5 +225,27 @@ func TestV1RollbackHTTPFailurePrecedesGitDestruction(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "rollback: failed deleting GitHub release v1.2.4") {
 		t.Fatalf("RevertGitRelease error = %v", err)
 	}
-	assertV1CommandLog(t, logPath, []string{"remote -v"})
+	assertV1CommandLog(t, logPath, nil)
+}
+
+func newV1RollbackWithTransport(transport http.RoundTripper) *V1ReleaseRollback {
+	runner := newSystemV1GitCommandRunner()
+	return &V1ReleaseRollback{
+		git: systemV1RollbackGit{runner: runner},
+		releases: systemV1GitHubReleaseRemover{
+			tokens: fixedV1TokenResolver{token: "test-token"},
+			client: boundedV1GitHubReleaseClient{
+				http:    &http.Client{Transport: transport},
+				remotes: fixedV1GitHubRemoteURLReader{remoteURL: "https://github.com/acme/example.git"},
+			},
+		},
+	}
+}
+
+type fixedV1GitHubRemoteURLReader struct {
+	remoteURL string
+}
+
+func (reader fixedV1GitHubRemoteURLReader) ReadOriginURL(string) (string, error) {
+	return reader.remoteURL, nil
 }

@@ -10,7 +10,6 @@ import (
 	"github.com/Masterminds/semver/v3"
 	coreconfig "github.com/nekoman-hq/neko-cli/pkg/config"
 	"github.com/nekoman-hq/neko-cli/pkg/log"
-	legacygit "github.com/nekoman-hq/neko-cli/plugin/release/pkg/git"
 )
 
 type v1GitCommandRunner interface {
@@ -212,38 +211,25 @@ func (adapter systemV1RollbackGit) CleanUntracked(root string) error {
 }
 
 type v1LegacyTokenResolver interface {
-	Resolve() (string, error)
+	Resolve() (v1GitHubToken, error)
+}
+
+type v1GitHubToken struct {
+	value string
 }
 
 type systemV1LegacyTokenResolver struct{}
 
-func (systemV1LegacyTokenResolver) Resolve() (string, error) { return coreconfig.GetPAT() }
+func (systemV1LegacyTokenResolver) Resolve() (v1GitHubToken, error) {
+	value, err := coreconfig.GetPAT()
+	if err != nil {
+		return v1GitHubToken{}, err
+	}
+	return v1GitHubToken{value: value}, nil
+}
 
 type v1GitHubReleaseClient interface {
-	Delete(repositoryRoot, tag, token string) error
-}
-
-type legacyV1GitHubReleaseClient struct{}
-
-func (legacyV1GitHubReleaseClient) Delete(repositoryRoot, tag, token string) error {
-	return inV1Repository(repositoryRoot, func() error {
-		return legacygit.DeleteGithubRelease(tag, token)
-	})
-}
-
-func inV1Repository(repositoryRoot string, operation func() error) error {
-	if repositoryRoot == "" {
-		return operation()
-	}
-	previous, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("failed to resolve current working directory: %w", err)
-	}
-	if err := os.Chdir(repositoryRoot); err != nil {
-		return fmt.Errorf("failed to enter repository root %s: %w", repositoryRoot, err)
-	}
-	defer func() { _ = os.Chdir(previous) }()
-	return operation()
+	Delete(repositoryRoot, tag string, token v1GitHubToken) error
 }
 
 type systemV1GitHubReleaseRemover struct {
@@ -254,7 +240,7 @@ type systemV1GitHubReleaseRemover struct {
 func newSystemV1GitHubReleaseRemover() systemV1GitHubReleaseRemover {
 	return systemV1GitHubReleaseRemover{
 		tokens: systemV1LegacyTokenResolver{},
-		client: legacyV1GitHubReleaseClient{},
+		client: newBoundedV1GitHubReleaseClient(),
 	}
 }
 
@@ -264,7 +250,7 @@ func (remover systemV1GitHubReleaseRemover) Delete(repositoryRoot, tag string) e
 		return err
 	}
 	if err := remover.client.Delete(repositoryRoot, tag, token); err != nil {
-		_, redactedErr := RedactV1ProcessResult(nil, err, token)
+		_, redactedErr := RedactV1ProcessResult(nil, err, token.value)
 		return redactedErr
 	}
 	return nil

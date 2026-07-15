@@ -109,6 +109,13 @@ func (executor *registeredV1ReleaseExecutor) Run(request V1ExecutorRequest) erro
 
 func (executor *registeredV1ReleaseExecutor) Rollback() error { return executor.tool.RevertRelease() }
 
+func (executor *registeredV1ReleaseExecutor) CompensationState() GitReleaseState {
+	if source, ok := executor.tool.(interface{ CompensationState() GitReleaseState }); ok {
+		return source.CompensationState()
+	}
+	return GitReleaseState{}
+}
+
 type directV1ReleaseExecutorCatalog struct{}
 
 func (directV1ReleaseExecutorCatalog) Resolve(name string) (v1ReleaseExecutor, error) {
@@ -134,6 +141,13 @@ func (executor *directV1ReleaseExecutor) Run(request V1ExecutorRequest) error {
 }
 
 func (executor *directV1ReleaseExecutor) Rollback() error { return executor.tool.RevertRelease() }
+
+func (executor *directV1ReleaseExecutor) CompensationState() GitReleaseState {
+	if source, ok := executor.tool.(interface{ CompensationState() GitReleaseState }); ok {
+		return source.CompensationState()
+	}
+	return GitReleaseState{}
+}
 
 type fixedV1ReleaseExecutorCatalog struct {
 	executors map[string]V1Executor

@@ -1,7 +1,13 @@
 //nolint:staticcheck // This file is the explicit application boundary for deprecated V1 compatibility.
 package release
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+	"path/filepath"
+
+	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
+)
 
 type v1PreviewPlanBuilder interface {
 	BuildPreviewPlan(V1ReleaseIntent) (V1ReleasePlan, error)
@@ -30,6 +36,7 @@ type V1Executor interface {
 	Name() string
 	Run(V1ExecutorRequest) error
 	Rollback() error
+	CompensationState() GitReleaseState
 }
 
 type v1ReleaseExecutor = V1Executor
@@ -72,16 +79,26 @@ func (useCase v1ReleasePreviewUseCase) Preview(request V1ReleasePreviewRequest) 
 }
 
 type v1ReleaseExecutionUseCase struct {
-	previewPlans   v1PreviewPlanBuilder
-	executionPlans v1ExecutionPlanBuilder
-	requirements   v1ReleaseRequirements
-	preflight      v1ReleasePreflight
-	materializer   v1ReleaseConfigMaterializer
-	executors      v1ReleaseExecutorCatalog
-	reporter       v1ReleaseReporter
+	previewPlans         v1PreviewPlanBuilder
+	executionPlans       v1ExecutionPlanBuilder
+	requirements         v1ReleaseRequirements
+	preflight            v1ReleasePreflight
+	materializer         v1ReleaseConfigMaterializer
+	executors            v1ReleaseExecutorCatalog
+	reporter             v1ReleaseReporter
+	compensationStores   v1CompensationEvidenceStores
+	compensationFiles    v1CompensationConfigFiles
+	compensationGit      v1CompensationGit
+	compensationReleases v1GitHubReleaseRemover
+	compensationClock    v1CompensationClock
 }
 
 func (useCase v1ReleaseExecutionUseCase) Execute(request V1ReleaseExecutionRequest) (V1ReleaseResult, *V1ReleaseFailure) {
+	store := useCase.compensationStores.Open(request.Intent.RepositoryRoot)
+	if failure := useCase.continueInterruptedCompensation(store); failure != nil {
+		return nil, failure
+	}
+
 	useCase.reporter.PlanningStarted()
 	previewPlan, err := useCase.previewPlans.BuildPreviewPlan(request.Intent)
 	if err != nil {
@@ -113,11 +130,15 @@ func (useCase v1ReleaseExecutionUseCase) Execute(request V1ReleaseExecutionReque
 	}
 	useCase.reporter.ExecutionReady(executionPlan, executor.Name())
 
-	if err := useCase.materializer.WritePlannedVersion(request.Intent, executionPlan); err != nil {
-		useCase.reporter.ConfigWriteFailed(err)
+	evidence, failure := useCase.createCompensationEvidence(store, request.Intent, executionPlan)
+	if failure != nil {
+		return nil, failure
 	}
-	if err := executor.Run(V1ExecutorRequest{Plan: executionPlan}); err != nil {
-		return nil, useCase.recoverExecutorFailure(request.Intent, executionPlan, executor, err)
+	if failure := useCase.writePlannedConfig(store, request.Intent, executionPlan, evidence); failure != nil {
+		return nil, failure
+	}
+	if failure := useCase.runExecutorWithEvidence(store, executionPlan, executor, evidence); failure != nil {
+		return nil, failure
 	}
 
 	useCase.reporter.ReleaseCompleted(executionPlan)
@@ -129,25 +150,161 @@ func (useCase v1ReleaseExecutionUseCase) Execute(request V1ReleaseExecutionReque
 	}, nil
 }
 
-func (useCase v1ReleaseExecutionUseCase) recoverExecutorFailure(
+func (useCase v1ReleaseExecutionUseCase) createCompensationEvidence(
+	store V1CompensationEvidenceStore,
 	intent V1ReleaseIntent,
 	plan V1ReleasePlan,
+) (*V1CompensationEvidence, *V1ReleaseFailure) {
+	configPath := filepath.Join(intent.RepositoryRoot, releaseconfig.V1FileName)
+	originalConfig, err := useCase.compensationFiles.Read(configPath)
+	if err != nil {
+		return nil, newV1ReleaseFailure(v1ReleaseExecutionFailure, "RELEASE_FAILED", err)
+	}
+	evidence, err := newV1CompensationEvidence(plan, configPath, originalConfig, useCase.compensationClock.Now())
+	if err != nil {
+		return nil, newV1ReleaseFailure(v1ReleaseExecutionFailure, "RELEASE_FAILED", err)
+	}
+	if err := store.Create(evidence); err != nil {
+		return nil, newV1ReleaseFailure(v1ReleaseExecutionFailure, "RELEASE_FAILED", err)
+	}
+	return &evidence, nil
+}
+
+func (useCase v1ReleaseExecutionUseCase) writePlannedConfig(
+	store V1CompensationEvidenceStore,
+	intent V1ReleaseIntent,
+	plan V1ReleasePlan,
+	evidence *V1CompensationEvidence,
+) *V1ReleaseFailure {
+	if err := store.RecordConfigWritePending(evidence); err != nil {
+		return newV1ReleaseFailure(v1ReleaseExecutionFailure, "RELEASE_FAILED", err)
+	}
+	if err := useCase.materializer.WritePlannedVersion(intent, plan); err != nil {
+		useCase.reporter.ConfigWriteFailed(err)
+		return useCase.recoverConfigMutationFailure(store, evidence, err)
+	}
+	if err := useCase.compensationFiles.VerifyVersion(evidence.OriginalConfig.Path, plan.NextVersion); err != nil {
+		useCase.reporter.ConfigWriteFailed(err)
+		return useCase.recoverConfigMutationFailure(store, evidence, err)
+	}
+	if err := store.ConfirmConfigWrite(evidence); err != nil {
+		return useCase.recoverConfigMutationFailure(store, evidence, err)
+	}
+	return nil
+}
+
+func (useCase v1ReleaseExecutionUseCase) runExecutorWithEvidence(
+	store V1CompensationEvidenceStore,
+	plan V1ReleasePlan,
+	executor v1ReleaseExecutor,
+	evidence *V1CompensationEvidence,
+) *V1ReleaseFailure {
+	if err := store.RecordExecutorPending(evidence); err != nil {
+		planningErr := store.PlanFailedExecution(evidence, GitReleaseState{})
+		return useCase.continueFailedCompensation(store, evidence, errors.Join(err, planningErr))
+	}
+	if err := executor.Run(V1ExecutorRequest{Plan: plan}); err != nil {
+		return useCase.recoverExecutorFailure(store, evidence, executor, err)
+	}
+	if err := store.ConfirmReleaseExecution(evidence, executor.CompensationState()); err != nil {
+		manualErr := store.MarkManualRecoveryRequired(evidence)
+		return newV1ReleaseFailure(
+			v1ReleaseRollbackFailure,
+			"RELEASE_FAILED",
+			errors.Join(fmt.Errorf("release completed but durable confirmation failed: %w", err), manualErr),
+		)
+	}
+	return nil
+}
+
+func (useCase v1ReleaseExecutionUseCase) recoverExecutorFailure(
+	store V1CompensationEvidenceStore,
+	evidence *V1CompensationEvidence,
 	executor v1ReleaseExecutor,
 	executorError error,
 ) *V1ReleaseFailure {
-	releaseError := fmt.Errorf("release failed: %w", executorError)
-	if err := useCase.materializer.RestorePreviousVersion(intent, plan); err != nil {
-		useCase.reporter.ConfigRestoreFailed(err)
+	state := executor.CompensationState()
+	var evidenceError error
+	if ClassifyV1ExecutorFailure(evidence.Identity.Executor, state) == V1ExecutorFailureExternalUncertainty {
+		evidenceError = store.RetainUncertainExecution(evidence, state)
+	} else {
+		evidenceError = store.PlanFailedExecution(evidence, state)
 	}
+	return useCase.continueFailedCompensation(store, evidence, errors.Join(executorError, evidenceError))
+}
 
+func (useCase v1ReleaseExecutionUseCase) recoverConfigMutationFailure(
+	store V1CompensationEvidenceStore,
+	evidence *V1CompensationEvidence,
+	configError error,
+) *V1ReleaseFailure {
+	evidenceError := store.RecordConfigWriteFailure(evidence)
+	return useCase.continueFailedCompensation(store, evidence, errors.Join(configError, evidenceError))
+}
+
+func (useCase v1ReleaseExecutionUseCase) continueFailedCompensation(
+	store V1CompensationEvidenceStore,
+	evidence *V1CompensationEvidence,
+	releaseCause error,
+) *V1ReleaseFailure {
+	releaseError := fmt.Errorf("release failed: %w", releaseCause)
 	useCase.reporter.RollbackStarted()
-	if err := executor.Rollback(); err != nil {
+	status, err := continueV1Compensation(
+		store,
+		useCase.compensationFiles,
+		useCase.compensationGit,
+		useCase.compensationReleases,
+		evidence,
+	)
+	if err != nil {
+		if evidence.Compensation.Failure != nil && evidence.Compensation.Failure.Action == V1CompensationRestoreConfig {
+			useCase.reporter.ConfigRestoreFailed(err)
+		}
 		return newV1ReleaseFailure(
 			v1ReleaseRollbackFailure,
 			"RELEASE_FAILED",
 			fmt.Errorf("%w: Failed undoing changes: %w", releaseError, err),
 		)
 	}
+	if status == V1CompensationContinuationManual {
+		path, pathErr := store.CurrentPath()
+		return newV1ReleaseFailure(
+			v1ReleaseRollbackFailure,
+			"RELEASE_FAILED",
+			errors.Join(fmt.Errorf("%w: manual recovery required; inspect V1 compensation evidence: %s", releaseError, path), pathErr),
+		)
+	}
 	useCase.reporter.RollbackCompleted()
 	return newV1ReleaseFailure(v1ReleaseExecutionFailure, "RELEASE_FAILED", releaseError)
+}
+
+func (useCase v1ReleaseExecutionUseCase) continueInterruptedCompensation(store V1CompensationEvidenceStore) *V1ReleaseFailure {
+	evidence, found, err := store.FindUnresolved()
+	if err != nil {
+		return newV1ReleaseFailure(v1ReleaseRollbackFailure, "RELEASE_FAILED", fmt.Errorf("load V1 compensation evidence: %w", err))
+	}
+	if !found {
+		return nil
+	}
+	useCase.reporter.RollbackStarted()
+	status, err := continueV1Compensation(
+		store,
+		useCase.compensationFiles,
+		useCase.compensationGit,
+		useCase.compensationReleases,
+		evidence,
+	)
+	if err != nil {
+		return newV1ReleaseFailure(v1ReleaseRollbackFailure, "RELEASE_FAILED", fmt.Errorf("continue interrupted V1 compensation: %w", err))
+	}
+	if status == V1CompensationContinuationManual {
+		path, pathErr := store.CurrentPath()
+		return newV1ReleaseFailure(
+			v1ReleaseRollbackFailure,
+			"RELEASE_FAILED",
+			errors.Join(fmt.Errorf("manual recovery required for interrupted V1 release; evidence: %s", path), pathErr),
+		)
+	}
+	useCase.reporter.RollbackCompleted()
+	return nil
 }

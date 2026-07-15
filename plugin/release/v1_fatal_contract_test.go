@@ -29,6 +29,7 @@ func TestV1ActivePreflightFailureKeepsFatalProcessContract(t *testing.T) {
 	binDir := t.TempDir()
 	gitScript := `#!/bin/sh
 case "$*" in
+	"rev-parse --git-common-dir") printf '.git\n' ;;
   "describe --tags --abbrev=0") printf 'v1.2.3\n' ;;
   "remote -v") printf 'origin\thttps://github.com/acme/example.git (fetch)\norigin\thttps://github.com/acme/example.git (push)\n' ;;
   "status --porcelain") printf ' M dirty-file\n' ;;

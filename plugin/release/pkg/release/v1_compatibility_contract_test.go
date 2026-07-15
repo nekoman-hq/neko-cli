@@ -258,7 +258,7 @@ func TestV1ReleaseCompatibilityUsesLocalPreviewThenRefreshedExecution(t *testing
 	}
 }
 
-func TestV1ReleaseCompatibilityRestoresConfigBeforeRollback(t *testing.T) {
+func TestV1ReleaseCompatibilityRestoresConfigThroughCompensationBoundary(t *testing.T) {
 	withWorkingDirectory(t)
 	installV1PreflightGit(t)
 	t.Setenv("GITHUB_TOKEN", "test-token")
@@ -277,8 +277,8 @@ func TestV1ReleaseCompatibilityRestoresConfigBeforeRollback(t *testing.T) {
 	if failure == nil || failure.Code != "RELEASE_FAILED" || !strings.Contains(failure.responseMessage(), "publish failed") {
 		t.Fatalf("failure = %#v", failure)
 	}
-	if !tool.reverted {
-		t.Fatal("executor failure did not invoke guarded rollback")
+	if tool.reverted {
+		t.Fatal("active V1 compensation delegated back to the legacy rollback wrapper")
 	}
 	restored, err := config.V1LoadConfig()
 	if err != nil {
@@ -289,7 +289,7 @@ func TestV1ReleaseCompatibilityRestoresConfigBeforeRollback(t *testing.T) {
 	}
 }
 
-func TestV1ReleaseCompatibilityContinuesWhenConfigWriteFails(t *testing.T) {
+func TestV1ReleaseCompatibilityStopsBeforeExecutorWhenOriginalConfigCannotBeCaptured(t *testing.T) {
 	withWorkingDirectory(t)
 	installV1PreflightGit(t)
 	t.Setenv("GITHUB_TOKEN", "test-token")
@@ -309,11 +309,11 @@ func TestV1ReleaseCompatibilityContinuesWhenConfigWriteFails(t *testing.T) {
 	cfg := validV1ReleaseConfig("1.2.3")
 	service := NewReleaseServiceWithContext(cfg, v1CompatibilityExecutionContext(t, Patch, false))
 
-	if err := service.Run(Patch); err != nil {
-		t.Fatalf("Service.Run must continue after V1 config warning: %v", err)
+	if err := service.Run(Patch); err == nil || !strings.Contains(err.Error(), "read original V1 config") {
+		t.Fatalf("Service.Run error = %v", err)
 	}
-	if cfg.Version != "1.2.4" || tool.contextVersion != "1.2.4" {
-		t.Fatalf("continued release versions: config=%q context=%q", cfg.Version, tool.contextVersion)
+	if cfg.Version != "1.2.3" || tool.contextVersion != "" {
+		t.Fatalf("unsafe release continued: config=%q context=%q", cfg.Version, tool.contextVersion)
 	}
 }
 
@@ -387,7 +387,8 @@ func installV1PreflightGit(t *testing.T) {
 	binDir := t.TempDir()
 	script := `#!/bin/sh
 case "$*" in
-  "remote -v")
+	"rev-parse --git-common-dir") printf '.git\n' ;;
+	"remote -v")
     printf 'origin\thttps://github.com/acme/example.git (fetch)\norigin\thttps://github.com/acme/example.git (push)\n'
     ;;
   "status --porcelain") ;;

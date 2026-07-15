@@ -127,11 +127,13 @@ func TestV1ReleaseRollbackKeepsFocusedCompensationOrder(t *testing.T) {
 
 type fixedV1TokenResolver struct{ token string }
 
-func (resolver fixedV1TokenResolver) Resolve() (string, error) { return resolver.token, nil }
+func (resolver fixedV1TokenResolver) Resolve() (v1GitHubToken, error) {
+	return v1GitHubToken{value: resolver.token}, nil
+}
 
 type failingV1ReleaseClient struct{ cause error }
 
-func (client failingV1ReleaseClient) Delete(_, _, _ string) error { return client.cause }
+func (client failingV1ReleaseClient) Delete(_, _ string, _ v1GitHubToken) error { return client.cause }
 
 func TestV1GitHubReleaseRemoverRedactsTokenAndPreservesCause(t *testing.T) {
 	secret := "v1-sentinel-secret"
@@ -205,9 +207,9 @@ func TestFixedV1ExecutorCatalogDoesNotReadCompatibilityRegistry(t *testing.T) {
 
 type recordingV1TokenResolver struct{ calls int }
 
-func (resolver *recordingV1TokenResolver) Resolve() (string, error) {
+func (resolver *recordingV1TokenResolver) Resolve() (v1GitHubToken, error) {
 	resolver.calls++
-	return "sentinel", nil
+	return v1GitHubToken{value: "sentinel"}, nil
 }
 
 type selectiveV1FileInspector struct {
