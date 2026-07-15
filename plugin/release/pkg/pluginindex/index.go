@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -60,8 +59,22 @@ type pluginManifest struct {
 	Description string `json:"description"`
 }
 
+type pluginIndexSourceReader interface {
+	LoadConfig(string) (*releaseconfig.V2ReleaseConfig, error)
+	LoadState(string) (*releaseconfig.V2ReleaseState, error)
+	ReadManifest(root, unitID, manifestPath string) (pluginManifest, error)
+}
+
+type pluginIndexQueryUseCase struct {
+	sources pluginIndexSourceReader
+}
+
 // Generate builds a deterministic plugin index from V2 plugin units and manifests.
 func Generate(ctx context.Context, options GenerateOptions) (*Index, error) {
+	return (pluginIndexQueryUseCase{sources: pluginIndexDiskSourceReader{}}).Query(ctx, options)
+}
+
+func (useCase pluginIndexQueryUseCase) Query(ctx context.Context, options GenerateOptions) (*Index, error) {
 	root := strings.TrimSpace(options.Root)
 	if root == "" {
 		root = "."
@@ -71,18 +84,17 @@ func Generate(ctx context.Context, options GenerateOptions) (*Index, error) {
 		repository = DefaultRepository
 	}
 
-	cfg, err := loadConfig(root)
+	cfg, err := useCase.sources.LoadConfig(root)
 	if err != nil {
 		return nil, err
 	}
-	state, err := loadState(root)
+	state, err := useCase.sources.LoadState(root)
 	if err != nil {
 		return nil, err
 	}
 	if state.Units == nil {
 		return nil, fmt.Errorf("plugin index state units are missing")
 	}
-
 	if err := validateDuplicateUnitIDs(cfg.Units); err != nil {
 		return nil, err
 	}
@@ -97,7 +109,15 @@ func Generate(ctx context.Context, options GenerateOptions) (*Index, error) {
 		if unit.Kind != releaseconfig.UnitKindPlugin {
 			continue
 		}
-		entry, err := buildPluginEntry(root, unit, state)
+		entry, err := buildPluginEntryCandidate(unit, state)
+		if err != nil {
+			return nil, err
+		}
+		manifest, err := useCase.sources.ReadManifest(root, unit.ID, unit.Plugin.Manifest)
+		if err != nil {
+			return nil, err
+		}
+		entry, err = completePluginEntry(entry, manifest)
 		if err != nil {
 			return nil, err
 		}
@@ -115,50 +135,7 @@ func Generate(ctx context.Context, options GenerateOptions) (*Index, error) {
 	sort.SliceStable(entries, func(i, j int) bool {
 		return entries[i].Name < entries[j].Name
 	})
-
-	return &Index{
-		SchemaVersion: SchemaVersion,
-		Repository:    repository,
-		Plugins:       entries,
-	}, nil
-}
-
-// Write serializes an index as stable, pretty JSON.
-func Write(index *Index, writer io.Writer) error {
-	return WriteWithOptions(index, writer, WriteOptions{Pretty: true})
-}
-
-// WriteWithOptions serializes an index as JSON.
-func WriteWithOptions(index *Index, writer io.Writer, options WriteOptions) error {
-	encoder := json.NewEncoder(writer)
-	if options.Pretty {
-		encoder.SetIndent("", "  ")
-	}
-	return encoder.Encode(index)
-}
-
-func loadConfig(root string) (*releaseconfig.V2ReleaseConfig, error) {
-	path := releaseconfig.V2ConfigPath(root)
-	cfg, err := releaseconfig.LoadV2Config(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("plugin index config file is missing: %s", path)
-		}
-		return nil, fmt.Errorf("plugin index config invalid: %w", err)
-	}
-	return cfg, nil
-}
-
-func loadState(root string) (*releaseconfig.V2ReleaseState, error) {
-	path := releaseconfig.V2StatePath(root)
-	state, err := releaseconfig.LoadV2State(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("plugin index state file is missing: %s", path)
-		}
-		return nil, fmt.Errorf("plugin index state invalid: %w", err)
-	}
-	return state, nil
+	return &Index{SchemaVersion: SchemaVersion, Repository: repository, Plugins: entries}, nil
 }
 
 func validateDuplicateUnitIDs(units []releaseconfig.V2Unit) error {
@@ -172,7 +149,7 @@ func validateDuplicateUnitIDs(units []releaseconfig.V2Unit) error {
 	return nil
 }
 
-func buildPluginEntry(root string, unit releaseconfig.V2Unit, state *releaseconfig.V2ReleaseState) (PluginEntry, error) {
+func buildPluginEntryCandidate(unit releaseconfig.V2Unit, state *releaseconfig.V2ReleaseState) (PluginEntry, error) {
 	if unit.Plugin == nil {
 		return PluginEntry{}, fmt.Errorf("plugin index unit %q has kind %q but no plugin metadata", unit.ID, unit.Kind)
 	}
@@ -184,18 +161,6 @@ func buildPluginEntry(root string, unit releaseconfig.V2Unit, state *releaseconf
 	if _, err := semver.StrictNewVersion(version); err != nil {
 		return PluginEntry{}, fmt.Errorf("plugin index plugin unit %q state version %q is not valid semver", unit.ID, unitState.Version)
 	}
-
-	manifest, err := readPluginManifest(root, unit.ID, unit.Plugin.Manifest)
-	if err != nil {
-		return PluginEntry{}, err
-	}
-	if manifest.Name != unit.Plugin.Name {
-		return PluginEntry{}, fmt.Errorf("plugin index plugin unit %q manifest name %q does not match plugin.name %q", unit.ID, manifest.Name, unit.Plugin.Name)
-	}
-	if manifest.Version != version {
-		return PluginEntry{}, fmt.Errorf("plugin index plugin unit %q manifest version %q does not match state version %q", unit.ID, manifest.Version, version)
-	}
-
 	return PluginEntry{
 		Name:        unit.Plugin.Name,
 		Unit:        unit.ID,
@@ -205,11 +170,47 @@ func buildPluginEntry(root string, unit releaseconfig.V2Unit, state *releaseconf
 		Manifest:    unit.Plugin.Manifest,
 		AssetPrefix: unit.Plugin.AssetPrefix,
 		BinaryName:  unit.Plugin.BinaryName,
-		Description: manifest.Description,
 	}, nil
 }
 
-func readPluginManifest(root, unitID, manifestPath string) (pluginManifest, error) {
+func completePluginEntry(entry PluginEntry, manifest pluginManifest) (PluginEntry, error) {
+	if manifest.Name != entry.Name {
+		return PluginEntry{}, fmt.Errorf("plugin index plugin unit %q manifest name %q does not match plugin.name %q", entry.Unit, manifest.Name, entry.Name)
+	}
+	if manifest.Version != entry.Version {
+		return PluginEntry{}, fmt.Errorf("plugin index plugin unit %q manifest version %q does not match state version %q", entry.Unit, manifest.Version, entry.Version)
+	}
+	entry.Description = manifest.Description
+	return entry, nil
+}
+
+type pluginIndexDiskSourceReader struct{}
+
+func (pluginIndexDiskSourceReader) LoadConfig(root string) (*releaseconfig.V2ReleaseConfig, error) {
+	path := releaseconfig.V2ConfigPath(root)
+	cfg, err := releaseconfig.LoadV2Config(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("plugin index config file is missing: %s", path)
+		}
+		return nil, fmt.Errorf("plugin index config invalid: %w", err)
+	}
+	return cfg, nil
+}
+
+func (pluginIndexDiskSourceReader) LoadState(root string) (*releaseconfig.V2ReleaseState, error) {
+	path := releaseconfig.V2StatePath(root)
+	state, err := releaseconfig.LoadV2State(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("plugin index state file is missing: %s", path)
+		}
+		return nil, fmt.Errorf("plugin index state invalid: %w", err)
+	}
+	return state, nil
+}
+
+func (pluginIndexDiskSourceReader) ReadManifest(root, unitID, manifestPath string) (pluginManifest, error) {
 	if strings.TrimSpace(manifestPath) == "" {
 		return pluginManifest{}, fmt.Errorf("plugin index plugin unit %q plugin manifest path is required", unitID)
 	}
