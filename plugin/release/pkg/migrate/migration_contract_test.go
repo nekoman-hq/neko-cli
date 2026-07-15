@@ -127,7 +127,7 @@ func TestHandleMigrateWrongDryRunTypeRetainsFalseDefault(t *testing.T) {
 func TestRecoveryPlanActionsDescribeDurableEvidence(t *testing.T) {
 	tests := []struct { //nolint:govet // Contract cases read most clearly with evidence before expected actions.
 		name        string
-		stage       string
+		stage       migrationJournalStage
 		writeConfig bool
 		writeState  bool
 		archive     bool
@@ -220,7 +220,7 @@ func TestRecoveryPlanActionsDescribeDurableEvidence(t *testing.T) {
 	}
 }
 
-func TestRecoveryPlanningCurrentlyAcceptsUnvalidatedJournalStages(t *testing.T) {
+func TestRecoveryPlanningRejectsUnvalidatedJournalStages(t *testing.T) {
 	for _, stage := range []string{"", "unknown-future-stage"} {
 		t.Run(stage, func(t *testing.T) {
 			root := withGitRepo(t)
@@ -229,14 +229,11 @@ func TestRecoveryPlanningCurrentlyAcceptsUnvalidatedJournalStages(t *testing.T) 
 			if err != nil {
 				t.Fatalf("ResolvePlan initial: %v", err)
 			}
-			writeJournalForTest(t, root, journalForPlan(t, plan, stage))
+			writeJournalForTest(t, root, journalForPlan(t, plan, migrationJournalStage(stage)))
 
-			recovery, err := ResolvePlan(root)
-			if err != nil {
-				t.Fatalf("current unvalidated stage %q was rejected: %v", stage, err)
-			}
-			if !recovery.Recovery {
-				t.Fatalf("stage %q did not produce recovery plan: %#v", stage, recovery)
+			_, err = ResolvePlan(root)
+			if err == nil || !strings.Contains(err.Error(), "unknown migration journal stage") {
+				t.Fatalf("stage %q error = %v, want typed-stage rejection", stage, err)
 			}
 		})
 	}

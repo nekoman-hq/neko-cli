@@ -338,7 +338,7 @@ func validStateJSON() string {
 `
 }
 
-func journalForPlan(t *testing.T, plan *Plan, stage string) *journal {
+func journalForPlan(t *testing.T, plan *Plan, stage migrationJournalStage) *journal {
 	t.Helper()
 	sourceBytes, err := os.ReadFile(plan.SourcePath)
 	if err != nil {

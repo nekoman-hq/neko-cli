@@ -20,11 +20,15 @@ import (
 const (
 	backupFileName  = ".release.neko.json.v1.bak"
 	journalFileName = "release.migration.json"
+)
 
-	journalStagePrepared      = "prepared"
-	journalStageConfigWritten = "config-written"
-	journalStageStateWritten  = "state-written"
-	journalStageV1Archived    = "v1-archived"
+type migrationJournalStage string
+
+const (
+	journalStagePrepared      migrationJournalStage = "prepared"
+	journalStageConfigWritten migrationJournalStage = "config-written"
+	journalStageStateWritten  migrationJournalStage = "state-written"
+	journalStageV1Archived    migrationJournalStage = "v1-archived"
 )
 
 // Plan describes the exact migration actions and content.
@@ -50,232 +54,172 @@ type Plan struct {
 
 //nolint:govet // Journal field order mirrors the documented recovery file.
 type journal struct {
-	SchemaVersion       int    `json:"schemaVersion"`
-	SourcePath          string `json:"sourcePath"`
-	SourceContentSHA256 string `json:"sourceContentSHA256"`
-	ConfigContentSHA256 string `json:"configContentSHA256"`
-	StateContentSHA256  string `json:"stateContentSHA256"`
-	BackupPath          string `json:"backupPath"`
-	Stage               string `json:"stage"`
+	SchemaVersion       int                   `json:"schemaVersion"`
+	SourcePath          string                `json:"sourcePath"`
+	SourceContentSHA256 string                `json:"sourceContentSHA256"`
+	ConfigContentSHA256 string                `json:"configContentSHA256"`
+	StateContentSHA256  string                `json:"stateContentSHA256"`
+	BackupPath          string                `json:"backupPath"`
+	Stage               migrationJournalStage `json:"stage"`
 }
 
 // ResolvePlan returns the current migration plan without writing files.
 func ResolvePlan(startDir string) (*Plan, error) {
-	root, err := gitRoot(startDir)
+	root, err := (gitMigrationRootResolver{}).Resolve(startDir)
 	if err != nil {
 		return nil, err
 	}
-	return resolvePlanAtRoot(root)
+	plan, err := (filesystemMigrationPlanResolver{}).Resolve(root)
+	if err != nil {
+		return nil, err
+	}
+	return plan.compatibilityPlan(), nil
 }
 
 // Run executes or previews the V1-to-V2 migration.
 func Run(startDir string, dryRun bool) (*Plan, error) {
-	plan, err := ResolvePlan(startDir)
-	if err != nil {
-		return nil, err
+	result, failure := newMigrationUseCase().Migrate(migrationCommandRequest{
+		startDirectory: startDir,
+		preview:        dryRun,
+	})
+	if failure != nil {
+		return nil, failure
 	}
-	if dryRun || plan.AlreadyDone {
-		if dryRun && plan.Recovery {
-			plan.Actions = append([]string{"preview recovery of interrupted migration"}, plan.Actions...)
-		}
-		return plan, nil
+	plan := result.plan.compatibilityPlan()
+	if result.outcome == migrationCompleted {
+		plan.Actions = append(plan.Actions, "migration completed")
 	}
-	if err := executePlan(plan); err != nil {
-		return nil, err
-	}
-	plan.Actions = append(plan.Actions, "migration completed")
 	return plan, nil
 }
 
-func resolvePlanAtRoot(root string) (*Plan, error) {
-	paths := migrationPaths(root)
-	journalExists := exists(paths.journal)
-	if journalExists {
-		return recoveryPlan(root, paths)
-	}
+type gitMigrationRootResolver struct{}
 
-	rootV1 := exists(paths.source)
-	configExists := exists(paths.config)
-	stateExists := exists(paths.state)
-
-	switch {
-	case configExists && stateExists && !rootV1:
-		if _, err := releaseconfig.LoadV2Repository(root); err != nil {
-			return nil, err
-		}
-		return &Plan{
-			RepositoryRoot: root,
-			SourceType:     "v2",
-			ConfigPath:     paths.config,
-			StatePath:      paths.state,
-			BackupPath:     paths.backup,
-			JournalPath:    paths.journal,
-			AlreadyDone:    true,
-			Actions:        []string{"already migrated; no changes required"},
-		}, nil
-	case configExists != stateExists:
-		return nil, fmt.Errorf("incomplete V2 configuration: both %s and %s are required", paths.config, paths.state)
-	case rootV1 && (configExists || stateExists):
-		return nil, fmt.Errorf("migration conflict: active V1 config and V2 files exist without migration journal")
-	case rootV1:
-		return planFromV1(root, paths, false)
-	}
-
-	if nested, ok, err := findNestedV1(root, paths.source); err != nil {
-		return nil, err
-	} else if ok {
-		return nil, fmt.Errorf("nested V1 release configuration cannot be migrated as a single-unit repository; create a V2 multi-unit configuration explicitly instead: %s", nested)
-	}
-
-	return nil, fmt.Errorf("no release configuration found to migrate in %s", root)
+func (gitMigrationRootResolver) Resolve(startDirectory string) (string, error) {
+	return gitRoot(startDirectory)
 }
 
-func recoveryPlan(root string, paths migrationPathSet) (*Plan, error) {
+type filesystemMigrationPlanResolver struct{}
+
+func (filesystemMigrationPlanResolver) Resolve(root string) (migrationPlan, error) {
+	paths := migrationPaths(root)
+	evidence := migrationRepositoryEvidence{
+		journalExists: exists(paths.journal),
+		sourceExists:  exists(paths.source),
+		configExists:  exists(paths.config),
+		stateExists:   exists(paths.state),
+	}
+	operation, err := selectMigrationPlanningOperation(classifyMigrationEvidence(evidence))
+	if err != nil {
+		return migrationPlan{}, err
+	}
+
+	switch operation {
+	case planInterruptedMigration:
+		return resolveRecoveryPlan(root, paths)
+	case returnCompletedMigration:
+		if _, err := releaseconfig.LoadV2Repository(root); err != nil {
+			return migrationPlan{}, err
+		}
+		return completedMigrationPlan(root, paths), nil
+	case refuseIncompleteMigrationTarget:
+		return migrationPlan{}, fmt.Errorf("incomplete V2 configuration: both %s and %s are required", paths.config, paths.state)
+	case refuseMigrationSourceTargetConflict:
+		return migrationPlan{}, fmt.Errorf("migration conflict: active V1 config and V2 files exist without migration journal")
+	case planNewMigration:
+		return resolveNewMigrationPlan(root, paths)
+	case inspectUnsupportedMigrationSource:
+		if nested, ok, err := findNestedV1(root, paths.source); err != nil {
+			return migrationPlan{}, err
+		} else if ok {
+			return migrationPlan{}, fmt.Errorf("nested V1 release configuration cannot be migrated as a single-unit repository; create a V2 multi-unit configuration explicitly instead: %s", nested)
+		}
+		return migrationPlan{}, fmt.Errorf("no release configuration found to migrate in %s", root)
+	default:
+		return migrationPlan{}, fmt.Errorf("migration recovery failed: unsupported planning operation %d", operation)
+	}
+}
+
+func resolveRecoveryPlan(root string, paths migrationPathSet) (migrationPlan, error) {
 	j, err := loadJournal(paths.journal)
 	if err != nil {
-		return nil, err
+		return migrationPlan{}, err
 	}
 	if j.SchemaVersion != 1 ||
 		j.SourcePath != paths.source ||
 		j.BackupPath != paths.backup {
-		return nil, fmt.Errorf("migration recovery failed: journal %s does not match repository paths", paths.journal)
+		return migrationPlan{}, fmt.Errorf("migration recovery failed: journal %s does not match repository paths", paths.journal)
 	}
 
-	plan, err := planFromJournal(root, paths, j)
+	plan, err := resolvePlanFromJournal(root, paths, j)
 	if err != nil {
-		return nil, err
+		return migrationPlan{}, err
 	}
-	plan.Recovery = true
-	plan.Actions = recoveryActions(paths, j)
+	plan.kind = recoveryMigrationPlan
+	plan.actions = recoveryActions(paths, j)
 	return plan, nil
 }
 
-func planFromV1(root string, paths migrationPathSet, recovery bool) (*Plan, error) {
-	sourceBytes, err := os.ReadFile(paths.source)
+func resolveNewMigrationPlan(root string, paths migrationPathSet) (migrationPlan, error) {
+	source, err := captureMigrationFile(paths.source)
 	if err != nil {
-		return nil, fmt.Errorf("read V1 config %s: %w", paths.source, err)
+		return migrationPlan{}, fmt.Errorf("read V1 config %s: %w", paths.source, err)
 	}
-	return planFromSourceBytes(root, paths, sourceBytes, recovery)
+	backup, err := captureMigrationFile(paths.backup)
+	if err != nil {
+		return migrationPlan{}, fmt.Errorf("read V1 backup %s: %w", paths.backup, err)
+	}
+	return constructMigrationPlan(root, paths, source, backup, newMigrationPlan)
 }
 
-func planFromJournal(root string, paths migrationPathSet, j *journal) (*Plan, error) {
-	var sourceBytes []byte
+func resolvePlanFromJournal(root string, paths migrationPathSet, j *journal) (migrationPlan, error) {
+	var source migrationFileSnapshot
 	if exists(paths.source) {
-		data, err := os.ReadFile(paths.source)
+		activeSource, err := captureMigrationFile(paths.source)
 		if err != nil {
-			return nil, fmt.Errorf("read V1 config %s: %w", paths.source, err)
+			return migrationPlan{}, fmt.Errorf("read V1 config %s: %w", paths.source, err)
 		}
-		if sha256Hex(data) != j.SourceContentSHA256 {
-			return nil, fmt.Errorf("migration recovery failed: active V1 config %s does not match journal hash", paths.source)
+		if sha256Hex(activeSource.data) != j.SourceContentSHA256 {
+			return migrationPlan{}, fmt.Errorf("migration recovery failed: active V1 config %s does not match journal hash", paths.source)
 		}
-		sourceBytes = data
+		source = activeSource
 	} else if exists(paths.backup) {
-		data, err := os.ReadFile(paths.backup)
+		archivedSource, err := captureMigrationFile(paths.backup)
 		if err != nil {
-			return nil, fmt.Errorf("read V1 backup %s: %w", paths.backup, err)
+			return migrationPlan{}, fmt.Errorf("read V1 backup %s: %w", paths.backup, err)
 		}
-		if sha256Hex(data) != j.SourceContentSHA256 {
-			return nil, fmt.Errorf("migration recovery failed: V1 backup %s does not match journal hash", paths.backup)
+		if sha256Hex(archivedSource.data) != j.SourceContentSHA256 {
+			return migrationPlan{}, fmt.Errorf("migration recovery failed: V1 backup %s does not match journal hash", paths.backup)
 		}
-		sourceBytes = data
+		source = archivedSource
 	} else {
-		return nil, fmt.Errorf("migration recovery failed: neither active V1 config nor backup exists")
+		return migrationPlan{}, fmt.Errorf("migration recovery failed: neither active V1 config nor backup exists")
 	}
 
-	plan, err := planFromSourceBytes(root, paths, sourceBytes, true)
+	backup, err := captureMigrationFile(paths.backup)
 	if err != nil {
-		return nil, err
+		return migrationPlan{}, fmt.Errorf("read V1 backup %s: %w", paths.backup, err)
 	}
-	if sha256Hex([]byte(plan.ConfigJSON)) != j.ConfigContentSHA256 ||
-		sha256Hex([]byte(plan.StateJSON)) != j.StateContentSHA256 {
-		return nil, fmt.Errorf("migration recovery failed: planned V2 content does not match journal hashes")
+	plan, err := constructMigrationPlan(root, paths, source, backup, recoveryMigrationPlan)
+	if err != nil {
+		return migrationPlan{}, err
 	}
-	if err := verifyExistingIfPresent(paths.config, []byte(plan.ConfigJSON), "config"); err != nil {
-		return nil, err
+	if sha256Hex(plan.target.configJSON) != j.ConfigContentSHA256 ||
+		sha256Hex(plan.target.stateJSON) != j.StateContentSHA256 {
+		return migrationPlan{}, fmt.Errorf("migration recovery failed: planned V2 content does not match journal hashes")
 	}
-	if err := verifyExistingIfPresent(paths.state, []byte(plan.StateJSON), "state"); err != nil {
-		return nil, err
+	if err := verifyExistingIfPresent(paths.config, plan.target.configJSON, "config"); err != nil {
+		return migrationPlan{}, err
+	}
+	if err := verifyExistingIfPresent(paths.state, plan.target.stateJSON, "state"); err != nil {
+		return migrationPlan{}, err
 	}
 	return plan, nil
 }
 
-func planFromSourceBytes(root string, paths migrationPathSet, sourceBytes []byte, recovery bool) (*Plan, error) {
-	if exists(paths.backup) {
-		backupBytes, err := os.ReadFile(paths.backup)
-		if err != nil {
-			return nil, fmt.Errorf("read V1 backup %s: %w", paths.backup, err)
-		}
-		if !bytes.Equal(backupBytes, sourceBytes) {
-			return nil, fmt.Errorf("migration conflict: existing backup %s differs from active V1 config", paths.backup)
-		}
-	}
+type filesystemMigrationPlanExecutor struct{}
 
-	var v1 releaseconfig.V1ReleaseConfig
-	if err := json.Unmarshal(sourceBytes, &v1); err != nil {
-		return nil, fmt.Errorf("parse V1 config %s: %w", paths.source, err)
-	}
-	if err := releaseconfig.V1Validate(&v1); err != nil {
-		return nil, err
-	}
-
-	v2Config := releaseconfig.V2ReleaseConfig{
-		SchemaVersion: 2,
-		Units: []releaseconfig.V2Unit{
-			{
-				ID:               "default",
-				DisplayName:      v1.ProjectName,
-				Paths:            []string{"**"},
-				WorkingDirectory: ".",
-				TagPrefix:        "v",
-				Executor: releaseconfig.V2Executor{
-					Type:     releaseconfig.ExecutorType(v1.ReleaseSystem),
-					Delivery: releaseconfig.DeliveryLocal,
-				},
-			},
-		},
-	}
-	v2State := releaseconfig.V2ReleaseState{
-		SchemaVersion: 2,
-		Units: map[string]releaseconfig.V2UnitState{
-			"default": {Version: v1.Version},
-		},
-	}
-	configBytes, err := releaseconfig.CanonicalV2Config(v2Config)
-	if err != nil {
-		return nil, err
-	}
-	stateBytes, err := releaseconfig.CanonicalV2State(v2State)
-	if err != nil {
-		return nil, err
-	}
-
-	plan := &Plan{
-		RepositoryRoot: root,
-		SourceType:     "v1",
-		SourcePath:     paths.source,
-		ConfigPath:     paths.config,
-		StatePath:      paths.state,
-		BackupPath:     paths.backup,
-		JournalPath:    paths.journal,
-		UnitID:         "default",
-		Version:        v1.Version,
-		TagPrefix:      "v",
-		Executor:       string(v1.ReleaseSystem),
-		Delivery:       string(releaseconfig.DeliveryLocal),
-		ConfigJSON:     string(configBytes),
-		StateJSON:      string(stateBytes),
-		Recovery:       recovery,
-		Actions: []string{
-			"create .neko directory",
-			"write migration journal",
-			"write .neko/release.config.json",
-			"write .neko/release.state.json",
-			"archive .release.neko.json to .release.neko.json.v1.bak",
-			"validate migrated V2 configuration",
-			"remove migration journal",
-		},
-	}
-	return plan, nil
+func (filesystemMigrationPlanExecutor) Execute(plan migrationPlan) error {
+	return executePlan(plan.compatibilityPlan())
 }
 
 func executePlan(plan *Plan) error {
@@ -445,7 +389,19 @@ func loadJournal(path string) (*journal, error) {
 	if err := dec.Decode(&j); err != nil {
 		return nil, fmt.Errorf("parse migration journal %s: %w", path, err)
 	}
+	if err := validateMigrationJournalStage(j.Stage); err != nil {
+		return nil, fmt.Errorf("parse migration journal %s: %w", path, err)
+	}
 	return &j, nil
+}
+
+func validateMigrationJournalStage(stage migrationJournalStage) error {
+	switch stage {
+	case journalStagePrepared, journalStageConfigWritten, journalStageStateWritten, journalStageV1Archived:
+		return nil
+	default:
+		return fmt.Errorf("unknown migration journal stage %q", stage)
+	}
 }
 
 func recoveryActions(paths migrationPathSet, j *journal) []string {
@@ -474,6 +430,21 @@ func sourceHashForPlan(plan *Plan) string {
 		return sha256Hex(data)
 	}
 	return ""
+}
+
+func captureMigrationFile(path string) (migrationFileSnapshot, error) {
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return migrationFileSnapshot{path: path}, nil
+	}
+	if err != nil {
+		return migrationFileSnapshot{}, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return migrationFileSnapshot{}, err
+	}
+	return newMigrationFileSnapshot(path, data, info.Mode().Perm()), nil
 }
 
 type migrationPathSet struct {
