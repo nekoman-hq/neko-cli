@@ -109,8 +109,8 @@ func TestHandlePluginIndexOutputPathFormattingOverwriteAndModes(t *testing.T) {
 	assertIndexMode(t, outputDir, 0755)
 	assertIndexMode(t, output, 0644)
 
-	if err := os.Chmod(output, 0600); err != nil {
-		t.Fatalf("chmod output: %v", err)
+	if chmodErr := os.Chmod(output, 0600); chmodErr != nil {
+		t.Fatalf("chmod output: %v", chmodErr)
 	}
 	resp, err = HandlePluginIndex(pluginRequest(map[string]any{
 		"output":     output,
@@ -158,8 +158,8 @@ func TestHandlePluginIndexOutputDirectoryFailurePreservesExistingFile(t *testing
 }
 
 type indexContractSnapshot struct {
-	Mode fs.FileMode
 	Data string
+	Mode fs.FileMode
 }
 
 func snapshotIndexTree(t *testing.T, root string) map[string]indexContractSnapshot {
