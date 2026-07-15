@@ -3,10 +3,11 @@ package main
 
 import (
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"os"
 
-	"github.com/nekoman-hq/neko-cli/pkg/errors"
+	pluginerrors "github.com/nekoman-hq/neko-cli/pkg/errors"
 	"github.com/nekoman-hq/neko-cli/pkg/log"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/contributors"
@@ -25,20 +26,20 @@ import (
 
 func main() {
 	// Set plugin info for error responses
-	errors.PluginName = metadata.PluginName
-	errors.PluginVersion = metadata.Version
+	pluginerrors.PluginName = metadata.PluginName
+	pluginerrors.PluginVersion = metadata.Version
 
 	// Read request from stdin
 	var req plugin.Request
 	if err := json.NewDecoder(os.Stdin).Decode(&req); err != nil {
-		errors.WriteError("PARSE_ERROR", fmt.Sprintf("failed to parse request: %v", err))
+		pluginerrors.WriteError("PARSE_ERROR", fmt.Sprintf("failed to parse request: %v", err))
 	}
 
 	// Set verbose mode from request context
 	log.Verbose = req.Context.Verbose
 
 	if err := workspace.ChangeToProjectRoot(req.Context.WorkingDir); err != nil {
-		errors.WriteError("WORKSPACE_ERROR", err.Error())
+		pluginerrors.WriteError("WORKSPACE_ERROR", err.Error())
 	}
 
 	var resp *plugin.Response
@@ -74,10 +75,14 @@ func main() {
 	}
 
 	if err != nil {
-		errors.WriteError("EXECUTION_ERROR", err.Error())
+		var fatal *release.FatalCommandError
+		if stderrors.As(err, &fatal) {
+			pluginerrors.WriteError(fatal.Code(), fatal.Error())
+		}
+		pluginerrors.WriteError("EXECUTION_ERROR", err.Error())
 	}
 
 	if err := json.NewEncoder(os.Stdout).Encode(resp); err != nil {
-		errors.WriteError("RESPONSE_ERROR", fmt.Sprintf("failed to encode response: %v", err))
+		pluginerrors.WriteError("RESPONSE_ERROR", fmt.Sprintf("failed to encode response: %v", err))
 	}
 }

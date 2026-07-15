@@ -25,6 +25,9 @@ func (handler releaseCommandHandler) Handle(ctx context.Context, req plugin.Requ
 	outcome, failure := handler.starter.Start(ctx, request)
 	timestamp := handler.clock.Now()
 	if failure != nil {
+		if failure.Boundary == CommandFailureFatal {
+			return nil, &FatalCommandError{failure: failure}
+		}
 		return MapCommandFailure(string(request.ReleaseType), failure, timestamp), nil
 	}
 	return MapReleaseCommandOutcome(string(request.ReleaseType), outcome, timestamp)
@@ -48,7 +51,7 @@ func (handler resumeCommandHandler) Handle(ctx context.Context, req plugin.Reque
 // HandleRelease handles the patch, minor, and major release commands.
 func HandleRelease(req plugin.Request, releaseType Type) (*plugin.Response, error) {
 	handler := releaseCommandHandler{
-		starter:     releaseStartOperation{},
+		starter:     newReleaseStartOperation(),
 		clock:       systemReleaseClock{},
 		releaseType: releaseType,
 	}

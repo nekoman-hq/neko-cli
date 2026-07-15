@@ -2,14 +2,22 @@ package release
 
 import "fmt"
 
+type CommandFailureBoundary uint8
+
+const (
+	CommandFailureStructured CommandFailureBoundary = iota
+	CommandFailureFatal
+)
+
 // CommandFailure is an expected command failure with a stable public code.
 // Cause is retained for application diagnostics while response mapping exposes
 // only its message and explicitly supplied details.
 type CommandFailure struct {
-	Cause   error
-	Details map[string]any
-	Code    string
-	Message string
+	Cause    error
+	Details  map[string]any
+	Code     string
+	Message  string
+	Boundary CommandFailureBoundary
 }
 
 func failureFromError(code string, cause error) *CommandFailure {
@@ -30,29 +38,60 @@ func (failure *CommandFailure) responseMessage() string {
 	return failure.Message
 }
 
+// FatalCommandError carries the historical V1 fatal-preflight contract from
+// the command handler to the plugin process boundary without exiting inside
+// application orchestration.
+type FatalCommandError struct {
+	failure *CommandFailure
+}
+
+func (fatal *FatalCommandError) Error() string {
+	if fatal == nil || fatal.failure == nil {
+		return ""
+	}
+	return fatal.failure.responseMessage()
+}
+
+func (fatal *FatalCommandError) Code() string {
+	if fatal == nil || fatal.failure == nil {
+		return ""
+	}
+	return fatal.failure.Code
+}
+
 // ReleaseCommandOutcome seals the result variants understood by the release
 // presentation mapper without introducing a generic result framework.
 type ReleaseCommandOutcome interface {
 	releaseCommandOutcome()
 }
 
-type LegacyReleasePreview struct {
+type V1ReleasePreview struct {
 	ReleaseType    Type
 	CurrentVersion string
 	NextVersion    string
 	ReleaseSystem  string
 }
 
-func (*LegacyReleasePreview) releaseCommandOutcome() {}
+func (*V1ReleasePreview) releaseCommandOutcome() {}
+func (*V1ReleasePreview) v1ReleaseResult()       {}
 
-type LegacyReleaseCompleted struct {
+// LegacyReleasePreview preserves the public compatibility name while the
+// active application path uses the explicitly owned V1 result.
+type LegacyReleasePreview = V1ReleasePreview
+
+type V1ReleaseCompleted struct {
 	ReleaseType     Type
 	PreviousVersion string
 	NextVersion     string
 	ReleaseSystem   string
 }
 
-func (*LegacyReleaseCompleted) releaseCommandOutcome() {}
+func (*V1ReleaseCompleted) releaseCommandOutcome() {}
+func (*V1ReleaseCompleted) v1ReleaseResult()       {}
+
+// LegacyReleaseCompleted preserves the public compatibility name while the
+// active application path uses the explicitly owned V1 result.
+type LegacyReleaseCompleted = V1ReleaseCompleted
 
 // V2ReleasePreview contains the application facts required to render the
 // existing V2 dry-run contract. It deliberately contains no plugin response

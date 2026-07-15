@@ -2,6 +2,7 @@ package release
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -54,6 +55,27 @@ func TestReleaseCommandHandlerMapsTypedFailureWithoutGoError(t *testing.T) {
 	}
 	if resp.Error.Details["hint"] != "initialize release config" || !resp.Metadata.Timestamp.Equal(timestamp) {
 		t.Fatalf("failure details or timestamp changed: %#v", resp)
+	}
+}
+
+func TestReleaseCommandHandlerReturnsFatalPreflightToProcessBoundary(t *testing.T) {
+	starter := &recordingReleaseCommandStarter{
+		failure: &CommandFailure{
+			Code:     "UNCOMMITTED_CHANGES",
+			Message:  "working tree is dirty",
+			Boundary: CommandFailureFatal,
+		},
+	}
+	handler := releaseCommandHandler{starter: starter, clock: fixedReleaseClock{}, releaseType: Patch}
+
+	resp, err := handler.Handle(context.Background(), plugin.Request{})
+
+	var fatal *FatalCommandError
+	if resp != nil || !errors.As(err, &fatal) {
+		t.Fatalf("response=%#v error=%v", resp, err)
+	}
+	if fatal.Code() != "UNCOMMITTED_CHANGES" || fatal.Error() != "working tree is dirty" {
+		t.Fatalf("fatal error = code %q message %q", fatal.Code(), fatal.Error())
 	}
 }
 

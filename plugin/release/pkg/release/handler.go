@@ -15,12 +15,51 @@ import (
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
-type releaseStartOperation struct{}
+type releaseRepositoryReader interface {
+	Load(string) (*config.ReleaseRepository, error)
+}
 
-func (releaseStartOperation) Start(ctx context.Context, request ReleaseCommandRequest) (ReleaseCommandOutcome, *CommandFailure) {
+type releaseConfigRepositoryReader struct{}
+
+func (releaseConfigRepositoryReader) Load(root string) (*config.ReleaseRepository, error) {
+	repository, err := config.LoadReleaseRepository(root)
+	if err != nil {
+		return nil, err
+	}
+	absoluteRoot, err := absoluteExistingDir(repository.RepositoryRoot, "repository root")
+	if err != nil {
+		return nil, err
+	}
+	repository.RepositoryRoot = absoluteRoot
+	return repository, nil
+}
+
+type v1ReleaseApplication interface {
+	Start(context.Context, *config.ReleaseRepository, ReleaseCommandRequest) (ReleaseCommandOutcome, *CommandFailure)
+}
+
+type v2ReleaseApplication interface {
+	Start(context.Context, *config.ReleaseRepository, ReleaseCommandRequest) (ReleaseCommandOutcome, *CommandFailure)
+}
+
+type releaseStartOperation struct {
+	repositories releaseRepositoryReader
+	v1           v1ReleaseApplication
+	v2           v2ReleaseApplication
+}
+
+func newReleaseStartOperation() releaseStartOperation {
+	return releaseStartOperation{
+		repositories: releaseConfigRepositoryReader{},
+		v1:           newV1ReleaseCommandApplication(),
+		v2:           v2ReleaseCommandApplication{},
+	}
+}
+
+func (operation releaseStartOperation) Start(ctx context.Context, request ReleaseCommandRequest) (ReleaseCommandOutcome, *CommandFailure) {
 	log.PluginPrint(log.Exec, "Starting %s release", string(request.ReleaseType))
 
-	repository, err := config.LoadReleaseRepository(".")
+	repository, err := operation.repositories.Load(".")
 	if err != nil {
 		return nil, &CommandFailure{
 			Code:  "CONFIG_NOT_FOUND",
@@ -31,19 +70,37 @@ func (releaseStartOperation) Start(ctx context.Context, request ReleaseCommandRe
 		}
 	}
 
+	path, err := selectReleaseApplicationPath(repository.SourceFormat)
+	if err != nil {
+		return nil, failureFromError("SOURCE_FORMAT_UNSUPPORTED", err)
+	}
+
+	switch path {
+	case config.SourceFormatV1:
+		return operation.v1.Start(ctx, repository, request)
+	case config.SourceFormatV2:
+		return operation.v2.Start(ctx, repository, request)
+	default:
+		return nil, failureFromMessage("SOURCE_FORMAT_UNSUPPORTED", "release source selection returned no application path")
+	}
+}
+
+type v2ReleaseCommandApplication struct{}
+
+func (v2ReleaseCommandApplication) Start(
+	ctx context.Context,
+	repository *config.ReleaseRepository,
+	request ReleaseCommandRequest,
+) (ReleaseCommandOutcome, *CommandFailure) {
 	unit, err := config.ResolveReleaseUnit(repository, request.UnitID, config.UnitResolutionOptions{RequireExplicitForMulti: true})
 	if err != nil {
 		return nil, failureFromError("UNIT_RESOLUTION_FAILED", err)
 	}
-	execCtx, err := BuildReleaseExecutionContext(repository, *unit, request.ReleaseType, request.DryRun)
+	execCtx, err := BuildV2ReleaseExecutionContext(repository.RepositoryRoot, *unit, request.ReleaseType, request.DryRun)
 	if err != nil {
 		return nil, failureFromError("EXECUTION_CONTEXT_FAILED", err)
 	}
-
-	if repository.SourceFormat == config.SourceFormatV2 {
-		return startV2Release(ctx, execCtx)
-	}
-	return startLegacyRelease(execCtx, repository.Legacy)
+	return startV2Release(ctx, execCtx)
 }
 
 func startV2Release(ctx context.Context, execCtx *ReleaseExecutionContext) (ReleaseCommandOutcome, *CommandFailure) {
@@ -95,34 +152,11 @@ func planV2Release(execCtx *ReleaseExecutionContext) (ReleaseCommandOutcome, *Co
 }
 
 func startLegacyRelease(execCtx *ReleaseExecutionContext, cfg *config.V1ReleaseConfig) (ReleaseCommandOutcome, *CommandFailure) { //nolint:staticcheck // V1 compatibility path intentionally uses the deprecated V1 schema.
-	svc := NewReleaseServiceWithContext(cfg, execCtx)
-	oldVersion, newVersion, err := svc.GetNewVersion(execCtx.ReleaseKind)
-	if err != nil {
-		return nil, failureFromError("VERSION_ERROR", err)
-	}
-
-	if execCtx.DryRun {
-		log.PluginPrint(log.Exec, "Dry run mode - no changes will be made")
-		return &LegacyReleasePreview{
-			ReleaseType:    execCtx.ReleaseKind,
-			CurrentVersion: oldVersion.String(),
-			NextVersion:    newVersion.String(),
-			ReleaseSystem:  string(cfg.ReleaseSystem),
-		}, nil
-	}
-
-	if err := ValidateRequirementsForContext(execCtx); err != nil {
-		return nil, failureFromError("VALIDATION_FAILED", err)
-	}
-	if err := svc.Run(execCtx.ReleaseKind); err != nil {
-		return nil, failureFromError("RELEASE_FAILED", err)
-	}
-	return &LegacyReleaseCompleted{
-		ReleaseType:     execCtx.ReleaseKind,
-		PreviousVersion: oldVersion.String(),
-		NextVersion:     newVersion.String(),
-		ReleaseSystem:   string(cfg.ReleaseSystem),
-	}, nil
+	repository := config.NormalizeV1Repository(execCtx.RepositoryRoot, cfg)
+	return newV1ReleaseCommandApplication().Start(context.Background(), repository, ReleaseCommandRequest{
+		ReleaseType: execCtx.ReleaseKind,
+		DryRun:      execCtx.DryRun,
+	})
 }
 
 func logV2DryRunPlan(execCtx *ReleaseExecutionContext, materializationPlan *MaterializationPlan, knownFiles KnownReleaseFiles, dispatchSummary *ReleaseDispatchDryRunSummary) {

@@ -33,8 +33,9 @@ type ReleaseExecutionContext struct {
 	DeliveryMode   DeliveryContract
 }
 
-// BuildReleaseExecutionContext creates the single context shape shared by V1,
-// V2 dry-runs, journaled V2 GitHub Actions releases, and future V2 local execution.
+// BuildReleaseExecutionContext is a compatibility facade for callers that
+// still pass a normalized repository containing either source format. Active
+// command composition selects the source first and uses the V2-only builder.
 func BuildReleaseExecutionContext(repository *releaseconfig.ReleaseRepository, unit releaseconfig.ReleaseUnit, releaseType Type, dryRun bool) (*ReleaseExecutionContext, error) {
 	if repository == nil {
 		return nil, fmt.Errorf("release repository is missing")
@@ -48,6 +49,31 @@ func BuildReleaseExecutionContext(repository *releaseconfig.ReleaseRepository, u
 	if err != nil {
 		return nil, err
 	}
+	return assembleReleaseExecutionContext(repositoryRoot, unitRoot, repository.SourceFormat, unit, releaseType, dryRun)
+}
+
+// BuildV2ReleaseExecutionContext builds the selected V2 application context
+// without inspecting or branching on source format.
+func BuildV2ReleaseExecutionContext(repositoryRoot string, unit releaseconfig.ReleaseUnit, releaseType Type, dryRun bool) (*ReleaseExecutionContext, error) {
+	repositoryRoot, err := absoluteExistingDir(repositoryRoot, "repository root")
+	if err != nil {
+		return nil, err
+	}
+	unitRoot, err := resolveV2UnitRoot(repositoryRoot, unit)
+	if err != nil {
+		return nil, err
+	}
+	return assembleReleaseExecutionContext(repositoryRoot, unitRoot, releaseconfig.SourceFormatV2, unit, releaseType, dryRun)
+}
+
+func assembleReleaseExecutionContext(
+	repositoryRoot string,
+	unitRoot string,
+	sourceFormat releaseconfig.SourceFormat,
+	unit releaseconfig.ReleaseUnit,
+	releaseType Type,
+	dryRun bool,
+) (*ReleaseExecutionContext, error) {
 	plan, err := PlanUnitVersionBump(unit, releaseType)
 	if err != nil {
 		return nil, err
@@ -78,7 +104,7 @@ func BuildReleaseExecutionContext(repository *releaseconfig.ReleaseRepository, u
 		Executor:       plan.Executor,
 		Delivery:       plan.Delivery,
 		Workflow:       unit.Workflow,
-		SourceFormat:   repository.SourceFormat,
+		SourceFormat:   sourceFormat,
 		Capabilities:   capabilities,
 		DeliveryMode:   delivery,
 	}, nil
@@ -109,6 +135,10 @@ func resolveUnitRoot(repositoryRoot string, sourceFormat releaseconfig.SourceFor
 	if sourceFormat == releaseconfig.SourceFormatV1 {
 		return repositoryRoot, nil
 	}
+	return resolveV2UnitRoot(repositoryRoot, unit)
+}
+
+func resolveV2UnitRoot(repositoryRoot string, unit releaseconfig.ReleaseUnit) (string, error) {
 	workingDirectory := unit.WorkingDirectory
 	if workingDirectory == "" {
 		workingDirectory = "."

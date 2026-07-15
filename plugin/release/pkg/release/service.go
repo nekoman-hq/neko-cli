@@ -1,136 +1,94 @@
-// Package release includes all neko cli release logic
+// Package release includes all neko cli release logic.
 //
-//nolint:staticcheck // V1 compatibility code intentionally uses deprecated V1 APIs during migration
+//nolint:staticcheck // Service is a direct compatibility facade over the isolated V1 application.
 package release
 
-//lint:file-ignore SA1019 V1 compatibility release paths intentionally use deprecated V1 APIs during migration
-
-/*
-@Author     Benjamin Senekowitsch
-@Contact    senekowitsch@nekoman.at
-@Since      20.12.2025
-*/
-
 import (
-	"fmt"
+	"context"
+	"os"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/nekoman-hq/neko-cli/pkg/errors"
-	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
-	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/git"
-
-	"github.com/nekoman-hq/neko-cli/pkg/log"
+	pluginerrors "github.com/nekoman-hq/neko-cli/pkg/errors"
+	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
+// Service preserves the former exported V1 entry points. Active command
+// composition no longer uses this type; both methods delegate to the isolated
+// V1 planner/application and contain no release orchestration.
 type Service struct {
-	cfg *config.V1ReleaseConfig
+	cfg *releaseconfig.V1ReleaseConfig
 	ctx *ReleaseExecutionContext
 }
 
-func NewReleaseService(cfg *config.V1ReleaseConfig) *Service {
+func NewReleaseService(cfg *releaseconfig.V1ReleaseConfig) *Service {
 	return &Service{cfg: cfg}
 }
 
-func NewReleaseServiceWithContext(cfg *config.V1ReleaseConfig, ctx *ReleaseExecutionContext) *Service {
+func NewReleaseServiceWithContext(cfg *releaseconfig.V1ReleaseConfig, ctx *ReleaseExecutionContext) *Service {
 	return &Service{cfg: cfg, ctx: ctx}
 }
 
-// Run executes the release with the specified release type (patch, minor, major)
-func (rs *Service) Run(releaseType Type) error {
-	_, _ = git.Current()
-
-	Preflight(rs.cfg)
-	version, err := VersionGuard(rs.cfg)
-	if err != nil {
-		return err
+func (service *Service) Run(releaseType Type) error {
+	root := service.repositoryRoot()
+	repository := releaseconfig.NormalizeV1Repository(root, service.cfg)
+	executors := v1ReleaseExecutorCatalog(directV1ReleaseExecutorCatalog{})
+	if service.ctx != nil {
+		executors = registeredV1ReleaseExecutorCatalog{}
 	}
-
-	releaser, err := Get(string(rs.cfg.ReleaseSystem))
-	if err != nil {
-		return fmt.Errorf(
-			"release System Not Found: %w", err,
-		)
-	}
-
-	log.PluginPrint(log.Exec,
-		"Release system detected: %s",
-		log.ColorText(log.ColorPurple, releaser.Name()),
+	_, failure := composeV1ReleaseCommandApplication(executors).Start(
+		context.Background(),
+		repository,
+		ReleaseCommandRequest{ReleaseType: releaseType},
 	)
-
-	log.PluginPrint(log.Exec,
-		"Latest version tag extracted successfully \uF178 %s",
-		log.ColorText(log.ColorCyan, version.String()),
-	)
-
-	rt, err := ResolveReleaseType(version, releaseType)
-	if err != nil {
-		return fmt.Errorf(
-			"invalid Release Type: %w", err,
-		)
+	if failure == nil {
+		return nil
 	}
-
-	log.PluginPrint(log.Guard, "\uF00C All checks have succeeded. %s", log.ColorText(log.ColorGreen, "Starting release now!"))
-
-	newVersion := NextVersion(version, rt)
-
-	if err := rs.updateConfig(&newVersion); err != nil {
-		errors.WriteWarning(
-			"Failed to update local config",
-			fmt.Sprintf("Updating version in .release.neko.json failed. Attempting to proceed with release: %s", err.Error()))
+	if failure.Boundary == CommandFailureFatal {
+		pluginerrors.WriteError(failure.Code, failure.responseMessage())
 	}
-
-	mutatingReleaseStarted := true
-	if rs.ctx != nil {
-		rs.ctx.CurrentVersion = version.String()
-		rs.ctx.NextVersion = newVersion.String()
-		rs.ctx.Tag = rs.ctx.TagSpec.Format(newVersion.String())
+	if failure.Cause != nil {
+		return failure.Cause
 	}
-	if err := executeRelease(releaser, rs.ctx, &newVersion); err != nil {
-		releaseError := fmt.Errorf("release failed: %w", err)
-
-		if err := rs.updateConfig(version); err != nil {
-			log.PluginPrint(log.Guard, "Warning: Failed to revert config: %s", err.Error())
-		}
-
-		// Rollback is intentionally only reachable after this service has
-		// crossed into the mutating release phase. Earlier planning and guard
-		// failures must never trigger destructive git cleanup/reset paths.
-		if mutatingReleaseStarted {
-			log.PluginPrint(log.Guard, "Encountered error while releasing. Trying to undo changes...")
-			if err := releaser.RevertRelease(); err != nil {
-				return fmt.Errorf("%w: Failed undoing changes: %w", releaseError, err)
-			}
-			log.PluginPrint(log.Guard, "Successfully undid changes.")
-		}
-
-		return releaseError
-	}
-
-	log.PluginPrint(log.Exec, "\uF00C Successfully released version %s",
-		log.ColorText(log.ColorCyan, newVersion.String()))
-
-	return nil
+	return &FatalCommandError{failure: failure}
 }
 
-// GetNewVersion returns what the new version would be for a given release type
-func (rs *Service) GetNewVersion(releaseType Type) (*semver.Version, *semver.Version, error) {
-	version, err := VersionGuardWithOptions(rs.cfg, VersionGuardOptions{AllowRemoteRefresh: false})
+func (service *Service) GetNewVersion(releaseType Type) (*semver.Version, *semver.Version, error) {
+	root := service.repositoryRoot()
+	repository := releaseconfig.NormalizeV1Repository(root, service.cfg)
+	intent := V1ReleaseIntent{
+		RepositoryRoot: root,
+		Unit:           repository.Units[0],
+		Config:         service.cfg,
+		ReleaseType:    releaseType,
+	}
+	reporter := systemV1ReleaseReporter{}
+	reporter.PlanningStarted()
+	plan, err := (v1ReleasePlanningOperation{
+		planner: pureV1ReleasePlanner{},
+		tags:    legacyV1VersionEvidence{},
+	}).BuildPreviewPlan(intent)
 	if err != nil {
 		return nil, nil, err
 	}
-
-	newVersion := NextVersion(version, releaseType)
-	return version, &newVersion, nil
-}
-
-func (rs *Service) updateConfig(newVersion *semver.Version) error {
-	rs.cfg.Version = newVersion.String()
-	return config.V1SaveConfig(*rs.cfg)
-}
-
-func executeRelease(releaser Tool, ctx *ReleaseExecutionContext, newVersion *semver.Version) error {
-	if ctx == nil {
-		return releaser.Release(newVersion)
+	reporter.PlanningCompleted(plan)
+	current, err := semver.NewVersion(plan.CurrentVersion)
+	if err != nil {
+		return nil, nil, err
 	}
-	return releaser.Execute(ctx)
+	next, err := semver.NewVersion(plan.NextVersion)
+	if err != nil {
+		return nil, nil, err
+	}
+	return current, next, nil
+}
+
+func (service *Service) repositoryRoot() string {
+	if service.ctx != nil && service.ctx.RepositoryRoot != "" {
+		return service.ctx.RepositoryRoot
+	}
+	root, err := os.Getwd()
+	if err != nil {
+		return "."
+	}
+	return root
 }
