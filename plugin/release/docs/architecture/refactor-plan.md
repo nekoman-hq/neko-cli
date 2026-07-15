@@ -56,6 +56,23 @@ The intended boundaries are deliberately small:
 
 The target does not require one package per layer. Boundaries can begin as types and functions in existing packages, then move only if a later change shows clear value.
 
+## Refactor progress ledger
+
+The architecture baseline is complete. Of the nine numbered stages, six are complete and Stage 7 is in progress; Stages 7 through 9 remain. The exact active stage is **Stage 7: Extract read-only query use cases and plugin-index output persistence.**
+
+| Stage | Title | Status | Commits |
+| ----- | ----- | ------ | ------- |
+| Architecture baseline | Define the architecture, compatibility, and clean-code baseline | Completed (2026-07-14) | `d85f43b`, `1c06e7b` |
+| Stage 1 | Characterize active command and failure contracts | Completed (2026-07-14) | `6cf0964` |
+| Stage 2 | Establish typed command requests and response mapping | Completed (2026-07-14) | `208fc84` |
+| Stage 3 | Extract the active V2 release use case with replaceable dependencies | Completed (2026-07-14) | `63de001` |
+| Stage 4 | Model resume policy and reuse the active release steps | Completed (2026-07-14) | `ae20876`, `4f63932` |
+| Stage 5 | Consolidate canonical release files, Git, journals, tokens, and clocks | Completed (2026-07-14) | `78c4dad`, `4a8542d` |
+| Stage 6 | Extract init and unit-add use cases with paired persistence | Completed (2026-07-14) | `fed944b`, `96338f8` |
+| Stage 7 | Extract read-only query use cases and plugin-index output persistence | In progress (2026-07-15) | — |
+| Stage 8 | Type and isolate migration recovery | Planned | — |
+| Stage 9 | Isolate the V1 compatibility subsystem | Planned | — |
+
 ## Clean-code completion gate for production refactors
 
 This gate applies to every production refactor stage in this plan and to any future production milestone derived from it. Behavior preservation is necessary but not sufficient. Every milestone must demonstrate that:
