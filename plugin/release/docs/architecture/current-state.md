@@ -45,7 +45,7 @@ The public command contract is duplicated between `manifest.json` and the switch
 | `pkg/release` execution journal | Durable intended-release identity, monotonic phases, pending actions, and execution-specific persistence | `ReleaseExecutionJournal`, `ReleaseExecutionJournalStore` | Store-specific validation/mutations use the shared fixed journal location and secure-write mechanics below the Git common directory. |
 | `pkg/release` dispatch | Immutable workflow request, dispatch-specific persistence/classification, typed token, GitHub target, and HTTP client | `ReleaseDispatchRequest`, `DispatchJournalStore`, `GitHubActionsDispatchToken`, `GitHubActionsDispatcher`, `GitHubActionsDispatchClient` | Explicit accepted/rejected/unknown outcomes; the token stays typed and redacted through dispatch adapters. |
 | `pkg/release` recovery | Typed command boundary, read-only assessment, pure continuation policy, and reuse of active named operations | `resumeCommandHandler`, `resumeReleaseUseCase`, `AssessReleaseExecutionRecovery`, `resolveResumeRecovery` | Recovery receives focused Git evidence and reuses active tag/dispatch/push/handoff capabilities without a second orchestration path. |
-| `pkg/release/tool/*` | GoReleaser, JReleaser, and release-it V1 executor orchestration plus executor-owned system adapters | `NewV1Executor`, `Run`, `Rollback` | Each executor consumes narrow Git/process/file/environment/token/clock capabilities and retains only its characterized rollback evidence. |
+| `pkg/release/tool/*` | GoReleaser, JReleaser, and release-it V1 executor orchestration plus executor-owned system adapters | `NewV1Executor`, `Run`, `CompensationState`, compatibility `Rollback` | Each executor consumes narrow Git/process/file/environment/token/clock capabilities, exposes typed effect evidence to the active application, and retains its characterized direct rollback delegate for compatibility callers. |
 
 ## Command-to-flow map
 
@@ -125,11 +125,12 @@ The public command contract is duplicated between `manifest.json` and the switch
 #### V1 execution
 
 - Planning: `pureV1ReleasePlanner` receives a typed `V1ReleasePlanningRequest` and returns current/latest/next versions, tag, commit metadata, executor, canonical V1 config file, and materialized-file ownership without infrastructure access or mutation. Preview uses local tag evidence only and returns a typed result without token, file, Git, executor, or rollback effects.
-- Execution: `v1ReleaseExecutionUseCase` performs local preview planning, requirements, typed preflight, refreshed execution planning, fixed executor resolution, best-effort V1 config materialization, one executor invocation, and typed completion. The readable order is explicit; no step list, workflow pipeline, state machine, or boolean V1/V2 mode is involved.
+- Execution: `v1ReleaseExecutionUseCase` first opens the repository's V1 compensation store and continues or refuses any unresolved attempt before planning a new release. It then performs local preview planning, requirements, typed preflight, refreshed execution planning, fixed executor resolution, durable evidence creation, verified V1 config materialization, one executor invocation, and typed completion. The readable order is explicit; no step list, workflow pipeline, state machine, or boolean V1/V2 mode is involved.
 - Preconditions: the characterized executor file and `GITHUB_TOKEN`; clean worktree; attached `main` or `master`; configured upstream; branch not reported behind. Fatal preflight is represented as `V1ReleaseFailure` and mapped at the command boundary to the established fatal JSON/exit behavior.
 - State mutation and ownership: `.release.neko.json` is written before execution through `V1SaveConfigAt`. GoReleaser owns the release commit, lightweight `v` tag, commit/tag pushes, warning-only snapshot, and publication. JReleaser first synchronizes `jreleaser.yml`, then owns the commit/push and warning-only dry-run while JReleaser owns tag/publication. release-it owns its commit/tag/push/publication internally and package-manager selection still prefers `bun.lock`, then `package-lock.json`, then npm.
-- Recovery: executor failure first attempts exact prior-version materialization, then invokes the executor's bounded rollback evidence. GitHub release deletion precedes tag deletion; local tag deletion remains best-effort; remote tag deletion is surfaced; pushed commits use revert with the established fallback empty commit then push; unpushed commits hard-reset to the captured pre-head; cleanup runs last. The first surfaced compensation failure stops later effects. This is guarded compensation, not transactional rollback, and failures can require manual recovery.
-- Tests: fake subprocess, Git, token, environment, clock, file, config, GitHub-client, and reporter capabilities protect the full order/failure matrix. System compatibility tests use only local fake executables, temporary repositories, and local HTTP transports.
+- Recovery: the active application stores V1-only evidence at `<git-common-dir>/neko/release/v1-compensation/current.json` before config mutation and executor invocation. Recovery selects exactly one named operation at a time in the fixed order: restore the exact original config bytes; delete the GitHub Release; delete the local tag; delete the remote tag; revert and push a pushed release commit, or reset an unpushed release commit; then clean untracked release files. Every operation persists `pending` before its side effect and confirms only after verification. The first failure stops later effects. A later V1 release invocation automatically continues supported repeatable local operations, but refuses pending or uncertain remote operations, a pending/non-repeatable revert, and an uncertain executor outcome with evidence-path guidance. This remains compensation, not transactional rollback, and unsupported evidence requires manual recovery.
+- Executor evidence: GoReleaser failures are automatically compensable only when its captured state proves local effects; push/publication ambiguity is manual. JReleaser is automatically compensable only before commit/push/publication ambiguity. A release-it process failure is always externally uncertain because release-it owns commit, tag, push, and publication internally.
+- Tests: fake subprocess, Git, token, environment, clock, file, config, GitHub-client, evidence-store, and reporter capabilities protect the full order/failure and interruption matrix. System compatibility tests use only local fake executables, temporary repositories, and local HTTP transports.
 
 ### `resume`
 
@@ -205,16 +206,16 @@ typed command request
 - `pkg/config` remains the sole owner of `V1ReleaseConfig`, strict V1 loading/validation, normalization to the virtual `default` unit, canonical bytes, and `.release.neko.json` writing. `V1SaveConfigAt` adds explicit repository-root ownership while `V1SaveConfig` remains a direct current-directory facade.
 - V1 release requirements own the legacy token-plus-executor-file contract. V1 preflight owns the exact clean/attached/main-or-master/upstream/not-behind checks and fatal codes. These semantics are not reused by V2 because V2 preconditions and failure policy differ.
 - `pureV1ReleasePlanner` owns patch/minor/major version and metadata calculation. Preview and execution are separate use cases after shared pure planning; preview cannot reach mutation dependencies.
-- `v1ReleaseExecutionUseCase` owns only the visible application order and classified recovery decision. It delegates file, repository, executor, rollback, reporting, and version-evidence effects to focused capabilities.
+- `v1ReleaseExecutionUseCase` owns only the visible application order and invokes the pure, executor-specific recovery decision. It delegates evidence persistence, file, repository, executor, named compensation, reporting, and version-evidence effects to focused capabilities.
 - Application code returns typed V1 results/failures. Existing release command mappers own `plugin.Response`, timestamps, renderer hints, metadata, ordering, nil-Go-error behavior, and fatal compatibility.
 
 ### File, Git, executor, token, environment, and clock ownership
 
-- `v1ReleaseConfigFileMaterializer` owns planned-version write and previous-version restoration through the canonical V1 store. It does not use the V2 config/state pair persister because the disk and rollback contracts differ.
-- `SystemV1GitWriter` owns the exact shared legacy commit/tag/push commands. `V1ReleaseRollback` owns only the characterized guarded compensation order. They are separate from `GitReleaseCoordinator`: V1 uses `commit -a`, allow-empty release/fallback commits, fixed `v` tags, immediate pushes, destructive compensation, and no durable execution journal.
+- `v1ReleaseConfigFileMaterializer` owns planned-version bytes through the canonical V1 store. `v1CompensationConfigFileAdapter` restores and verifies the exact original bytes captured before mutation. Neither uses the V2 config/state pair persister because the disk and recovery contracts differ.
+- `SystemV1GitWriter` owns the exact shared legacy commit/tag/push commands. The active application owns fixed named compensation operations through root-aware, verifying Git adapters and V1-only durable evidence; it does not call the direct compatibility `V1ReleaseRollback`. They remain separate from `GitReleaseCoordinator`: V1 uses `commit -a`, allow-empty release commits, fixed `v` tags, immediate pushes, and destructive compensation with a distinct evidence contract.
 - Production `main` constructs GoReleaser, JReleaser, and release-it explicitly and passes an immutable fixed catalog to the V1 application. The catalog invokes exactly one configured executor. Concrete executor packages no longer self-register or inspect source format.
 - Each executor has consumer-owned process/file/config/environment/token/clock ports matching its actual behavior. GoReleaser and release-it receive the legacy environment and redact `GITHUB_TOKEN` from process output/errors. JReleaser resolves the legacy token explicitly, appends only `JRELEASER_GITHUB_TOKEN`, and uses an injected clock for inception-year generation. Shared redaction preserves underlying error causes.
-- V1 response timestamps use the existing command clock. V1 release execution persists no timestamp. The only executor wall-clock read is behind JReleaser's system clock adapter for generated init configuration.
+- V1 response timestamps use the existing command clock. The compensation store uses the injected clock for evidence `createdAt` and `updatedAt`; these are recovery facts, not response values. The only executor wall-clock read is behind JReleaser's system clock adapter for generated init configuration.
 
 ### Shared versus isolated capabilities
 
@@ -223,11 +224,11 @@ Shared capabilities have identical contracts:
 - canonical V1 model/load/validation/write operations;
 - normalized repository/unit read models;
 - pure SemVer interpretation and release command response mapping where the schemas already match;
-- V1 binary lookup, file existence, process-result redaction, release Git writes, and rollback order shared by all V1 executors.
+- V1 binary lookup, file existence, process-result redaction, release Git writes, executor evidence vocabulary, and fixed compensation order shared by all V1 executors.
 
 Isolated capabilities differ materially:
 
-- V1 requirements/preflight, Git mutation, rollback, token handling, executor commands, and single-file materialization remain separate from V2 journals, targeted staging, typed dispatch token, recovery, and evidence-preserving failure policy;
+- V1 requirements/preflight, Git mutation, compensation evidence, token handling, executor commands, and single-file materialization remain separate from V2 journals, targeted staging, typed dispatch token, recovery, and evidence-preserving failure policy;
 - GoReleaser, JReleaser, and release-it keep separate subprocess/config/environment/clock ports because their command, file, token, publication, and ownership contracts differ;
 - migration may consume only canonical V1 read models/loaders/validation. Architecture guards prohibit migration from importing the V1 release use case, executor request, Git mutation, or rollback internals.
 
@@ -243,8 +244,10 @@ The retained public compatibility surfaces are direct delegates:
 Bounded limitations remain:
 
 - the compatibility registry and version-evidence package variables remain mutable for old callers/tests but are unreachable from production release composition;
-- the underlying legacy GitHub deletion client still uses `http.DefaultClient` and current-directory Git discovery, scoped behind a replaceable release-owned client and repository-root adapter;
-- V1 rollback is best-effort and not crash-safe, journaled, or universally reversible;
+- direct callers of the legacy `V1ReleaseRollback` compatibility surface retain its characterized in-memory, best-effort behavior; the active V1 application does not use it;
+- pending/uncertain remote deletion or push, a pending revert, release-it failure, and executor push/publication ambiguity intentionally require manual recovery rather than remote inference or blind retry;
+- the active release invocation is recorded as one pending executor effect, so interruption inside an executor is conservatively classified as manual instead of inferred from remote state;
+- the single `current.json` record is retained after completion and may be replaced by a later attempt; inspection, archival, and schema-lifecycle tooling remain deferred to H3;
 - `ReleaseTransaction` retains inactive V2-local preparation tests, but production blocks V2 local execution and no concrete V1 executor implements or branches into that path. The former JReleaser V2-local bypass was removed rather than activated;
 - process-global workspace selection and compatibility current-directory facades remain outside this stage.
 
@@ -330,11 +333,11 @@ The serialized strings remain compatible with earlier journals. New execution pe
 | Dependency | Current access | Test seam | Risk |
 | --- | --- | --- | --- |
 | Working directory | `workspace.ChangeToProjectRoot`, `ToolBase.InUnitRoot`, many relative paths | temp dirs plus `os.Chdir` | Process-global state prevents parallel handler tests and hides path dependencies. |
-| Filesystem | shared config pair persistence; focused init, plugin-index, migration, V1 materialization, preflight, and executor config/file boundaries | pair replacement seams; command-owned file/config ports; temporary directories | V1 uses its canonical single-file writer and intentionally does not share the V2 pair transaction. Inactive paths retain some direct `os.*`. |
-| Git | active V2 release/resume use one `GitReleaseCoordinator`; V1 uses `SystemV1GitWriter`, `V1ReleaseRollback`, and a preflight repository port; queries retain command-owned read ports | fake V1 Git/rollback capabilities, coordinator runner, query capabilities, and real temp repositories | V1 destructive compensation differs from V2 evidence preservation and is intentionally isolated. |
+| Filesystem | shared config pair persistence; focused init, plugin-index, migration, V1 materialization, compensation evidence/config, preflight, and executor config/file boundaries | pair replacement seams; V1 evidence-store/config ports; command-owned file/config ports; temporary directories | V1 uses its canonical single-file writer plus a private `0700` common-dir evidence directory and atomically replaced `0600` record; it intentionally does not share the V2 pair transaction. Inactive paths retain some direct `os.*`. |
+| Git | active V2 release/resume use one `GitReleaseCoordinator`; active V1 uses `SystemV1GitWriter`, root-aware named compensation adapters, and a preflight repository port; direct compatibility callers may still use `V1ReleaseRollback`; queries retain command-owned read ports | fake V1 Git/evidence capabilities, coordinator runner, query capabilities, and real temp repositories | V1 destructive compensation uses a fixed V1-only evidence contract and remains intentionally isolated from V2 recovery. |
 | Environment/token | V1-owned legacy token/environment ports; V2 `EnvironmentGitHubActionsDispatchTokenResolver` returning `GitHubActionsDispatchToken` | sentinel fake token/environment/process adapters | V1 and V2 intentionally retain different token types, variable injection, messages, and behavior. |
-| Network | release-owned V1 GitHub removal client below the rollback port; injected V2 dispatch transport | fake V1 remover/client and local HTTP transport; V2 `RoundTripper` | The underlying V1 compatibility client still uses `http.DefaultClient`, but application/rollback ordering is testable without it. |
-| Time | `ReleaseClock` for release/resume responses and active V2 persistence; command-owned query clocks; JReleaser init `v1Clock` | injected fixed clocks and persisted timestamp tests | V1 execution persists no timestamp; direct compatibility model fallbacks remain. |
+| Network | bounded, root-aware V1 GitHub Release client; injected V2 dispatch transport | fake V1 remover/client and local HTTP transport; V2 `RoundTripper` | The active V1 client has a finite timeout, bounded response reads, explicit repository root, a narrow typed-token boundary, and verified GET/DELETE/not-found behavior. |
+| Time | `ReleaseClock` for release/resume responses, active V2 persistence, and V1 compensation evidence; command-owned query clocks; JReleaser init `v1Clock` | injected fixed clocks and persisted timestamp tests | V1 evidence timestamps support auditability but do not infer completion; direct compatibility model fallbacks remain. |
 | External executables | V1-owned Git/executor process and binary-locator adapters; `du` and inactive paths retain direct execution | fake per-executor runners plus local fake processes | Exact V1 command order, environment, outputs, warnings, failures, and ownership are isolated and characterized. |
 | Logging | package-global `log.Verbose` and direct logging throughout domain/orchestration | source assertions and output inspection | Presentation concerns occur inside planning and side-effect code. |
 | Tool registry | explicit compatibility-only `pkg/release/tool` aggregator | registry characterization; production fixed catalog tests | The mutable map remains for old callers but production neither imports nor reads it. |
@@ -365,7 +368,7 @@ The following are current behavior. They are not statements that every behavior 
 | INV-18 | A handoff-ready execution journal is considered resolved and is excluded by `FindUnresolved`; a new release command therefore plans from updated V2 state rather than reopening the completed transaction. | `FindUnresolved` and active runner state update | happy-path runner and explicit completed-journal exclusion tests; a subsequent active release remains uncharacterized |
 | INV-19 | V2 release dry-run does not resolve a token, fetch, write state/manifests/journals, run an executor, commit, tag, push, dispatch, publish, or invoke rollback. It still validates the executor config file and reads planned file content/hashes. | `releaseStartOperation`, `ValidateRequirementsForContext`, `planV2Release` | `dry_run_test.go`, materializer tests, coordinator dry-run test |
 | INV-20 | V1 preview uses local evidence, returns the calculated version, and does not fetch, resolve a token, write config, invoke Git/executor/rollback, or construct a command response. Real execution refreshes tag evidence only after preflight. | `v1ReleasePreviewUseCase`, `v1ReleaseExecutionUseCase`, `v1ReleasePlanningOperation` | V1 planner/preview/execution order tests and compatibility two-pass evidence test |
-| INV-21 | V1 rollback is reachable only after an executor returns failure and recorded evidence guards every destructive compensation. Empty evidence is a no-op. Config restoration precedes GitHub/tag/commit/cleanup compensation. | `recoverExecutorFailure`, `GitReleaseState.hasMutatingStep`, `V1ReleaseRollback.Rollback` | focused use-case restoration tests plus complete V1 rollback order/failure/fallback/no-mutation matrix |
+| INV-21 | Active V1 execution creates strict private evidence before mutation. Each required compensation persists pending intent before its side effect, verifies success before confirmation, and runs in the fixed config/GitHub/local-tag/remote-tag/revert-or-reset/cleanup order. Supported repeatable local pending work may continue; remote, non-repeatable, corrupt, or uncertain evidence fails closed. | `v1ReleaseExecutionUseCase`, `SelectV1CompensationOperation`, `continueV1Compensation`, named V1 compensation operations and store | characterization, schema/store/policy, operation interruption, adapter, GitHub-client, and next-invocation integration tests |
 | INV-22 | V2 code does not perform destructive automatic rollback after commit/tag/push uncertainty. Local snapshots are restored only before the unsafe boundary; later failures preserve evidence. | active runner, `GitReleaseCoordinator`, `ReleaseTransaction.fail` | source assertions plus active-runner commit, tag, commit-push, and tag-push failure tests; state/materialization/store-write boundaries still lack active-runner seams |
 | INV-23 | Execution and dispatch journals contain release facts and hashes, not file bytes or tokens. The typed dispatch token redacts all string formatting, and dispatch errors are capped and redact the exact secret. | journal models, `GitHubActionsDispatchToken`, `sanitizeDispatchText`, store permissions | typed-token formatting/source tests, journal/dispatcher tests, and sentinel assertions across logs, runner errors, command responses, and both journals |
 | INV-24 | Public response status/error schemas and error codes are command contracts, but they are currently constructed in multiple packages. Unexpected handler errors become fatal top-level `EXECUTION_ERROR`. | `plugin.Response`, `main.main`, handler response helpers | focused V2 release/resume status, code, metadata, renderer, and ordered-item contracts; other public commands remain incomplete |
@@ -465,23 +468,24 @@ Existing replaceable seams include:
 - `ReleaseClock` across response mapping, active journal stores, runner, and dispatcher.
 - `VersionMaterializer`.
 - `transactionExecutor` in the inactive `ReleaseTransaction` preparation path.
-- V1 preview/execution plan builders, requirements, preflight repository, config store, fixed executor catalog, reporter, release Git writer, guarded rollback operations, GitHub Release client, per-executor process/config/file/environment/token/clock ports, and shared binary/file/redaction adapters.
+- V1 preview/execution plan builders, requirements, preflight repository, config store, fixed executor catalog, reporter, release Git writer, compensation evidence store/policy/named operations, bounded GitHub Release client, per-executor process/config/file/environment/token/clock ports, and shared binary/file/redaction adapters.
 - package variables `refreshVersionTags` and `latestVersionTag` for V1 version-guard tests.
 
 Important missing seams include:
 
 - process-global workspace/current-directory compatibility paths and inactive release transaction factories;
-- the legacy GitHub deletion implementation below the replaceable V1 client still relies on `http.DefaultClient` and current-directory remote discovery;
+- direct compatibility callers can still reach the legacy best-effort `V1ReleaseRollback`; its behavior is not the active V1 recovery protocol;
 - registry and version-evidence globals remain mutable only for compatibility tests/direct callers;
 - a command-decoding policy for wrong flag types; the Stage 2 parsers deliberately preserve silent defaults because rejection would be a new public behavior.
 
 ## Bounded post-refactor limitations, prioritized
 
-1. V1 rollback remains best-effort, destructive, and non-journaled; a process crash or failed compensation can require manual recovery.
-2. `ReleaseTransaction` preparation and `GitReleaseCoordinator.Coordinate` remain inactive/convenience paths; production does not select them.
-3. Process-global workspace selection and compatibility current-directory facades still limit parallel in-process command execution.
-4. Completed V2 release behavior after journal exclusion and subsequent planning remains less directly characterized than the primary release/recovery matrix.
-5. Plugin-index symlink/output-confinement policy remains deliberately undefined; the established arbitrary requested-path behavior is preserved.
+1. V2 config/state pair persistence and migration retain crash windows that H2 must classify and recover without claiming cross-file atomicity.
+2. Active V1 compensation is interruption-safe for supported local actions, but deliberately requires manual recovery for pending/uncertain remote actions, pending revert, corrupt evidence, and uncertain executor outcomes; direct legacy rollback callers remain best-effort.
+3. `ReleaseTransaction` preparation and `GitReleaseCoordinator.Coordinate` remain inactive/convenience paths; production does not select them.
+4. Process-global workspace selection and compatibility current-directory facades still limit parallel in-process command execution.
+5. Completed V2 release behavior after journal exclusion and subsequent planning remains less directly characterized than the primary release/recovery matrix.
+6. Plugin-index symlink/output-confinement policy remains deliberately undefined; the established arbitrary requested-path behavior is preserved.
 
 ## Compatibility constraints for future work
 
@@ -506,6 +510,7 @@ The post-refactor verification found one bounded deviation from the strict prese
 - Completed stages: 9 / 9
 - Remaining stages: 0
 - Release Plugin refactor: completed
-- Next milestone: H1 — Make V1 compensation interruption-safe
+- Completed roadmap milestones: H1 — Make V1 compensation interruption-safe
+- Next milestone: H2 — Make pair and migration crash recovery explicit
 
-H1 and the later milestones are maintained in [post-refactor-roadmap.md](post-refactor-roadmap.md). They are not Stage 10; the historical refactor ledger remains closed.
+H1 and the later milestones are maintained in [post-refactor-roadmap.md](post-refactor-roadmap.md). Roadmap milestones are not refactor stages; the historical refactor ledger remains closed.

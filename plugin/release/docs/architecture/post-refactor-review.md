@@ -128,15 +128,15 @@ Migration uses `config.V2ReleasePairPersister`, verifies exact target bytes and 
 
 Production `main` explicitly constructs `goreleaser.NewV1Executor`, `jreleaser.NewV1Executor`, and `releaseit.NewV1Executor` and passes them to `HandleReleaseWithV1Executors`. The fixed catalog selects one executor without mutable registry lookup.
 
-The V1 application owns typed intent, preview/execution requests, pure planning, classified failures, and visible execution order. Focused capabilities own requirements, preflight, version evidence, config materialization, Git writes, rollback, process invocation, file inspection, environment/token access, and JReleaser time.
+The V1 application owns typed intent, preview/execution requests, pure planning, classified failures, and visible execution order. Focused capabilities own requirements, preflight, version evidence, config materialization, compensation evidence, named Git/GitHub compensation, process invocation, file inspection, environment/token access, and JReleaser time.
 
-V1 rollback remains intentionally separate from V2 recovery. It may delete a GitHub Release and tags, create and push a revert or fallback commit, hard-reset an unpushed release commit, and clean untracked files according to recorded evidence. It is best-effort compensation without a durable journal.
+Active V1 compensation remains intentionally separate from V2 recovery. Its strict V1-only record at `<git-common-dir>/neko/release/v1-compensation/current.json` captures release identity, exact original config bytes and hashes, executor/Git evidence, fixed action fields, pending/confirmed outcomes, and timestamps. Named operations restore config, remove a GitHub Release and tags, revert and push or reset the release commit, and clean untracked release files. They persist intent before effects and verify before confirmation. Uncertain remote/executor evidence fails closed. The direct `V1ReleaseRollback` compatibility surface retains its characterized best-effort behavior but is not selected by the active application.
 
 ## Git ownership
 
 Active V2 release and resume use one `GitReleaseCoordinator` instance per composed operation graph. Consumer-owned adapters expose only the preflight, stage, commit, tag, push, verification, or inspection methods needed by each operation. `GitReleaseCoordinator.Coordinate` is not selected by production.
 
-V1 uses `SystemV1GitWriter`, `V1ReleaseRollback`, and the V1 preflight repository adapter because its commit, push, and destructive-compensation contracts differ from V2. Read-only query adapters use `pkg/git` for their legacy and selected-path reads. Migration has a migration-owned Git-root resolver.
+Active V1 execution uses `SystemV1GitWriter`, root-aware named compensation adapters, the V1 compensation evidence store, and the V1 preflight repository adapter because its commit, push, and destructive-compensation contracts differ from V2. `V1ReleaseRollback` remains reachable only through direct compatibility calls. Read-only query adapters use `pkg/git` for their legacy and selected-path reads. Migration has a migration-owned Git-root resolver.
 
 These owners are intentionally distinct; no active flow has two selectable Git implementations for the same intention.
 
@@ -152,9 +152,9 @@ Migration owns a separate compatible worktree journal because its source/target 
 
 `EnvironmentGitHubActionsDispatchTokenResolver` is the production V2 `GITHUB_TOKEN` reader. It returns `GitHubActionsDispatchToken`; only dispatch adapters unwrap the value, and string formatting remains redacted.
 
-V1 keeps its legacy token/environment behavior behind executor- and rollback-owned adapters. GoReleaser and release-it pass the legacy environment with redaction. JReleaser maps the legacy token to `JRELEASER_GITHUB_TOKEN` and uses an injected year clock.
+V1 keeps its legacy token/environment behavior behind executor- and compensation-owned adapters. GoReleaser and release-it pass the legacy environment with redaction. JReleaser maps the legacy token to `JRELEASER_GITHUB_TOKEN` and uses an injected year clock. The bounded GitHub client receives a redacting typed token that is unwrapped only while constructing the request.
 
-`ReleaseClock` supplies active release/resume response timestamps and V2 execution/dispatch persistence. Query commands own their response clocks. Model-level zero-time fallbacks and public constructors with system defaults remain compatibility behavior for direct callers. V1 execution persists no timestamp.
+`ReleaseClock` supplies active release/resume response timestamps, V2 execution/dispatch persistence, and V1 compensation evidence timestamps. Query commands own their response clocks. Model-level zero-time fallbacks and public constructors with system defaults remain compatibility behavior for direct callers.
 
 ## Config, state, and materialization ownership
 
@@ -192,33 +192,23 @@ Priority means:
 - **P2** — bounded architectural or compatibility debt;
 - **P3** — optional cleanup.
 
-No P0 issue was found. The active V2 GitHub Actions path preserves evidence around uncertain operations, blocks ambiguous retry, and has a complete pending-action boundary around its unsafe mutations. The P1 items below are real risks but are either confined to V1 execution or require a process/machine interruption during pair persistence or migration.
+No P0 issue was found. The active V2 GitHub Actions path preserves evidence around uncertain operations, blocks ambiguous retry, and has a complete pending-action boundary around its unsafe mutations. H1 resolved the active V1 P1 items below; the remaining P1 risks require a process or machine interruption during pair persistence or migration.
 
-### D-01 — Destructive V1 compensation is best-effort and non-journaled
+### D-01 — Destructive V1 compensation was best-effort and non-journaled
 
-- **Affected files or symbols:** `pkg/release/v1_git_adapters.go`; `V1ReleaseRollback.Rollback`; `GitReleaseState`; executor `Rollback` / `RevertRelease` methods.
-- **Current behavior:** After executor failure, V1 may delete a GitHub Release, delete local and remote tags, create and push a revert or fallback commit, hard-reset an unpushed commit, and clean untracked files. In-memory flags guard the order, but no durable intent or confirmation is written.
-- **Why it remains:** These destructive semantics are characterized V1 compatibility behavior. Stage 9 isolated them without authorizing a behavior or recovery-format change.
-- **Risk:** A crash, interruption, stale in-memory flag, or partial compensation can leave remote and local state divergent. Later cleanup may lack enough evidence to determine which actions completed.
-- **User or developer impact:** A failed V1 release can require manual Git/GitHub recovery and can remove untracked work as part of the legacy contract.
-- **Removal or improvement preconditions:** Decide the supported lifetime of V1; characterize interruption evidence and all remote/local partial states; define a compatible durable record or explicitly narrow destructive compensation; document manual recovery and migration guidance.
-- **Recommended action:** **Harden**. Do not broaden compensation. Prefer durable evidence and explicit refusal when completion is uncertain.
-- **Priority:** **P1**.
-- **Proposed milestone:** **H1 — Make V1 compensation interruption-safe**.
-- **Blocking new features:** Blocks new V1 release execution or rollback features. It does not block read-only work or unrelated V2 features.
+- **Status:** **Resolved by H1** for the active V1 application. Direct compatibility calls to `V1ReleaseRollback` retain their characterized best-effort semantics.
+- **Affected files or symbols:** `v1_compensation_evidence.go`; `v1_compensation_store.go`; `v1_compensation_policy.go`; `v1_compensation_operations.go`; `v1_compensation_adapters.go`; `v1_release_use_case.go`; executor `CompensationState` methods.
+- **Current behavior:** The active application creates private, strict, hashed evidence before mutation and records pending intent before every fixed compensation effect. Exact config restoration and repeatable local Git operations can continue on the next invocation; remote, non-repeatable, corrupt, and uncertain states require manual recovery. No generic transition API or executable action list was introduced.
+- **Remaining boundary:** An interruption inside the executor is not remotely inferred. release-it failures and GoReleaser/JReleaser push/publication ambiguity remain manual by design. H3 owns future inspection or archival tooling.
+- **Completed milestone:** **H1 — Make V1 compensation interruption-safe**.
 
-### D-02 — Legacy GitHub Release deletion has an unbounded global HTTP client
+### D-02 — Active V1 GitHub Release deletion used an unbounded global HTTP client
 
-- **Affected files or symbols:** `pkg/git/repository.go`; `DeleteGithubRelease`; `http.DefaultClient`; `legacyV1GitHubReleaseClient`; `systemV1GitHubReleaseRemover`.
-- **Current behavior:** The release-owned rollback adapter is replaceable, but its production compatibility client changes the process cwd, discovers the GitHub remote there, and performs GET/DELETE requests through `http.DefaultClient`. Error bodies are read without a configured limit before the outer adapter redacts the token.
-- **Why it remains:** Stage 9 preserved the legacy GitHub API behavior beneath a testable release-owned boundary and did not change network semantics.
-- **Risk:** Rollback can hang without a client timeout, consume an unexpectedly large error body, or be influenced by global HTTP-client mutation. Process cwd remains an implicit input to remote selection.
-- **User or developer impact:** V1 recovery may stall or report an oversized third-party error while other compensation is stopped.
-- **Removal or improvement preconditions:** Pin status/body compatibility, inject a bounded client and explicit repository target, retain token redaction and idempotent 404 handling, and prove no real network use in tests.
-- **Recommended action:** **Harden** within the V1 rollback boundary.
-- **Priority:** **P1**.
-- **Proposed milestone:** **H1 — Make V1 compensation interruption-safe**.
-- **Blocking new features:** Blocks expansion of V1 remote compensation. It does not block V2 dispatch or read-only features.
+- **Status:** **Resolved by H1** for the active V1 application.
+- **Affected files or symbols:** `v1_github_release_client.go`; `systemV1GitHubReleaseRemover`; `v1GitHubToken`.
+- **Current behavior:** The injected client receives an explicit repository root, derives a canonical GitHub target without changing cwd, uses a finite 15-second timeout, caps response reads at 64 KiB, never includes response bodies in diagnostics, and verifies deletion with a final not-found lookup. The typed token is unwrapped only at request construction and never reaches evidence, errors, logs, or responses.
+- **Remaining boundary:** The old raw `pkg/git` helper remains an exported compatibility candidate for C2, but active V1 compensation cannot reach it.
+- **Completed milestone:** **H1 — Make V1 compensation interruption-safe**.
 
 ### D-03 — V2 config/state pair persistence is not crash-atomic
 
@@ -405,7 +395,7 @@ No P0 issue was found. The active V2 GitHub Actions path preserves evidence arou
 ### D-17 — Superseded raw Git helpers have no internal production consumers
 
 - **Affected files or symbols:** `pkg/git/repository.go`; `LastCommit`, `TotalCommits`, `FilesCount`, `RepoSize`, `Head`, `CleanUntracked`, `DeleteLocalTag`, `DeleteRemoteTag`, `RevertCommit`, `CreateCommit`, and `HardResetTo`.
-- **Current behavior:** These exported cwd-based helpers remain compiled. Repository-wide search found no production consumer for them; active V1 rollback uses `systemV1RollbackGit`, while `cmd/version.go` still consumes `git.Current` and query paths consume other `pkg/git` reads.
+- **Current behavior:** These exported cwd-based helpers remain compiled. Repository-wide search found no production consumer for them; active V1 compensation uses root-aware focused adapters, while direct legacy rollback uses `systemV1RollbackGit`, `cmd/version.go` still consumes `git.Current`, and query paths consume other `pkg/git` reads.
 - **Why it remains:** Exported symbols may have downstream consumers, and Stage 9 did not authorize compatibility deletion.
 - **Risk:** The destructive helpers can be mistaken for the canonical V1 rollback adapter and bypass repository-root, environment-redaction, and test seams.
 - **User or developer impact:** No current command uses them, but external embedders may.
@@ -482,7 +472,7 @@ No code is labeled dead solely from an IDE result. Classification uses productio
 
 ### Bounded technical debt
 
-- P1 V1 rollback/network safety and config/state/migration crash windows;
+- P1 config/state pair and migration crash windows; the former V1 rollback/network items were resolved for active execution by H1;
 - P2 mutable compatibility globals, process cwd, broad public compatibility surfaces, inactive paths, and absent journal lifecycle tooling;
 - P3 arbitrary plugin-index output policy, empty-directory residue, repeated-release characterization gap, and superseded raw Git helpers.
 
@@ -492,4 +482,4 @@ No code is labeled dead solely from an IDE result. Classification uses productio
 
 The violation does not change the historical ledger: all nine planned refactor stages were completed. It means “completed” is a closed milestone record, not a claim that no future architecture maintenance exists.
 
-The prioritized implementation sequence, acceptance criteria, and commit boundaries are defined in [post-refactor-roadmap.md](post-refactor-roadmap.md). The recommended next milestone is **H1 — Make V1 compensation interruption-safe**.
+The prioritized implementation sequence, acceptance criteria, and commit boundaries are defined in [post-refactor-roadmap.md](post-refactor-roadmap.md). H1 is completed. The recommended next milestone is **H2 — Make pair and migration crash recovery explicit**.

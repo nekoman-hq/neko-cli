@@ -4,6 +4,11 @@
 
 The behavior-preserving Release Plugin refactor is closed at 9 / 9 stages. This roadmap starts after that ledger; none of the milestones below is Stage 10 or reopens a completed stage.
 
+- Refactor: completed
+- Post-refactor review: completed
+- H1: completed
+- Next roadmap milestone: **H2 — Make pair and migration crash recovery explicit**
+
 The architecture evidence, debt ranking, compatibility inventory, and removal candidates behind this roadmap are in [post-refactor-review.md](post-refactor-review.md). The detailed runtime and disk contracts remain in [current-state.md](current-state.md). Every implementation milestone remains subject to `plugin/release/RULES.md`.
 
 Milestone namespaces distinguish the nature of future work:
@@ -15,7 +20,7 @@ Milestone namespaces distinguish the nature of future work:
 | `DX` | Developer experience | Clarify presentation, composition, and filesystem policies |
 | `F` | New features | Add separately authorized user-facing capabilities |
 
-The recommended next milestone is **H1 — Make V1 compensation interruption-safe**. It addresses the highest-severity active risk: destructive V1 rollback can change local Git and GitHub state without durable intent or confirmation. H1 does not imply that all compatibility cleanup must precede product work. In particular, read-only F1 can proceed independently after its own characterization and can be developed in parallel if it does not touch H1 files or contracts.
+H1 — Make V1 compensation interruption-safe is completed. The recommended next milestone is **H2 — Make pair and migration crash recovery explicit**. H2 addresses the remaining P1 crash windows across V2 config/state pair replacement and migration. Compatibility cleanup still does not have to precede unrelated product work; read-only F1 may proceed independently when it does not touch H2 files or contracts.
 
 ## Sequencing and gates
 
@@ -32,7 +37,7 @@ F1  (independent of C1/C2; token-free and read-only)
 F2  (decision milestone; implementation requires a later approved design)
 ```
 
-- Start with H1 because its risk includes destructive remote compensation.
+- H1 established the durable V1 compensation baseline; new V1 mutation work must preserve it.
 - H2 precedes changes that add multi-file config/state writes or broaden migration.
 - H3 precedes any journal schema change or automated repair behavior.
 - C1 must establish support and deprecation policy before C2 removes exported compatibility code.
@@ -44,15 +49,15 @@ F2  (decision milestone; implementation requires a later approved design)
 
 ### H1 — Make V1 compensation interruption-safe
 
-- **Objective:** Preserve durable intent and outcome evidence around every destructive V1 compensation action, and bound the legacy GitHub deletion client so an interrupted or uncertain rollback fails closed instead of guessing.
-- **User value:** A failed V1 release has an auditable recovery record and cannot silently continue destructive cleanup after the process loses proof of what already happened.
-- **Characterize first:** Pin the current rollback order, state-flag prerequisites, idempotent/not-found outcomes, partial Git/GitHub failures, token redaction, untracked-file deletion, and executor-specific failure mapping. Add interruption cases before changing production behavior.
-- **Scope:** `V1ReleaseRollback`, its Git and GitHub adapters, bounded HTTP client construction, durable compensation evidence, supported continuation/refusal decisions, operator-facing recovery guidance, and exact compatibility response mapping.
-- **Non-goals:** V1 redesign, V1 removal, broader compensation, remote-state inference, blind retry, V2 journal reuse, or a generic transaction/workflow engine.
-- **Dependencies:** Existing Stage 9 V1 characterization; an explicit location, schema, permissions, and lifecycle decision for V1 evidence; agreement on supported manual versus automatic continuation.
-- **Risks:** A new journal can itself become stale or corrupt; tightening a legacy timeout can expose previously hidden hangs as errors; resuming destructive work from insufficient evidence would be worse than the current behavior.
-- **Acceptance criteria:** Every destructive action records intent before mutation and confirmation only after verified success; uncertain evidence blocks automatic continuation; network requests use an injected client with a finite timeout and bounded error reads; repository root is explicit; secrets never reach files, errors, logs, or responses; pre-existing V1 behavior remains characterized; no V2 ordering or schema changes; full failure-injection tests pass.
-- **Expected commit boundaries:** (1) characterization only; (2) bounded/root-aware GitHub client; (3) durable evidence model and store; (4) rollback integration plus refusal/continuation policy; (5) recovery documentation and final architecture validation. Keep executor-specific behavior in independently revertible commits where practical.
+- **Status:** **Completed.** Active V1 execution now fails closed around interrupted or uncertain compensation while preserving the public command response contract and all V2 ordering/schema boundaries.
+- **Evidence ownership:** Schema version 1 is V1-only and lives at `<git-common-dir>/neko/release/v1-compensation/current.json` beneath a private `0700` directory with an atomically replaced `0600` file. Strict decoding rejects unknown, corrupt, unhashed, or unsupported evidence. The fixed record contains release identity, exact original config content/hash, executor/Git facts, release/config status, eight typed action fields, failure classification, and timestamps. It contains no token, headers, callbacks, response body, raw failure string, generic map, or executable action list.
+- **Operation order:** restore exact V1 config; delete GitHub Release; delete local tag; delete remote tag; revert release commit then push the revert, or reset an unpushed release commit; clean untracked release files. Every required operation persists pending intent before its side effect, verifies success where observable, and persists confirmation afterward. A failure stops all later effects.
+- **Automatic continuation:** A subsequent V1 release invocation continues supported repeatable local actions and does not replay confirmed effects. An absent local tag is verified as already complete. Completed evidence is retained and safely replaced only when a later attempt starts.
+- **Manual recovery boundary:** Pending or uncertain GitHub deletion, remote tag deletion, or revert push; a pending/non-repeatable revert; corrupt/unsupported evidence; and interruption or ambiguity inside an executor block automatic continuation with the evidence path. No remote-state inference, blind retry, fallback mutation, repair command, V2 journal reuse, or generic transaction engine was added.
+- **Executor policy:** GoReleaser may compensate only proven local effects; push/publication ambiguity is manual. JReleaser may compensate only before commit/push/publication ambiguity. release-it failure is always externally uncertain because the subprocess owns all Git and publication effects.
+- **Network boundary:** The active GitHub client is injected, root-aware, uses a 15-second timeout and 64 KiB response cap, verifies GET/DELETE/not-found, and unwraps a redacting typed token only at request construction. It never changes cwd or uses `http.DefaultClient`.
+- **Compatibility:** Direct legacy `V1ReleaseRollback` calls remain characterized best-effort delegates. The active V1 application uses only the new fixed named operations. Public flags, schemas, response codes, fatal mapping, and executor selection are unchanged.
+- **Delivered commits:** H1.1 characterization `43f5997`; H1.2 evidence model/store/policy `4b40f6a`; H1.3 active interruption-safe integration `3fde644`; H1.4 documentation and roadmap closure uses commit message `docs(release): complete h1 compensation hardening`.
 
 ### H2 — Make pair and migration crash recovery explicit
 
@@ -151,7 +156,7 @@ F2  (decision milestone; implementation requires a later approved design)
 - **Characterize first:** Pin existing dry-run calculations and outputs for V1/V2, unit selection, version/tag rules, materialization validation, unresolved-journal checks, and structured/fatal response boundaries.
 - **Scope:** A dedicated query/use-case boundary, typed facts, human and structured response mapping, manifest/docs changes if a new command is selected, and reuse of pure planning capabilities.
 - **Non-goals:** Token resolution, file writes, Git mutation, workflow dispatch, remote probing, retry, or changing existing dry-run behavior incidentally.
-- **Dependencies:** Completed refactor planning seams; no dependency on C1 or C2. H1 remains the recommended next overall milestone, but F1 may proceed independently when work does not overlap.
+- **Dependencies:** Completed refactor planning seams; no dependency on C1 or C2. H2 is the recommended next overall milestone, but F1 may proceed independently when work does not overlap.
 - **Risks:** Reusing a runner facade could accidentally construct mutating adapters; duplicated planning could drift; exposing filesystem details may create a new public contract.
 - **Acceptance criteria:** Tests prove zero writes/process mutations/network/token reads; calculations match canonical release planning; selected paths are validated; results are typed until presentation; command and manifest contracts agree; V1 compatibility is explicit rather than inferred.
 - **Expected commit boundaries:** (1) behavior/contract characterization; (2) typed query and pure planning reuse; (3) response mapping and command/manifest integration; (4) docs and architecture guards.
@@ -183,6 +188,6 @@ The following are not backlog omissions. They remain deliberate boundaries until
 
 ## Roadmap completion reporting
 
-Roadmap progress is reported independently from the historical refactor ledger. A future status should say, for example, “Refactor stages: 9 / 9 completed; roadmap milestone H1: completed.” It must not report H1 as Stage 10.
+Roadmap progress is reported independently from the historical refactor ledger: “Refactor stages: 9 / 9 completed; roadmap milestone H1: completed; next milestone: H2 — Make pair and migration crash recovery explicit.” H1 must not be reported as Stage 10.
 
 Each milestone begins with characterization, retains independently revertible commit boundaries, runs the full uncached Release Plugin and repository validation required by `plugin/release/RULES.md`, and updates this roadmap plus the architecture review when evidence changes a priority or recommendation.
