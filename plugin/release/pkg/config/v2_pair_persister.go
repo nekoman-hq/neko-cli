@@ -1,12 +1,10 @@
-package init
+package config
 
 import (
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
 const v2ReleaseFileMode os.FileMode = 0644
@@ -33,34 +31,42 @@ type v2PairPersistenceDisk interface {
 	RestoreState(snapshot v2FileSnapshot) error
 }
 
-type v2ReleasePairPersister struct {
+// V2ReleasePair contains one complete config/state pair ready for validation or persistence.
+type V2ReleasePair struct { //nolint:govet // Config precedes its matching mutable state.
+	Config V2ReleaseConfig
+	State  V2ReleaseState
+}
+
+// V2ReleasePairPersister persists one complete, already validated V2 pair.
+type V2ReleasePairPersister struct {
 	disk v2PairPersistenceDisk
 }
 
-func newV2ReleasePairPersister(root string) v2ReleasePairPersister {
-	return v2ReleasePairPersister{disk: &osV2PairPersistenceDisk{root: root}}
+// NewV2ReleasePairPersister creates the canonical config/state pair writer for a repository.
+func NewV2ReleasePairPersister(root string) V2ReleasePairPersister {
+	return V2ReleasePairPersister{disk: &osV2PairPersistenceDisk{root: root}}
 }
 
 // Persist prepares both files before replacing either one. If either replace
 // fails it attempts to restore both prior snapshots. This is rollback-backed
 // paired persistence, not cross-file atomicity: a process or machine crash
 // between the two renames can still leave a mixed pair.
-func (persister v2ReleasePairPersister) Persist(pair v2ReleasePair) error {
+func (persister V2ReleasePairPersister) Persist(pair V2ReleasePair) error {
 	configForSerialization := pair.Config
-	configForSerialization.Units = make([]config.V2Unit, len(pair.Config.Units))
+	configForSerialization.Units = make([]V2Unit, len(pair.Config.Units))
 	for index := range pair.Config.Units {
-		configForSerialization.Units[index] = cloneV2Unit(pair.Config.Units[index])
+		configForSerialization.Units[index] = clonePairV2Unit(pair.Config.Units[index])
 	}
-	configData, err := config.CanonicalV2Config(configForSerialization)
+	configData, err := CanonicalV2Config(configForSerialization)
 	if err != nil {
 		return fmt.Errorf("prepare config data: %w", err)
 	}
-	stateData, err := config.CanonicalV2State(pair.State)
+	stateData, err := CanonicalV2State(pair.State)
 	if err != nil {
 		return fmt.Errorf("prepare state data: %w", err)
 	}
 	if createErr := persister.disk.CreateDirectory(); createErr != nil {
-		return fmt.Errorf("create %s directory: %w", config.V2Directory, createErr)
+		return fmt.Errorf("create %s directory: %w", V2Directory, createErr)
 	}
 
 	configSnapshot, err := persister.disk.CaptureConfig()
@@ -98,7 +104,7 @@ func (persister v2ReleasePairPersister) Persist(pair v2ReleasePair) error {
 	return nil
 }
 
-func (persister v2ReleasePairPersister) rollback(
+func (persister V2ReleasePairPersister) rollback(
 	operation string,
 	cause error,
 	configSnapshot v2FileSnapshot,
@@ -112,7 +118,7 @@ func (persister v2ReleasePairPersister) rollback(
 		restorationFailures = append(restorationFailures, fmt.Sprintf("restore V2 state: %v", err))
 	}
 	if len(restorationFailures) > 0 {
-		return &v2PairPersistenceError{
+		return &V2PairPersistenceError{
 			operation:   operation,
 			cause:       cause,
 			restoration: strings.Join(restorationFailures, "; "),
@@ -121,13 +127,14 @@ func (persister v2ReleasePairPersister) rollback(
 	return fmt.Errorf("%s: %w; previous config/state pair restored", operation, cause)
 }
 
-type v2PairPersistenceError struct {
+// V2PairPersistenceError reports an incomplete rollback that requires manual recovery.
+type V2PairPersistenceError struct {
 	operation   string
 	cause       error
 	restoration string
 }
 
-func (persistenceError *v2PairPersistenceError) Error() string {
+func (persistenceError *V2PairPersistenceError) Error() string {
 	return fmt.Sprintf(
 		"%s: %v; rollback failed (%s); manual recovery required",
 		persistenceError.operation,
@@ -136,8 +143,18 @@ func (persistenceError *v2PairPersistenceError) Error() string {
 	)
 }
 
-func (persistenceError *v2PairPersistenceError) Unwrap() error {
+func (persistenceError *V2PairPersistenceError) Unwrap() error {
 	return persistenceError.cause
+}
+
+// ManualRecoveryRequired reports that at least one original pair file could not be restored.
+func (persistenceError *V2PairPersistenceError) ManualRecoveryRequired() bool {
+	return true
+}
+
+// RestorationFailed identifies this as an incomplete config/state restoration.
+func (persistenceError *V2PairPersistenceError) RestorationFailed() bool {
+	return true
 }
 
 type osV2PairPersistenceDisk struct {
@@ -145,31 +162,31 @@ type osV2PairPersistenceDisk struct {
 }
 
 func (disk *osV2PairPersistenceDisk) CreateDirectory() error {
-	return os.MkdirAll(filepath.Join(disk.root, config.V2Directory), 0755)
+	return os.MkdirAll(filepath.Join(disk.root, V2Directory), 0755)
 }
 
 func (disk *osV2PairPersistenceDisk) CaptureConfig() (v2FileSnapshot, error) {
-	return captureV2File(config.V2ConfigPath(disk.root))
+	return captureV2File(V2ConfigPath(disk.root))
 }
 
 func (disk *osV2PairPersistenceDisk) CaptureState() (v2FileSnapshot, error) {
-	return captureV2File(config.V2StatePath(disk.root))
+	return captureV2File(V2StatePath(disk.root))
 }
 
 func (disk *osV2PairPersistenceDisk) CreateConfigTemp() (v2TemporaryFile, error) {
-	return config.CreateAtomicFileReplacement(config.V2ConfigPath(disk.root))
+	return CreateAtomicFileReplacement(V2ConfigPath(disk.root))
 }
 
 func (disk *osV2PairPersistenceDisk) CreateStateTemp() (v2TemporaryFile, error) {
-	return config.CreateAtomicFileReplacement(config.V2StatePath(disk.root))
+	return CreateAtomicFileReplacement(V2StatePath(disk.root))
 }
 
 func (disk *osV2PairPersistenceDisk) RestoreConfig(snapshot v2FileSnapshot) error {
-	return restoreV2File(config.V2ConfigPath(disk.root), snapshot)
+	return restoreV2File(V2ConfigPath(disk.root), snapshot)
 }
 
 func (disk *osV2PairPersistenceDisk) RestoreState(snapshot v2FileSnapshot) error {
-	return restoreV2File(config.V2StatePath(disk.root), snapshot)
+	return restoreV2File(V2StatePath(disk.root), snapshot)
 }
 
 func captureV2File(path string) (v2FileSnapshot, error) {
@@ -198,5 +215,14 @@ func restoreV2File(path string, snapshot v2FileSnapshot) error {
 		}
 		return nil
 	}
-	return config.AtomicWriteFile(path, snapshot.data, snapshot.mode)
+	return AtomicWriteFile(path, snapshot.data, snapshot.mode)
+}
+
+func clonePairV2Unit(unit V2Unit) V2Unit {
+	unit.Paths = append([]string(nil), unit.Paths...)
+	if unit.Plugin != nil {
+		pluginConfig := *unit.Plugin
+		unit.Plugin = &pluginConfig
+	}
+	return unit
 }

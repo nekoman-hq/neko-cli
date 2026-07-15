@@ -1,6 +1,7 @@
 package migrate
 
 import (
+	"errors"
 	"os"
 
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
@@ -44,20 +45,37 @@ const (
 	completedMigrationPlanKind
 )
 
+type migrationTargetOperation uint8
+
+const (
+	persistMigrationTarget migrationTargetOperation = iota + 1
+	retainMigrationTarget
+)
+
+type migrationSourceOperation uint8
+
+const (
+	archiveMigrationSource migrationSourceOperation = iota + 1
+	retainArchivedMigrationSource
+)
+
 type migrationPlan struct { //nolint:govet // The plan follows source, target, and presentation domain order.
-	repositoryRoot string
-	sourceFormat   migrationSourceFormat
-	source         migrationFileSnapshot
-	backup         migrationFileSnapshot
-	paths          migrationPathSet
-	target         migrationTarget
-	kind           migrationPlanKind
-	actions        []string
-	unitID         string
-	version        string
-	tagPrefix      string
-	executor       string
-	delivery       string
+	repositoryRoot  string
+	sourceFormat    migrationSourceFormat
+	source          migrationFileSnapshot
+	backup          migrationFileSnapshot
+	paths           migrationPathSet
+	target          migrationTarget
+	kind            migrationPlanKind
+	targetOperation migrationTargetOperation
+	sourceOperation migrationSourceOperation
+	journal         journal
+	actions         []string
+	unitID          string
+	version         string
+	tagPrefix       string
+	executor        string
+	delivery        string
 }
 
 func (plan migrationPlan) compatibilityPlan() *Plan {
@@ -96,7 +114,9 @@ type migrationCommandResult struct {
 }
 
 type migrationFailure struct {
-	cause error
+	cause                  error
+	kind                   migrationFailureKind
+	manualRecoveryRequired bool
 }
 
 func (failure *migrationFailure) Error() string {
@@ -105,4 +125,79 @@ func (failure *migrationFailure) Error() string {
 
 func (failure *migrationFailure) Unwrap() error {
 	return failure.cause
+}
+
+type migrationFailureKind uint8
+
+const (
+	migrationPlanningFailure migrationFailureKind = iota + 1
+	migrationJournalFailure
+	migrationTargetPersistenceFailure
+	migrationTargetVerificationFailure
+	migrationSourceCleanupFailure
+	migrationSourceVerificationFailure
+	migrationRestorationFailure
+)
+
+type migrationExecutionFailure struct {
+	cause                  error
+	kind                   migrationFailureKind
+	manualRecoveryRequired bool
+}
+
+func newMigrationExecutionFailure(kind migrationFailureKind, cause error) *migrationExecutionFailure {
+	manualRecoveryRequired := false
+	var restorationFailure interface {
+		RestorationFailed() bool
+	}
+	if errors.As(cause, &restorationFailure) && restorationFailure.RestorationFailed() {
+		kind = migrationRestorationFailure
+	}
+	var manualFailure interface {
+		ManualRecoveryRequired() bool
+	}
+	if errors.As(cause, &manualFailure) && manualFailure.ManualRecoveryRequired() {
+		manualRecoveryRequired = true
+	}
+	return &migrationExecutionFailure{
+		kind:                   kind,
+		cause:                  cause,
+		manualRecoveryRequired: manualRecoveryRequired,
+	}
+}
+
+func (failure *migrationExecutionFailure) Error() string {
+	return failure.cause.Error()
+}
+
+func (failure *migrationExecutionFailure) Unwrap() error {
+	return failure.cause
+}
+
+func migrationFailureFromExecution(err error) *migrationFailure {
+	var executionFailure *migrationExecutionFailure
+	if errors.As(err, &executionFailure) {
+		return &migrationFailure{
+			kind:                   executionFailure.kind,
+			cause:                  executionFailure,
+			manualRecoveryRequired: executionFailure.manualRecoveryRequired,
+		}
+	}
+	return &migrationFailure{kind: migrationTargetPersistenceFailure, cause: err}
+}
+
+type migrationManualRecoveryError struct {
+	cause error
+}
+
+func (failure *migrationManualRecoveryError) Error() string {
+	return failure.cause.Error() + "; manual recovery required"
+}
+
+func (failure *migrationManualRecoveryError) Unwrap() error {
+	return failure.cause
+}
+
+func (failure *migrationManualRecoveryError) ManualRecoveryRequired() bool {
+	return true
 }

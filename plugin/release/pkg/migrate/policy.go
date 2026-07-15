@@ -66,3 +66,17 @@ func selectMigrationPlanningOperation(classification migrationRecoveryClassifica
 		return 0, fmt.Errorf("migration recovery failed: unknown migration classification %d", classification)
 	}
 }
+
+func selectRecoveryTargetOperation(configExists, stateExists bool) migrationTargetOperation {
+	if configExists && stateExists {
+		return retainMigrationTarget
+	}
+	return persistMigrationTarget
+}
+
+func selectRecoverySourceOperation(activeSourceExists bool) migrationSourceOperation {
+	if activeSourceExists {
+		return archiveMigrationSource
+	}
+	return retainArchivedMigrationSource
+}

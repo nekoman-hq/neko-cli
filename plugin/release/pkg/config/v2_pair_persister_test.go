@@ -1,4 +1,4 @@
-package init
+package config
 
 import (
 	"errors"
@@ -6,14 +6,12 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-
-	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
 func TestV2ReleasePairPersisterSuccessPreparesBothBeforeReplace(t *testing.T) {
 	pair := testV2ReleasePair("api", "1.2.3")
 	disk := newFakeV2PairDisk()
-	persister := v2ReleasePairPersister{disk: disk}
+	persister := V2ReleasePairPersister{disk: disk}
 
 	if err := persister.Persist(pair); err != nil {
 		t.Fatalf("Persist: %v", err)
@@ -26,11 +24,11 @@ func TestV2ReleasePairPersisterSuccessPreparesBothBeforeReplace(t *testing.T) {
 	if !reflect.DeepEqual(disk.operations, wantOperations) {
 		t.Fatalf("operations = %v, want %v", disk.operations, wantOperations)
 	}
-	wantConfig, err := config.CanonicalV2Config(pair.Config)
+	wantConfig, err := CanonicalV2Config(pair.Config)
 	if err != nil {
 		t.Fatalf("canonical config: %v", err)
 	}
-	wantState, err := config.CanonicalV2State(pair.State)
+	wantState, err := CanonicalV2State(pair.State)
 	if err != nil {
 		t.Fatalf("canonical state: %v", err)
 	}
@@ -48,28 +46,28 @@ func TestV2ReleasePairPersisterPreparationFailuresDoNotReplace(t *testing.T) {
 	t.Run("directory", func(t *testing.T) {
 		disk := newFakeV2PairDisk()
 		disk.createErr = errors.New("mkdir denied")
-		err := (v2ReleasePairPersister{disk: disk}).Persist(pair)
+		err := (V2ReleasePairPersister{disk: disk}).Persist(pair)
 		assertPersistenceErrorAndOperations(t, err, "create .neko directory", disk.operations, []string{"mkdir"})
 	})
 
 	t.Run("config snapshot", func(t *testing.T) {
 		disk := newFakeV2PairDisk()
 		disk.captureConfigErr = errors.New("config unreadable")
-		err := (v2ReleasePairPersister{disk: disk}).Persist(pair)
+		err := (V2ReleasePairPersister{disk: disk}).Persist(pair)
 		assertPersistenceErrorAndOperations(t, err, "capture existing V2 config", disk.operations, []string{"mkdir", "capture-config"})
 	})
 
 	t.Run("state snapshot", func(t *testing.T) {
 		disk := newFakeV2PairDisk()
 		disk.captureStateErr = errors.New("state unreadable")
-		err := (v2ReleasePairPersister{disk: disk}).Persist(pair)
+		err := (V2ReleasePairPersister{disk: disk}).Persist(pair)
 		assertPersistenceErrorAndOperations(t, err, "capture existing V2 state", disk.operations, []string{"mkdir", "capture-config", "capture-state"})
 	})
 
 	t.Run("config temp create", func(t *testing.T) {
 		disk := newFakeV2PairDisk()
 		disk.createConfigTempErr = errors.New("config temp create failed")
-		err := (v2ReleasePairPersister{disk: disk}).Persist(pair)
+		err := (V2ReleasePairPersister{disk: disk}).Persist(pair)
 		assertPersistenceErrorAndOperations(t, err, "create V2 config temp file", disk.operations, []string{
 			"mkdir", "capture-config", "capture-state", "create-config-temp",
 		})
@@ -78,7 +76,7 @@ func TestV2ReleasePairPersisterPreparationFailuresDoNotReplace(t *testing.T) {
 	t.Run("config temp write", func(t *testing.T) {
 		disk := newFakeV2PairDisk()
 		disk.writeConfigErr = errors.New("config temp write failed")
-		err := (v2ReleasePairPersister{disk: disk}).Persist(pair)
+		err := (V2ReleasePairPersister{disk: disk}).Persist(pair)
 		assertPersistenceErrorAndOperations(t, err, "write V2 config temp file", disk.operations, []string{
 			"mkdir", "capture-config", "capture-state", "create-config-temp", "write-config-temp", "discard-config",
 		})
@@ -87,7 +85,7 @@ func TestV2ReleasePairPersisterPreparationFailuresDoNotReplace(t *testing.T) {
 	t.Run("state temp create", func(t *testing.T) {
 		disk := newFakeV2PairDisk()
 		disk.createStateTempErr = errors.New("state temp create failed")
-		err := (v2ReleasePairPersister{disk: disk}).Persist(pair)
+		err := (V2ReleasePairPersister{disk: disk}).Persist(pair)
 		assertPersistenceErrorAndOperations(t, err, "create V2 state temp file", disk.operations, []string{
 			"mkdir", "capture-config", "capture-state", "create-config-temp", "write-config-temp",
 			"create-state-temp", "discard-config",
@@ -97,7 +95,7 @@ func TestV2ReleasePairPersisterPreparationFailuresDoNotReplace(t *testing.T) {
 	t.Run("state temp write", func(t *testing.T) {
 		disk := newFakeV2PairDisk()
 		disk.writeStateErr = errors.New("state temp write failed")
-		err := (v2ReleasePairPersister{disk: disk}).Persist(pair)
+		err := (V2ReleasePairPersister{disk: disk}).Persist(pair)
 		assertPersistenceErrorAndOperations(t, err, "write V2 state temp file", disk.operations, []string{
 			"mkdir", "capture-config", "capture-state", "create-config-temp", "write-config-temp",
 			"create-state-temp", "write-state-temp", "discard-state", "discard-config",
@@ -115,7 +113,7 @@ func TestV2ReleasePairPersisterReplaceFailuresRestoreBothSnapshots(t *testing.T)
 		disk.configSnapshot = configSnapshot
 		disk.stateSnapshot = stateSnapshot
 		disk.replaceConfigErr = errors.New("config rename failed")
-		err := (v2ReleasePairPersister{disk: disk}).Persist(pair)
+		err := (V2ReleasePairPersister{disk: disk}).Persist(pair)
 		assertPersistenceErrorAndOperations(t, err, "previous config/state pair restored", disk.operations, []string{
 			"mkdir", "capture-config", "capture-state", "create-config-temp", "write-config-temp",
 			"create-state-temp", "write-state-temp",
@@ -129,7 +127,7 @@ func TestV2ReleasePairPersisterReplaceFailuresRestoreBothSnapshots(t *testing.T)
 		disk.configSnapshot = configSnapshot
 		disk.stateSnapshot = stateSnapshot
 		disk.replaceStateErr = errors.New("state rename failed")
-		err := (v2ReleasePairPersister{disk: disk}).Persist(pair)
+		err := (V2ReleasePairPersister{disk: disk}).Persist(pair)
 		assertPersistenceErrorAndOperations(t, err, "previous config/state pair restored", disk.operations, []string{
 			"mkdir", "capture-config", "capture-state", "create-config-temp", "write-config-temp",
 			"create-state-temp", "write-state-temp",
@@ -145,10 +143,10 @@ func TestV2ReleasePairPersisterRestorationFailureRequiresManualRecovery(t *testi
 	disk.restoreConfigErr = errors.New("config restore failed")
 	disk.restoreStateErr = errors.New("state restore failed")
 
-	err := (v2ReleasePairPersister{disk: disk}).Persist(testV2ReleasePair("api", "1.2.3"))
-	var persistenceError *v2PairPersistenceError
+	err := (V2ReleasePairPersister{disk: disk}).Persist(testV2ReleasePair("api", "1.2.3"))
+	var persistenceError *V2PairPersistenceError
 	if !errors.As(err, &persistenceError) {
-		t.Fatalf("restoration failure type = %T, want *v2PairPersistenceError", err)
+		t.Fatalf("restoration failure type = %T, want *V2PairPersistenceError", err)
 	}
 	for _, want := range []string{"rollback failed", "restore V2 config", "restore V2 state", "manual recovery required"} {
 		if err == nil || !strings.Contains(err.Error(), want) {
@@ -164,9 +162,9 @@ func TestV2ReleasePairPersisterRestorationFailureRequiresManualRecovery(t *testi
 
 func TestV2ReleasePairPersisterRestoresExactFilesOnSecondReplaceFailure(t *testing.T) {
 	root := t.TempDir()
-	configPath := config.V2ConfigPath(root)
-	statePath := config.V2StatePath(root)
-	if err := os.MkdirAll(root+"/"+config.V2Directory, 0755); err != nil {
+	configPath := V2ConfigPath(root)
+	statePath := V2StatePath(root)
+	if err := os.MkdirAll(root+"/"+V2Directory, 0755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 	oldConfig := []byte("old config bytes\n")
@@ -179,7 +177,7 @@ func TestV2ReleasePairPersisterRestoresExactFilesOnSecondReplaceFailure(t *testi
 	}
 	disk := &failAfterStateReplaceDisk{osV2PairPersistenceDisk: osV2PairPersistenceDisk{root: root}}
 
-	err := (v2ReleasePairPersister{disk: disk}).Persist(testV2ReleasePair("api", "1.2.3"))
+	err := (V2ReleasePairPersister{disk: disk}).Persist(testV2ReleasePair("api", "1.2.3"))
 	if err == nil || !strings.Contains(err.Error(), "previous config/state pair restored") {
 		t.Fatalf("expected recovered second-replace failure, got %v", err)
 	}
@@ -205,23 +203,23 @@ func TestV2ReleasePairPersisterRestoresExactFilesOnSecondReplaceFailure(t *testi
 	if !reflect.DeepEqual(stateData, oldState) || stateInfo.Mode().Perm() != 0640 {
 		t.Fatalf("state restoration changed bytes/mode: %q %04o", stateData, stateInfo.Mode().Perm())
 	}
-	assertNoPairTemps(t, root+"/"+config.V2Directory)
+	assertNoPairTemps(t, root+"/"+V2Directory)
 }
 
 func TestV2ReleasePairPersisterRemovesNewPairOnSecondReplaceFailure(t *testing.T) {
 	root := t.TempDir()
 	disk := &failAfterStateReplaceDisk{osV2PairPersistenceDisk: osV2PairPersistenceDisk{root: root}}
 
-	err := (v2ReleasePairPersister{disk: disk}).Persist(testV2ReleasePair("api", "1.2.3"))
+	err := (V2ReleasePairPersister{disk: disk}).Persist(testV2ReleasePair("api", "1.2.3"))
 	if err == nil || !strings.Contains(err.Error(), "previous config/state pair restored") {
 		t.Fatalf("expected recovered creation failure, got %v", err)
 	}
-	for _, path := range []string{config.V2ConfigPath(root), config.V2StatePath(root)} {
+	for _, path := range []string{V2ConfigPath(root), V2StatePath(root)} {
 		if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
 			t.Fatalf("new target survived rollback: %s (%v)", path, statErr)
 		}
 	}
-	assertNoPairTemps(t, root+"/"+config.V2Directory)
+	assertNoPairTemps(t, root+"/"+V2Directory)
 }
 
 type failAfterStateReplaceDisk struct {
@@ -255,24 +253,24 @@ func (file *failAfterReplaceFile) Discard() {
 	file.prepared.Discard()
 }
 
-func testV2ReleasePair(unitID, version string) v2ReleasePair {
-	return v2ReleasePair{
-		Config: config.V2ReleaseConfig{
+func testV2ReleasePair(unitID, version string) V2ReleasePair {
+	return V2ReleasePair{
+		Config: V2ReleaseConfig{
 			SchemaVersion: 2,
-			Units: []config.V2Unit{{
+			Units: []V2Unit{{
 				ID:               unitID,
 				Paths:            []string{"**"},
 				WorkingDirectory: ".",
 				TagPrefix:        unitID + "/v",
-				Executor: config.V2Executor{
-					Type:     config.ExecutorGoReleaser,
-					Delivery: config.DeliveryLocal,
+				Executor: V2Executor{
+					Type:     ExecutorGoReleaser,
+					Delivery: DeliveryLocal,
 				},
 			}},
 		},
-		State: config.V2ReleaseState{
+		State: V2ReleaseState{
 			SchemaVersion: 2,
-			Units: map[string]config.V2UnitState{
+			Units: map[string]V2UnitState{
 				unitID: {Version: version},
 			},
 		},

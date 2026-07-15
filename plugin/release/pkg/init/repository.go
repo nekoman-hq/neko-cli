@@ -71,14 +71,14 @@ func (loadError *v2PairLoadError) Error() string {
 }
 
 type v2Repository struct {
-	persister v2ReleasePairPersister
+	persister config.V2ReleasePairPersister
 	root      string
 }
 
 func newV2Repository(root string) *v2Repository {
 	return &v2Repository{
 		root:      root,
-		persister: newV2ReleasePairPersister(root),
+		persister: config.NewV2ReleasePairPersister(root),
 	}
 }
 
@@ -107,7 +107,10 @@ func (repository *v2Repository) ValidatePair(pair v2ReleasePair) error {
 }
 
 func (repository *v2Repository) PersistPair(pair v2ReleasePair) error {
-	return repository.persister.Persist(pair)
+	return repository.persister.Persist(config.V2ReleasePair{
+		Config: pair.Config,
+		State:  pair.State,
+	})
 }
 
 func fileExists(path string) bool {

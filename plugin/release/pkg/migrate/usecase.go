@@ -22,18 +22,18 @@ func newMigrationUseCase() migrationUseCase {
 	return migrationUseCase{
 		roots:    gitMigrationRootResolver{},
 		plans:    filesystemMigrationPlanResolver{},
-		executor: filesystemMigrationPlanExecutor{},
+		executor: newMigrationPlanExecution(),
 	}
 }
 
 func (useCase migrationUseCase) Migrate(request migrationCommandRequest) (migrationCommandResult, *migrationFailure) {
 	root, err := useCase.roots.Resolve(request.startDirectory)
 	if err != nil {
-		return migrationCommandResult{}, &migrationFailure{cause: err}
+		return migrationCommandResult{}, &migrationFailure{kind: migrationPlanningFailure, cause: err}
 	}
 	plan, err := useCase.plans.Resolve(root)
 	if err != nil {
-		return migrationCommandResult{}, &migrationFailure{cause: err}
+		return migrationCommandResult{}, &migrationFailure{kind: migrationPlanningFailure, cause: err}
 	}
 	if request.preview {
 		return migrationCommandResult{plan: previewMigrationPlan(plan), outcome: migrationPreviewed}, nil
@@ -42,7 +42,7 @@ func (useCase migrationUseCase) Migrate(request migrationCommandRequest) (migrat
 		return migrationCommandResult{plan: plan, outcome: migrationAlreadyCompleted}, nil
 	}
 	if err := useCase.executor.Execute(plan); err != nil {
-		return migrationCommandResult{}, &migrationFailure{cause: err}
+		return migrationCommandResult{}, migrationFailureFromExecution(err)
 	}
 	return migrationCommandResult{plan: plan, outcome: migrationCompleted}, nil
 }

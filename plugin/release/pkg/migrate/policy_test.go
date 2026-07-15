@@ -53,3 +53,21 @@ func TestSelectMigrationPlanningOperation(t *testing.T) {
 		t.Fatal("unknown classification was accepted")
 	}
 }
+
+func TestSelectRecoveryFileOperations(t *testing.T) {
+	if got := selectRecoveryTargetOperation(false, false); got != persistMigrationTarget {
+		t.Fatalf("missing target operation = %d, want persist", got)
+	}
+	if got := selectRecoveryTargetOperation(true, false); got != persistMigrationTarget {
+		t.Fatalf("partial target operation = %d, want persist", got)
+	}
+	if got := selectRecoveryTargetOperation(true, true); got != retainMigrationTarget {
+		t.Fatalf("complete target operation = %d, want retain", got)
+	}
+	if got := selectRecoverySourceOperation(true); got != archiveMigrationSource {
+		t.Fatalf("active source operation = %d, want archive", got)
+	}
+	if got := selectRecoverySourceOperation(false); got != retainArchivedMigrationSource {
+		t.Fatalf("archived source operation = %d, want retain", got)
+	}
+}

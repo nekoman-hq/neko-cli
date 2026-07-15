@@ -172,8 +172,9 @@ func resolveNewMigrationPlan(root string, paths migrationPathSet) (migrationPlan
 }
 
 func resolvePlanFromJournal(root string, paths migrationPathSet, j *journal) (migrationPlan, error) {
+	activeSourceExists := exists(paths.source)
 	var source migrationFileSnapshot
-	if exists(paths.source) {
+	if activeSourceExists {
 		activeSource, err := captureMigrationFile(paths.source)
 		if err != nil {
 			return migrationPlan{}, fmt.Errorf("read V1 config %s: %w", paths.source, err)
@@ -213,108 +214,10 @@ func resolvePlanFromJournal(root string, paths migrationPathSet, j *journal) (mi
 	if err := verifyExistingIfPresent(paths.state, plan.target.stateJSON, "state"); err != nil {
 		return migrationPlan{}, err
 	}
+	plan.journal = *j
+	plan.targetOperation = selectRecoveryTargetOperation(exists(paths.config), exists(paths.state))
+	plan.sourceOperation = selectRecoverySourceOperation(activeSourceExists)
 	return plan, nil
-}
-
-type filesystemMigrationPlanExecutor struct{}
-
-func (filesystemMigrationPlanExecutor) Execute(plan migrationPlan) error {
-	return executePlan(plan.compatibilityPlan())
-}
-
-func executePlan(plan *Plan) error {
-	paths := migrationPaths(plan.RepositoryRoot)
-	if err := os.MkdirAll(filepath.Dir(paths.config), 0755); err != nil {
-		return fmt.Errorf("create V2 directory %s: %w", filepath.Dir(paths.config), err)
-	}
-
-	j := &journal{
-		SchemaVersion:       1,
-		SourcePath:          paths.source,
-		SourceContentSHA256: sourceHashForPlan(plan),
-		ConfigContentSHA256: sha256Hex([]byte(plan.ConfigJSON)),
-		StateContentSHA256:  sha256Hex([]byte(plan.StateJSON)),
-		BackupPath:          paths.backup,
-		Stage:               journalStagePrepared,
-	}
-	if err := writeJournal(paths.journal, j); err != nil {
-		return err
-	}
-
-	if err := writeExpected(paths.config, []byte(plan.ConfigJSON)); err != nil {
-		return err
-	}
-	j.Stage = journalStageConfigWritten
-	if err := writeJournal(paths.journal, j); err != nil {
-		return err
-	}
-
-	if err := writeExpected(paths.state, []byte(plan.StateJSON)); err != nil {
-		return err
-	}
-	j.Stage = journalStageStateWritten
-	if err := writeJournal(paths.journal, j); err != nil {
-		return err
-	}
-
-	if err := archiveV1(paths, j.SourceContentSHA256); err != nil {
-		return err
-	}
-	j.Stage = journalStageV1Archived
-	if err := writeJournal(paths.journal, j); err != nil {
-		return err
-	}
-
-	if err := validateFinal(plan, j); err != nil {
-		return err
-	}
-	if err := os.Remove(paths.journal); err != nil {
-		return fmt.Errorf("remove migration journal %s: %w", paths.journal, err)
-	}
-	return nil
-}
-
-func validateFinal(plan *Plan, j *journal) error {
-	repo, err := releaseconfig.LoadV2Repository(plan.RepositoryRoot)
-	if err != nil {
-		return err
-	}
-	if len(repo.Units) != 1 {
-		return fmt.Errorf("migration validation failed: expected exactly one unit, got %d", len(repo.Units))
-	}
-	unit := repo.Units[0]
-	if unit.ID != "default" ||
-		unit.Version != plan.Version ||
-		unit.TagPrefix != "v" ||
-		unit.ExecutorType != plan.Executor ||
-		unit.Delivery != string(releaseconfig.DeliveryLocal) {
-		return fmt.Errorf("migration validation failed: unexpected migrated unit: %#v", unit)
-	}
-	paths := migrationPaths(plan.RepositoryRoot)
-	if exists(paths.source) {
-		return fmt.Errorf("migration validation failed: active V1 config still exists at %s", paths.source)
-	}
-	backupBytes, err := os.ReadFile(paths.backup)
-	if err != nil {
-		return fmt.Errorf("migration validation failed: read backup %s: %w", paths.backup, err)
-	}
-	if sha256Hex(backupBytes) != j.SourceContentSHA256 {
-		return fmt.Errorf("migration validation failed: backup hash mismatch at %s", paths.backup)
-	}
-	return nil
-}
-
-func writeExpected(path string, expected []byte) error {
-	if err := verifyExistingIfPresent(path, expected, path); err != nil {
-		return err
-	}
-	if exists(path) {
-		return nil
-	}
-	if err := releaseconfig.AtomicWriteFile(path, expected, 0644); err != nil {
-		return err
-	}
-	return nil
 }
 
 func verifyExistingIfPresent(path string, expected []byte, label string) error {
@@ -327,53 +230,6 @@ func verifyExistingIfPresent(path string, expected []byte, label string) error {
 	}
 	if !bytes.Equal(current, expected) {
 		return fmt.Errorf("migration conflict: existing %s %s differs from planned content", label, path)
-	}
-	return nil
-}
-
-func archiveV1(paths migrationPathSet, sourceHash string) error {
-	if exists(paths.backup) {
-		backupBytes, err := os.ReadFile(paths.backup)
-		if err != nil {
-			return fmt.Errorf("read backup %s: %w", paths.backup, err)
-		}
-		if sha256Hex(backupBytes) != sourceHash {
-			return fmt.Errorf("migration conflict: existing backup %s differs from source", paths.backup)
-		}
-		if exists(paths.source) {
-			sourceBytes, err := os.ReadFile(paths.source)
-			if err != nil {
-				return fmt.Errorf("read active V1 config %s: %w", paths.source, err)
-			}
-			if sha256Hex(sourceBytes) != sourceHash {
-				return fmt.Errorf("migration recovery failed: active V1 config changed since journal creation")
-			}
-			if err := os.Remove(paths.source); err != nil {
-				return fmt.Errorf("remove already-archived active V1 config %s: %w", paths.source, err)
-			}
-		}
-		return nil
-	}
-
-	if !exists(paths.source) {
-		return fmt.Errorf("migration recovery failed: active V1 config missing before backup was created")
-	}
-	sourceBytes, err := os.ReadFile(paths.source)
-	if err != nil {
-		return fmt.Errorf("read active V1 config %s: %w", paths.source, err)
-	}
-	if sha256Hex(sourceBytes) != sourceHash {
-		return fmt.Errorf("migration recovery failed: active V1 config changed since journal creation")
-	}
-	if err := os.Rename(paths.source, paths.backup); err != nil {
-		return fmt.Errorf("archive V1 config %s to %s: %w", paths.source, paths.backup, err)
-	}
-	return nil
-}
-
-func writeJournal(path string, j *journal) error {
-	if err := releaseconfig.AtomicWriteJSON(path, j, 0644); err != nil {
-		return fmt.Errorf("write migration journal %s: %w", path, err)
 	}
 	return nil
 }
@@ -420,16 +276,6 @@ func recoveryActions(paths migrationPathSet, j *journal) []string {
 		actions = append([]string{fmt.Sprintf("resume from journal stage %s", j.Stage)}, actions...)
 	}
 	return actions
-}
-
-func sourceHashForPlan(plan *Plan) string {
-	if data, err := os.ReadFile(plan.SourcePath); err == nil {
-		return sha256Hex(data)
-	}
-	if data, err := os.ReadFile(plan.BackupPath); err == nil {
-		return sha256Hex(data)
-	}
-	return ""
 }
 
 func captureMigrationFile(path string) (migrationFileSnapshot, error) {
