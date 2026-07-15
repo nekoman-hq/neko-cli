@@ -17,11 +17,11 @@ import (
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/migrate"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/pluginindex"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/release"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/release/tool/goreleaser"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/release/tool/jreleaser"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/release/tool/releaseit"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/validate"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
-
-	// Register all release tools
-	_ "github.com/nekoman-hq/neko-cli/plugin/release/pkg/release/tool"
 )
 
 func main() {
@@ -44,6 +44,11 @@ func main() {
 
 	var resp *plugin.Response
 	var err error
+	v1Executors := []release.V1Executor{
+		goreleaser.NewV1Executor(),
+		jreleaser.NewV1Executor(),
+		releaseit.NewV1Executor(),
+	}
 
 	switch req.Command {
 	case "init":
@@ -55,11 +60,11 @@ func main() {
 	case "migrate":
 		resp, err = migrate.HandleMigrate(req)
 	case "patch":
-		resp, err = release.HandleRelease(req, release.Patch)
+		resp, err = release.HandleReleaseWithV1Executors(req, release.Patch, v1Executors...)
 	case "minor":
-		resp, err = release.HandleRelease(req, release.Minor)
+		resp, err = release.HandleReleaseWithV1Executors(req, release.Minor, v1Executors...)
 	case "major":
-		resp, err = release.HandleRelease(req, release.Major)
+		resp, err = release.HandleReleaseWithV1Executors(req, release.Major, v1Executors...)
 	case "resume":
 		resp, err = release.HandleResume(req)
 	case "history":

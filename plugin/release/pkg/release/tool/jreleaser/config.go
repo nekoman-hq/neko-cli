@@ -9,6 +9,7 @@ package jreleaser
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 )
@@ -98,7 +99,11 @@ type Category struct {
 }
 
 func LoadConfig() (*Config, error) {
-	data, err := os.ReadFile("jreleaser.yml")
+	return LoadConfigAt("")
+}
+
+func LoadConfigAt(repositoryRoot string) (*Config, error) {
+	data, err := os.ReadFile(filepath.Join(repositoryRoot, "jreleaser.yml"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
@@ -112,7 +117,11 @@ func LoadConfig() (*Config, error) {
 }
 
 func SaveConfig(cfg *Config) (err error) {
-	file, err := os.Create("jreleaser.yml")
+	return SaveConfigAt("", cfg)
+}
+
+func SaveConfigAt(repositoryRoot string, cfg *Config) (err error) {
+	file, err := os.Create(filepath.Join(repositoryRoot, "jreleaser.yml"))
 	if err != nil {
 		return fmt.Errorf("create jreleaser.yml: %w", err)
 	}

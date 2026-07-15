@@ -121,11 +121,18 @@ func V1Validate(cfg *V1ReleaseConfig) error {
 //
 // Deprecated: V1 is supported only as the legacy compatibility format.
 func V1SaveConfig(config V1ReleaseConfig) error {
+	return V1SaveConfigAt(".", config)
+}
+
+// V1SaveConfigAt writes the canonical legacy file within repositoryRoot.
+//
+// Deprecated: V1 is supported only as the legacy compatibility format.
+func V1SaveConfigAt(repositoryRoot string, config V1ReleaseConfig) error {
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
 		return fmt.Errorf("configuration serialization failed: %w", err)
 	}
-	if err = os.WriteFile(V1FileName, data, 0644); err != nil {
+	if err = os.WriteFile(filepath.Join(repositoryRoot, V1FileName), data, 0644); err != nil {
 		return fmt.Errorf("configuration write failed: %w", err)
 	}
 	return nil

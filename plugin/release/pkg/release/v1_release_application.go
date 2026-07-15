@@ -32,6 +32,7 @@ func composeV1ReleaseCommandApplication(executors v1ReleaseExecutorCatalog) v1Re
 		refresher: evidence,
 	}
 	reporter := systemV1ReleaseReporter{}
+	requirements := newSystemV1ReleaseRequirements()
 	return v1ReleaseCommandApplication{
 		preview: v1ReleasePreviewUseCase{
 			plans:    planning,
@@ -40,11 +41,14 @@ func composeV1ReleaseCommandApplication(executors v1ReleaseExecutorCatalog) v1Re
 		execution: v1ReleaseExecutionUseCase{
 			previewPlans:   planning,
 			executionPlans: planning,
-			requirements:   systemV1ReleaseRequirements{},
-			preflight:      systemV1ReleasePreflight{},
-			materializer:   v1ReleaseConfigFileMaterializer{},
-			executors:      executors,
-			reporter:       reporter,
+			requirements:   requirements,
+			preflight: systemV1ReleasePreflight{
+				requirements: requirements,
+				repository:   systemV1PreflightRepository{},
+			},
+			materializer: v1ReleaseConfigFileMaterializer{store: systemV1ConfigVersionStore{}},
+			executors:    executors,
+			reporter:     reporter,
 		},
 	}
 }

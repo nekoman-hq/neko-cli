@@ -3,7 +3,7 @@
 //nolint:staticcheck // V1 compatibility code intentionally uses deprecated V1 APIs during migration
 package jreleaser
 
-//lint:file-ignore SA1019 V1 executor initialization still receives the legacy config until V2 execution is implemented
+//lint:file-ignore SA1019 The legacy init compatibility facade receives the deprecated V1 config.
 
 /*
 @Author     Benjamin Senekowitsch
@@ -13,16 +13,11 @@ package jreleaser
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/nekoman-hq/neko-cli/pkg/config"
 	config2 "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
-	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/git"
 	release2 "github.com/nekoman-hq/neko-cli/plugin/release/pkg/release"
 
 	"github.com/nekoman-hq/neko-cli/pkg/errors"
@@ -30,7 +25,14 @@ import (
 )
 
 type JReleaser struct {
-	release2.ToolBase
+	git            v1GitWriter
+	rollback       v1Rollback
+	commands       v1JReleaserCommand
+	files          v1FileInspector
+	configs        v1ConfigStore
+	clock          v1Clock
+	binaries       v1BinaryLocator
+	repositoryRoot string
 
 	State struct {
 		PreHead           string
@@ -41,24 +43,96 @@ type JReleaser struct {
 	}
 }
 
+type v1GitWriter interface {
+	Head(string) (string, error)
+	CreateReleaseCommit(string, *semver.Version) error
+	PushCommits(string) error
+}
+
+type v1Rollback interface {
+	Rollback(string, release2.GitReleaseState) error
+}
+
+type v1JReleaserCommand interface {
+	Run(string, ...string) ([]byte, error)
+}
+
+type v1FileInspector interface {
+	Exists(string, string) (bool, error)
+}
+
+type v1ConfigStore interface {
+	Load(string) (*Config, error)
+	Save(string, *Config) error
+}
+
+type v1Clock interface {
+	Year() int
+}
+
+type v1BinaryLocator interface {
+	Require(string) error
+}
+
+func NewV1Executor() *JReleaser {
+	return &JReleaser{
+		git:      release2.NewSystemV1GitWriter(),
+		rollback: release2.NewSystemV1ReleaseRollback(),
+		commands: newSystemV1JReleaserCommand(),
+		files:    release2.NewSystemV1FileInspector(),
+		configs:  systemV1ConfigStore{},
+		clock:    systemV1Clock{},
+		binaries: release2.NewSystemV1BinaryLocator(),
+	}
+}
+
+func (j *JReleaser) ensureDependencies() {
+	if j.git != nil && j.rollback != nil && j.commands != nil && j.files != nil && j.configs != nil && j.clock != nil && j.binaries != nil {
+		return
+	}
+	defaults := NewV1Executor()
+	if j.git == nil {
+		j.git = defaults.git
+	}
+	if j.rollback == nil {
+		j.rollback = defaults.rollback
+	}
+	if j.commands == nil {
+		j.commands = defaults.commands
+	}
+	if j.files == nil {
+		j.files = defaults.files
+	}
+	if j.configs == nil {
+		j.configs = defaults.configs
+	}
+	if j.clock == nil {
+		j.clock = defaults.clock
+	}
+	if j.binaries == nil {
+		j.binaries = defaults.binaries
+	}
+}
+
 func (j *JReleaser) Name() string {
 	return "jreleaser"
 }
 
 func (j *JReleaser) Init(cfg *config2.V1ReleaseConfig) error {
+	j.ensureDependencies()
 	log.PluginV(log.Init, fmt.Sprintf("Initializing %s for project %s@%s",
 		log.ColorText(log.ColorGreen, j.Name()),
 		cfg.ProjectName,
 		cfg.Version,
 	))
 
-	if err := j.RequireBinary(j.Name()); err != nil {
+	if err := j.binaries.Require(j.Name()); err != nil {
 		return err
 	}
-	if err := j.runJReleaserInit(cfg); err != nil {
+	if err := j.runJReleaserInit("", cfg); err != nil {
 		return err
 	}
-	if err := j.runJReleaserCheck(); err != nil {
+	if err := j.runJReleaserCheck(""); err != nil {
 		return err
 	}
 
@@ -70,60 +144,58 @@ func (j *JReleaser) Execute(ctx *release2.ReleaseExecutionContext) error {
 	if ctx == nil {
 		return fmt.Errorf("release execution context is missing")
 	}
-	version, err := semver.NewVersion(ctx.NextVersion)
+	return j.Run(release2.V1ExecutorRequest{Plan: release2.V1ReleasePlan{
+		RepositoryRoot: ctx.UnitRoot,
+		NextVersion:    ctx.NextVersion,
+	}})
+}
+
+func (j *JReleaser) Run(request release2.V1ExecutorRequest) error {
+	version, err := semver.NewVersion(request.Plan.NextVersion)
 	if err != nil {
-		return fmt.Errorf("invalid next version %q: %w", ctx.NextVersion, err)
+		return fmt.Errorf("invalid next version %q: %w", request.Plan.NextVersion, err)
 	}
-	return j.InUnitRoot(ctx, func() error {
-		if ctx.SourceFormat == config2.SourceFormatV2 {
-			return j.releasePrepared(version)
-		}
-		return j.Release(version)
-	})
+	return j.release(request.Plan.RepositoryRoot, version)
 }
 
 func (j *JReleaser) Release(v *semver.Version) error {
-	return j.release(v, true)
+	return j.release("", v)
 }
 
-func (j *JReleaser) releasePrepared(v *semver.Version) error {
-	return j.release(v, false)
-}
-
-func (j *JReleaser) release(v *semver.Version, syncVersionFile bool) error {
-	pre, err := git.Head()
+func (j *JReleaser) release(repositoryRoot string, v *semver.Version) error {
+	j.ensureDependencies()
+	j.repositoryRoot = repositoryRoot
+	pre, err := j.git.Head(repositoryRoot)
 
 	if err != nil {
 		return err
 	}
 	j.State.PreHead = pre
 
-	if syncVersionFile {
-		if err = j.syncJReleaser(v); err != nil {
-			return err
-		}
-	}
-
-	if err = j.CreateReleaseCommit(v); err != nil {
+	if err = j.syncJReleaser(repositoryRoot, v); err != nil {
 		return err
 	}
 
-	head, err := git.Head()
+	if err = j.git.CreateReleaseCommit(repositoryRoot, v); err != nil {
+		return err
+	}
+
+	head, err := j.git.Head(repositoryRoot)
 	if err != nil {
 		return err
 	}
 	j.State.ReleaseCommitHash = head
 
-	if err = j.PushCommits(); err != nil {
+	if err = j.git.PushCommits(repositoryRoot); err != nil {
 		return err
 	}
 	j.State.PushedCommit = true
 
-	if err = j.runJReleaserDryRun(); err != nil {
+	if err = j.runJReleaserDryRun(repositoryRoot); err != nil {
 		return err
 	}
 
-	if err = j.runJReleaserRelease(); err != nil {
+	if err = j.runJReleaserRelease(repositoryRoot); err != nil {
 		return err
 	}
 	j.State.TagName = fmt.Sprintf("v%s", v.String())
@@ -133,7 +205,8 @@ func (j *JReleaser) release(v *semver.Version, syncVersionFile bool) error {
 }
 
 func (j *JReleaser) RevertRelease() error {
-	return j.RevertGitRelease(release2.GitReleaseState{
+	j.ensureDependencies()
+	return j.rollback.Rollback(j.repositoryRoot, release2.GitReleaseState{
 		PreHead:              j.State.PreHead,
 		ReleaseHead:          j.State.ReleaseCommitHash,
 		PushedCommit:         j.State.PushedCommit,
@@ -144,20 +217,22 @@ func (j *JReleaser) RevertRelease() error {
 	})
 }
 
-func (j *JReleaser) runJReleaserInit(cfg *config2.V1ReleaseConfig) error {
+func (j *JReleaser) Rollback() error { return j.RevertRelease() }
+
+func (j *JReleaser) runJReleaserInit(repositoryRoot string, cfg *config2.V1ReleaseConfig) error {
 	log.PluginV(log.Init, "Generating JReleaser configuration...")
 
-	if _, err := os.Stat("jreleaser.yml"); err == nil {
+	exists, err := j.files.Exists(repositoryRoot, "jreleaser.yml")
+	if err != nil {
+		return fmt.Errorf("failed to check jreleaser.yml: %w", err)
+	}
+	if exists {
 		log.PluginPrint(
 			log.Init,
 			"Skipping jreleaser init, %s already exists",
 			log.ColorText(log.ColorCyan, "jreleaser.yml"),
 		)
 		return nil
-	} else if !os.IsNotExist(err) {
-		return fmt.Errorf(
-			"failed to check jreleaser.yml: %w", err,
-		)
 	}
 
 	jcfg := &Config{
@@ -172,7 +247,7 @@ func (j *JReleaser) runJReleaserInit(cfg *config2.V1ReleaseConfig) error {
 					Version: "25",
 				},
 			},
-			InceptionYear: strconv.Itoa(time.Now().Year()),
+			InceptionYear: strconv.Itoa(j.clock.Year()),
 		},
 		Release: Release{
 			Github: GithubRelease{
@@ -224,7 +299,7 @@ func (j *JReleaser) runJReleaserInit(cfg *config2.V1ReleaseConfig) error {
 		},
 	}
 
-	if err := SaveConfig(jcfg); err != nil {
+	if err := j.configs.Save(repositoryRoot, jcfg); err != nil {
 		return fmt.Errorf(
 			"configuration write failed: %w", err,
 		)
@@ -234,13 +309,13 @@ func (j *JReleaser) runJReleaserInit(cfg *config2.V1ReleaseConfig) error {
 	return nil
 }
 
-func (j *JReleaser) runJReleaserCheck() error {
+func (j *JReleaser) runJReleaserCheck(repositoryRoot string) error {
 	log.PluginV(log.Init,
 		"Checking JReleaser configuration: %s",
 		log.ColorText(log.ColorGreen, "jreleaser config"),
 	)
 
-	output, err := executeJReleaserCommand("config")
+	output, err := j.commands.Run(repositoryRoot, "config")
 	if err != nil {
 		return fmt.Errorf(
 			"JReleaser configuration check failed: %s: %w", string(output), err,
@@ -256,18 +331,22 @@ func (j *JReleaser) runJReleaserCheck() error {
 	return nil
 }
 
-func (j *JReleaser) syncJReleaser(v *semver.Version) error {
+func (j *JReleaser) syncJReleaser(repositoryRoot string, v *semver.Version) error {
 	log.PluginV(log.Exec,
 		fmt.Sprintf("Syncing JReleaser configuration with version %s",
 			log.ColorText(log.ColorCyan, v.String()),
 		),
 	)
 
-	if _, err := os.Stat("jreleaser.yml"); os.IsNotExist(err) {
+	exists, err := j.files.Exists(repositoryRoot, "jreleaser.yml")
+	if err != nil {
+		return fmt.Errorf("failed to check jreleaser.yml: %w", err)
+	}
+	if !exists {
 		return fmt.Errorf("jreleaser.yml not found")
 	}
 
-	jcfg, err := LoadConfig()
+	jcfg, err := j.configs.Load(repositoryRoot)
 	if err != nil {
 		return fmt.Errorf(
 			"configuration serialization failed: %w", err,
@@ -276,7 +355,7 @@ func (j *JReleaser) syncJReleaser(v *semver.Version) error {
 
 	jcfg.Project.Version = v.String()
 
-	if err := SaveConfig(jcfg); err != nil {
+	if err := j.configs.Save(repositoryRoot, jcfg); err != nil {
 		return fmt.Errorf(
 			"configuration write failed: %w", err,
 		)
@@ -291,7 +370,7 @@ func (j *JReleaser) syncJReleaser(v *semver.Version) error {
 }
 
 // runJReleaserDryRun executes JReleaser in dry-run mode
-func (j *JReleaser) runJReleaserDryRun() error {
+func (j *JReleaser) runJReleaserDryRun(repositoryRoot string) error {
 	args := []string{"full-release", "--dry-run"}
 
 	log.PluginV(
@@ -302,7 +381,7 @@ func (j *JReleaser) runJReleaserDryRun() error {
 		),
 	)
 
-	output, err := executeJReleaserCommand(args...)
+	output, err := j.commands.Run(repositoryRoot, args...)
 	if err != nil {
 		errors.WriteWarning(
 			"JReleaser dry run failed",
@@ -324,7 +403,7 @@ func (j *JReleaser) runJReleaserDryRun() error {
 }
 
 // runJReleaserRelease executes the full jreleaser release
-func (j *JReleaser) runJReleaserRelease() error {
+func (j *JReleaser) runJReleaserRelease(repositoryRoot string) error {
 	args := []string{"full-release"}
 
 	log.PluginV(
@@ -335,7 +414,7 @@ func (j *JReleaser) runJReleaserRelease() error {
 		),
 	)
 
-	output, err := executeJReleaserCommand(args...)
+	output, err := j.commands.Run(repositoryRoot, args...)
 	if err != nil {
 		return fmt.Errorf(
 			"JReleaser release failed: %s: %w", string(output), err,
@@ -350,30 +429,11 @@ func (j *JReleaser) runJReleaserRelease() error {
 	return nil
 }
 
-func executeJReleaserCommand(args ...string) ([]byte, error) {
-	pat, err := config.GetPAT()
-	if err != nil {
-		return nil, err
-	}
-
-	maskedPat := strings.Repeat("*", 5)
-	log.PluginV(log.Init, fmt.Sprintf(
-		"Executing command: JRELEASER_GITHUB_TOKEN=%s jreleaser %s",
-		maskedPat,
-		strings.Join(args, " "),
-	))
-
-	cmd := exec.Command("jreleaser", args...)
-	cmd.Env = append(os.Environ(), "JRELEASER_GITHUB_TOKEN="+pat)
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return output, fmt.Errorf("failed to execute command: %w", err)
-	}
-
-	return output, nil
+func (j *JReleaser) ValidateRequirements(ctx *release2.ReleaseExecutionContext) error {
+	return release2.ValidateRequirementsForContext(ctx)
 }
 
-func init() {
-	release2.Register(&JReleaser{})
+func (j *JReleaser) ResolveFiles(ctx *release2.ReleaseExecutionContext) ([]string, error) {
+	var compatibility release2.ToolBase
+	return compatibility.ResolveFiles(ctx)
 }

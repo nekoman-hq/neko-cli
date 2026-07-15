@@ -9,9 +9,7 @@ package release
 
 import (
 	"github.com/nekoman-hq/neko-cli/pkg/errors"
-	"github.com/nekoman-hq/neko-cli/pkg/log"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
-	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/git"
 )
 
 func Preflight(cfg *config.V1ReleaseConfig) {
@@ -22,32 +20,9 @@ func Preflight(cfg *config.V1ReleaseConfig) {
 }
 
 func checkV1ReleasePreflight(cfg *config.V1ReleaseConfig) *V1ReleaseFailure {
-	log.PluginV(log.Preflight, "Running pre-flight checks")
-
-	if err := ValidateRequirements(cfg); err != nil {
-		return newFatalV1ReleaseFailure("RELEASE_REQUIREMENTS_INVALID", err)
-	}
-
-	if err := git.IsClean(); err != nil {
-		return newFatalV1ReleaseFailure("UNCOMMITTED_CHANGES", err)
-	}
-
-	if err := git.EnsureNotDetached(); err != nil {
-		return newFatalV1ReleaseFailure("DETACHED_HEAD", err)
-	}
-
-	if err := git.OnMainBranch(); err != nil {
-		return newFatalV1ReleaseFailure("INCORRECT_BRANCH", err)
-	}
-
-	if err := git.HasUpstream(); err != nil {
-		return newFatalV1ReleaseFailure("NO_UPSTREAM_BRANCH", err)
-	}
-
-	if err := git.IsUpToDate(); err != nil {
-		return newFatalV1ReleaseFailure("BRANCH_OUT_OF_DATE", err)
-	}
-
-	log.PluginV(log.Preflight, "\uF00C Preflight checks succeeded!")
-	return nil
+	root := currentV1RepositoryRoot()
+	return legacyV1Preflight{
+		requirements: newSystemV1ReleaseRequirements(),
+		repository:   systemV1PreflightRepository{},
+	}.Check(V1ReleaseIntent{RepositoryRoot: root, Config: cfg})
 }

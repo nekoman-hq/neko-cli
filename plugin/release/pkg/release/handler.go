@@ -49,9 +49,13 @@ type releaseStartOperation struct {
 }
 
 func newReleaseStartOperation() releaseStartOperation {
+	return newReleaseStartOperationWithV1Executors(registeredV1ReleaseExecutorCatalog{})
+}
+
+func newReleaseStartOperationWithV1Executors(executors v1ReleaseExecutorCatalog) releaseStartOperation {
 	return releaseStartOperation{
 		repositories: releaseConfigRepositoryReader{},
-		v1:           newV1ReleaseCommandApplication(),
+		v1:           composeV1ReleaseCommandApplication(executors),
 		v2:           v2ReleaseCommandApplication{},
 	}
 }

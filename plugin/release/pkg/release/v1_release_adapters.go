@@ -8,7 +8,6 @@ import (
 	pluginerrors "github.com/nekoman-hq/neko-cli/pkg/errors"
 	"github.com/nekoman-hq/neko-cli/pkg/log"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
-	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/git"
 )
 
 type v1LatestTagReader interface {
@@ -39,28 +38,28 @@ func (operation v1ReleasePlanningOperation) BuildExecutionPlan(intent V1ReleaseI
 	return operation.planner.Plan(V1ReleasePlanningRequest{Intent: intent, LatestTag: operation.tags.LatestTag()})
 }
 
-type systemV1ReleaseRequirements struct{}
-
-func (systemV1ReleaseRequirements) Validate(intent V1ReleaseIntent) error {
-	log.PluginV(
-		log.Config,
-		"Validating release requirements for %s in %s",
-		log.ColorText(log.ColorCyan, string(intent.Config.ReleaseSystem)),
-		log.ColorText(log.ColorGreen, intent.RepositoryRoot),
-	)
-	return validateRequirementsForExecutor(string(intent.Config.ReleaseSystem), intent.RepositoryRoot, true)
+type v1ConfigVersionStore interface {
+	Save(string, releaseconfig.V1ReleaseConfig) error
 }
 
-type v1ReleaseConfigFileMaterializer struct{}
+type systemV1ConfigVersionStore struct{}
 
-func (v1ReleaseConfigFileMaterializer) WritePlannedVersion(intent V1ReleaseIntent, plan V1ReleasePlan) error {
+func (systemV1ConfigVersionStore) Save(repositoryRoot string, cfg releaseconfig.V1ReleaseConfig) error {
+	return releaseconfig.V1SaveConfigAt(repositoryRoot, cfg)
+}
+
+type v1ReleaseConfigFileMaterializer struct {
+	store v1ConfigVersionStore
+}
+
+func (materializer v1ReleaseConfigFileMaterializer) WritePlannedVersion(intent V1ReleaseIntent, plan V1ReleasePlan) error {
 	intent.Config.Version = plan.NextVersion
-	return releaseconfig.V1SaveConfig(*intent.Config)
+	return materializer.store.Save(intent.RepositoryRoot, *intent.Config)
 }
 
-func (v1ReleaseConfigFileMaterializer) RestorePreviousVersion(intent V1ReleaseIntent, plan V1ReleasePlan) error {
+func (materializer v1ReleaseConfigFileMaterializer) RestorePreviousVersion(intent V1ReleaseIntent, plan V1ReleasePlan) error {
 	intent.Config.Version = plan.CurrentVersion
-	return releaseconfig.V1SaveConfig(*intent.Config)
+	return materializer.store.Save(intent.RepositoryRoot, *intent.Config)
 }
 
 type registeredV1ReleaseExecutorCatalog struct{}
@@ -79,7 +78,7 @@ type registeredV1ReleaseExecutor struct {
 
 func (executor *registeredV1ReleaseExecutor) Name() string { return executor.tool.Name() }
 
-func (executor *registeredV1ReleaseExecutor) Execute(request V1ExecutorRequest) error {
+func (executor *registeredV1ReleaseExecutor) Run(request V1ExecutorRequest) error {
 	plan := request.Plan
 	tagSpec, err := releaseconfig.NewTagSpec("v")
 	if err != nil {
@@ -126,7 +125,7 @@ type directV1ReleaseExecutor struct {
 
 func (executor *directV1ReleaseExecutor) Name() string { return executor.tool.Name() }
 
-func (executor *directV1ReleaseExecutor) Execute(request V1ExecutorRequest) error {
+func (executor *directV1ReleaseExecutor) Run(request V1ExecutorRequest) error {
 	version, err := semver.NewVersion(request.Plan.NextVersion)
 	if err != nil {
 		return err
@@ -135,6 +134,28 @@ func (executor *directV1ReleaseExecutor) Execute(request V1ExecutorRequest) erro
 }
 
 func (executor *directV1ReleaseExecutor) Rollback() error { return executor.tool.RevertRelease() }
+
+type fixedV1ReleaseExecutorCatalog struct {
+	executors map[string]V1Executor
+}
+
+func newFixedV1ReleaseExecutorCatalog(executors ...V1Executor) fixedV1ReleaseExecutorCatalog {
+	byName := make(map[string]V1Executor, len(executors))
+	for _, executor := range executors {
+		if executor != nil {
+			byName[executor.Name()] = executor
+		}
+	}
+	return fixedV1ReleaseExecutorCatalog{executors: byName}
+}
+
+func (catalog fixedV1ReleaseExecutorCatalog) Resolve(name string) (v1ReleaseExecutor, error) {
+	executor, ok := catalog.executors[name]
+	if !ok {
+		return nil, fmt.Errorf("unknown release system: %s", name)
+	}
+	return executor, nil
+}
 
 type systemV1ReleaseReporter struct{}
 
@@ -209,11 +230,4 @@ func (systemV1ReleaseReporter) ReleaseCompleted(plan V1ReleasePlan) {
 		"\uF00C Successfully released version %s",
 		log.ColorText(log.ColorCyan, plan.NextVersion),
 	)
-}
-
-type systemV1ReleasePreflight struct{}
-
-func (systemV1ReleasePreflight) Check(intent V1ReleaseIntent) *V1ReleaseFailure {
-	_, _ = git.Current()
-	return checkV1ReleasePreflight(intent.Config)
 }

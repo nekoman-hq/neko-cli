@@ -84,7 +84,7 @@ type recordingV1Executor struct {
 
 func (*recordingV1Executor) Name() string { return "goreleaser" }
 
-func (executor *recordingV1Executor) Execute(request V1ExecutorRequest) error {
+func (executor *recordingV1Executor) Run(request V1ExecutorRequest) error {
 	*executor.events = append(*executor.events, "execute")
 	executor.request = request
 	return executor.executeErr

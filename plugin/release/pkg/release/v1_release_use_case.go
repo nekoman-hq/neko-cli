@@ -24,11 +24,15 @@ type v1ReleaseConfigMaterializer interface {
 	RestorePreviousVersion(V1ReleaseIntent, V1ReleasePlan) error
 }
 
-type v1ReleaseExecutor interface {
+// V1Executor invokes one explicitly composed legacy release system and owns
+// the rollback evidence produced by that invocation.
+type V1Executor interface {
 	Name() string
-	Execute(V1ExecutorRequest) error
+	Run(V1ExecutorRequest) error
 	Rollback() error
 }
+
+type v1ReleaseExecutor = V1Executor
 
 type v1ReleaseExecutorCatalog interface {
 	Resolve(string) (v1ReleaseExecutor, error)
@@ -112,7 +116,7 @@ func (useCase v1ReleaseExecutionUseCase) Execute(request V1ReleaseExecutionReque
 	if err := useCase.materializer.WritePlannedVersion(request.Intent, executionPlan); err != nil {
 		useCase.reporter.ConfigWriteFailed(err)
 	}
-	if err := executor.Execute(V1ExecutorRequest{Plan: executionPlan}); err != nil {
+	if err := executor.Run(V1ExecutorRequest{Plan: executionPlan}); err != nil {
 		return nil, useCase.recoverExecutorFailure(request.Intent, executionPlan, executor, err)
 	}
 

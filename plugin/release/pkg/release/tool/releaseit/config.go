@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 )
 
 type Config struct {
@@ -35,7 +36,11 @@ type HooksConfig struct {
 }
 
 func LoadConfig() (*Config, error) {
-	data, err := os.ReadFile(".release-it.json")
+	return LoadConfigAt("")
+}
+
+func LoadConfigAt(repositoryRoot string) (*Config, error) {
+	data, err := os.ReadFile(filepath.Join(repositoryRoot, ".release-it.json"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
@@ -49,7 +54,11 @@ func LoadConfig() (*Config, error) {
 }
 
 func SaveConfig(cfg *Config) (err error) {
-	file, err := os.Create(".release-it.json")
+	return SaveConfigAt("", cfg)
+}
+
+func SaveConfigAt(repositoryRoot string, cfg *Config) (err error) {
+	file, err := os.Create(filepath.Join(repositoryRoot, ".release-it.json"))
 	if err != nil {
 		return fmt.Errorf("create .release-it.json: %w", err)
 	}

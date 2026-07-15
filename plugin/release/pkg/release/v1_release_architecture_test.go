@@ -97,3 +97,66 @@ func TestMigrationDoesNotDependOnV1ExecutionSubsystem(t *testing.T) {
 		}
 	}
 }
+
+func TestProductionV1CompositionUsesFixedConcreteExecutors(t *testing.T) {
+	source := readCommandBoundarySource(t, "../../main.go")
+	for _, required := range []string{
+		"goreleaser.NewV1Executor()",
+		"jreleaser.NewV1Executor()",
+		"releaseit.NewV1Executor()",
+		"HandleReleaseWithV1Executors",
+	} {
+		if !strings.Contains(source, required) {
+			t.Fatalf("main.go is missing explicit V1 composition %q", required)
+		}
+	}
+	for _, forbidden := range []string{
+		"_ \"github.com/nekoman-hq/neko-cli/plugin/release/pkg/release/tool\"",
+		"release.HandleRelease(req",
+		"release.Register(",
+	} {
+		if strings.Contains(source, forbidden) {
+			t.Fatalf("main.go retains mutable V1 lookup through %q", forbidden)
+		}
+	}
+}
+
+func TestV1ExecutorOrchestrationUsesOnlyFocusedPorts(t *testing.T) {
+	for _, path := range []string{
+		"tool/goreleaser/goreleaser.go",
+		"tool/jreleaser/jreleaser.go",
+		"tool/releaseit/release_it.go",
+	} {
+		source := readCommandBoundarySource(t, path)
+		for _, forbidden := range []string{
+			"exec.Command",
+			"os.Stat",
+			"os.Environ",
+			"GetPAT",
+			"time.Now",
+			"SourceFormatV2",
+			"releasePrepared",
+			"release2.Register",
+		} {
+			if strings.Contains(source, forbidden) {
+				t.Fatalf("%s contains hidden V1 infrastructure or mixed selection %q", path, forbidden)
+			}
+		}
+	}
+}
+
+func TestLegacyRegistrationIsConfinedToCompatibilityAggregator(t *testing.T) {
+	for _, path := range []string{
+		"tool/goreleaser/goreleaser.go",
+		"tool/jreleaser/jreleaser.go",
+		"tool/releaseit/release_it.go",
+	} {
+		if source := readCommandBoundarySource(t, path); strings.Contains(source, "Register(") {
+			t.Fatalf("%s self-registers outside the compatibility aggregator", path)
+		}
+	}
+	aggregator := readCommandBoundarySource(t, "tool/register.go")
+	if count := strings.Count(aggregator, "release.Register("); count != 3 {
+		t.Fatalf("compatibility registrations = %d, want 3", count)
+	}
+}
