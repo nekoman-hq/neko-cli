@@ -4,6 +4,8 @@
 
 This document describes the Release Plugin as it exists in the current checkout. It is not a target package design and does not assume that an earlier refactor exists.
 
+The verified final dependency view, compatibility inventory, debt classification, and future roadmap are maintained separately in [post-refactor-review.md](post-refactor-review.md). This document remains the detailed behavioral and data-contract reference.
+
 The audit follows the current command routes in `plugin/release/main.go`, every production package under `plugin/release/pkg`, the tests under `plugin/release`, the plugin manifest, the repository V2 release files, and the release workflows. Existing repository-wide release documentation was used only as supporting context where the source and tests confirmed it.
 
 The active production scope is `plugin/release`. Shared contracts inspected for integration context include `pkg/plugin/types.go`, `pkg/errors/plugin_errors.go`, and `pkg/config/env.go`.
@@ -498,6 +500,8 @@ Important missing seams include:
 ## Final refactor status
 
 The final architecture audit found no active V1/V2 mixed orchestration, scattered source-format selection in release execution, raw flags in application code, application-owned `plugin.Response`, generic workflow pipeline, dependency bag, versioned engine, boolean V1/V2 selector, replacement god function, duplicate active Git/journal implementation, or unbounded token/clock access in deterministic boundaries. Shared code is limited to identical contracts; V1-, V2-, migration-, and command-specific behavior remains isolated where semantics differ.
+
+The post-refactor verification found one bounded deviation from the strict presentation rule: active V2 application and focused operation code still emits progress through the package-global terminal logger. This does not mix response construction into application code or create a second orchestrator, but it is recorded as an architecture violation in [post-refactor-review.md](post-refactor-review.md) rather than being hidden by the completed-stage ledger.
 
 - Completed stages: 9 / 9
 - Remaining stages: 0
