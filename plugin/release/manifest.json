@@ -1,6 +1,6 @@
 {
   "name": "release",
-  "version": "4.1.1",
+  "version": "4.2.0",
   "description": "Release management plugin",
   "author": "nekoman-hq",
   "commands": [
@@ -76,31 +76,31 @@
           "type": "string",
           "required": false,
           "default": "release",
-          "description": "Unit kind: release (default) for normal services, apps, CLIs, SDKs, libraries, and backend modules; plugin only for Neko CLI plugins"
+          "description": "Release unit kind (release|plugin)"
         },
         {
           "name": "plugin-name",
           "type": "string",
           "required": false,
-          "description": "Public Neko CLI plugin name; only for --kind plugin and required there"
+          "description": "Public plugin name, required when kind=plugin"
         },
         {
           "name": "plugin-manifest",
           "type": "string",
           "required": false,
-          "description": "Neko CLI plugin manifest path relative to repository root; only for --kind plugin and required there"
+          "description": "Repository-root-relative plugin manifest path, required when kind=plugin"
         },
         {
           "name": "plugin-asset-prefix",
           "type": "string",
           "required": false,
-          "description": "Neko CLI plugin release asset prefix; only for --kind plugin, required there, and must equal unit id"
+          "description": "Plugin release asset prefix, required when kind=plugin and must match the unit id"
         },
         {
           "name": "plugin-binary-name",
           "type": "string",
           "required": false,
-          "description": "Neko CLI plugin executable name in release archives; only for --kind plugin and required there"
+          "description": "Plugin executable name in release archives, required when kind=plugin"
         },
         {
           "name": "force",
@@ -183,31 +183,31 @@
           "type": "string",
           "required": false,
           "default": "release",
-          "description": "Unit kind: release (default) for normal services, apps, CLIs, SDKs, libraries, and backend modules; plugin only for Neko CLI plugins"
+          "description": "Release unit kind (release|plugin)"
         },
         {
           "name": "plugin-name",
           "type": "string",
           "required": false,
-          "description": "Public Neko CLI plugin name; only for --kind plugin and required there"
+          "description": "Public plugin name, required when kind=plugin"
         },
         {
           "name": "plugin-manifest",
           "type": "string",
           "required": false,
-          "description": "Neko CLI plugin manifest path relative to repository root; only for --kind plugin and required there"
+          "description": "Repository-root-relative plugin manifest path, required when kind=plugin"
         },
         {
           "name": "plugin-asset-prefix",
           "type": "string",
           "required": false,
-          "description": "Neko CLI plugin release asset prefix; only for --kind plugin, required there, and must equal unit id"
+          "description": "Plugin release asset prefix, required when kind=plugin and must match the unit id"
         },
         {
           "name": "plugin-binary-name",
           "type": "string",
           "required": false,
-          "description": "Neko CLI plugin executable name in release archives; only for --kind plugin and required there"
+          "description": "Plugin executable name in release archives, required when kind=plugin"
         }
       ]
     },
