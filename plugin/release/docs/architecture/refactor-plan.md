@@ -58,7 +58,12 @@ The target does not require one package per layer. Boundaries can begin as types
 
 ## Refactor progress ledger
 
-The architecture baseline is complete. Of the nine numbered stages, eight are complete and one remains. The exact next stage is **Stage 9: Isolate the V1 compatibility subsystem.**
+- Completed stages: 9 / 9
+- Remaining stages: 0
+- Release Plugin refactor: completed
+- Next step: post-refactor review and feature planning
+
+The next step is not Stage 10. Any future implementation requires a separately authorized feature or compatibility decision.
 
 | Stage | Title | Status | Commits |
 | ----- | ----- | ------ | ------- |
@@ -71,7 +76,7 @@ The architecture baseline is complete. Of the nine numbered stages, eight are co
 | Stage 6 | Extract init and unit-add use cases with paired persistence | Completed (2026-07-14) | `fed944b`, `96338f8` |
 | Stage 7 | Extract read-only query use cases and plugin-index output persistence | Completed (2026-07-15) | `a0d79e9`, `0fa44f8`, `4e97d78` |
 | Stage 8 | Type and isolate migration recovery | Completed (2026-07-15) | `0f48993`, `d2463d0`, `b11267a` |
-| Stage 9 | Isolate the V1 compatibility subsystem | Planned | — |
+| Stage 9 | Isolate the V1 compatibility subsystem | Completed (2026-07-15) | `fa55952`, `ab72785`, `55d5962`, `docs(release): complete release plugin refactor` (this documentation commit) |
 
 ## Clean-code completion gate for production refactors
 
@@ -854,9 +859,7 @@ Stage 8 was completed on 2026-07-15 by `0f48993`, `d2463d0`, and `b11267a`.
 - Focused tests inject journal start/confirm/remove, target persist/verify, source archive/confirm/verify, and restoration failures; assert stop order and disk evidence at every boundary; prove recovery skips completed effects; validate journal compatibility and permissions; and enforce handler/planner/policy/execution separation plus pair-writer reuse. Migration/config/init/validate packages, all Release Plugin tests, the full repository, and lint pass.
 - No multi-unit/nested migration, journal relocation/schema bump, plugin inference, V1 executor change, V2 release behavior change, remote action, publication action, generic migration framework, or boolean internal workflow selector was introduced.
 
-Eight of nine numbered stages are complete; one remains.
-
-Next exact stage: **Stage 9: Isolate the V1 compatibility subsystem.**
+At the Stage 8 boundary, eight of nine numbered stages were complete; Stage 9 followed as the final planned implementation stage.
 
 ## Stage 9: Isolate the V1 compatibility subsystem
 
@@ -918,11 +921,13 @@ Build fake-driven executor and rollback matrices first. Include no-mutation guar
 
 Run all V1 config/requirements/version/tool/rollback tests, full Release Plugin tests, then the full baseline.
 
-### Expected commit sequence
+### Completed commit sequence
 
 ```text
-test(release): characterize legacy executor recovery
-refactor(release): isolate v1 release compatibility
+fa55952 test(release): characterize v1 compatibility contracts
+ab72785 refactor(release): isolate v1 compatibility use cases
+55d5962 refactor(release): isolate v1 compatibility adapters
+docs(release): complete release plugin refactor
 ```
 
 ### Risks
@@ -936,6 +941,24 @@ Keep compatibility facades and one commit per executor/core extraction. Revert t
 ### Dependencies
 
 Stages 2 and 3 establish the preferred command/use-case patterns. Perform this after the active V2 path is stable.
+
+### Completion record
+
+Stage 9 was completed on 2026-07-15 by the four milestones above.
+
+- Milestone 9.1 characterized the canonical V1 loader/write bytes and mode, registry overwrite/lookup behavior, local-versus-refreshed version evidence, fatal preflight code/JSON/exit contracts, two-pass execution and config timing, warning-only materialization failure, executor command/ownership/failure behavior, and guarded rollback ordering/fallback/stopping. Tests use fake local processes, temporary repositories/files, and local HTTP transports only.
+- Milestone 9.2 introduced one canonical source selector and distinct V1/V2 applications. V1 now receives typed intent, preview/execution requests, a pure deterministic plan, typed results, and classified failures. Preview is effect-free; execution order is visible through focused dependencies; fatal compatibility is mapped at the command boundary. Active V1 no longer uses `Service`, fatal `Preflight`, or the mixed V1/V2 execution-context builder.
+- Milestone 9.3 replaced active mutable registry lookup with explicit GoReleaser/JReleaser/release-it composition and a fixed catalog. V1 config materialization, requirements/preflight, Git writes, guarded compensation, binary/file access, process execution, token/environment handling, GitHub Release removal, and JReleaser time now have narrow owned adapters. Shared code is limited to identical V1 contracts; executor-specific and V1/V2-specific semantics remain isolated.
+- Concrete executors preserve their distinct behavior: GoReleaser owns commit/tag/push and publication around a warning-only snapshot; JReleaser synchronizes YAML and owns commit/push while the external tool owns tag/publication; release-it owns commit/tag/push/publication and retains bun/npm detection. All store repository-root evidence for bounded compensation.
+- V1 secret handling preserves the legacy `GITHUB_TOKEN` contract but redacts the secret from executor output/errors and GitHub removal errors while preserving wrapped causes. JReleaser's generated inception year uses an injected clock. V1 release responses continue to use the command clock and V1 execution persists no timestamps.
+- Migration remains dependent only on canonical V1 read models/loaders/validation. Architecture guards reject imports of V1 execution, executor, Git mutation, or rollback internals. No V2 application imports V1 execution internals.
+- `HandleRelease`, `Service`, `Preflight`, `Tool`, `ToolBase`, `Register/Get`, executor `Execute`/`Release`/`RevertRelease`, and the mixed context builder remain documented direct compatibility facades. Importing `pkg/release/tool` is the explicit opt-in for side-effect registration; production does not import it. Zero-value executor defaults exist only for legacy callers.
+- The inactive V2-local transaction remains blocked and test-only. The JReleaser V2 source-format bypass was removed instead of activating local V2 execution. No executor, publication type, remote mutation condition, journal schema, or V2 behavior was added.
+- The final clean-code audit found no active mixed V1/V2 orchestration, scattered active source selection, raw flags in application code, application-owned `plugin.Response`, generic state machine, workflow pipeline, dependency bag, broad compatibility manager, versioned release engine, boolean workflow selector, replacement god function, duplicate active journal, or competing active Git implementation.
+- Bounded limitations remain: V1 rollback is best-effort and non-journaled; the compatibility registry and version-evidence variables remain mutable for direct callers/tests; legacy GitHub deletion still uses `http.DefaultClient` below a replaceable client; process-global workspace/current-directory compatibility paths and inactive `ReleaseTransaction` preparation remain. These are post-refactor review topics, not Stage 10.
+- Focused V1 command, source-selection, planner, preview, execution, adapter, rollback, secret-safety, integration, migration-direction, and architecture tests pass. All Release Plugin packages, the full repository, `git diff --check`, and `golangci-lint` pass uncached where applicable.
+
+All nine numbered stages are complete. The next step is **post-refactor review and feature planning**, not another implementation stage in this plan.
 
 ## Atomic commit sequence across the plan
 
@@ -989,4 +1012,6 @@ Features that change active release execution, journal/recovery semantics, dispa
 
 Features that consume arbitrary validated plugin units may now reuse the Stage 5 metadata-driven materializer; changing plugin-index policy or adding release behavior still requires its own authorized stage.
 
-V2 local execution must not begin until Stages 3 through 5 are complete and a separate design explicitly resolves executor ownership, state-in-commit guarantees, unsafe-operation journaling, and recovery. Release-it remains blocked unless that design proves the root state can be included safely.
+All refactor-stage gates are now complete, but completion does not authorize a feature change. V2 local execution remains blocked until a separate design explicitly resolves executor ownership, state-in-commit guarantees, unsafe-operation journaling, and recovery. release-it remains blocked unless that design proves the root state can be included safely.
+
+The next activity is post-refactor review and feature planning. There is no Stage 10 in this plan.
