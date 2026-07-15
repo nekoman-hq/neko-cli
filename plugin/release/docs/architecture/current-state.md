@@ -4,7 +4,7 @@
 
 This document describes the Release Plugin as it exists in the current checkout. It is not a target package design and does not assume that an earlier refactor exists.
 
-The verified final dependency view, compatibility inventory, debt classification, and future roadmap are maintained separately in [post-refactor-review.md](post-refactor-review.md). This document remains the detailed behavioral and data-contract reference.
+The verified final dependency view, compatibility inventory, and debt classification are maintained in [post-refactor-review.md](post-refactor-review.md). Future safety, compatibility, developer-experience, and feature milestones are maintained in [post-refactor-roadmap.md](post-refactor-roadmap.md). This document remains the detailed behavioral and data-contract reference.
 
 The audit follows the current command routes in `plugin/release/main.go`, every production package under `plugin/release/pkg`, the tests under `plugin/release`, the plugin manifest, the repository V2 release files, and the release workflows. Existing repository-wide release documentation was used only as supporting context where the source and tests confirmed it.
 
@@ -506,6 +506,6 @@ The post-refactor verification found one bounded deviation from the strict prese
 - Completed stages: 9 / 9
 - Remaining stages: 0
 - Release Plugin refactor: completed
-- Next step: post-refactor review and feature planning
+- Next milestone: H1 — Make V1 compensation interruption-safe
 
-The next step is not Stage 10. It is a separate review/planning activity for any future feature, compatibility removal, or bounded limitation.
+H1 and the later milestones are maintained in [post-refactor-roadmap.md](post-refactor-roadmap.md). They are not Stage 10; the historical refactor ledger remains closed.

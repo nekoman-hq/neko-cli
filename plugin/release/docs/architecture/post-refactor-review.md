@@ -13,7 +13,7 @@ ab72785 refactor(release): isolate v1 compatibility use cases
 440eecc docs(release): complete release plugin refactor
 ```
 
-The authoritative historical ledger remains in [refactor-plan.md](refactor-plan.md). Detailed behavioral invariants and disk contracts remain in [current-state.md](current-state.md).
+The authoritative historical ledger remains in [refactor-plan.md](refactor-plan.md). Detailed behavioral invariants and disk contracts remain in [current-state.md](current-state.md). Ranked work is sequenced independently in [post-refactor-roadmap.md](post-refactor-roadmap.md).
 
 ## Verified dependency direction
 
@@ -181,7 +181,7 @@ The verified architecture contains no active god function, replacement god objec
 
 One active deviation from the strict presentation rule remains: `releaseStartOperation.Start`, `planV2Release`, `GitHubActionsReleaseRunner.Run`, `githubActionsReleaseUseCase.Run`, and focused V2 release operation adapters call the package-global terminal logger directly. The release decisions and response models remain typed, and the calls do not alter safety ordering, but progress presentation is not supplied as an explicit boundary. This is a bounded architecture violation, not an intentional compatibility requirement. It does not invalidate the historical fact that all nine planned stages were completed; it does require an explicit post-refactor recommendation rather than a claim of zero remaining architectural debt.
 
-The refactor ledger therefore remains closed at 9 / 9. Future safety, compatibility, developer-experience, and feature work belongs in the separate post-refactor roadmap, not in a Stage 10.
+The refactor ledger therefore remains closed at 9 / 9. Future safety, compatibility, developer-experience, and feature work belongs in the separate [post-refactor roadmap](post-refactor-roadmap.md), not in a Stage 10.
 
 ## Prioritized debt register
 
@@ -491,3 +491,5 @@ No code is labeled dead solely from an IDE result. Classification uses productio
 - active V2 application and operation code directly formats terminal progress through the package-global logger. This is bounded to reporting, does not own `plugin.Response`, and does not change release decisions or order, but it conflicts with the strict presentation dependency direction and is assigned to DX1.
 
 The violation does not change the historical ledger: all nine planned refactor stages were completed. It means “completed” is a closed milestone record, not a claim that no future architecture maintenance exists.
+
+The prioritized implementation sequence, acceptance criteria, and commit boundaries are defined in [post-refactor-roadmap.md](post-refactor-roadmap.md). The recommended next milestone is **H1 — Make V1 compensation interruption-safe**.

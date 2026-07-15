@@ -8,6 +8,8 @@ The plan establishes the smallest boundaries needed to make unsafe release order
 
 No stage may silently activate V2 local execution, add standalone dispatch/retry, change V1 semantics, or change production release behavior unless a later feature task explicitly requests that behavior.
 
+This is the closed historical stage plan. The verified post-refactor architecture and debt inventory are in [post-refactor-review.md](post-refactor-review.md); subsequent work uses the separate milestone namespace in [post-refactor-roadmap.md](post-refactor-roadmap.md). No roadmap milestone extends the ledger below.
+
 ## Global invariants for every stage
 
 Every stage must preserve the current contracts in `plugin/release/RULES.md`, especially:
@@ -1014,4 +1016,4 @@ Features that consume arbitrary validated plugin units may now reuse the Stage 5
 
 All refactor-stage gates are now complete, but completion does not authorize a feature change. V2 local execution remains blocked until a separate design explicitly resolves executor ownership, state-in-commit guarantees, unsafe-operation journaling, and recovery. release-it remains blocked unless that design proves the root state can be included safely.
 
-The next activity is post-refactor review and feature planning. There is no Stage 10 in this plan.
+The post-refactor review is complete. The recommended next activity is **H1 — Make V1 compensation interruption-safe**, defined in [post-refactor-roadmap.md](post-refactor-roadmap.md). There is no Stage 10 in this plan.
