@@ -58,7 +58,7 @@ The target does not require one package per layer. Boundaries can begin as types
 
 ## Refactor progress ledger
 
-The architecture baseline is complete. Of the nine numbered stages, six are complete and Stage 7 is in progress; Stages 7 through 9 remain. The exact active stage is **Stage 7: Extract read-only query use cases and plugin-index output persistence.**
+The architecture baseline is complete. Of the nine numbered stages, seven are complete and two remain. The exact next stage is **Stage 8: Type and isolate migration recovery.**
 
 | Stage | Title | Status | Commits |
 | ----- | ----- | ------ | ------- |
@@ -69,7 +69,7 @@ The architecture baseline is complete. Of the nine numbered stages, six are comp
 | Stage 4 | Model resume policy and reuse the active release steps | Completed (2026-07-14) | `ae20876`, `4f63932` |
 | Stage 5 | Consolidate canonical release files, Git, journals, tokens, and clocks | Completed (2026-07-14) | `78c4dad`, `4a8542d` |
 | Stage 6 | Extract init and unit-add use cases with paired persistence | Completed (2026-07-14) | `fed944b`, `96338f8` |
-| Stage 7 | Extract read-only query use cases and plugin-index output persistence | In progress (2026-07-15) | — |
+| Stage 7 | Extract read-only query use cases and plugin-index output persistence | Completed (2026-07-15) | `a0d79e9`, `0fa44f8`, `4e97d78` |
 | Stage 8 | Type and isolate migration recovery | Planned | — |
 | Stage 9 | Isolate the V1 compatibility subsystem | Planned | — |
 
@@ -744,6 +744,23 @@ One commit per query group/output adapter. Revert independently.
 ### Dependencies
 
 Stage 2 mapping patterns; Stage 5 canonical adapter conventions.
+
+### Completion record
+
+Stage 7 was completed on 2026-07-15 by `a0d79e9`, `0fa44f8`, and `4e97d78`.
+
+- `validate`, `history`, and `contributors` now have distinct typed request/result/failure models. Each handler parses raw flags, invokes one focused query use case, and maps one response with a command-owned clock; query code neither imports `plugin.Response` nor receives mutation capabilities.
+- Command-owned repository, Git, and legacy-requirements readers replace direct handler infrastructure. History deliberately retains V1's non-erroring tag/count adapter while V2 Git errors remain structured; contributors retains repository-wide versus path-filtered shortlog behavior; V1 validation still requires its token/executor requirements while V2 remains token-independent.
+- Query use-case tests prove typed defaults, one invocation, deterministic order, dependency stop points, cloned results where canonical slices could alias, empty results, exact structured failures, and absence of config/state/worktree/index/ref mutations. Architecture tests prohibit handler infrastructure access, application response construction, raw flags outside parsers, mutation inside queries, and generic query managers.
+- Plugin-index parses render/check/persist into a typed mode and invokes one `generatePluginIndexUseCase`. `pluginIndexQueryUseCase` owns read-only config/state/manifest discovery, validation, duplicate detection, and stable plugin-name ordering; public `Generate` remains its compatibility facade.
+- `jsonPluginIndexOutputBuilder` owns only stable schema serialization to complete pretty/compact bytes. It chooses no path, performs no filesystem access, and constructs no command response. `Write` and `WriteWithOptions` remain compatibility wrappers.
+- Output mode is explicitly `query -> build -> persist`. `atomicPluginIndexOutputPersister` receives complete bytes and the unchanged arbitrary requested target, creates parents as `0755`, creates new outputs as `0644`, preserves an existing target mode, and uses target-local write/chmod/fsync/close/rename replacement. Overwrite remains allowed.
+- Injected directory/stat/create/write/replace tests prove stopping behavior, old-target preservation for returned pre-replace failures, temporary cleanup, and no unrelated-file mutation. Check remains discovery-only; default raw JSON and output responses, error-to-fatal boundaries, schema, formatting, flags, paths, manifest/workflow contracts, and cancellation behavior remain characterized.
+- No shared query service, broad read repository, generic output store, dependency bag, command pipeline, boolean workflow selector, schema change, output confinement rule, publication action, token change, V1 behavior change, or V2 release-path change was introduced.
+
+Seven of nine numbered stages are complete; two remain.
+
+Next exact stage: **Stage 8: Type and isolate migration recovery.**
 
 ## Stage 8: Type and isolate migration recovery
 

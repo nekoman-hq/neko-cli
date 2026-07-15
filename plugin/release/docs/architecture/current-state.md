@@ -30,10 +30,10 @@ The public command contract is duplicated between `manifest.json` and the switch
 | `pkg/config` | V1/V2 disk models, strict loading, validation, normalization, unit and tag selection, atomic file writes | `ReleaseRepository`, `ReleaseUnit`, `LoadReleaseRepository`, `ValidateV2`, `ResolveReleaseUnit`, `TagSpec`, `AtomicWriteFile` | `ReleaseRepository` is the shared normalized model. V1 remains a compatibility source. |
 | `pkg/init` | Typed init/unit-add command boundaries, focused initialization use cases, pure unit/pair construction, explicit file policy, and rollback-backed pair persistence | `HandleInit`, `HandleUnitAdd`, `initializeV2RepositoryUseCase`, `addV2ReleaseUnitUseCase`, `v2ReleasePairPersister` | Handlers parse, invoke one use case, and map a typed result/failure; persistence prepares both targets and has a bounded restore contract. |
 | `pkg/migrate` | Plan, execute, journal, recover, and present root V1-to-V2 migration | `ResolvePlan`, `Run`, `executePlan`, `HandleMigrate` | Uses a worktree migration journal distinct from release journals. |
-| `pkg/validate` | Load V1/V2, validate requirements, render config rows | `HandleValidate`, `validateV1Response`, `validateV2Response` | V1 validation resolves `GITHUB_TOKEN`; V2 config validation does not. |
-| `pkg/history` | Unit selection, unit tag discovery, path-filtered commit counts, response mapping | `HandleHistory`, `handleV2History` | V1 uses every tag; V2 uses exact `TagSpec` matches. |
-| `pkg/contributors` | Unit selection, path-filtered Git shortlog, response mapping | `HandleContributors` | V1 and V2 Git access share direct package functions. |
-| `pkg/pluginindex` | Generate deterministic public plugin registry data, optionally write or render it | `HandlePluginIndex`, `Generate`, `WriteWithOptions` | Handler errors are returned as Go errors and become `EXECUTION_ERROR` in `main`. |
+| `pkg/validate` | Typed validation request/result boundary, focused V1/V2 validation query, and response mapping | `HandleValidate`, `validationQueryUseCase`, `mapValidationQueryResponse` | V1 validation retains its requirements adapter and `GITHUB_TOKEN` dependency; V2 config validation is token-independent and read-only. |
+| `pkg/history` | Typed history query, format-specific read-only Git capabilities, and response mapping | `HandleHistory`, `historyQueryUseCase`, `historyGitReader` | V1 deliberately retains non-erroring tag/count queries; V2 uses exact `TagSpec` matches and structured Git failures. |
+| `pkg/contributors` | Typed contributor query, repository/unit selection, focused shortlog capabilities, and response mapping | `HandleContributors`, `contributorsQueryUseCase`, `contributorsGitReader` | V1 repository-wide and V2 path-filtered reads share one command-owned read port without mutation capabilities. |
+| `pkg/pluginindex` | Typed command modes, deterministic discovery/validation/order, pure JSON output building, and atomic requested-path persistence | `HandlePluginIndex`, `pluginIndexQueryUseCase`, `jsonPluginIndexOutputBuilder`, `atomicPluginIndexOutputPersister` | Check/render/persist retain their established outputs; all command failures remain Go errors that become top-level `EXECUTION_ERROR`. |
 | `pkg/git` | Legacy Git queries, V1 preflight, tag/history queries, and destructive V1 rollback helpers | `IsClean`, `LatestTag`, `UnitTagsInHistory`, `DeleteRemoteTag`, `HardResetTo` | Direct `exec.Command` and `http.DefaultClient`; mostly no injected seam. |
 | `pkg/release` planning | Version bump, execution context, delivery/capability descriptions, materialization plan | `PlanUnitVersionBump`, `BuildReleaseExecutionContext`, `ResolveDelivery`, `ResolveExecutorCapabilities`, `ResolveVersionMaterializer` | Useful typed models exist, but some capability data describes inactive V2 local behavior. |
 | `pkg/release` V1 | V1 preflight, version guard, executor registry, local executor execution and rollback | `Service.Run`, `Preflight`, `Tool`, `ToolBase`, `VersionGuard` | Uses global tool registration and direct process/Git/environment dependencies. |
@@ -144,34 +144,35 @@ The public command contract is duplicated between `manifest.json` and the switch
 
 ### `history`
 
-- Entry: `history.HandleHistory`.
-- V1: uses all local tags and direct commit counts.
-- V2: exact unit-prefixed tags reachable from `HEAD`, ordered by history, with counts constrained to unit pathspecs.
-- Tests: `history_test.go` and `git/tag_test.go` cover unit filtering, path counts, and explicit selection.
-- Missing characterization: errors from each Git query and deterministic behavior when multiple matching tags point to one commit.
+- Entry: `history.HandleHistory` parses `historyQueryRequest`, invokes `historyQueryUseCase.Query` once, and maps the typed result/failure with a response clock.
+- Read ownership: `historyRepositoryReader` loads the canonical repository; the command-owned `historyGitReader` exposes only legacy tags/counts and V2 unit-tags/path-counts. No mutating Git capability enters the use case.
+- V1: uses all local tags and direct commit counts. The legacy adapter intentionally retains the established empty-success/zero-count behavior when its package functions suppress Git errors.
+- V2: exact unit-prefixed tags reachable from `HEAD`, ordered by history, with counts constrained to unit pathspecs. Unit-tag and count errors map to `GIT_HISTORY_FAILED` with a nil handler Go error.
+- Tests: parser, one-invocation handler, fixed mapper, focused stop-point, same-commit ordering, empty result, real-Git path filtering, and worktree/index/ref immutability tests supplement `git/tag_test.go`.
 
 ### `contributors`
 
-- Entry: `contributors.HandleContributors`.
-- V1: repository-wide `git shortlog`; V2: selected-unit pathspecs.
-- Tests: `contributors_test.go` and `git/tag_test.go`.
-- Missing characterization: Git failure response contract and stable item ordering beyond Git output order.
+- Entry: `contributors.HandleContributors` parses `contributorsQueryRequest`, invokes `contributorsQueryUseCase.Query` once, and maps its typed result/failure.
+- Read ownership: a command-owned repository reader and contributor-only Git port expose repository-wide or selected-path shortlog reads; the use case preserves the adapter's deterministic order and clones returned entries.
+- V1: repository-wide `git shortlog`; V2: selected-unit pathspecs. Git failures remain structured `GIT_CONTRIBUTORS_FAILED` responses with nil handler Go errors.
+- Tests: typed defaults, handler invocation/mapping, V1/V2 capability selection, dependency stopping, empty results, selected paths, response contracts, and worktree/index/HEAD immutability are explicit.
 
 ### `validate`
 
-- Entry: `validate.HandleValidate`.
-- V2: strict load/validation already occurred in `LoadReleaseRepository`; optional `--show` renders normalized unit facts.
-- V1: revalidates config and checks token/executor configuration through `ValidateRequirements`.
-- Tests: `validate_test.go`, config tests, workflow validation tests.
-- Missing characterization: stable error mapping for every invalid V2 file combination and whether read-only V1 validation should continue to require a token; the current token requirement is behavior, not a target recommendation.
+- Entry: `validate.HandleValidate` parses `validationQueryRequest`, invokes `validationQueryUseCase.Query` once, and maps typed validation facts/failures outside application code.
+- Read ownership: `validationRepositoryReader` returns canonical repository data plus the presence fact needed to preserve `CONFIG_NOT_FOUND` versus `CONFIG_INVALID`; `legacyRequirementsValidator` is the only V1 environment/filesystem requirements capability.
+- V2: strict load/validation already occurred in `LoadReleaseRepository`; optional `--show` returns cloned normalized unit facts for pure response formatting. It remains token-independent and non-mutating.
+- V1: resolves the legacy unit, revalidates the model, then invokes the established token/executor requirements adapter in that order. The token requirement remains characterized compatibility behavior, not a recommendation.
+- Tests: typed defaults, fixed response mapping, load/presence classification, V1 validation/requirements stop order, V2 dependency isolation and no-alias behavior, stable rows/errors, and exact config/state immutability supplement config/workflow tests.
 
 ### `plugin-index`
 
-- Entry: `pluginindex.HandlePluginIndex` -> `Generate`.
-- Decisions: load V2 config/state, select `kind: plugin` units, validate manifest name/version, reject duplicate names/tags, sort by plugin name.
-- Side effects: optional direct `os.WriteFile` to an arbitrary requested output path; default output is raw JSON.
-- Tests: generator validation, deterministic order, check/default/output modes, and workflow script integration.
-- Missing characterization: stable plugin error code/response behavior, atomic output writes, output path confinement policy, filesystem failure injection, and clock/cancellation behavior.
+- Entry: `pluginindex.HandlePluginIndex` parses one typed render/check/persist mode, invokes `generatePluginIndexUseCase.Run` once, and maps a typed result. `--check` with `--output`, discovery, building, and persistence failures intentionally remain Go errors and therefore top-level `EXECUTION_ERROR` values.
+- Discovery and validation: `pluginIndexQueryUseCase` owns config/state/manifest reads through `pluginIndexSourceReader`; pure candidate/completion functions validate state SemVer and manifest identity, duplicate checks retain their prior order, and entries are stably sorted by plugin name. Public `Generate` is the compatibility facade over this query.
+- Output building: `jsonPluginIndexOutputBuilder` alone creates complete pretty or compact JSON bytes with the stable schema/order and trailing newline. It chooses no path, reads no files, and constructs no response. `Write` and `WriteWithOptions` remain public compatibility wrappers over those complete bytes.
+- Persistence: output mode passes complete bytes and the unchanged requested path to `atomicPluginIndexOutputPersister`. It creates requested parent directories as `0755`, overwrites the arbitrary requested target, uses `0644` for a new file, preserves an existing target's mode, writes/fsyncs/closes a target-local temporary file, then renames it and discards any unconsumed temporary file. A returned pre-replace/write/replace failure preserves the prior target; no config, state, manifest, Git, journal, or unrelated file is mutated.
+- Modes: check performs discovery only; default render performs discovery then building and returns raw JSON; output performs discovery, building, and the explicit single-file command effect. There is still no output-path confinement policy, publication action, cancellation source beyond the supplied context, or schema change.
+- Tests: query/read stop points, typed entry validation, deterministic output, parser/handler/use-case boundaries, all three modes, builder/writer failure, creation/replacement/modes, injected create/write/replace failures, original preservation, temporary cleanup, unrelated-file preservation, response compatibility, and workflow scripts are explicit.
 
 ## Important data models
 
@@ -253,11 +254,11 @@ prepared -> config-written -> state-written -> v1-archived -> validated -> journ
 | Dependency | Current access | Test seam | Risk |
 | --- | --- | --- | --- |
 | Working directory | `workspace.ChangeToProjectRoot`, `ToolBase.InUnitRoot`, many relative paths | temp dirs plus `os.Chdir` | Process-global state prevents parallel handler tests and hides path dependencies. |
-| Filesystem | focused init pair repository/disk boundaries; direct `os.*` remain across config/migrate/release/pluginindex/tools | init pair temp/create/write/replace/restore seams, temp directories, and a few release/migration abstractions | Init pair failures are isolated; most other handlers still cannot inject every read/write/rename failure. |
-| Git | active V2 release/resume use one `GitReleaseCoordinator`; `pkg/git` and direct Git remain in V1, migration, inactive transaction, and tools | coordinator runner, focused consumer ports, and real temp Git repositories | Legacy flows still expose different error and logging semantics; Stage 5 does not rewrite them. |
+| Filesystem | focused init pair and plugin-index source/persistence boundaries; direct `os.*` remain across config/migrate/release/tools | init pair temp/create/write/replace/restore seams; plugin-index source reader plus directory/stat/atomic-replacement seams; temp directories and release/migration abstractions | Init pair and plugin-index output failures are isolated; migration, V1 tools, and inactive release paths still cannot inject every filesystem boundary. |
+| Git | active V2 release/resume use one `GitReleaseCoordinator`; history and contributors use separate command-owned read-only ports; `pkg/git` and direct Git remain in V1, migration, inactive transaction, and tools | coordinator runner, focused query capabilities, and real temp Git repositories | Legacy V1 history intentionally suppresses some Git errors, and V1 release/migration/tool flows still expose different semantics. |
 | Environment/token | V1 `pkg/config.GetPAT`; V2 `EnvironmentGitHubActionsDispatchTokenResolver` returning `GitHubActionsDispatchToken` | `t.Setenv`, typed token resolver interfaces | V1 and V2 intentionally retain different token messages and behavior. |
 | Network | V1 `http.DefaultClient` GitHub deletion; V2 injected `RoundTripper` dispatch client | strong V2 client seam; weak V1 seam | V1 rollback network behavior is hard to isolate. |
-| Time | one `ReleaseClock` for release/resume responses and active V2 persisted timestamps; compatibility zero-time fallbacks and other commands/tools still use direct time | injected fixed clock and end-to-end persisted timestamp tests | Non-release commands, V1 tools, and direct model callers remain outside the active V2 clock boundary. |
+| Time | `ReleaseClock` for release/resume responses and active V2 persistence; command-owned response clocks for validate/history/contributors/plugin-index; compatibility fallbacks and V1 tools still use direct time | injected fixed response clocks and end-to-end persisted timestamp tests | V1 tools and direct compatibility model callers remain outside an injected clock boundary. |
 | External executables | `git`, `goreleaser`, `jreleaser`, `npm`, `bun`, `npx`, `du` | mostly real executable lookup/subprocess | V1 executor unit tests do not isolate command ordering/failures. |
 | Logging | package-global `log.Verbose` and direct logging throughout domain/orchestration | source assertions and output inspection | Presentation concerns occur inside planning and side-effect code. |
 | Tool registry | global map populated by blank imports | package-global registry | Registration order/state is implicit. |
@@ -295,6 +296,8 @@ The following are current behavior. They are not statements that every behavior 
 | INV-25 | Root V1 migration writes a content-hashed journal before V2 files, archives byte-identical V1 content, validates the final V2 repository, and removes the journal only after success. | `migrate.executePlan`, `archiveV1`, `validateFinal` | all migration and interruption recovery tests |
 | INV-26 | V2 local non-dry-run execution is blocked. GitHub Actions owns build and publish after accepted handoff; local release tools are not invoked by that V2 path. | `releaseStartOperation`, `GitHubActionsReleaseRunner.Run` | V2 block tests and runner fake dispatch tests |
 | INV-27 | Init and unit-add validate one complete V2 config/state pair before persistence. Both temporary files are created, written, chmodded, and fsynced before config then state replacement; a returned replace failure attempts exact restoration of both prior byte/mode/existence snapshots. | `initializeV2RepositoryUseCase`, `addV2ReleaseUnitUseCase`, `v2ReleasePairPersister` | focused new/update, temp-create/write, first/second replace, exact restore, restore-failure, cleanup, byte, and mode tests |
+| INV-28 | Validate, history, contributors, and plugin-index check/render queries receive only command-owned read capabilities and do not mutate release files, Git worktree/index/refs, journals, environment, or plugin state. V1 validate still resolves its token through the requirements read, and legacy history retains suppressed Git failures. | `validationQueryUseCase`, `historyQueryUseCase`, `contributorsQueryUseCase`, `pluginIndexQueryUseCase` | parser/use-case/handler stop-point tests plus config/state/tree and real-Git worktree/index/ref immutability contracts |
+| INV-29 | Plugin-index output mode builds the complete stable JSON bytes before passing them and the unchanged requested path to one atomic persister. New parents/files use `0755`/`0644`; overwrite is allowed and preserves an existing target mode; returned write/replace failures preserve the old target and clean temporary files. | `jsonPluginIndexOutputBuilder`, `atomicPluginIndexOutputPersister`, `config.AtomicFileReplacement` | exact pretty/compact schema tests plus creation, replacement, mode, injected write/replace, original-preservation, unrelated-file, and cleanup tests |
 
 ## Architecture strengths
 
@@ -308,6 +311,8 @@ The following are current behavior. They are not statements that every behavior 
 - Execution and dispatch journal states are typed, monotonic, and persisted outside the worktree.
 - Dispatch target parsing, redirect refusal, response classification, and token redaction are conservative and well tested.
 - V2 failure policy preserves evidence after unsafe operations instead of destructive rollback.
+- Validate, history, contributors, and plugin-index have typed command boundaries with command-owned read capabilities and deterministic mappers.
+- Plugin-index discovery, JSON output construction, and atomic single-file persistence are distinct owners with focused failure seams.
 - Manifest, routes, docs, workflows, V2 self-release state, and plugin index scripts have cross-file contract tests.
 
 ## Concrete hotspots and mixed abstraction levels
@@ -336,9 +341,15 @@ This is bounded rollback, not cross-file atomicity. A process, kernel, machine, 
 
 V2 config validation and normalized `ReleaseUnit` metadata own plugin manifest identity and location. Materialization consumes that metadata directly; no active hard-coded unit mapping or generic path registry remains.
 
+### Read-only query and plugin-index ownership
+
+Validate, history, and contributors each retain a separate user-visible query intention. Raw flags stop in their command request parser; handlers invoke one query and one mapper; query results contain typed facts rather than `plugin.Response` rows. Repository, Git, and V1 requirements reads are consumer-owned capabilities with no mutation methods. The former duplicated `getFlagString`, error-response constructors, direct clocks, and handler-level row construction were removed without introducing a shared query service or universal result.
+
+Plugin-index is explicitly not one pure query in output mode. `pluginIndexQueryUseCase` discovers and validates typed entries through read-only config/state/manifest sources and orders them by plugin name. `jsonPluginIndexOutputBuilder` transforms the complete typed index to stable bytes. `atomicPluginIndexOutputPersister` alone selects the unchanged command-supplied target and performs the single-file effect. Check mode ends after discovery, render mode ends after building, and persist mode is the readable `query -> build -> persist` path. The persister is not used for release config/state, manifests, journals, or unrelated artifacts.
+
 ### Response and error duplication
 
-Release start and resume centralize typed failures and exact response mapping in `command_response.go`, with explicit timestamps supplied by their handler clocks. Init and unit-add now share `response_mapper.go`, but intentionally retain the characterized compatibility value `init` for unit-add error metadata; correcting that value is a later explicit public-contract decision. Other command packages still create timestamps, metadata, table rows, and error structures independently. `history` and `contributors` duplicate the same helpers. `plugin-index` often returns Go errors, unlike handlers that return structured error responses. Stable contracts outside release start/resume/init therefore remain distributed.
+Release start/resume, init/unit-add, validate, history, contributors, and plugin-index each now have typed results/failures and command-owned response mappers with explicit clocks. The mappers remain command-specific because their schemas are not one universal result contract. Init/unit-add intentionally retain the characterized compatibility value `init` for unit-add error metadata. Validate/history/contributors convert their typed failures to structured responses with nil Go errors; plugin-index intentionally returns parser/query/builder/persistence errors as Go errors for top-level fatal `EXECUTION_ERROR` mapping. Migration and V1 compatibility response/fatal behavior remain later-stage concerns.
 
 ### Multiple side-effect adapters
 
@@ -351,6 +362,8 @@ The suite is package-local and predominantly uses temporary real files and real 
 Existing replaceable seams include:
 
 - init/unit-add `v2PresenceReader`, `v2PairLoader`, `v2PairValidator`, and `v2PairWriter` consumer ports, plus config/state-specific temp-create/write/replace/restore operations inside the focused pair persister;
+- validate `validationRepositoryReader` and `legacyRequirementsValidator`, history `historyRepositoryReader`/`historyGitReader`, and contributors `contributorsRepositoryReader`/`contributorsGitReader` read-only capabilities;
+- plugin-index `pluginIndexSourceReader`, query/builder/persister command ports, and persistence-specific directory/stat/atomic-replacement operations;
 - `gitCommandRunner` inside the single active `GitReleaseCoordinator` and shared journal common-dir mechanics.
 - `GitHubActionsWorkflowDispatchClient` and injected HTTP transport.
 - `GitHubActionsDispatchTokenResolver`.
@@ -361,21 +374,20 @@ Existing replaceable seams include:
 
 Important missing seams include:
 
-- filesystem/config/state repositories for flows outside init and active release; active release transaction factories and journal operation ports permit failure injection without changing production stores;
+- filesystem/config/state repositories for migration, V1 compatibility, and inactive release paths; active release transaction factories and journal operation ports permit failure injection without changing production stores;
 - replaceable facade construction inside `releaseStartOperation`; release and resume composition itself now injects focused coordinator, store, dispatch, token, and clock dependencies;
-- one Git port used by all Release Plugin flows;
+- focused Git ports for migration and V1 compatibility; a universal Git port is not a target;
 - subprocess runners for V1 tools;
 - an HTTP client for V1 GitHub rollback;
 - a command-decoding policy for wrong flag types; the Stage 2 parsers deliberately preserve silent defaults because rejection would be a new public behavior.
 
 ## Missing characterization coverage, prioritized
 
-1. Stable command contracts outside V2 release/resume/init/unit-add: exact error code/message/details, response metadata command, renderer hint, and deterministic item order for every other public command.
-2. V1 executor order and rollback characterization with fake subprocess/network adapters before any extraction.
+1. Migration error/response contracts, injected failure at every unsafe filesystem boundary, and unknown/corrupt journal stage handling.
+2. V1 executor order, command/fatal mapping, and rollback characterization with fake subprocess/network adapters before extraction.
 3. Remaining secret non-disclosure and filesystem/journal failure paths outside the active release operation seams.
 4. Completed release behavior after exclusion: subsequent active version planning from the committed V2 state.
-5. Migration injected failure at every unsafe filesystem boundary and unknown/corrupt journal stage handling.
-6. History, contributors, validate, and plugin-index Git/filesystem error mapping and stable output ordering.
+5. Plugin-index symlink/output-confinement policy remains deliberately undefined; the established arbitrary requested-path behavior is preserved.
 
 ## Compatibility constraints for future work
 
@@ -387,7 +399,8 @@ Important missing seams include:
 - Preserve journal schema versions, identity inputs, file locations/permissions, state order, pending markers, and terminal dispatch behavior.
 - Preserve the `GITHUB_TOKEN` non-disclosure boundary.
 - Preserve dry-run and recovery read-only guarantees.
+- Preserve query-command structured-versus-fatal boundaries, deterministic row order, and plugin-index schema/format/path/overwrite/mode contracts.
 - Do not activate V2 local execution, standalone dispatch/retry, or a new publication adapter as an incidental refactor.
 - Do not rename or move public symbols until callers and contract tests make that change explicit.
 
-Active release and resume share canonical metadata-driven release files, focused Git capabilities, store-specific journals over common secure file mechanics, one typed V2 token, and one explicit clock. Init and unit-add now have typed boundaries, focused application use cases, pure policy/construction/mutation, and bounded rollback-backed pair persistence without a generic transaction framework. The exact next refactor stage is Stage 7: extract read-only query use cases and plugin-index output persistence.
+Active release/resume, init/unit-add, and the four Stage 7 query/output commands now have typed presentation boundaries, focused application intentions, and narrowly owned adapters without generic workflows, repositories, or managers. Read-only queries expose no mutation capabilities; plugin-index persistence is an explicit atomic single-file command effect over complete bytes. The exact next refactor stage is Stage 8: type and isolate migration recovery.
