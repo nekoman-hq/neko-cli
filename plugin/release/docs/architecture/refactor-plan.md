@@ -58,7 +58,7 @@ The target does not require one package per layer. Boundaries can begin as types
 
 ## Refactor progress ledger
 
-The architecture baseline is complete. Of the nine numbered stages, seven are complete and two remain. The exact next stage is **Stage 8: Type and isolate migration recovery.**
+The architecture baseline is complete. Of the nine numbered stages, eight are complete and one remains. The exact next stage is **Stage 9: Isolate the V1 compatibility subsystem.**
 
 | Stage | Title | Status | Commits |
 | ----- | ----- | ------ | ------- |
@@ -70,7 +70,7 @@ The architecture baseline is complete. Of the nine numbered stages, seven are co
 | Stage 5 | Consolidate canonical release files, Git, journals, tokens, and clocks | Completed (2026-07-14) | `78c4dad`, `4a8542d` |
 | Stage 6 | Extract init and unit-add use cases with paired persistence | Completed (2026-07-14) | `fed944b`, `96338f8` |
 | Stage 7 | Extract read-only query use cases and plugin-index output persistence | Completed (2026-07-15) | `a0d79e9`, `0fa44f8`, `4e97d78` |
-| Stage 8 | Type and isolate migration recovery | Planned | — |
+| Stage 8 | Type and isolate migration recovery | Completed (2026-07-15) | `0f48993`, `d2463d0`, `b11267a` |
 | Stage 9 | Isolate the V1 compatibility subsystem | Planned | — |
 
 ## Clean-code completion gate for production refactors
@@ -819,11 +819,12 @@ Add corrupt/unknown stage cases and injected failures at every persisted boundar
 
 Run migration, config atomic/V1/V2, validate, and full baseline tests.
 
-### Expected commit sequence
+### Completed commit sequence
 
 ```text
-test(release): characterize migration failure boundaries
-refactor(release): type migration recovery phases
+0f48993 test(release): characterize migration recovery contracts
+d2463d0 refactor(release): type migration recovery policy
+b11267a refactor(release): isolate migration recovery operations
 ```
 
 ### Risks
@@ -837,6 +838,25 @@ Keep serialized format unchanged so reverting production code does not strand jo
 ### Dependencies
 
 Stage 5 adapter conventions are helpful but not required.
+
+### Completion record
+
+Stage 8 was completed on 2026-07-15 by `0f48993`, `d2463d0`, and `b11267a`.
+
+- Characterization pins the exact dry-run and execution response envelope, metadata, ordered rows, data keys, JSON, nil-Go-error `MIGRATION_FAILED` behavior, wrong-typed `dry-run` default, recovery actions for every compatible durable stage, byte-identical source backup and mode, target modes, input immutability, and unrelated-file preservation.
+- Raw flags now stop in `command_request.go`. `HandleMigrate` parses one typed request, invokes `migrationUseCase` once, and maps one typed result/failure with an injected clock. `Run`, `ResolvePlan`, and `Plan` remain compatibility facades; public codes, renderer hints, rows, keys, flags, journal schema/paths/mode, and serialized stage strings remain stable.
+- Source format, exact file snapshots, complete V2 target values/canonical bytes, plan kind, recovery classification, target/source file operations, command outcome, and failure class are typed. The planner constructs and validates a complete target pair without filesystem access; pure policy selects the planning intention and evidence-driven operations.
+- `migrationJournalStage` serializes the existing `prepared`, `config-written`, `state-written`, and `v1-archived` values. Load-time validation now rejects empty and unknown stages. Characterization proved those values were accepted accidentally; rejection is the narrow intentional safety correction because silently planning from unrecognized durable state could destroy recovery evidence.
+- `migrationPlanExecution` exposes one fixed safety order through focused journal, target-pair persistence, target-verification, source-archive, and archived-source-verification capabilities. It is not a generic workflow, pipeline, dependency bag, manager, or transition engine. The old duplicate procedural `executePlan`, per-file target writes, `archiveV1`, and `validateFinal` execution path was removed.
+- Init, unit-add, and migration reuse `config.V2ReleasePairPersister`. Both target files are prepared before either replacement; a returned replace failure attempts exact restoration of both prior byte/mode/existence snapshots, attempts both restorations even if one fails, cleans temporary files, and identifies incomplete restoration as manual recovery. This is bounded rollback, not cross-file crash atomicity.
+- Migration confirms and verifies exact target bytes plus strict V2 validity before archiving the active V1 source. Target persistence, journal confirmation, or target verification failures therefore retain active V1 plus journal/target evidence. After archive, the byte-identical hash-matched backup is authoritative; source confirmation, source verification, or final journal-removal failures preserve the target pair, backup, and journal for the next evidence-driven run. An invalid only remaining backup requires manual recovery.
+- Process, kernel, machine, and filesystem crashes can still occur between the two target renames or between an effect and journal confirmation. A mixed pair, retained journal, or empty `.neko` directory can remain. The next run classifies compatible journal and exact file/hash evidence; no claim of universal repair or cross-file transactionality is made.
+- Focused tests inject journal start/confirm/remove, target persist/verify, source archive/confirm/verify, and restoration failures; assert stop order and disk evidence at every boundary; prove recovery skips completed effects; validate journal compatibility and permissions; and enforce handler/planner/policy/execution separation plus pair-writer reuse. Migration/config/init/validate packages, all Release Plugin tests, the full repository, and lint pass.
+- No multi-unit/nested migration, journal relocation/schema bump, plugin inference, V1 executor change, V2 release behavior change, remote action, publication action, generic migration framework, or boolean internal workflow selector was introduced.
+
+Eight of nine numbered stages are complete; one remains.
+
+Next exact stage: **Stage 9: Isolate the V1 compatibility subsystem.**
 
 ## Stage 9: Isolate the V1 compatibility subsystem
 

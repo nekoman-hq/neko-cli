@@ -27,9 +27,9 @@ The public command contract is duplicated between `manifest.json` and the switch
 | --- | --- | --- | --- |
 | `main` | Plugin protocol entry, workspace change, command routing, fatal error fallback | `main` | Uses a command switch rather than a command registry. |
 | `pkg/workspace` | Select V2 Git root or legacy nearest-V1 root, then change process cwd | `ResolveProjectRoot`, `ChangeToProjectRoot` | Process-global `os.Chdir` is an implicit dependency of every handler. |
-| `pkg/config` | V1/V2 disk models, strict loading, validation, normalization, unit and tag selection, atomic file writes | `ReleaseRepository`, `ReleaseUnit`, `LoadReleaseRepository`, `ValidateV2`, `ResolveReleaseUnit`, `TagSpec`, `AtomicWriteFile` | `ReleaseRepository` is the shared normalized model. V1 remains a compatibility source. |
-| `pkg/init` | Typed init/unit-add command boundaries, focused initialization use cases, pure unit/pair construction, explicit file policy, and rollback-backed pair persistence | `HandleInit`, `HandleUnitAdd`, `initializeV2RepositoryUseCase`, `addV2ReleaseUnitUseCase`, `v2ReleasePairPersister` | Handlers parse, invoke one use case, and map a typed result/failure; persistence prepares both targets and has a bounded restore contract. |
-| `pkg/migrate` | Plan, execute, journal, recover, and present root V1-to-V2 migration | `ResolvePlan`, `Run`, `executePlan`, `HandleMigrate` | Uses a worktree migration journal distinct from release journals. |
+| `pkg/config` | V1/V2 disk models, strict loading, validation, normalization, unit and tag selection, atomic file writes, and canonical rollback-backed V2 pair persistence | `ReleaseRepository`, `ReleaseUnit`, `LoadReleaseRepository`, `ValidateV2`, `ResolveReleaseUnit`, `TagSpec`, `AtomicWriteFile`, `V2ReleasePairPersister` | `ReleaseRepository` is the shared normalized model. Init and migration reuse one V2 config/state writer. V1 remains a compatibility source. |
+| `pkg/init` | Typed init/unit-add command boundaries, focused initialization use cases, pure unit/pair construction, and explicit file policy | `HandleInit`, `HandleUnitAdd`, `initializeV2RepositoryUseCase`, `addV2ReleaseUnitUseCase` | Handlers parse, invoke one use case, and map a typed result/failure; validated pairs are passed to the shared config persister. |
+| `pkg/migrate` | Typed command presentation, source discovery, pure target planning/recovery policy, ordered failure-aware execution, journaling, and root V1-to-V2 migration | `HandleMigrate`, `migrationUseCase`, `migrationPlan`, `migrationPlanExecution`, `ResolvePlan`, `Run` | Uses focused filesystem operations and a worktree migration journal distinct from release journals. |
 | `pkg/validate` | Typed validation request/result boundary, focused V1/V2 validation query, and response mapping | `HandleValidate`, `validationQueryUseCase`, `mapValidationQueryResponse` | V1 validation retains its requirements adapter and `GITHUB_TOKEN` dependency; V2 config validation is token-independent and read-only. |
 | `pkg/history` | Typed history query, format-specific read-only Git capabilities, and response mapping | `HandleHistory`, `historyQueryUseCase`, `historyGitReader` | V1 deliberately retains non-erroring tag/count queries; V2 uses exact `TagSpec` matches and structured Git failures. |
 | `pkg/contributors` | Typed contributor query, repository/unit selection, focused shortlog capabilities, and response mapping | `HandleContributors`, `contributorsQueryUseCase`, `contributorsGitReader` | V1 repository-wide and V2 path-filtered reads share one command-owned read port without mutation capabilities. |
@@ -53,7 +53,7 @@ The public command contract is duplicated between `manifest.json` and the switch
 - Request parsing: `parseInitCommandRequest` is the only init path that reads the untyped flag map and produces `initCommandRequest`; wrong raw types retain the prior zero-value/default behavior.
 - Application boundary: `initializeV2RepositoryUseCase.Execute` applies the pure V1/V2/force policy, constructs one normal or plugin unit, creates a complete config/state pair, validates it, and passes it to the pair writer.
 - Domain ownership: `unit_constructor.go` owns defaults and normal/plugin construction; `policy.go` owns side-effect-free file-presence decisions; `repository.go` owns complete pair creation and repository validation.
-- Side effects: `v2ReleasePairPersister` snapshots both targets, creates and writes both temporary files, then replaces config followed by state. Returned replace failures trigger restoration of both snapshots.
+- Side effects: `config.V2ReleasePairPersister` snapshots both targets, creates and writes both temporary files, then replaces config followed by state. Returned replace failures trigger restoration of both snapshots.
 - State mutations: replaces both V2 files when permitted; `--force` never overwrites V1.
 - Output: `response_mapper.go` constructs the text-oriented success response or stable structured failure from a typed result/failure.
 - Error behavior: stable codes include `CONFIG_CONFLICT`, `V1_CONFIG_EXISTS`, `CONFIG_EXISTS`, `INVALID_FLAGS`, `VALIDATION_ERROR`, and `SAVE_ERROR`.
@@ -78,13 +78,14 @@ The public command contract is duplicated between `manifest.json` and the switch
 
 ### `migrate`
 
-- Entry: `main.main` -> `migrate.HandleMigrate` -> `migrate.Run`.
-- Planning: `ResolvePlan` resolves the Git root and selects new migration, recovery, already-complete, or conflict behavior.
-- Side effects: creates `.neko`; writes a content-hashed migration journal; writes config; writes state; renames V1 to `.release.neko.json.v1.bak`; validates; removes the journal.
-- State: migration stages are string constants `prepared`, `config-written`, `state-written`, and `v1-archived`.
-- Dry-run: returns exact planned config/state JSON without creating `.neko`.
-- Tests: `pkg/migrate/migration_test.go` covers normal migration, dry-run, already migrated, conflicts, and interruption recovery at every recorded stage.
-- Missing characterization: injected failure on each write/rename/journal removal and rejection of unknown journal stage values. The journal stage is not a typed validated state machine.
+- Entry: `main.main` -> `migrate.HandleMigrate`. The handler parses a typed request, invokes `migrationUseCase.Migrate` once, and maps the typed outcome/failure with an injected response clock. `Run` remains a compatibility facade over the same path.
+- Discovery and planning: the root resolver and filesystem plan resolver classify new migration, recovery, already-complete, and conflict states. `constructMigrationPlan` builds and validates the complete target pair without filesystem access; pure policy functions select one typed planning intention and the target/source operations required by disk evidence. `ResolvePlan` remains a compatibility facade.
+- Execution order: start or read the journal; persist the target pair when needed through `config.V2ReleasePairPersister`; confirm target persistence; verify exact target bytes plus strict V2 loading/validation; archive the V1 source when needed; confirm the archive; verify the byte-identical backup; remove the journal.
+- Recovery: the immutable plan selects `persistMigrationTarget` or `retainMigrationTarget` and `archiveMigrationSource` or `retainArchivedMigrationSource`. Recovery skips effects already proven by the journal and filesystem evidence instead of replaying a generic transition machine.
+- State: `migrationJournalStage` validates the compatible serialized values `prepared`, `config-written`, `state-written`, and `v1-archived`. Empty and unknown values are rejected at load time. The schema version, field names, paths, hashes, strings, and journal mode `0644` are unchanged.
+- Dry-run: returns the exact ordered response rows and planned config/state JSON without creating `.neko`, writing a journal or targets, or archiving V1.
+- Failure behavior: planning, journal, target persistence, target verification, source cleanup, source verification, and restoration are typed internal failure classes while the public `MIGRATION_FAILED`/nil-Go-error contract remains stable. Incomplete pair restoration or an invalid only remaining backup explicitly requires manual recovery.
+- Tests: characterization preserves the public envelope, metadata, data keys, row order, JSON, flag defaults, recovery actions, source bytes/mode, and unrelated files. Focused unit/integration tests inject every execution boundary, prove stop order and recoverable disk evidence, validate typed journal transitions, and enforce the planner/policy/execution boundaries.
 
 ### `patch`, `minor`, and `major`
 
@@ -205,7 +206,7 @@ The source-of-truth disk models are:
 - `releaseJournalFiles` is not a generic store: it owns only the two fixed journal directories, common-dir resolution, canonical JSON bytes, `0700` directory creation, and atomic `0600` replacement used identically by both stores.
 - `EnvironmentGitHubActionsDispatchTokenResolver` is the only production V2 environment reader and returns `GitHubActionsDispatchToken`; formatting is redacted, and only dispatch adapters unwrap it for authorization and error sanitization.
 - `ReleaseClock` is the active release/resume timestamp capability. One injected clock supplies command responses and the composed V2 execution/dispatch stores and dispatcher; model-level zero-time fallbacks remain compatibility behavior for direct callers.
-- Public store, dispatcher, and runner constructors remain compatibility entry points with production defaults. V1 token/Git/tool adapters, migration Git/filesystem code, inactive `ReleaseTransaction`, and `GitReleaseCoordinator.Coordinate` remain deliberately outside this stage and do not compete with the active V2 path.
+- Public store, dispatcher, and runner constructors remain compatibility entry points with production defaults. V1 token/Git/tool adapters, migration-specific root/filesystem adapters, inactive `ReleaseTransaction`, and `GitReleaseCoordinator.Coordinate` remain deliberately outside the active V2 adapter consolidation and do not compete with that path.
 
 ### Git and delivery results
 
@@ -243,18 +244,20 @@ prepared -> request-started -> accepted | rejected | unknown
 
 All states after `request-started` are terminal for the current dispatcher. Existing terminal journals block another request.
 
-Migration has a third, implicit state machine expressed as strings and ordered function calls:
+Migration has a separate typed journal vocabulary and an explicit operation order:
 
 ```text
 prepared -> config-written -> state-written -> v1-archived -> validated -> journal removed
 ```
+
+The serialized strings remain compatible with earlier journals. New execution persists the complete target pair together and confirms `state-written`; `config-written` remains readable for interrupted older executions. The journal type validates persisted stages, while recovery policy is expressed as typed evidence classifications and file operations rather than a generic state-machine executor.
 
 ## External dependencies and side effects
 
 | Dependency | Current access | Test seam | Risk |
 | --- | --- | --- | --- |
 | Working directory | `workspace.ChangeToProjectRoot`, `ToolBase.InUnitRoot`, many relative paths | temp dirs plus `os.Chdir` | Process-global state prevents parallel handler tests and hides path dependencies. |
-| Filesystem | focused init pair and plugin-index source/persistence boundaries; direct `os.*` remain across config/migrate/release/tools | init pair temp/create/write/replace/restore seams; plugin-index source reader plus directory/stat/atomic-replacement seams; temp directories and release/migration abstractions | Init pair and plugin-index output failures are isolated; migration, V1 tools, and inactive release paths still cannot inject every filesystem boundary. |
+| Filesystem | shared config pair persistence; focused init, plugin-index, and migration source/journal/verification boundaries; direct `os.*` remain across config/release/tools | pair temp/create/write/replace/restore seams; plugin-index source and atomic-replacement seams; migration operation ports; temp directories | Init and migration share the same target-pair recovery contract. Migration failures are injectable at every ordered boundary; V1 tools and inactive release paths remain less isolated. |
 | Git | active V2 release/resume use one `GitReleaseCoordinator`; history and contributors use separate command-owned read-only ports; `pkg/git` and direct Git remain in V1, migration, inactive transaction, and tools | coordinator runner, focused query capabilities, and real temp Git repositories | Legacy V1 history intentionally suppresses some Git errors, and V1 release/migration/tool flows still expose different semantics. |
 | Environment/token | V1 `pkg/config.GetPAT`; V2 `EnvironmentGitHubActionsDispatchTokenResolver` returning `GitHubActionsDispatchToken` | `t.Setenv`, typed token resolver interfaces | V1 and V2 intentionally retain different token messages and behavior. |
 | Network | V1 `http.DefaultClient` GitHub deletion; V2 injected `RoundTripper` dispatch client | strong V2 client seam; weak V1 seam | V1 rollback network behavior is hard to isolate. |
@@ -293,9 +296,9 @@ The following are current behavior. They are not statements that every behavior 
 | INV-22 | V2 code does not perform destructive automatic rollback after commit/tag/push uncertainty. Local snapshots are restored only before the unsafe boundary; later failures preserve evidence. | active runner, `GitReleaseCoordinator`, `ReleaseTransaction.fail` | source assertions plus active-runner commit, tag, commit-push, and tag-push failure tests; state/materialization/store-write boundaries still lack active-runner seams |
 | INV-23 | Execution and dispatch journals contain release facts and hashes, not file bytes or tokens. The typed dispatch token redacts all string formatting, and dispatch errors are capped and redact the exact secret. | journal models, `GitHubActionsDispatchToken`, `sanitizeDispatchText`, store permissions | typed-token formatting/source tests, journal/dispatcher tests, and sentinel assertions across logs, runner errors, command responses, and both journals |
 | INV-24 | Public response status/error schemas and error codes are command contracts, but they are currently constructed in multiple packages. Unexpected handler errors become fatal top-level `EXECUTION_ERROR`. | `plugin.Response`, `main.main`, handler response helpers | focused V2 release/resume status, code, metadata, renderer, and ordered-item contracts; other public commands remain incomplete |
-| INV-25 | Root V1 migration writes a content-hashed journal before V2 files, archives byte-identical V1 content, validates the final V2 repository, and removes the journal only after success. | `migrate.executePlan`, `archiveV1`, `validateFinal` | all migration and interruption recovery tests |
+| INV-25 | Root V1 migration writes a content-hashed compatible journal before target persistence, uses the shared rollback-backed writer for one complete V2 pair, verifies exact target bytes and strict V2 validity before archiving byte-identical V1 content, and removes the journal only after target/source verification. Recovery selects typed operations from journal and file evidence. | `migrationPlanExecution.Execute`, `V2ReleasePairPersister`, migration execution adapters and policy | command-contract, journal-stage, operation-order, boundary-failure, restoration, backup-verification, and interruption recovery tests |
 | INV-26 | V2 local non-dry-run execution is blocked. GitHub Actions owns build and publish after accepted handoff; local release tools are not invoked by that V2 path. | `releaseStartOperation`, `GitHubActionsReleaseRunner.Run` | V2 block tests and runner fake dispatch tests |
-| INV-27 | Init and unit-add validate one complete V2 config/state pair before persistence. Both temporary files are created, written, chmodded, and fsynced before config then state replacement; a returned replace failure attempts exact restoration of both prior byte/mode/existence snapshots. | `initializeV2RepositoryUseCase`, `addV2ReleaseUnitUseCase`, `v2ReleasePairPersister` | focused new/update, temp-create/write, first/second replace, exact restore, restore-failure, cleanup, byte, and mode tests |
+| INV-27 | Init, unit-add, and migration validate one complete V2 config/state pair before persistence and reuse `config.V2ReleasePairPersister`. Both temporary files are created, written, chmodded, and fsynced before config then state replacement; a returned replace failure attempts exact restoration of both prior byte/mode/existence snapshots. | initialization use cases, migration planner/execution, `V2ReleasePairPersister` | focused new/update/migration, temp-create/write, first/second replace, exact restore, restore-failure, cleanup, byte, and mode tests |
 | INV-28 | Validate, history, contributors, and plugin-index check/render queries receive only command-owned read capabilities and do not mutate release files, Git worktree/index/refs, journals, environment, or plugin state. V1 validate still resolves its token through the requirements read, and legacy history retains suppressed Git failures. | `validationQueryUseCase`, `historyQueryUseCase`, `contributorsQueryUseCase`, `pluginIndexQueryUseCase` | parser/use-case/handler stop-point tests plus config/state/tree and real-Git worktree/index/ref immutability contracts |
 | INV-29 | Plugin-index output mode builds the complete stable JSON bytes before passing them and the unchanged requested path to one atomic persister. New parents/files use `0755`/`0644`; overwrite is allowed and preserves an existing target mode; returned write/replace failures preserve the old target and clean temporary files. | `jsonPluginIndexOutputBuilder`, `atomicPluginIndexOutputPersister`, `config.AtomicFileReplacement` | exact pretty/compact schema tests plus creation, replacement, mode, injected write/replace, original-preservation, unrelated-file, and cleanup tests |
 
@@ -311,6 +314,8 @@ The following are current behavior. They are not statements that every behavior 
 - Execution and dispatch journal states are typed, monotonic, and persisted outside the worktree.
 - Dispatch target parsing, redirect refusal, response classification, and token redaction are conservative and well tested.
 - V2 failure policy preserves evidence after unsafe operations instead of destructive rollback.
+- Migration planning, recovery policy, ordered execution, journal persistence, target persistence/verification, and source archive/verification have distinct owners and focused failure seams.
+- Init, unit-add, and migration reuse one rollback-backed V2 pair persister; migration verifies the target before archiving V1.
 - Validate, history, contributors, and plugin-index have typed command boundaries with command-owned read capabilities and deterministic mappers.
 - Plugin-index discovery, JSON output construction, and atomic single-file persistence are distinct owners with focused failure seams.
 - Manifest, routes, docs, workflows, V2 self-release state, and plugin index scripts have cross-file contract tests.
@@ -333,9 +338,19 @@ The following are current behavior. They are not statements that every behavior 
 
 `HandleInit` and `HandleUnitAdd` are command boundaries: each parses one distinct typed request, invokes one focused use case, and maps one typed result or failure. Raw flags stop in `command_request.go`; pure normal/plugin unit construction, file-presence policy, and complete pair creation/append are separate. `buildV2InitConfigFromFlags` remains only as a narrow compatibility seam over the typed parser and constructor.
 
-`v2ReleasePairPersister` is the sole init pair writer. It canonicalizes both values, creates `.neko`, captures exact bytes/modes/existence for both targets in memory, creates and fully writes/fsyncs both temporary files, then renames config followed by state. A returned error from either rename triggers restoration of both snapshots: an existing target is atomically restored with its exact bytes and mode, while a previously absent target is removed. Both restoration attempts run even when the first fails, temporary files are discarded, and any restoration failure is surfaced with `manual recovery required`. No backup files are created.
+`config.V2ReleasePairPersister` is the canonical pair writer shared by init, unit-add, and migration. It canonicalizes both values, creates `.neko`, captures exact bytes/modes/existence for both targets in memory, creates and fully writes/fsyncs both temporary files, then renames config followed by state. A returned error from either rename triggers restoration of both snapshots: an existing target is atomically restored with its exact bytes and mode, while a previously absent target is removed. Both restoration attempts run even when the first fails, temporary files are discarded, and any restoration failure is surfaced as `V2PairPersistenceError` with `manual recovery required`. No backup files are created.
 
 This is bounded rollback, not cross-file atomicity. A process, kernel, machine, or filesystem failure between successful renames can still leave a mixed pair because no single cross-file atomic primitive exists. A failed new-pair attempt may leave an empty `.neko` directory. Successful config/state files retain mode `0644`.
+
+### Migration ownership and recovery
+
+`HandleMigrate` is now a strict command boundary. Untyped flags stop in `command_request.go`; `migrationUseCase` resolves one root and one immutable plan; `response_mapper.go` alone owns `plugin.Response`. The wrong-typed `dry-run` flag still defaults to execution for compatibility. `Plan`, `ResolvePlan`, and `Run` remain narrow public compatibility facades.
+
+Source discovery reads V1 or the byte-identical backup and captures exact bytes, mode, and existence. `planner.go` constructs the complete typed V2 config/state target and canonical bytes, validates the pair, and performs no filesystem writes. `policy.go` owns pure format/evidence classification and selects the required planning, target, and source operations. `migrationPlanExecution.Execute` makes the safety order visible and delegates to focused journal, pair-persistence, target-verification, source-archive, and archived-source-verification capabilities. The former duplicate per-file target writes and procedural `executePlan`/`archiveV1`/`validateFinal` path were removed.
+
+A returned target-persistence failure invokes the shared persister's exact pair restoration and leaves the active V1 source plus journal evidence. Journal-confirmation or target-verification failure after a successful pair write preserves the active V1 source, target pair, and journal for evidence-driven retry. Only after exact target verification may V1 be renamed to `.release.neko.json.v1.bak`. After that rename, the hash-matched backup is the authoritative source evidence; source-confirmation, verification, or final journal-removal failure preserves the pair, backup, and journal. If restoration is incomplete, or the only remaining backup cannot be verified against the planned source, the typed failure requires manual recovery.
+
+These guarantees cover returned filesystem errors and deterministic next-run recovery; they do not claim process- or machine-crash atomicity. A crash between the two target renames can expose a mixed pair, and a crash between an effect and its journal confirmation can leave evidence that the next run must classify. The journal and exact file hashes make those states detectable, but no generic transaction engine repairs arbitrary corruption. An empty `.neko` directory may remain after a failed attempt.
 
 ### Plugin manifest ownership
 
@@ -349,11 +364,11 @@ Plugin-index is explicitly not one pure query in output mode. `pluginIndexQueryU
 
 ### Response and error duplication
 
-Release start/resume, init/unit-add, validate, history, contributors, and plugin-index each now have typed results/failures and command-owned response mappers with explicit clocks. The mappers remain command-specific because their schemas are not one universal result contract. Init/unit-add intentionally retain the characterized compatibility value `init` for unit-add error metadata. Validate/history/contributors convert their typed failures to structured responses with nil Go errors; plugin-index intentionally returns parser/query/builder/persistence errors as Go errors for top-level fatal `EXECUTION_ERROR` mapping. Migration and V1 compatibility response/fatal behavior remain later-stage concerns.
+Release start/resume, init/unit-add, validate, history, contributors, plugin-index, and migration each now have typed results/failures and command-owned response mappers with explicit clocks. The mappers remain command-specific because their schemas are not one universal result contract. Init/unit-add intentionally retain the characterized compatibility value `init` for unit-add error metadata. Validate/history/contributors and migration convert typed failures to structured responses with nil Go errors; plugin-index intentionally returns parser/query/builder/persistence errors as Go errors for top-level fatal `EXECUTION_ERROR` mapping. V1 compatibility response/fatal behavior remains a later-stage concern.
 
 ### Multiple side-effect adapters
 
-Active V2 release and resume now use one coordinator boundary, one typed token boundary, shared focused journal file mechanics, and one explicit clock. `pkg/git`, V1 token lookup, direct subprocesses in `ReleaseTransaction`, migration, and tools, and direct clocks outside active V2 remain compatibility paths for later stages; they retain differing semantics but do not compete inside the active V2 flow.
+Active V2 release and resume use one coordinator boundary, one typed token boundary, shared focused journal file mechanics, and one explicit clock. Migration has its own narrowly scoped root, journal, target, and source adapters because its worktree recovery contract differs from release execution. `pkg/git`, V1 token lookup, direct subprocesses in `ReleaseTransaction` and tools, and direct clocks outside active V2 remain compatibility paths for later stages; they retain differing semantics but do not compete inside the active V2 flow.
 
 ## Test structure and current seams
 
@@ -361,7 +376,8 @@ The suite is package-local and predominantly uses temporary real files and real 
 
 Existing replaceable seams include:
 
-- init/unit-add `v2PresenceReader`, `v2PairLoader`, `v2PairValidator`, and `v2PairWriter` consumer ports, plus config/state-specific temp-create/write/replace/restore operations inside the focused pair persister;
+- init/unit-add `v2PresenceReader`, `v2PairLoader`, `v2PairValidator`, and `v2PairWriter` consumer ports, plus config/state-specific temp-create/write/replace/restore operations inside the shared pair persister;
+- migration root/plan ports plus focused journal, target-pair persistence, target-verification, source-archive, and archived-source-verification capabilities;
 - validate `validationRepositoryReader` and `legacyRequirementsValidator`, history `historyRepositoryReader`/`historyGitReader`, and contributors `contributorsRepositoryReader`/`contributorsGitReader` read-only capabilities;
 - plugin-index `pluginIndexSourceReader`, query/builder/persister command ports, and persistence-specific directory/stat/atomic-replacement operations;
 - `gitCommandRunner` inside the single active `GitReleaseCoordinator` and shared journal common-dir mechanics.
@@ -374,20 +390,19 @@ Existing replaceable seams include:
 
 Important missing seams include:
 
-- filesystem/config/state repositories for migration, V1 compatibility, and inactive release paths; active release transaction factories and journal operation ports permit failure injection without changing production stores;
+- filesystem/config/state repositories for V1 compatibility and inactive release paths; active release transaction factories, migration operation ports, and journal operation ports permit failure injection without changing production stores;
 - replaceable facade construction inside `releaseStartOperation`; release and resume composition itself now injects focused coordinator, store, dispatch, token, and clock dependencies;
-- focused Git ports for migration and V1 compatibility; a universal Git port is not a target;
+- a focused Git-root seam exists for migration; the remaining focused Git ports are V1 compatibility concerns, and a universal Git port is not a target;
 - subprocess runners for V1 tools;
 - an HTTP client for V1 GitHub rollback;
 - a command-decoding policy for wrong flag types; the Stage 2 parsers deliberately preserve silent defaults because rejection would be a new public behavior.
 
 ## Missing characterization coverage, prioritized
 
-1. Migration error/response contracts, injected failure at every unsafe filesystem boundary, and unknown/corrupt journal stage handling.
-2. V1 executor order, command/fatal mapping, and rollback characterization with fake subprocess/network adapters before extraction.
-3. Remaining secret non-disclosure and filesystem/journal failure paths outside the active release operation seams.
-4. Completed release behavior after exclusion: subsequent active version planning from the committed V2 state.
-5. Plugin-index symlink/output-confinement policy remains deliberately undefined; the established arbitrary requested-path behavior is preserved.
+1. V1 executor order, command/fatal mapping, and rollback characterization with fake subprocess/network adapters before extraction.
+2. Remaining secret non-disclosure and filesystem/journal failure paths outside the active release and migration operation seams.
+3. Completed release behavior after exclusion: subsequent active version planning from the committed V2 state.
+4. Plugin-index symlink/output-confinement policy remains deliberately undefined; the established arbitrary requested-path behavior is preserved.
 
 ## Compatibility constraints for future work
 
@@ -403,4 +418,4 @@ Important missing seams include:
 - Do not activate V2 local execution, standalone dispatch/retry, or a new publication adapter as an incidental refactor.
 - Do not rename or move public symbols until callers and contract tests make that change explicit.
 
-Active release/resume, init/unit-add, and the four Stage 7 query/output commands now have typed presentation boundaries, focused application intentions, and narrowly owned adapters without generic workflows, repositories, or managers. Read-only queries expose no mutation capabilities; plugin-index persistence is an explicit atomic single-file command effect over complete bytes. The exact next refactor stage is Stage 8: type and isolate migration recovery.
+Active release/resume, init/unit-add, the four Stage 7 query/output commands, and migration now have typed presentation boundaries, focused application intentions, and narrowly owned adapters without generic workflows, repositories, or managers. Read-only queries expose no mutation capabilities; plugin-index persistence is an explicit atomic single-file effect over complete bytes; migration uses typed evidence-driven recovery operations and the shared V2 pair writer. Eight of nine numbered stages are complete. The exact next refactor stage is Stage 9: isolate the V1 compatibility subsystem.
