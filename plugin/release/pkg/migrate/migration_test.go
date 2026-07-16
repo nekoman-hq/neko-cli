@@ -247,6 +247,92 @@ func TestRunRecoversInterruptedMigration(t *testing.T) {
 	}
 }
 
+func TestRunRecoversArchiveCrashBeforeSourceConfirmation(t *testing.T) {
+	root := withGitRepo(t)
+	writeFile(t, filepath.Join(root, releaseconfig.V1FileName), v1Fixture)
+	plan, err := ResolvePlan(root)
+	if err != nil {
+		t.Fatalf("ResolvePlan: %v", err)
+	}
+	j := journalForPlan(t, plan, journalStageStateWritten)
+	writeFile(t, plan.ConfigPath, plan.ConfigJSON)
+	writeFile(t, plan.StatePath, plan.StateJSON)
+	if err := os.Rename(plan.SourcePath, plan.BackupPath); err != nil {
+		t.Fatalf("archive source before simulated crash: %v", err)
+	}
+	writeJournalForTest(t, root, j)
+
+	recovered, err := Run(root, false)
+	if err != nil {
+		t.Fatalf("Run recovery: %v", err)
+	}
+	if !recovered.Recovery {
+		t.Fatalf("expected recovery plan, got %#v", recovered)
+	}
+	if exists(plan.SourcePath) || !exists(plan.BackupPath) || exists(plan.JournalPath) {
+		t.Fatalf("recovery did not close archive-before-confirmation evidence")
+	}
+	assertFileBytesAndMode(t, plan.BackupPath, []byte(v1Fixture), 0644)
+	assertV2Config(t, plan.ConfigPath)
+	assertV2State(t, plan.StatePath)
+}
+
+func TestRunRecoversBackupVerifiedButActiveSourceRemovalInterrupted(t *testing.T) {
+	root := withGitRepo(t)
+	writeFile(t, filepath.Join(root, releaseconfig.V1FileName), v1Fixture)
+	plan, err := ResolvePlan(root)
+	if err != nil {
+		t.Fatalf("ResolvePlan: %v", err)
+	}
+	writeFile(t, plan.ConfigPath, plan.ConfigJSON)
+	writeFile(t, plan.StatePath, plan.StateJSON)
+	writeFile(t, plan.BackupPath, v1Fixture)
+	writeJournalForTest(t, root, journalForPlan(t, plan, journalStageStateWritten))
+
+	recovered, err := Run(root, false)
+	if err != nil {
+		t.Fatalf("Run recovery: %v", err)
+	}
+	if !recovered.Recovery {
+		t.Fatalf("expected recovery plan, got %#v", recovered)
+	}
+	if exists(plan.SourcePath) || !exists(plan.BackupPath) || exists(plan.JournalPath) {
+		t.Fatalf("recovery did not remove the duplicate active source safely")
+	}
+	assertFileBytesAndMode(t, plan.BackupPath, []byte(v1Fixture), 0644)
+	assertV2Config(t, plan.ConfigPath)
+	assertV2State(t, plan.StatePath)
+}
+
+func TestRunTreatsCompletedMigrationWithRetainedJournalAsAlreadyCompleted(t *testing.T) {
+	root := withGitRepo(t)
+	writeFile(t, filepath.Join(root, releaseconfig.V1FileName), v1Fixture)
+	plan, err := ResolvePlan(root)
+	if err != nil {
+		t.Fatalf("ResolvePlan: %v", err)
+	}
+	j := journalForPlan(t, plan, journalStageV1Archived)
+	writeFile(t, plan.ConfigPath, plan.ConfigJSON)
+	writeFile(t, plan.StatePath, plan.StateJSON)
+	if err := os.Rename(plan.SourcePath, plan.BackupPath); err != nil {
+		t.Fatalf("archive source before simulated cleanup crash: %v", err)
+	}
+	writeJournalForTest(t, root, j)
+
+	recovered, err := Run(root, false)
+	if err != nil {
+		t.Fatalf("Run recovery: %v", err)
+	}
+	if !recovered.Recovery {
+		t.Fatalf("expected recovery plan, got %#v", recovered)
+	}
+	if exists(plan.SourcePath) || !exists(plan.BackupPath) || exists(plan.JournalPath) {
+		t.Fatalf("recovery did not recognize completed migration evidence")
+	}
+	assertV2Config(t, plan.ConfigPath)
+	assertV2State(t, plan.StatePath)
+}
+
 func TestHandleMigrateDryRun(t *testing.T) {
 	root := withGitRepo(t)
 	writeFile(t, filepath.Join(root, releaseconfig.V1FileName), v1Fixture)
