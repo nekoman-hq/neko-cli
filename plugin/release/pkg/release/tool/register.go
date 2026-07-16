@@ -21,7 +21,7 @@ import (
 // callers that still use release.Register/Get. Production command composition
 // constructs immutable V1 executor catalogs instead.
 func init() {
-	release.Register(goreleaser.NewV1Executor())
-	release.Register(jreleaser.NewV1Executor())
-	release.Register(releaseit.NewV1Executor())
+	release.Register(goreleaser.NewV1Executor()) //nolint:staticcheck // Legacy shim intentionally wires deprecated V1 registry APIs.
+	release.Register(jreleaser.NewV1Executor())  //nolint:staticcheck // Legacy shim intentionally wires deprecated V1 registry APIs.
+	release.Register(releaseit.NewV1Executor())  //nolint:staticcheck // Legacy shim intentionally wires deprecated V1 registry APIs.
 }
