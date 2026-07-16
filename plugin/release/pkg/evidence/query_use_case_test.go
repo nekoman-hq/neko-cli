@@ -56,8 +56,8 @@ func TestEvidenceQuerySummarizesValidJournalsAndCorruptDiagnosticsWithoutSecrets
 		RecoveryGuidance: "accepted",
 	})
 	corruptPath := filepath.Join(dispatchDir, strings.Repeat("c", 64)+".json")
-	if err := os.WriteFile(corruptPath, []byte("{not-json"), 0600); err != nil {
-		t.Fatalf("write corrupt dispatch journal: %v", err)
+	if writeErr := os.WriteFile(corruptPath, []byte("{not-json"), 0600); writeErr != nil {
+		t.Fatalf("write corrupt dispatch journal: %v", writeErr)
 	}
 
 	result, err := newEvidenceQueryUseCase().Query(context.Background(), evidenceQueryRequest{RepositoryRoot: root})
@@ -153,11 +153,11 @@ func TestEvidenceArchiveRequiresFreshDigestAndCreatesPrivateExactArchive(t *test
 		DigestSHA256:   strings.Repeat("0", 64),
 		ConfirmArchive: true,
 	}
-	if _, err := newEvidenceArchiveUseCase().Archive(context.Background(), request); err == nil || !strings.Contains(err.Error(), "digest changed") {
-		t.Fatalf("wrong digest archive error = %v, want digest changed", err)
+	if _, archiveErr := newEvidenceArchiveUseCase().Archive(context.Background(), request); archiveErr == nil || !strings.Contains(archiveErr.Error(), "digest changed") {
+		t.Fatalf("wrong digest archive error = %v, want digest changed", archiveErr)
 	}
-	if _, err := os.Stat(sourcePath); err != nil {
-		t.Fatalf("wrong digest removed source evidence: %v", err)
+	if _, statErr := os.Stat(sourcePath); statErr != nil {
+		t.Fatalf("wrong digest removed source evidence: %v", statErr)
 	}
 
 	request.DigestSHA256 = query.Records[0].DigestSHA256
@@ -165,8 +165,8 @@ func TestEvidenceArchiveRequiresFreshDigestAndCreatesPrivateExactArchive(t *test
 	if err != nil {
 		t.Fatalf("Archive: %v", err)
 	}
-	if _, err := os.Stat(sourcePath); !os.IsNotExist(err) {
-		t.Fatalf("source evidence still exists after archive: %v", err)
+	if _, statErr := os.Stat(sourcePath); !os.IsNotExist(statErr) {
+		t.Fatalf("source evidence still exists after archive: %v", statErr)
 	}
 	archived, err := os.ReadFile(result.ArchivePath)
 	if err != nil {

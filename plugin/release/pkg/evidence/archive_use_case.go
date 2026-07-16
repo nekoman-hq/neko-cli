@@ -87,20 +87,20 @@ func archiveCompletedEvidence(record EvidenceRecord) (string, string, error) {
 		return "", "", fmt.Errorf("evidence digest changed before archival")
 	}
 	archiveDir := filepath.Join(filepath.Dir(record.Path), "archived")
-	if err := os.MkdirAll(archiveDir, 0700); err != nil {
-		return "", "", fmt.Errorf("create evidence archive directory: %w", err)
+	if mkdirErr := os.MkdirAll(archiveDir, 0700); mkdirErr != nil {
+		return "", "", fmt.Errorf("create evidence archive directory: %w", mkdirErr)
 	}
-	if err := os.Chmod(archiveDir, 0700); err != nil {
-		return "", "", fmt.Errorf("secure evidence archive directory: %w", err)
+	if chmodErr := os.Chmod(archiveDir, 0700); chmodErr != nil {
+		return "", "", fmt.Errorf("secure evidence archive directory: %w", chmodErr)
 	}
 	archivePath := filepath.Join(archiveDir, record.Identity+"-"+record.DigestSHA256+".json")
-	if _, err := os.Lstat(archivePath); err == nil {
+	if _, statErr := os.Lstat(archivePath); statErr == nil {
 		return "", "", fmt.Errorf("evidence archive already exists")
-	} else if !os.IsNotExist(err) {
-		return "", "", fmt.Errorf("inspect evidence archive path: %w", err)
+	} else if !os.IsNotExist(statErr) {
+		return "", "", fmt.Errorf("inspect evidence archive path: %w", statErr)
 	}
-	if err := releaseconfig.AtomicWriteFile(archivePath, data, 0600); err != nil {
-		return "", "", fmt.Errorf("write evidence archive: %w", err)
+	if writeErr := releaseconfig.AtomicWriteFile(archivePath, data, 0600); writeErr != nil {
+		return "", "", fmt.Errorf("write evidence archive: %w", writeErr)
 	}
 	archived, err := os.ReadFile(archivePath)
 	if err != nil {
@@ -109,8 +109,8 @@ func archiveCompletedEvidence(record EvidenceRecord) (string, string, error) {
 	if string(archived) != string(data) {
 		return "", "", fmt.Errorf("evidence archive bytes do not match source")
 	}
-	if err := os.Remove(record.Path); err != nil {
-		return "", "", fmt.Errorf("remove archived evidence source: %w", err)
+	if removeErr := os.Remove(record.Path); removeErr != nil {
+		return "", "", fmt.Errorf("remove archived evidence source: %w", removeErr)
 	}
 	return record.Path, archivePath, nil
 }

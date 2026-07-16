@@ -345,7 +345,7 @@ func inspectMigrationJournal(root string) ([]EvidenceRecord, []EvidenceDiagnosti
 	if !validMigrationStage(journal.Stage) {
 		return nil, []EvidenceDiagnostic{invalidEvidenceDiagnostic(FamilyMigration, path)}
 	}
-	expectedSource := filepath.Join(root, releaseconfig.V1FileName)
+	expectedSource := filepath.Join(root, releaseconfig.V1FileName) //nolint:staticcheck // Migration evidence intentionally references legacy V1 source.
 	expectedBackup := filepath.Join(root, ".release.neko.json.v1.bak")
 	if journal.SourcePath != expectedSource || journal.BackupPath != expectedBackup {
 		return nil, []EvidenceDiagnostic{conflictingEvidenceDiagnostic(FamilyMigration, path)}
