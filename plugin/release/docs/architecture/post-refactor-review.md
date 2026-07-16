@@ -13,7 +13,7 @@ ab72785 refactor(release): isolate v1 compatibility use cases
 440eecc docs(release): complete release plugin refactor
 ```
 
-The authoritative historical ledger remains in [refactor-plan.md](refactor-plan.md). Detailed behavioral invariants and disk contracts remain in [current-state.md](current-state.md). Ranked work is sequenced independently in [post-refactor-roadmap.md](post-refactor-roadmap.md).
+The authoritative historical ledger remains in [refactor-plan.md](refactor-plan.md). Detailed behavioral invariants and disk contracts remain in [current-state.md](current-state.md). Ranked work is sequenced independently in [post-refactor-roadmap.md](post-refactor-roadmap.md). The completed C1 support decision for retained V1 compatibility surfaces is recorded in [v1-compatibility-policy.md](v1-compatibility-policy.md).
 
 ## Verified dependency direction
 
@@ -166,7 +166,7 @@ Plugin manifest materialization derives its path only from validated `ReleaseUni
 
 ## Remaining compatibility entry-point families
 
-The following families remain outside canonical production composition or wrap it for compatibility. The debt register added by the next review milestone records each qualified symbol, consumer, behavior, and recommendation.
+The following families remain outside canonical production composition or wrap it for compatibility. The completed C1 policy register records each qualified symbol, consumer, behavior, support decision, replacement, deprecation message, removal precondition, and intended removal milestone.
 
 - registry-backed release entry: `HandleRelease`, `Register`, `Get`, and the opt-in `pkg/release/tool` aggregator;
 - legacy V1 command and tool surfaces: `Service`, `Preflight`, `Tool`, `ToolBase`, and executor `Init` / `Execute` / `Release` / `RevertRelease` methods;
@@ -242,7 +242,7 @@ No P0 issue was found. The active V2 GitHub Actions path preserves evidence arou
 - **Removal or improvement preconditions:** Audit downstream imports, publish a deprecation window, offer explicit executor composition to embedders, and retain characterized lookup/overwrite behavior until removal.
 - **Recommended action:** **Replace** with explicit composition for all known consumers, then remove after compatibility policy permits.
 - **Priority:** **P2**.
-- **Proposed milestone:** **C1 — Decide and deprecate V1 compatibility surfaces**.
+- **Proposed milestone:** **C1 — Decide and deprecate V1 compatibility surfaces** completed the support/deprecation decision; removal remains gated by **C2 — Retire superseded and inactive release paths**.
 - **Blocking new features:** Not blocking product features; blocks adding new registry-based executors.
 
 ### D-06 — V1 version-evidence seams are mutable package globals
@@ -255,7 +255,7 @@ No P0 issue was found. The active V2 GitHub Actions path preserves evidence arou
 - **Removal or improvement preconditions:** Retain two-pass evidence semantics, inject the evidence source at compatibility composition, and keep public `VersionGuard` behavior characterized.
 - **Recommended action:** **Replace** the globals with explicit compatibility composition.
 - **Priority:** **P2**.
-- **Proposed milestone:** **C1 — Decide and deprecate V1 compatibility surfaces**.
+- **Proposed milestone:** **C1 — Decide and deprecate V1 compatibility surfaces** completed the support/deprecation decision; removal remains gated by **C2 — Retire superseded and inactive release paths**.
 - **Blocking new features:** Not blocking unrelated features; blocks parallel V1 execution support.
 
 ### D-07 — Working-directory ownership remains process-global
@@ -332,9 +332,9 @@ No P0 issue was found. The active V2 GitHub Actions path preserves evidence arou
 - **Risk:** Unknown consumers constrain signature cleanup and can make inactive code appear canonical.
 - **User or developer impact:** Existing embedders retain source compatibility; maintainers carry extra surfaces and tests.
 - **Removal or improvement preconditions:** Downstream reference audit, deprecation policy, replacement examples, release notes, and an explicit support/removal decision.
-- **Recommended action:** **Keep** bounded wrappers now; **Remove** or **Replace** only through compatibility milestones with evidence.
+- **Recommended action:** Follow the C1 policy register: keep, deprecate, defer, or mark as removal candidate by family. Remove or replace only through C2 or a later compatibility milestone with fresh evidence.
 - **Priority:** **P2**.
-- **Proposed milestone:** **C1 — Decide and deprecate V1 compatibility surfaces**, followed by **C2** for proven removals.
+- **Proposed milestone:** **C1 — Decide and deprecate V1 compatibility surfaces** is completed; **C2 — Retire superseded and inactive release paths** owns proven removals.
 - **Blocking new features:** Not generally blocking. New code must not depend on these wrappers.
 
 ### D-13 — Active V2 progress logging crosses the presentation boundary
@@ -411,19 +411,19 @@ The inventory distinguishes the plugin executable's active composition from publ
 | Symbol or family | Package | Active internal consumers | Compatibility purpose | Behavior or delegation | Removal risk | Recommendation |
 | --- | --- | --- | --- | --- | --- | --- |
 | `release.HandleRelease` | `pkg/release` | none; command and dry-run tests use it | Preserve the original patch/minor/major entry | Composes the registry-backed V1 catalog, then delegates to the canonical handler/start operation | High: exported command API and V1 behavior | Keep for C1; production remains on `HandleReleaseWithV1Executors` |
-| `release.Service`, `NewReleaseService`, `NewReleaseServiceWithContext`, `Service.Run`, `Service.GetNewVersion` | `pkg/release` | none; compatibility tests only | Preserve the former V1 service API | Delegates to isolated planning/application, but retains catalog selection, cwd fallback, logging, and fatal-exit mapping | High | Keep until downstream audit; deprecate in C1 |
-| `release.Preflight` | `pkg/release` | none; compatibility tests only | Preserve fatal V1 preflight entry | Delegates checks to focused preflight then invokes legacy fatal output on failure | High because exit behavior is observable | Keep until C1 support decision |
-| `release.Tool` | `pkg/release` | compatibility catalogs and registry only | Preserve the legacy executor interface | Interface only; its method shape drives compatibility adapters | High | Keep while registry/service are supported; do not use in new code |
-| `ToolBase.ValidateRequirements`, `ResolveFiles`, `InUnitRoot`, `RequireBinary`, `RevertGitRelease`, `DeleteGitHubRelease`, `CreateReleaseCommit`, `CreateGitTag`, `PushCommits`, `PushGitTag` | `pkg/release` | executor compatibility methods and tests; not active fixed-catalog `Run` flow | Preserve shared legacy tool methods | Direct delegates except cwd-changing `InUnitRoot`; constructs system adapters with legacy empty-root semantics | High for external tool implementations | Keep bounded; deprecate with `Tool` in C1 |
-| `release.Register`, `release.Get`, package variable `tools`, and `pkg/release/tool.init` | `pkg/release`, `pkg/release/tool` | registry-backed compatibility entry points only | Preserve registration and blank-import discovery | Contains mutable overwrite/lookup behavior and import side effects | High | Replace known consumers with explicit composition; remove only after C1 |
-| `GoReleaser.Init`, `Execute`, `Release`, `RevertRelease`, `ValidateRequirements`, `ResolveFiles` | `pkg/release/tool/goreleaser` | `Rollback` delegates to `RevertRelease`; other methods serve `Tool` compatibility | Preserve concrete legacy tool API | `Execute` delegates to `Run`; `Release` delegates to shared release logic; `RevertRelease` owns current rollback mapping | High | In C1 invert rollback so canonical `Rollback` owns behavior, then keep direct wrappers until deprecation ends |
-| `JReleaser.Init`, `Execute`, `Release`, `RevertRelease`, `ValidateRequirements`, `ResolveFiles` | `pkg/release/tool/jreleaser` | same pattern as GoReleaser | Preserve concrete legacy tool API | Direct compatibility delegates around the canonical executor logic; `RevertRelease` currently owns rollback mapping | High | Same C1 recommendation |
-| `ReleaseIt.Init`, `Execute`, `Release`, `RevertRelease`, `ValidateRequirements`, `ResolveFiles` | `pkg/release/tool/releaseit` | same pattern as GoReleaser | Preserve concrete legacy tool API | Direct compatibility delegates around the canonical executor logic; `RevertRelease` currently owns rollback mapping | High | Same C1 recommendation |
-| `release.BuildReleaseExecutionContext` | `pkg/release` | tests only; production uses `BuildV2ReleaseExecutionContext` | Preserve a mixed V1/V2 normalized-repository builder | Contains source-specific unit-root selection, then delegates to common assembly | Medium to high | Deprecate in C1; retain until external callers migrate |
+| `release.Service`, `NewReleaseService`, `NewReleaseServiceWithContext`, `Service.Run`, `Service.GetNewVersion` | `pkg/release` | none; compatibility tests only | Preserve the former V1 service API | Delegates to isolated planning/application, but retains catalog selection, cwd fallback, logging, and fatal-exit mapping | High | Deprecated by C1; removal requires C2/downstream audit |
+| `release.Preflight` | `pkg/release` | none; compatibility tests only | Preserve fatal V1 preflight entry | Delegates checks to focused preflight then invokes legacy fatal output on failure | High because exit behavior is observable | Deferred by C1 because no exact public replacement exists |
+| `release.Tool` | `pkg/release` | compatibility catalogs and registry only | Preserve the legacy executor interface | Interface only; its method shape drives compatibility adapters | High | Deferred by C1; `V1Executor` replaces release execution but not legacy init/tool methods |
+| `ToolBase.ValidateRequirements`, `ResolveFiles`, `InUnitRoot`, `RequireBinary`, `RevertGitRelease`, `DeleteGitHubRelease`, `CreateReleaseCommit`, `CreateGitTag`, `PushCommits`, `PushGitTag` | `pkg/release` | executor compatibility methods and tests; not active fixed-catalog `Run` flow | Preserve shared legacy tool methods | Direct delegates except cwd-changing `InUnitRoot`; constructs system adapters with legacy empty-root semantics | High for external tool implementations | Deferred by C1; no exact public replacement for every helper |
+| `release.Register`, `release.Get`, package variable `tools`, and `pkg/release/tool.init` | `pkg/release`, `pkg/release/tool` | registry-backed compatibility entry points only | Preserve registration and blank-import discovery | Contains mutable overwrite/lookup behavior and import side effects | High | Registry functions and package init deprecated by C1; `tools` is a C2 removal candidate |
+| `GoReleaser.Init`, `Execute`, `Release`, `RevertRelease`, `ValidateRequirements`, `ResolveFiles` | `pkg/release/tool/goreleaser` | compatibility tests and potential external callers; active production uses `Run`/`Rollback` through `V1Executor` | Preserve concrete legacy tool API | `Execute` delegates to `Run`; `Release` delegates to shared release logic; `RevertRelease` delegates to canonical `Rollback` after C1 | High | `Execute`, `Release`, and `RevertRelease` deprecated by C1; `Init` deferred |
+| `JReleaser.Init`, `Execute`, `Release`, `RevertRelease`, `ValidateRequirements`, `ResolveFiles` | `pkg/release/tool/jreleaser` | same pattern as GoReleaser | Preserve concrete legacy tool API | Direct compatibility delegates around canonical executor logic; `RevertRelease` delegates to canonical `Rollback` after C1 | High | Same C1 result |
+| `ReleaseIt.Init`, `Execute`, `Release`, `RevertRelease`, `ValidateRequirements`, `ResolveFiles` | `pkg/release/tool/releaseit` | same pattern as GoReleaser | Preserve concrete legacy tool API | Direct compatibility delegates around canonical executor logic; `RevertRelease` delegates to canonical `Rollback` after C1 | High | Same C1 result |
+| `release.BuildReleaseExecutionContext` | `pkg/release` | tests only; production uses `BuildV2ReleaseExecutionContext` | Preserve a mixed V1/V2 normalized-repository builder | Contains source-specific unit-root selection, then delegates to common assembly | Medium to high | Deprecated by C1; retain until external callers migrate |
 | `release.startLegacyRelease`, `newV1ReleaseCommandApplication` | `pkg/release` | compatibility tests only | Preserve internal test/transition entry points from the old path | Delegate to the isolated V1 application | Low internally | Safe removal candidates in C2 after tests move to canonical entry points |
-| `config.V1Exists`, `V1LoadConfig`, `V1SaveConfig` | `pkg/config` | compatibility tests; canonical code uses explicit-root/path variants | Preserve cwd-based V1 config API | Direct delegates to `V1ConfigExistsAt`, `V1LoadConfigAt`, and `V1SaveConfigAt` | High because exported and deprecated | Keep through C1; use explicit variants in new code |
-| `release.VersionGuard`, `VersionGuardWithOptions`, `EnsureVersionIsValid` | `pkg/release` | compatibility tests; active V1 application uses its planning evidence adapter | Preserve legacy version-guard API and warnings | Contains compatibility behavior over mutable evidence globals | Medium to high | Characterize and deprecate in C1; do not remove pure version validation without consumer audit |
-| `release.V2ExecutionUnavailableResponse` | `pkg/release` | none found | Preserve an exported response helper from command extraction | Directly maps a classified failure through the canonical response mapper | Medium unknown-consumer risk | Deprecate and remove in C2 if downstream audit is clean |
+| `config.V1Exists`, `V1LoadConfig`, `V1SaveConfig` | `pkg/config` | compatibility tests; canonical code uses explicit-root/path variants | Preserve cwd-based V1 config API | Direct delegates to `V1ConfigExistsAt`, `V1LoadConfigAt`, and `V1SaveConfigAt` | High because exported and deprecated | Deprecated by C1 with explicit-root/path replacements |
+| `release.VersionGuard`, `VersionGuardWithOptions`, `EnsureVersionIsValid` | `pkg/release` | compatibility tests; active V1 application uses its planning evidence adapter | Preserve legacy version-guard API and warnings | `VersionGuard` and `VersionGuardWithOptions` retain mutable evidence globals; `EnsureVersionIsValid` is pure | Medium to high | `VersionGuard` and `VersionGuardWithOptions` deprecated by C1; pure `EnsureVersionIsValid` kept |
+| `release.V2ExecutionUnavailableResponse` | `pkg/release` | none found | Preserve an exported response helper from command extraction | Directly maps a classified failure through the canonical response mapper | Medium unknown-consumer risk | Deprecated by C1; remove in C2 if downstream audit is clean |
 | `release.ReleaseTransaction`, `NewReleaseTransaction`, `ReleaseTransaction.Execute` | `pkg/release` | tests only | Preserve inactive V2-local scaffold/public shape | Constructor builds preparation state; `Execute` always blocks | High because exported despite inactive behavior | Decide product direction first; deprecate/remove in C2 if local delivery is rejected |
 | `GitReleaseCoordinator.Coordinate` | `pkg/release` | tests only; active release/resume use focused methods through adapters | Preserve the earlier one-call Git sequence | Contains a complete stage/commit/tag/push convenience sequence | Medium to high | Deprecate in C2 to prevent a competing orchestration path |
 | `migrate.ResolvePlan`, `migrate.Run`, exported `migrate.Plan` | `pkg/migrate` | tests only; command uses `migrationUseCase` | Preserve programmatic migration preview/execution | Narrow facades over canonical root/plan/use-case paths | Medium | Keep unless a public API policy removes them; they do not violate direction |
@@ -481,4 +481,4 @@ No code is labeled dead solely from an IDE result. Classification uses productio
 
 The violation does not change the historical ledger: all nine planned refactor stages were completed. It means “completed” is a closed milestone record, not a claim that no future architecture maintenance exists.
 
-The prioritized implementation sequence, acceptance criteria, and commit boundaries are defined in [post-refactor-roadmap.md](post-refactor-roadmap.md). H1, H2, and H3 are completed. The recommended next milestone is **C1 — Decide and deprecate V1 compatibility surfaces**.
+The prioritized implementation sequence, acceptance criteria, and commit boundaries are defined in [post-refactor-roadmap.md](post-refactor-roadmap.md). H1, H2, H3, and C1 are completed. The recommended next milestone is **C2 — Retire superseded and inactive release paths**.

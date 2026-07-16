@@ -6,6 +6,8 @@ This document describes the Release Plugin as it exists in the current checkout.
 
 The verified final dependency view, compatibility inventory, and debt classification are maintained in [post-refactor-review.md](post-refactor-review.md). Future safety, compatibility, developer-experience, and feature milestones are maintained in [post-refactor-roadmap.md](post-refactor-roadmap.md). This document remains the detailed behavioral and data-contract reference.
 
+The C1 support decision for retained V1 compatibility surfaces is recorded in [v1-compatibility-policy.md](v1-compatibility-policy.md). That register is the authoritative source for Keep, Deprecate, Defer, and Removal candidate decisions until C2 re-runs the consumer audit.
+
 The audit follows the current command routes in `plugin/release/main.go`, every production package under `plugin/release/pkg`, the tests under `plugin/release`, the plugin manifest, the repository V2 release files, and the release workflows. Existing repository-wide release documentation was used only as supporting context where the source and tests confirmed it.
 
 The active production scope is `plugin/release`. Shared contracts inspected for integration context include `pkg/plugin/types.go`, `pkg/errors/plugin_errors.go`, and `pkg/config/env.go`.
@@ -241,9 +243,11 @@ The retained public compatibility surfaces are direct delegates:
 - `Service`, `Preflight`, `Tool`, `ToolBase`, executor `Execute`, `Release`, and `RevertRelease`, and the mixed context builder remain for direct callers/tests and delegate to the isolated V1 behavior.
 - zero-value executor construction is retained only for those legacy facades; active executors arrive fully composed through `NewV1Executor` and do not construct hidden dependencies during execution.
 
+C1 completed the support decision for those surfaces. Deprecated surfaces now point to tested replacements where one exists: explicit `HandleReleaseWithV1Executors` composition, `PlanV1Release`, `BuildV2ReleaseExecutionContext`, explicit V1 config root/path functions, `Run` with `V1ExecutorRequest`, `Rollback`, and `MapCommandFailure`. Deferred surfaces such as fatal `Preflight`, `Tool`, `ToolBase`, and legacy executor `Init` remain unmarked because no exact public replacement exists. Concrete executor `Rollback` methods now own the direct rollback adapter call, while `RevertRelease` is the deprecated direct delegate.
+
 Bounded limitations remain:
 
-- the compatibility registry and version-evidence package variables remain mutable for old callers/tests but are unreachable from production release composition;
+- the compatibility registry and version-evidence package variables remain mutable for old callers/tests but are unreachable from production release composition and deprecated where a tested explicit replacement exists;
 - direct callers of the legacy `V1ReleaseRollback` compatibility surface retain its characterized in-memory, best-effort behavior; the active V1 application does not use it;
 - pending/uncertain remote deletion or push, a pending revert, release-it failure, and executor push/publication ambiguity intentionally require manual recovery rather than remote inference or blind retry;
 - the active release invocation is recorded as one pending executor effect, so interruption inside an executor is conservatively classified as manual instead of inferred from remote state;
@@ -516,7 +520,7 @@ The post-refactor verification found one bounded deviation from the strict prese
 - Completed stages: 9 / 9
 - Remaining stages: 0
 - Release Plugin refactor: completed
-- Completed roadmap milestones: H1 — Make V1 compensation interruption-safe; H2 — Make pair and migration crash recovery explicit; H3 — Add evidence-safe journal inspection and lifecycle support
-- Next milestone: C1 — Decide and deprecate V1 compatibility surfaces
+- Completed roadmap milestones: H1 — Make V1 compensation interruption-safe; H2 — Make pair and migration crash recovery explicit; H3 — Add evidence-safe journal inspection and lifecycle support; C1 — Decide and deprecate V1 compatibility surfaces
+- Next milestone: C2 — Retire superseded and inactive release paths
 
-H1, H2, H3, and the later milestones are maintained in [post-refactor-roadmap.md](post-refactor-roadmap.md). Roadmap milestones are not refactor stages; the historical refactor ledger remains closed.
+H1, H2, H3, C1, and the later milestones are maintained in [post-refactor-roadmap.md](post-refactor-roadmap.md). Roadmap milestones are not refactor stages; the historical refactor ledger remains closed.

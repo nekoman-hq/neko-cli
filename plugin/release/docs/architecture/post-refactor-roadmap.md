@@ -9,7 +9,8 @@ The behavior-preserving Release Plugin refactor is closed at 9 / 9 stages. This 
 - H1: completed
 - H2: completed
 - H3: completed
-- Next roadmap milestone: **C1 — Decide and deprecate V1 compatibility surfaces**
+- C1: completed
+- Next roadmap milestone: **C2 — Retire superseded and inactive release paths**
 
 The architecture evidence, debt ranking, compatibility inventory, and removal candidates behind this roadmap are in [post-refactor-review.md](post-refactor-review.md). The detailed runtime and disk contracts remain in [current-state.md](current-state.md). Every implementation milestone remains subject to `plugin/release/RULES.md`.
 
@@ -22,7 +23,7 @@ Milestone namespaces distinguish the nature of future work:
 | `DX` | Developer experience | Clarify presentation, composition, and filesystem policies |
 | `F` | New features | Add separately authorized user-facing capabilities |
 
-H1 — Make V1 compensation interruption-safe, H2 — Make pair and migration crash recovery explicit, and H3 — Add evidence-safe journal inspection and lifecycle support are completed. The recommended next milestone is **C1 — Decide and deprecate V1 compatibility surfaces**. Compatibility cleanup still does not have to precede unrelated product work; read-only F1 may proceed independently when it does not touch H2/H3 files or contracts.
+H1 — Make V1 compensation interruption-safe, H2 — Make pair and migration crash recovery explicit, H3 — Add evidence-safe journal inspection and lifecycle support, and C1 — Decide and deprecate V1 compatibility surfaces are completed. The recommended next milestone is **C2 — Retire superseded and inactive release paths**. Compatibility cleanup still does not have to precede unrelated product work; read-only F1 may proceed independently when it does not touch H2/H3 files or contracts.
 
 ## Sequencing and gates
 
@@ -42,7 +43,7 @@ F2  (decision milestone; implementation requires a later approved design)
 - H1 established the durable V1 compensation baseline; new V1 mutation work must preserve it.
 - H2 established the required evidence protocol for changes that add multi-file config/state writes or broaden migration.
 - H3 precedes any journal schema change or automated repair behavior.
-- C1 must establish support and deprecation policy before C2 removes exported compatibility code.
+- C1 established support and deprecation policy before C2 removes exported compatibility code.
 - DX1 should precede substantial edits to active V2 orchestration files.
 - F1 does not wait for compatibility cleanup. It may follow H1 or run independently when file ownership and validation remain isolated.
 - F2 is evaluation only. A positive decision creates a new, separately reviewed implementation milestone; it does not activate the existing scaffold.
@@ -90,6 +91,7 @@ F2  (decision milestone; implementation requires a later approved design)
 
 ### C1 — Decide and deprecate V1 compatibility surfaces
 
+- **Status:** **Completed.** C1 added repository characterization for the retained compatibility surfaces, recorded the support/removal decisions in [v1-compatibility-policy.md](v1-compatibility-policy.md), deprecated only surfaces with tested replacements, and kept/deferred surfaces without exact replacement unmarked.
 - **Objective:** Turn unknown compatibility risk into an explicit support matrix and migrate known consumers away from mutable registries, version-evidence globals, mixed builders, and legacy executor method ownership.
 - **User value:** Embedders receive a documented stable path and deprecation window instead of surprise removal, while maintainers gain one clearly canonical composition model.
 - **Characterize first:** Inventory repository, module, generated entry-point, and known downstream use of every symbol in the review's compatibility table; pin fatal-exit, cwd, registry overwrite, and executor delegation behavior.
@@ -98,7 +100,8 @@ F2  (decision milestone; implementation requires a later approved design)
 - **Dependencies:** A public API/versioning policy, a downstream communication channel, replacement examples, and deprecation duration.
 - **Risks:** Unseen Go consumers may compile against exported symbols; fatal and cwd behavior may be observable; partial deprecation can leave two apparent canonical paths.
 - **Acceptance criteria:** Every retained surface has an owner and support status; every deprecated surface points to a tested replacement; production stays on fixed explicit composition; globals have no new consumers; direct `Rollback` owns canonical executor rollback behavior before `RevertRelease` is considered removable; no public symbol is deleted in C1.
-- **Expected commit boundaries:** (1) consumer/contract evidence; (2) support matrix and deprecation docs; (3) explicit registry replacement for known callers; (4) version-evidence injection; (5) executor delegation inversion and migration examples.
+- **Completed commit boundaries:** C1.1 `test(release): characterize v1 compatibility surfaces`; C1.2 `docs(release): decide v1 compatibility policy`; C1.3 `refactor(release): deprecate v1 compatibility surfaces`; C1.4 documentation closure uses commit message `docs(release): complete c1 compatibility deprecation`.
+- **Completion record:** Production remains on `HandleReleaseWithV1Executors` and fixed concrete V1 executors. `Service`, registry functions, registry package init, mixed execution-context builder, mutable version guards, cwd V1 config facades, selected executor legacy methods, and `V2ExecutionUnavailableResponse` now have precise deprecation comments. `Preflight`, `Tool`, `ToolBase`, legacy executor `Init`, explicit V1 config operations, pure `EnsureVersionIsValid`, system constructors, migration/plugin-index programmatic APIs, and undecided V2-local scaffolding were kept or deferred because no exact replacement/removal decision exists. `Rollback` owns concrete executor rollback behavior; `RevertRelease` is a deprecated direct delegate. No public symbol was removed.
 
 ### C2 — Retire superseded and inactive release paths
 
@@ -107,7 +110,7 @@ F2  (decision milestone; implementation requires a later approved design)
 - **Characterize first:** Re-run repository and downstream reference searches; move tests from private bridges to canonical boundaries; prove production uses named V2 operations and fixed V1 executors.
 - **Scope:** Eligible internal V1 bridges, inactive `ReleaseTransaction` preparation, `GitReleaseCoordinator.Coordinate`, `V2ExecutionUnavailableResponse`, `buildV2InitConfigFromFlags`, registry internals after C1, and the exact unused raw `pkg/git` helpers listed in the review.
 - **Non-goals:** Removing active `git.Current` or query/preflight helpers, deleting public APIs without policy, implementing V2 local execution, or combining cleanup with behavior changes.
-- **Dependencies:** C1 completion for exported V1 surfaces; F2 decision for local-execution scaffolding; deprecation window and downstream evidence.
+- **Dependencies:** completed C1 support decisions for exported V1 surfaces; F2 decision for local-execution scaffolding; deprecation window and downstream evidence.
 - **Risks:** Reflection, blank imports, or external packages may make a symbol reachable outside repository search; deleting test scaffolds can reduce failure coverage if tests are not moved first.
 - **Acceptance criteria:** Each deletion has call-site evidence and a replacement or explicit unsupported decision; architecture guards prevent reintroduction of competing orchestration; all behavior tests remain; release binaries and public docs contain no stale reference; removals are independently revertible by family.
 - **Expected commit boundaries:** (1) test migration; (2) private bridge removal; (3) inactive V2-local path decision/removal; (4) raw Git helper removal; (5) exported compatibility removals by separately announced family.
@@ -183,7 +186,7 @@ The following are not backlog omissions. They remain deliberate boundaries until
 - no blind retry of ambiguous push or uncertain workflow dispatch;
 - no remote-state inference that converts an observation into proof of safe retry;
 - no generic workflow pipeline, universal state-machine engine, dependency bag, or shared journal repository;
-- no V1 removal before C1 establishes consumers, policy, replacements, and a deprecation window;
+- no V1 removal before C2 re-runs consumers, policy, replacements, and the deprecation window established by C1;
 - no V2 local execution before F2 and a subsequent implementation milestone prove executor ownership and recovery;
 - no journal schema migration or repair command without a concrete format/support need and an inspection-first design;
 - no process-wide cwd rewrite before an embedding/concurrency requirement justifies DX2;
@@ -191,6 +194,6 @@ The following are not backlog omissions. They remain deliberate boundaries until
 
 ## Roadmap completion reporting
 
-Roadmap progress is reported independently from the historical refactor ledger: “Refactor stages: 9 / 9 completed; roadmap milestones H1, H2, and H3: completed; next milestone: C1 — Decide and deprecate V1 compatibility surfaces.” H1, H2, H3, and later roadmap milestones must not be reported as Stage 10.
+Roadmap progress is reported independently from the historical refactor ledger: “Refactor stages: 9 / 9 completed; roadmap milestones H1, H2, H3, and C1: completed; next milestone: C2 — Retire superseded and inactive release paths.” H1, H2, H3, C1, and later roadmap milestones must not be reported as Stage 10.
 
 Each milestone begins with characterization, retains independently revertible commit boundaries, runs the full uncached Release Plugin and repository validation required by `plugin/release/RULES.md`, and updates this roadmap plus the architecture review when evidence changes a priority or recommendation.
