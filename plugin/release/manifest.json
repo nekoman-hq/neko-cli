@@ -383,6 +383,28 @@
       ]
     },
     {
+      "name": "evidence",
+      "description": "Inspect release evidence journals without mutating recovery state",
+      "outputs": [
+        "table",
+        "json"
+      ],
+      "flags": [
+        {
+          "name": "family",
+          "type": "string",
+          "required": false,
+          "description": "Filter evidence by family: release-execution, dispatch, migration, v1-compensation, or v2-pair-recovery"
+        },
+        {
+          "name": "unit",
+          "type": "string",
+          "required": false,
+          "description": "Filter evidence records by release unit when the evidence family records a unit"
+        }
+      ]
+    },
+    {
       "name": "plugin-index",
       "description": "Generate the public plugin registry index from V2 plugin units",
       "outputs": [

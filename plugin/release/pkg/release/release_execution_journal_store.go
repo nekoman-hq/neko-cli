@@ -47,6 +47,10 @@ func (store *ReleaseExecutionJournalStore) JournalPath(identity ReleaseExecution
 	return store.files.executionPath(identity.SHA256)
 }
 
+func (store *ReleaseExecutionJournalStore) JournalDirectory() (string, error) {
+	return store.files.executionDirectory()
+}
+
 func (store *ReleaseExecutionJournalStore) Prepare(expected *ReleaseExecutionJournal) (*ReleaseExecutionJournalResolution, error) {
 	if expected == nil {
 		return nil, fmt.Errorf("release execution journal is missing")

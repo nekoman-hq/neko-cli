@@ -85,6 +85,10 @@ func TestManifestMatchesPublicReleaseContract(t *testing.T) {
 			"unit":    "string",
 			"dry-run": "bool",
 		},
+		"evidence": {
+			"family": "string",
+			"unit":   "string",
+		},
 		"plugin-index": {
 			"output":     "string",
 			"check":      "bool",

@@ -44,6 +44,10 @@ func (store *DispatchJournalStore) JournalPath(identity ReleaseDispatchIdentity)
 	return store.files.dispatchPath(identity.SHA256)
 }
 
+func (store *DispatchJournalStore) JournalDirectory() (string, error) {
+	return store.files.dispatchDirectory()
+}
+
 func (store *DispatchJournalStore) Prepare(request *ReleaseDispatchRequest) (*DispatchJournalResolution, error) {
 	if request == nil {
 		return nil, errDispatchRequestMissing()

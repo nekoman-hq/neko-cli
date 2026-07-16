@@ -11,6 +11,7 @@ import (
 	"github.com/nekoman-hq/neko-cli/pkg/log"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/contributors"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/evidence"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/history"
 	initcmd "github.com/nekoman-hq/neko-cli/plugin/release/pkg/init"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata"
@@ -67,6 +68,8 @@ func main() {
 		resp, err = release.HandleReleaseWithV1Executors(req, release.Major, v1Executors...)
 	case "resume":
 		resp, err = release.HandleResume(req)
+	case "evidence":
+		resp, err = evidence.HandleEvidence(req)
 	case "history":
 		resp, err = history.HandleHistory(req)
 	case "contributors":
