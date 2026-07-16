@@ -133,6 +133,8 @@ func releaseExecutionRecord(path string, data []byte, journal release.ReleaseExe
 		SafeToResume:          safeToResume,
 		AutomaticContinuation: automatic,
 		ManualRecovery:        manual,
+		LifecycleAllowed:      classification == ClassificationCompleted,
+		LifecycleOperation:    lifecycleOperation(classification == ClassificationCompleted),
 		Guidance:              guidance,
 		Path:                  path,
 		DigestSHA256:          sha256Hex(data),
@@ -280,6 +282,8 @@ func v1CompensationRecord(path string, data []byte, evidence release.V1Compensat
 		SafeToResume:          safeToResume,
 		AutomaticContinuation: automatic,
 		ManualRecovery:        manual,
+		LifecycleAllowed:      classification == ClassificationCompleted,
+		LifecycleOperation:    lifecycleOperation(classification == ClassificationCompleted),
 		Guidance:              guidance,
 		Path:                  path,
 		DigestSHA256:          sha256Hex(data),
@@ -449,6 +453,8 @@ func inspectV2PairRecoveryEvidence(root string) ([]EvidenceRecord, []EvidenceDia
 		SafeToResume:          automatic,
 		AutomaticContinuation: automatic,
 		ManualRecovery:        manual,
+		LifecycleAllowed:      evidence.Completed && classification == ClassificationCompleted,
+		LifecycleOperation:    lifecycleOperation(evidence.Completed && classification == ClassificationCompleted),
 		Guidance:              guidance,
 		Path:                  path,
 		DigestSHA256:          sha256Hex(data),
@@ -667,6 +673,13 @@ func safeEvidenceHash(hash string) bool {
 func sha256Hex(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
+}
+
+func lifecycleOperation(allowed bool) string {
+	if allowed {
+		return "archive-completed"
+	}
+	return ""
 }
 
 func formatEvidenceTime(value string) string {

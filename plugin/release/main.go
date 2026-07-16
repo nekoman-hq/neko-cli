@@ -70,6 +70,8 @@ func main() {
 		resp, err = release.HandleResume(req)
 	case "evidence":
 		resp, err = evidence.HandleEvidence(req)
+	case "evidence-archive":
+		resp, err = evidence.HandleEvidenceArchive(req)
 	case "history":
 		resp, err = history.HandleHistory(req)
 	case "contributors":

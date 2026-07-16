@@ -113,6 +113,122 @@ func TestEvidenceQueryPreservesUnsupportedMigrationJournal(t *testing.T) {
 	}
 }
 
+func TestEvidenceArchiveRequiresFreshDigestAndCreatesPrivateExactArchive(t *testing.T) {
+	root := newEvidenceGitRepository(t)
+	identity := strings.Repeat("d", 64)
+	executionDir, err := release.NewReleaseExecutionJournalStore(root).JournalDirectory()
+	if err != nil {
+		t.Fatalf("execution directory: %v", err)
+	}
+	sourcePath := filepath.Join(executionDir, identity+".json")
+	writeEvidenceJSON(t, sourcePath, release.ReleaseExecutionJournal{
+		SchemaVersion: releaseExecutionSchemaVersionForTest,
+		Identity: release.ReleaseExecutionIdentity{
+			SHA256: identity,
+		},
+		RepositoryRemote: "https://github.com/nekoman/repo.git",
+		UnitID:           "api",
+		NextVersion:      "1.2.4",
+		Tag:              "api/v1.2.4",
+		State:            release.ReleaseExecutionHandoffReady,
+		PendingAction:    release.ReleaseExecutionPendingNone,
+		CreatedAt:        evidenceTestTime,
+		UpdatedAt:        evidenceTestTime,
+	})
+	before, err := os.ReadFile(sourcePath)
+	if err != nil {
+		t.Fatalf("read source evidence: %v", err)
+	}
+	query, err := newEvidenceQueryUseCase().Query(context.Background(), evidenceQueryRequest{RepositoryRoot: root, Family: FamilyReleaseExecution})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if len(query.Records) != 1 || !query.Records[0].LifecycleAllowed || query.Records[0].LifecycleOperation != "archive-completed" {
+		t.Fatalf("completed evidence was not marked archivable: %#v", query.Records)
+	}
+	request := evidenceArchiveRequest{
+		RepositoryRoot: root,
+		Family:         FamilyReleaseExecution,
+		Identity:       identity,
+		DigestSHA256:   strings.Repeat("0", 64),
+		ConfirmArchive: true,
+	}
+	if _, err := newEvidenceArchiveUseCase().Archive(context.Background(), request); err == nil || !strings.Contains(err.Error(), "digest changed") {
+		t.Fatalf("wrong digest archive error = %v, want digest changed", err)
+	}
+	if _, err := os.Stat(sourcePath); err != nil {
+		t.Fatalf("wrong digest removed source evidence: %v", err)
+	}
+
+	request.DigestSHA256 = query.Records[0].DigestSHA256
+	result, err := newEvidenceArchiveUseCase().Archive(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Archive: %v", err)
+	}
+	if _, err := os.Stat(sourcePath); !os.IsNotExist(err) {
+		t.Fatalf("source evidence still exists after archive: %v", err)
+	}
+	archived, err := os.ReadFile(result.ArchivePath)
+	if err != nil {
+		t.Fatalf("read archive: %v", err)
+	}
+	if string(archived) != string(before) {
+		t.Fatalf("archive bytes changed:\n%s", archived)
+	}
+	info, err := os.Stat(filepath.Dir(result.ArchivePath))
+	if err != nil {
+		t.Fatalf("stat archive dir: %v", err)
+	}
+	if info.Mode().Perm() != 0700 {
+		t.Fatalf("archive dir mode = %04o, want 0700", info.Mode().Perm())
+	}
+}
+
+func TestEvidenceArchiveRefusesUnresolvedEvidence(t *testing.T) {
+	root := newEvidenceGitRepository(t)
+	identity := strings.Repeat("e", 64)
+	executionDir, err := release.NewReleaseExecutionJournalStore(root).JournalDirectory()
+	if err != nil {
+		t.Fatalf("execution directory: %v", err)
+	}
+	sourcePath := filepath.Join(executionDir, identity+".json")
+	writeEvidenceJSON(t, sourcePath, release.ReleaseExecutionJournal{
+		SchemaVersion: releaseExecutionSchemaVersionForTest,
+		Identity: release.ReleaseExecutionIdentity{
+			SHA256: identity,
+		},
+		RepositoryRemote: "https://github.com/nekoman/repo.git",
+		UnitID:           "api",
+		NextVersion:      "1.2.4",
+		Tag:              "api/v1.2.4",
+		State:            release.ReleaseExecutionPrepared,
+		PendingAction:    release.ReleaseExecutionPendingNone,
+		CreatedAt:        evidenceTestTime,
+		UpdatedAt:        evidenceTestTime,
+	})
+	query, err := newEvidenceQueryUseCase().Query(context.Background(), evidenceQueryRequest{RepositoryRoot: root, Family: FamilyReleaseExecution})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if len(query.Records) != 1 || query.Records[0].LifecycleAllowed {
+		t.Fatalf("unresolved evidence was marked archivable: %#v", query.Records)
+	}
+
+	_, err = newEvidenceArchiveUseCase().Archive(context.Background(), evidenceArchiveRequest{
+		RepositoryRoot: root,
+		Family:         FamilyReleaseExecution,
+		Identity:       identity,
+		DigestSHA256:   query.Records[0].DigestSHA256,
+		ConfirmArchive: true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "not eligible") {
+		t.Fatalf("unresolved archive error = %v, want not eligible", err)
+	}
+	if _, err := os.Stat(sourcePath); err != nil {
+		t.Fatalf("unresolved archive removed source evidence: %v", err)
+	}
+}
+
 const (
 	releaseExecutionSchemaVersionForTest = 1
 	dispatchSchemaVersionForTest         = 1

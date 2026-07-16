@@ -36,6 +36,29 @@ func mapEvidenceQueryResponse(result evidenceQueryResult, timestamp time.Time) *
 	}
 }
 
+func mapEvidenceArchiveResponse(result evidenceArchiveResult, timestamp time.Time) *plugin.Response {
+	return &plugin.Response{
+		Status: "success",
+		Metadata: plugin.ResponseMetadata{
+			Plugin:    metadata.PluginName,
+			Version:   metadata.Version,
+			Command:   ArchiveCommandName,
+			Timestamp: timestamp,
+		},
+		Data: map[string]any{
+			"items": []map[string]any{
+				{"property": "Family", "value": result.Family},
+				{"property": "Identity", "value": result.Identity},
+				{"property": "Digest", "value": result.DigestSHA256},
+				{"property": "Source", "value": result.SourcePath},
+				{"property": "Archive", "value": result.ArchivePath},
+				{"property": "Status", "value": "archived"},
+			},
+		},
+		RendererHint: "table",
+	}
+}
+
 func evidenceResponseItems(result evidenceQueryResult) []map[string]any {
 	items := make([]map[string]any, 0, len(result.Records)+len(result.Diagnostics)+1)
 	for _, record := range result.Records {
@@ -53,6 +76,7 @@ func evidenceResponseItems(result evidenceQueryResult) []map[string]any {
 			"automatic_continuation": fmt.Sprintf("%t", record.AutomaticContinuation),
 			"manual_recovery":        fmt.Sprintf("%t", record.ManualRecovery),
 			"lifecycle":              lifecycleEvidenceValue(record),
+			"digest":                 record.DigestSHA256,
 			"path":                   record.Path,
 			"guidance":               record.Guidance,
 		})
@@ -72,6 +96,7 @@ func evidenceResponseItems(result evidenceQueryResult) []map[string]any {
 			"automatic_continuation": "false",
 			"manual_recovery":        "true",
 			"lifecycle":              "blocked",
+			"digest":                 "not applicable",
 			"path":                   diagnostic.Path,
 			"guidance":               diagnostic.Guidance,
 		})
@@ -91,6 +116,7 @@ func evidenceResponseItems(result evidenceQueryResult) []map[string]any {
 			"automatic_continuation": "false",
 			"manual_recovery":        "false",
 			"lifecycle":              "not applicable",
+			"digest":                 "not applicable",
 			"path":                   "not applicable",
 			"guidance":               "No release evidence files were found.",
 		})

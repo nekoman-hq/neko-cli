@@ -405,6 +405,41 @@
       ]
     },
     {
+      "name": "evidence-archive",
+      "description": "Archive one completed release evidence file after explicit confirmation",
+      "outputs": [
+        "table",
+        "json"
+      ],
+      "flags": [
+        {
+          "name": "family",
+          "type": "string",
+          "required": true,
+          "description": "Evidence family to archive; only completed release-execution, v1-compensation, and v2-pair-recovery evidence are supported"
+        },
+        {
+          "name": "identity",
+          "type": "string",
+          "required": true,
+          "description": "Evidence identity from inspection output"
+        },
+        {
+          "name": "digest-sha256",
+          "type": "string",
+          "required": true,
+          "description": "Current evidence digest from inspection output; used to reject stale archive requests"
+        },
+        {
+          "name": "confirm-archive",
+          "type": "bool",
+          "required": true,
+          "default": false,
+          "description": "Required explicit confirmation for archive-completed"
+        }
+      ]
+    },
+    {
       "name": "plugin-index",
       "description": "Generate the public plugin registry index from V2 plugin units",
       "outputs": [

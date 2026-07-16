@@ -89,6 +89,12 @@ func TestManifestMatchesPublicReleaseContract(t *testing.T) {
 			"family": "string",
 			"unit":   "string",
 		},
+		"evidence-archive": {
+			"family":          "string",
+			"identity":        "string",
+			"digest-sha256":   "string",
+			"confirm-archive": "bool",
+		},
 		"plugin-index": {
 			"output":     "string",
 			"check":      "bool",
