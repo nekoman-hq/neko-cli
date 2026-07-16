@@ -21,11 +21,11 @@ func TestV2ReleasePairCrashWindowWithoutEvidenceLeavesMixedPairInvalid(t *testin
 	if err != nil {
 		t.Fatalf("old state: %v", err)
 	}
-	if err := os.WriteFile(V2ConfigPath(root), oldConfig, 0600); err != nil {
-		t.Fatalf("write old config: %v", err)
+	if writeErr := os.WriteFile(V2ConfigPath(root), oldConfig, 0600); writeErr != nil {
+		t.Fatalf("write old config: %v", writeErr)
 	}
-	if err := os.WriteFile(V2StatePath(root), oldState, 0640); err != nil {
-		t.Fatalf("write old state: %v", err)
+	if writeErr := os.WriteFile(V2StatePath(root), oldState, 0640); writeErr != nil {
+		t.Fatalf("write old state: %v", writeErr)
 	}
 
 	nextPair := testV2ReleasePair("web", "2.0.0")
@@ -33,11 +33,11 @@ func TestV2ReleasePairCrashWindowWithoutEvidenceLeavesMixedPairInvalid(t *testin
 	if err != nil {
 		t.Fatalf("next config: %v", err)
 	}
-	if err := os.Remove(V2ConfigPath(root)); err != nil {
-		t.Fatalf("remove old config before simulated rename: %v", err)
+	if removeErr := os.Remove(V2ConfigPath(root)); removeErr != nil {
+		t.Fatalf("remove old config before simulated rename: %v", removeErr)
 	}
-	if err := os.WriteFile(V2ConfigPath(root), nextConfig, 0644); err != nil {
-		t.Fatalf("simulate config-only crash: %v", err)
+	if writeErr := os.WriteFile(V2ConfigPath(root), nextConfig, 0644); writeErr != nil {
+		t.Fatalf("simulate config-only crash: %v", writeErr)
 	}
 
 	_, err = LoadV2Repository(root)
@@ -59,8 +59,8 @@ func TestV2ReleasePairCrashWindowWithoutEvidenceLeavesIncompleteNewPairInvalid(t
 	if err != nil {
 		t.Fatalf("config: %v", err)
 	}
-	if err := os.WriteFile(V2ConfigPath(root), configData, 0644); err != nil {
-		t.Fatalf("simulate config-only create crash: %v", err)
+	if writeErr := os.WriteFile(V2ConfigPath(root), configData, 0644); writeErr != nil {
+		t.Fatalf("simulate config-only create crash: %v", writeErr)
 	}
 
 	_, err = LoadV2Repository(root)

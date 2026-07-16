@@ -259,8 +259,8 @@ func TestRunRecoversArchiveCrashBeforeSourceConfirmation(t *testing.T) {
 	j := journalForPlan(t, plan, journalStageStateWritten)
 	writeFile(t, plan.ConfigPath, plan.ConfigJSON)
 	writeFile(t, plan.StatePath, plan.StateJSON)
-	if err := os.Rename(plan.SourcePath, plan.BackupPath); err != nil {
-		t.Fatalf("archive source before simulated crash: %v", err)
+	if renameErr := os.Rename(plan.SourcePath, plan.BackupPath); renameErr != nil {
+		t.Fatalf("archive source before simulated crash: %v", renameErr)
 	}
 	writeJournalForTest(t, root, j)
 
@@ -316,8 +316,8 @@ func TestRunTreatsCompletedMigrationWithRetainedJournalAsAlreadyCompleted(t *tes
 	j := journalForPlan(t, plan, journalStageV1Archived)
 	writeFile(t, plan.ConfigPath, plan.ConfigJSON)
 	writeFile(t, plan.StatePath, plan.StateJSON)
-	if err := os.Rename(plan.SourcePath, plan.BackupPath); err != nil {
-		t.Fatalf("archive source before simulated cleanup crash: %v", err)
+	if renameErr := os.Rename(plan.SourcePath, plan.BackupPath); renameErr != nil {
+		t.Fatalf("archive source before simulated cleanup crash: %v", renameErr)
 	}
 	writeJournalForTest(t, root, j)
 
@@ -501,7 +501,6 @@ func writeJournalForTest(t *testing.T, root string, j *journal) {
 func writePairRecoveryEvidenceForTest(t *testing.T, root string, plan *Plan) {
 	t.Helper()
 	evidence := struct {
-		SchemaVersion     int    `json:"schemaVersion"`
 		ConfigPath        string `json:"configPath"`
 		StatePath         string `json:"statePath"`
 		PriorConfig       any    `json:"priorConfig"`
@@ -511,6 +510,7 @@ func writePairRecoveryEvidenceForTest(t *testing.T, root string, plan *Plan) {
 		ConfigReplacement string `json:"configReplacement"`
 		StateReplacement  string `json:"stateReplacement"`
 		Restoration       string `json:"restoration"`
+		SchemaVersion     int    `json:"schemaVersion"`
 		Completed         bool   `json:"completed"`
 	}{
 		SchemaVersion:     1,

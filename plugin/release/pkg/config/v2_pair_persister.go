@@ -55,10 +55,9 @@ func NewV2ReleasePairPersister(root string) V2ReleasePairPersister {
 	}
 }
 
-// Persist prepares both files before replacing either one. If either replace
-// fails it attempts to restore both prior snapshots. This is rollback-backed
-// paired persistence, not cross-file atomicity: a process or machine crash
-// between the two renames can still leave a mixed pair.
+// Persist records pair-recovery evidence before unsafe replacement. This is
+// crash-recoverable paired persistence, not cross-file atomicity: a process or
+// machine crash between the two renames can still expose a mixed pair.
 func (persister V2ReleasePairPersister) Persist(pair V2ReleasePair) error {
 	configForSerialization := pair.Config
 	configForSerialization.Units = make([]V2Unit, len(pair.Config.Units))
@@ -76,8 +75,8 @@ func (persister V2ReleasePairPersister) Persist(pair V2ReleasePair) error {
 	if createErr := persister.disk.CreateDirectory(); createErr != nil {
 		return fmt.Errorf("create %s directory: %w", V2Directory, createErr)
 	}
-	if err := persister.recoverUnresolvedPair(); err != nil {
-		return err
+	if recoverErr := persister.recoverUnresolvedPair(); recoverErr != nil {
+		return recoverErr
 	}
 
 	configSnapshot, err := persister.disk.CaptureConfig()
@@ -90,8 +89,8 @@ func (persister V2ReleasePairPersister) Persist(pair V2ReleasePair) error {
 	}
 	recoveryEvidence := newV2PairRecoveryEvidence(persister.root, configSnapshot, stateSnapshot, configData, stateData)
 	if persister.recovery != nil {
-		if err := persister.recovery.CreatePairRecoveryEvidence(recoveryEvidence); err != nil {
-			return err
+		if evidenceErr := persister.recovery.CreatePairRecoveryEvidence(recoveryEvidence); evidenceErr != nil {
+			return evidenceErr
 		}
 	}
 
@@ -108,8 +107,8 @@ func (persister V2ReleasePairPersister) Persist(pair V2ReleasePair) error {
 		return fmt.Errorf("create V2 state temp file: %w", err)
 	}
 	defer preparedState.Discard()
-	if err := preparedState.Write(stateData, v2ReleaseFileMode); err != nil {
-		return fmt.Errorf("write V2 state temp file: %w", err)
+	if writeStateErr := preparedState.Write(stateData, v2ReleaseFileMode); writeStateErr != nil {
+		return fmt.Errorf("write V2 state temp file: %w", writeStateErr)
 	}
 
 	if persister.recovery != nil {

@@ -38,24 +38,24 @@ func V2PairRecoveryPath(root string) string {
 }
 
 type v2PairRecoveryEvidence struct {
-	SchemaVersion     int                       `json:"schemaVersion"`
 	ConfigPath        string                    `json:"configPath"`
 	StatePath         string                    `json:"statePath"`
+	ConfigReplacement v2PairReplacementEvidence `json:"configReplacement"`
+	StateReplacement  v2PairReplacementEvidence `json:"stateReplacement"`
+	Restoration       v2PairRestorationEvidence `json:"restoration"`
 	PriorConfig       v2PairRecoveryFile        `json:"priorConfig"`
 	PriorState        v2PairRecoveryFile        `json:"priorState"`
 	IntendedConfig    v2PairRecoveryFile        `json:"intendedConfig"`
 	IntendedState     v2PairRecoveryFile        `json:"intendedState"`
-	ConfigReplacement v2PairReplacementEvidence `json:"configReplacement"`
-	StateReplacement  v2PairReplacementEvidence `json:"stateReplacement"`
-	Restoration       v2PairRestorationEvidence `json:"restoration"`
+	SchemaVersion     int                       `json:"schemaVersion"`
 	Completed         bool                      `json:"completed"`
 }
 
 type v2PairRecoveryFile struct {
-	Exists bool        `json:"exists"`
-	Mode   os.FileMode `json:"mode,omitempty"`
 	SHA256 string      `json:"sha256,omitempty"`
 	Data   []byte      `json:"data,omitempty"`
+	Mode   os.FileMode `json:"mode,omitempty"`
+	Exists bool        `json:"exists"`
 }
 
 func newV2PairRecoveryEvidence(root string, configSnapshot, stateSnapshot v2FileSnapshot, configData, stateData []byte) v2PairRecoveryEvidence {
@@ -309,9 +309,9 @@ func (store *v2PairRecoveryStore) persist(evidence v2PairRecoveryEvidence) error
 }
 
 type v2PairObservedFile struct {
-	exists bool
-	mode   os.FileMode
 	sha    string
+	mode   os.FileMode
+	exists bool
 }
 
 type v2PairRecoveryObservation struct {
@@ -329,8 +329,8 @@ const (
 )
 
 type v2PairRecoveryDecision struct {
-	kind   v2PairRecoveryDecisionKind
 	reason string
+	kind   v2PairRecoveryDecisionKind
 }
 
 func selectV2PairRecoveryOperation(evidence v2PairRecoveryEvidence, observation v2PairRecoveryObservation) v2PairRecoveryDecision {
