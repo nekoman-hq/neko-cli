@@ -1,6 +1,8 @@
 package config
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -39,12 +41,18 @@ type V2ReleasePair struct { //nolint:govet // Config precedes its matching mutab
 
 // V2ReleasePairPersister persists one complete, already validated V2 pair.
 type V2ReleasePairPersister struct {
-	disk v2PairPersistenceDisk
+	disk     v2PairPersistenceDisk
+	recovery *v2PairRecoveryStore
+	root     string
 }
 
 // NewV2ReleasePairPersister creates the canonical config/state pair writer for a repository.
 func NewV2ReleasePairPersister(root string) V2ReleasePairPersister {
-	return V2ReleasePairPersister{disk: &osV2PairPersistenceDisk{root: root}}
+	return V2ReleasePairPersister{
+		disk:     &osV2PairPersistenceDisk{root: root},
+		recovery: newV2PairRecoveryStore(root),
+		root:     root,
+	}
 }
 
 // Persist prepares both files before replacing either one. If either replace
@@ -68,6 +76,9 @@ func (persister V2ReleasePairPersister) Persist(pair V2ReleasePair) error {
 	if createErr := persister.disk.CreateDirectory(); createErr != nil {
 		return fmt.Errorf("create %s directory: %w", V2Directory, createErr)
 	}
+	if err := persister.recoverUnresolvedPair(); err != nil {
+		return err
+	}
 
 	configSnapshot, err := persister.disk.CaptureConfig()
 	if err != nil {
@@ -76,6 +87,12 @@ func (persister V2ReleasePairPersister) Persist(pair V2ReleasePair) error {
 	stateSnapshot, err := persister.disk.CaptureState()
 	if err != nil {
 		return fmt.Errorf("capture existing V2 state: %w", err)
+	}
+	recoveryEvidence := newV2PairRecoveryEvidence(persister.root, configSnapshot, stateSnapshot, configData, stateData)
+	if persister.recovery != nil {
+		if err := persister.recovery.CreatePairRecoveryEvidence(recoveryEvidence); err != nil {
+			return err
+		}
 	}
 
 	preparedConfig, err := persister.disk.CreateConfigTemp()
@@ -95,11 +112,52 @@ func (persister V2ReleasePairPersister) Persist(pair V2ReleasePair) error {
 		return fmt.Errorf("write V2 state temp file: %w", err)
 	}
 
+	if persister.recovery != nil {
+		if err := persister.recovery.RecordConfigReplacementPending(&recoveryEvidence); err != nil {
+			return err
+		}
+	}
 	if err := preparedConfig.Replace(); err != nil {
-		return persister.rollback("replace V2 config", err, configSnapshot, stateSnapshot)
+		return persister.rollback("replace V2 config", err, configSnapshot, stateSnapshot, &recoveryEvidence)
+	}
+	if persister.root != "" {
+		if err := verifyV2PairFileBytes(V2ConfigPath(persister.root), configData); err != nil {
+			return err
+		}
+	}
+	if persister.recovery != nil {
+		if err := persister.recovery.ConfirmConfigReplacement(&recoveryEvidence); err != nil {
+			return err
+		}
+		if err := persister.recovery.RecordStateReplacementPending(&recoveryEvidence); err != nil {
+			return err
+		}
 	}
 	if err := preparedState.Replace(); err != nil {
-		return persister.rollback("replace V2 state", err, configSnapshot, stateSnapshot)
+		return persister.rollback("replace V2 state", err, configSnapshot, stateSnapshot, &recoveryEvidence)
+	}
+	if persister.root != "" {
+		if err := verifyV2PairFileBytes(V2StatePath(persister.root), stateData); err != nil {
+			return err
+		}
+	}
+	if persister.recovery != nil {
+		if err := persister.recovery.ConfirmStateReplacement(&recoveryEvidence); err != nil {
+			return err
+		}
+	}
+	if persister.root != "" {
+		if err := validatePersistedV2Pair(persister.root, configData, stateData); err != nil {
+			return err
+		}
+	}
+	if persister.recovery != nil {
+		if err := persister.recovery.MarkPairRecoveryCompleted(&recoveryEvidence); err != nil {
+			return err
+		}
+		if err := persister.recovery.ClosePairRecoveryEvidence(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -109,7 +167,11 @@ func (persister V2ReleasePairPersister) rollback(
 	cause error,
 	configSnapshot v2FileSnapshot,
 	stateSnapshot v2FileSnapshot,
+	recoveryEvidence *v2PairRecoveryEvidence,
 ) error {
+	if persister.recovery != nil && recoveryEvidence != nil {
+		_ = persister.recovery.RecordOriginalPairRestorationPending(recoveryEvidence)
+	}
 	restorationFailures := make([]string, 0, 2)
 	if err := persister.disk.RestoreConfig(configSnapshot); err != nil {
 		restorationFailures = append(restorationFailures, fmt.Sprintf("restore V2 config: %v", err))
@@ -118,13 +180,202 @@ func (persister V2ReleasePairPersister) rollback(
 		restorationFailures = append(restorationFailures, fmt.Sprintf("restore V2 state: %v", err))
 	}
 	if len(restorationFailures) > 0 {
+		if persister.recovery != nil && recoveryEvidence != nil {
+			_ = persister.recovery.RecordOriginalPairRestorationFailed(recoveryEvidence)
+		}
 		return &V2PairPersistenceError{
 			operation:   operation,
 			cause:       cause,
 			restoration: strings.Join(restorationFailures, "; "),
 		}
 	}
+	if persister.recovery != nil && recoveryEvidence != nil {
+		_ = persister.recovery.ConfirmOriginalPairRestoration(recoveryEvidence)
+		_ = persister.recovery.ClosePairRecoveryEvidence()
+	}
 	return fmt.Errorf("%s: %w; previous config/state pair restored", operation, cause)
+}
+
+func (persister V2ReleasePairPersister) recoverUnresolvedPair() error {
+	if persister.recovery == nil {
+		return nil
+	}
+	evidence, err := persister.recovery.LoadUnresolved()
+	if err != nil {
+		return err
+	}
+	if evidence == nil {
+		return nil
+	}
+	observation, err := observeV2PairRecovery(persister.root, *evidence)
+	if err != nil {
+		return &V2PairRecoveryError{manual: true, cause: err}
+	}
+	decision := selectV2PairRecoveryOperation(*evidence, observation)
+	switch decision.kind {
+	case v2PairRecoveryAlreadyComplete:
+		if err := persister.recovery.MarkPairRecoveryCompleted(evidence); err != nil {
+			return err
+		}
+		if err := persister.recovery.ClosePairRecoveryEvidence(); err != nil {
+			return err
+		}
+		return discardV2PairPreparedTemps(persister.root)
+	case v2PairRecoveryRestoreOriginal:
+		if err := persister.restoreOriginalPairFromEvidence(evidence); err != nil {
+			return err
+		}
+		return discardV2PairPreparedTemps(persister.root)
+	case v2PairRecoveryManual:
+		return &V2PairRecoveryError{manual: true, cause: fmt.Errorf("%s", decision.reason)}
+	default:
+		return &V2PairRecoveryError{
+			manual: true,
+			cause:  fmt.Errorf("unknown V2 pair recovery decision %d", decision.kind),
+		}
+	}
+}
+
+func (persister V2ReleasePairPersister) restoreOriginalPairFromEvidence(evidence *v2PairRecoveryEvidence) error {
+	if err := persister.recovery.RecordOriginalPairRestorationPending(evidence); err != nil {
+		return err
+	}
+	restorationFailures := make([]string, 0, 2)
+	if err := restoreV2File(evidence.ConfigPath, evidence.PriorConfig.snapshot()); err != nil {
+		restorationFailures = append(restorationFailures, fmt.Sprintf("restore V2 config: %v", err))
+	}
+	if err := restoreV2File(evidence.StatePath, evidence.PriorState.snapshot()); err != nil {
+		restorationFailures = append(restorationFailures, fmt.Sprintf("restore V2 state: %v", err))
+	}
+	if len(restorationFailures) > 0 {
+		_ = persister.recovery.RecordOriginalPairRestorationFailed(evidence)
+		return &V2PairRecoveryError{
+			manual: true,
+			cause:  fmt.Errorf("V2 pair recovery restoration failed (%s)", strings.Join(restorationFailures, "; ")),
+		}
+	}
+	if err := verifyV2PairRecoveredSnapshot(evidence.ConfigPath, evidence.PriorConfig); err != nil {
+		_ = persister.recovery.RecordOriginalPairRestorationFailed(evidence)
+		return &V2PairRecoveryError{manual: true, cause: err}
+	}
+	if err := verifyV2PairRecoveredSnapshot(evidence.StatePath, evidence.PriorState); err != nil {
+		_ = persister.recovery.RecordOriginalPairRestorationFailed(evidence)
+		return &V2PairRecoveryError{manual: true, cause: err}
+	}
+	if err := persister.recovery.ConfirmOriginalPairRestoration(evidence); err != nil {
+		return err
+	}
+	return persister.recovery.ClosePairRecoveryEvidence()
+}
+
+func observeV2PairRecovery(root string, evidence v2PairRecoveryEvidence) (v2PairRecoveryObservation, error) {
+	intendedPairValid := false
+	if err := validatePersistedV2PairBytes(root, evidence.IntendedConfig.Data, evidence.IntendedState.Data); err == nil {
+		intendedPairValid = true
+	}
+	config, err := observeV2PairFile(evidence.ConfigPath)
+	if err != nil {
+		return v2PairRecoveryObservation{}, err
+	}
+	state, err := observeV2PairFile(evidence.StatePath)
+	if err != nil {
+		return v2PairRecoveryObservation{}, err
+	}
+	return v2PairRecoveryObservation{
+		config:            config,
+		state:             state,
+		intendedPairValid: intendedPairValid,
+	}, nil
+}
+
+func observeV2PairFile(path string) (v2PairObservedFile, error) {
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return v2PairObservedFile{}, nil
+	}
+	if err != nil {
+		return v2PairObservedFile{}, fmt.Errorf("stat %s: %w", path, err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return v2PairObservedFile{}, fmt.Errorf("read %s: %w", path, err)
+	}
+	return v2PairObservedFile{
+		exists: true,
+		mode:   info.Mode().Perm(),
+		sha:    sha256HexBytes(data),
+	}, nil
+}
+
+func verifyV2PairFileBytes(path string, want []byte) error {
+	if path == "" {
+		return nil
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("verify V2 pair file %s: %w", path, err)
+	}
+	if !bytes.Equal(got, want) {
+		return fmt.Errorf("verify V2 pair file %s: content mismatch", path)
+	}
+	return nil
+}
+
+func validatePersistedV2Pair(root string, configData, stateData []byte) error {
+	if err := verifyV2PairFileBytes(V2ConfigPath(root), configData); err != nil {
+		return err
+	}
+	if err := verifyV2PairFileBytes(V2StatePath(root), stateData); err != nil {
+		return err
+	}
+	return validatePersistedV2PairBytes(root, configData, stateData)
+}
+
+func validatePersistedV2PairBytes(root string, configData, stateData []byte) error {
+	var cfg V2ReleaseConfig
+	if err := json.Unmarshal(configData, &cfg); err != nil {
+		return fmt.Errorf("parse intended V2 config: %w", err)
+	}
+	var state V2ReleaseState
+	if err := json.Unmarshal(stateData, &state); err != nil {
+		return fmt.Errorf("parse intended V2 state: %w", err)
+	}
+	if err := ValidateV2(root, &cfg, &state); err != nil {
+		return err
+	}
+	return nil
+}
+
+func verifyV2PairRecoveredSnapshot(path string, want v2PairRecoveryFile) error {
+	observed, err := observeV2PairFile(path)
+	if err != nil {
+		return err
+	}
+	if !observed.matches(want) {
+		return fmt.Errorf("restored V2 pair file %s does not match recovery evidence", path)
+	}
+	if want.Exists && observed.mode != want.Mode.Perm() {
+		return fmt.Errorf("restored V2 pair file %s mode = %04o, want %04o", path, observed.mode, want.Mode.Perm())
+	}
+	return nil
+}
+
+func discardV2PairPreparedTemps(root string) error {
+	for _, pattern := range []string{
+		filepath.Join(root, V2Directory, "."+V2ConfigFileName+".tmp-*"),
+		filepath.Join(root, V2Directory, "."+V2StateFileName+".tmp-*"),
+	} {
+		matches, err := filepath.Glob(pattern)
+		if err != nil {
+			return fmt.Errorf("find V2 pair temp files %s: %w", pattern, err)
+		}
+		for _, match := range matches {
+			if err := os.Remove(match); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("remove V2 pair temp file %s: %w", match, err)
+			}
+		}
+	}
+	return nil
 }
 
 // V2PairPersistenceError reports an incomplete rollback that requires manual recovery.
