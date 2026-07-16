@@ -312,15 +312,16 @@ No P0 issue was found. The active V2 GitHub Actions path preserves evidence arou
 
 ### D-11 — Journals have no repair tool or schema-migration mechanism
 
+- **Status:** Partially resolved by H3. There is still no repair or schema-migration command, by design, but operators now have evidence-safe inspection and a guarded completed-evidence archival path.
 - **Affected files or symbols:** `ReleaseExecutionJournalStore`; `DispatchJournalStore`; migration journal loading; fixed schema versions and strict validation.
-- **Current behavior:** Invalid, conflicting, or unsupported journals are rejected and preserved. There is no command that edits evidence, migrates schemas, or clears pending actions.
+- **Current behavior:** Invalid, conflicting, or unsupported journals are rejected and preserved. `neko release evidence` reports redacted typed summaries and diagnostics across release execution, dispatch, migration, V1 compensation, and V2 pair-recovery evidence. `neko release evidence-archive` can only archive completed release-execution, completed V1 compensation, or completed V2 pair-recovery evidence after family, identity, digest, and explicit confirmation are rechecked.
 - **Why it remains:** Guessing or rewriting recovery evidence would weaken safety. Existing schemas have not required migration yet.
-- **Risk:** A corrupted journal can block automatic continuation indefinitely; a future schema change lacks a migration path.
-- **User or developer impact:** Manual inspection is required, but evidence is not silently destroyed.
+- **Risk:** A corrupted journal can still block automatic continuation indefinitely; a future schema change still requires a separate migration design.
+- **User or developer impact:** Manual recovery remains conservative, but operators no longer need to inspect raw JSON just to know which evidence exists, who owns it, whether it is completed, and whether archival is allowed.
 - **Removal or improvement preconditions:** Define immutable backups, an auditable repair plan, explicit operator confirmation, schema compatibility rules, and tests that never infer unsafe completion.
-- **Recommended action:** **Defer** until a concrete schema change or support burden exists; then **Harden** with a separate inspection-first tool.
+- **Recommended action:** **Keep** the H3 inspection/archive boundary. **Defer** repair or schema migration until a concrete schema change or support burden exists.
 - **Priority:** **P2**.
-- **Proposed milestone:** **H3 — Add evidence-safe journal inspection and lifecycle support**.
+- **Proposed milestone:** none for inspection/archive; future schema migration would require a new dedicated milestone.
 - **Blocking new features:** Blocks journal schema changes and automated repair features; not other product work.
 
 ### D-12 — Public compatibility wrappers remain broad
@@ -378,16 +379,17 @@ No P0 issue was found. The active V2 GitHub Actions path preserves evidence arou
 
 ### D-16 — Successive V2 release planning after completed-journal exclusion is less directly characterized
 
+- **Status:** Resolved by H3 characterization.
 - **Affected files or symbols:** `ReleaseExecutionJournalStore.FindUnresolved`; selected-unit state update; `releaseStartOperation`; planner tests.
-- **Current behavior:** `handoff-ready` journals are excluded, so a later release plans from committed V2 state. The primary release/recovery matrix is stronger than one end-to-end test of a second release after handoff.
+- **Current behavior:** `handoff-ready` journals are excluded, so a later release plans from committed V2 state. H3 adds an end-to-end temporary-repository characterization that completes one GitHub Actions handoff, reloads V2 state, runs the next release, and proves the first execution/dispatch journals are not rewritten.
 - **Why it remains:** Existing unit and runner tests prove the component facts; the refactor did not add a separate repeated-release scenario.
 - **Risk:** A future journal-filter or state-loading change could reopen a completed execution or calculate from stale state.
 - **User or developer impact:** Potential regression would affect repeated releases, not the first release.
-- **Removal or improvement preconditions:** Add an end-to-end temporary-repository scenario that completes one handoff, reloads state, and plans the next version without redispatching the prior journal.
-- **Recommended action:** **Harden** with focused characterization before changing journal exclusion or release planning.
+- **Removal or improvement preconditions:** Keep the H3 characterization before changing journal exclusion or release planning.
+- **Recommended action:** **Keep**.
 - **Priority:** **P3**.
-- **Proposed milestone:** **H3 — Add evidence-safe journal inspection and lifecycle support**.
-- **Blocking new features:** Blocks changes to completed-journal lifecycle or repeated-release planning; otherwise not blocking.
+- **Proposed milestone:** none.
+- **Blocking new features:** Not blocking while the characterization remains in place.
 
 ### D-17 — Superseded raw Git helpers have no internal production consumers
 
@@ -470,8 +472,8 @@ No code is labeled dead solely from an IDE result. Classification uses productio
 ### Bounded technical debt
 
 - no unresolved P1 issue remains in the active release safety model after H1 and H2; manual recovery boundaries are explicit compatibility and safety policy;
-- P2 mutable compatibility globals, process cwd, broad public compatibility surfaces, inactive paths, and absent journal lifecycle tooling;
-- P3 arbitrary plugin-index output policy, empty-directory residue, repeated-release characterization gap, and superseded raw Git helpers.
+- P2 mutable compatibility globals, process cwd, broad public compatibility surfaces, inactive paths, and future schema repair/migration policy;
+- P3 arbitrary plugin-index output policy, empty-directory residue, and superseded raw Git helpers.
 
 ### Architecture violation
 
@@ -479,4 +481,4 @@ No code is labeled dead solely from an IDE result. Classification uses productio
 
 The violation does not change the historical ledger: all nine planned refactor stages were completed. It means “completed” is a closed milestone record, not a claim that no future architecture maintenance exists.
 
-The prioritized implementation sequence, acceptance criteria, and commit boundaries are defined in [post-refactor-roadmap.md](post-refactor-roadmap.md). H1 and H2 are completed. The recommended next milestone is **H3 — Add evidence-safe journal inspection and lifecycle support**.
+The prioritized implementation sequence, acceptance criteria, and commit boundaries are defined in [post-refactor-roadmap.md](post-refactor-roadmap.md). H1, H2, and H3 are completed. The recommended next milestone is **C1 — Decide and deprecate V1 compatibility surfaces**.

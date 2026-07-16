@@ -8,7 +8,8 @@ The behavior-preserving Release Plugin refactor is closed at 9 / 9 stages. This 
 - Post-refactor review: completed
 - H1: completed
 - H2: completed
-- Next roadmap milestone: **H3 — Add evidence-safe journal inspection and lifecycle support**
+- H3: completed
+- Next roadmap milestone: **C1 — Decide and deprecate V1 compatibility surfaces**
 
 The architecture evidence, debt ranking, compatibility inventory, and removal candidates behind this roadmap are in [post-refactor-review.md](post-refactor-review.md). The detailed runtime and disk contracts remain in [current-state.md](current-state.md). Every implementation milestone remains subject to `plugin/release/RULES.md`.
 
@@ -21,7 +22,7 @@ Milestone namespaces distinguish the nature of future work:
 | `DX` | Developer experience | Clarify presentation, composition, and filesystem policies |
 | `F` | New features | Add separately authorized user-facing capabilities |
 
-H1 — Make V1 compensation interruption-safe and H2 — Make pair and migration crash recovery explicit are completed. The recommended next milestone is **H3 — Add evidence-safe journal inspection and lifecycle support**. H3 builds on the durable evidence families from H1 and H2 without changing their conservative manual-recovery boundaries. Compatibility cleanup still does not have to precede unrelated product work; read-only F1 may proceed independently when it does not touch H2 files or contracts.
+H1 — Make V1 compensation interruption-safe, H2 — Make pair and migration crash recovery explicit, and H3 — Add evidence-safe journal inspection and lifecycle support are completed. The recommended next milestone is **C1 — Decide and deprecate V1 compatibility surfaces**. Compatibility cleanup still does not have to precede unrelated product work; read-only F1 may proceed independently when it does not touch H2/H3 files or contracts.
 
 ## Sequencing and gates
 
@@ -73,6 +74,7 @@ F2  (decision milestone; implementation requires a later approved design)
 
 ### H3 — Add evidence-safe journal inspection and lifecycle support
 
+- **Status:** **Completed.** `neko release evidence` provides read-only, redacted inspection for release-execution journals, dispatch journals, migration journals, V1 compensation evidence, and V2 pair-recovery evidence. `neko release evidence-archive` provides the only lifecycle operation, `archive-completed`, for completed release-execution, completed V1 compensation, and completed V2 pair-recovery evidence.
 - **Objective:** Provide read-only inspection first, then narrowly authorized lifecycle operations for release, dispatch, migration, and any H1/H2 evidence without inferring that an unsafe effect completed.
 - **User value:** Operators can understand why recovery is blocked and can archive or migrate evidence through an auditable process instead of editing private JSON by hand.
 - **Characterize first:** Pin corrupt, unsupported-version, conflicting, terminal, unresolved, and missing-evidence behavior for each journal owner, plus a complete second-release scenario after handoff-ready exclusion.
@@ -81,7 +83,8 @@ F2  (decision milestone; implementation requires a later approved design)
 - **Dependencies:** completed H2 pair/migration evidence integration; completed H1 V1 compensation evidence if included; an explicit retention and schema-support policy.
 - **Risks:** A repair command can legitimize unsafe operator guesses; output may reveal sensitive request context; premature schema abstraction can merge intentionally distinct journal contracts.
 - **Acceptance criteria:** Inspection is token-free and read-only; corrupt/unknown evidence is preserved; any mutation creates an exact private backup and requires explicit authorization; no operation converts uncertainty into completion; second-release tests prove completed journals are not reopened; schema versions remain owner-specific.
-- **Expected commit boundaries:** (1) characterization including repeated release; (2) typed read-only inspection; (3) output/redaction mapping; (4) optional archival lifecycle; (5) schema migration only as a separate commit with a real format need.
+- **Delivered commits:** H3.1 characterization `62052fc`; H3.2 read-only inspection `2241ab9`; H3.3 guarded archival `3ec8df5`; H3.3 lint cleanup `3fb309c`; H3.4 documentation and closure uses commit message `docs(release): complete h3 journal lifecycle hardening`.
+- **Lifecycle policy:** Inspection is read-only and deterministic; diagnostics are emitted for corrupt, unsupported, conflicting, and invalid evidence without raw file content. Archival re-observes family, identity, and digest, requires explicit confirmation, writes an exact private archive copy, verifies it, and only then removes the completed source. No force, repair, retry, remote inference, dispatch archival, or migration archival was added.
 
 ## Compatibility cleanup
 
@@ -182,12 +185,12 @@ The following are not backlog omissions. They remain deliberate boundaries until
 - no generic workflow pipeline, universal state-machine engine, dependency bag, or shared journal repository;
 - no V1 removal before C1 establishes consumers, policy, replacements, and a deprecation window;
 - no V2 local execution before F2 and a subsequent implementation milestone prove executor ownership and recovery;
-- no journal schema migration or repair command before H3 has a concrete format/support need;
+- no journal schema migration or repair command without a concrete format/support need and an inspection-first design;
 - no process-wide cwd rewrite before an embedding/concurrency requirement justifies DX2;
 - no plugin-index confinement change before DX3 resolves the product policy.
 
 ## Roadmap completion reporting
 
-Roadmap progress is reported independently from the historical refactor ledger: “Refactor stages: 9 / 9 completed; roadmap milestones H1 and H2: completed; next milestone: H3 — Add evidence-safe journal inspection and lifecycle support.” H1 and H2 must not be reported as Stage 10.
+Roadmap progress is reported independently from the historical refactor ledger: “Refactor stages: 9 / 9 completed; roadmap milestones H1, H2, and H3: completed; next milestone: C1 — Decide and deprecate V1 compatibility surfaces.” H1, H2, H3, and later roadmap milestones must not be reported as Stage 10.
 
 Each milestone begins with characterization, retains independently revertible commit boundaries, runs the full uncached Release Plugin and repository validation required by `plugin/release/RULES.md`, and updates this roadmap plus the architecture review when evidence changes a priority or recommendation.

@@ -447,9 +447,11 @@ Validate, history, and contributors each retain a separate user-visible query in
 
 Plugin-index is explicitly not one pure query in output mode. `pluginIndexQueryUseCase` discovers and validates typed entries through read-only config/state/manifest sources and orders them by plugin name. `jsonPluginIndexOutputBuilder` transforms the complete typed index to stable bytes. `atomicPluginIndexOutputPersister` alone selects the unchanged command-supplied target and performs the single-file effect. Check mode ends after discovery, render mode ends after building, and persist mode is the readable `query -> build -> persist` path. The persister is not used for release config/state, manifests, journals, or unrelated artifacts.
 
+`evidence` is a read-only H3 query across the explicit evidence families: release-execution journals, dispatch journals, migration journals, V1 compensation evidence, and V2 pair-recovery evidence. It returns typed redacted records and diagnostics instead of raw JSON, keeps corrupt/unsupported/conflicting files visible without dumping their content, and orders records deterministically. `evidence-archive` is the only H3 lifecycle operation. It supports `archive-completed` only for completed release-execution, completed V1 compensation, and completed V2 pair-recovery evidence, requires family, identity, current digest, and explicit confirmation, re-observes the evidence, writes and verifies an exact private archive, then removes the completed source. Dispatch and migration evidence remain inspect-only because accepted dispatches and migration journals can still be needed for handoff audit or owner-specific recovery.
+
 ### Response and error duplication
 
-Release start/resume, V1 preview/execution, init/unit-add, validate, history, contributors, plugin-index, and migration each now have typed results/failures and command-owned response mappers with explicit clocks. The mappers remain command-specific because their schemas are not one universal result contract. V1 structured and fatal failures are classified in application code and mapped only at the release command boundary, preserving status, codes, message meaning, metadata, renderer hints, item order, nil-Go-error behavior, JSON fatal output, and deterministic timestamps. Init/unit-add intentionally retain the characterized compatibility value `init` for unit-add error metadata. Plugin-index intentionally retains top-level fatal `EXECUTION_ERROR` mapping.
+Release start/resume, V1 preview/execution, init/unit-add, validate, history, contributors, evidence, evidence-archive, plugin-index, and migration each now have typed results/failures and command-owned response mappers with explicit clocks. The mappers remain command-specific because their schemas are not one universal result contract. V1 structured and fatal failures are classified in application code and mapped only at the release command boundary, preserving status, codes, message meaning, metadata, renderer hints, item order, nil-Go-error behavior, JSON fatal output, and deterministic timestamps. Init/unit-add intentionally retain the characterized compatibility value `init` for unit-add error metadata. Plugin-index intentionally retains top-level fatal `EXECUTION_ERROR` mapping.
 
 ### Multiple side-effect adapters
 
@@ -464,6 +466,7 @@ Existing replaceable seams include:
 - init/unit-add `v2PresenceReader`, `v2PairLoader`, `v2PairValidator`, and `v2PairWriter` consumer ports, plus config/state-specific temp-create/write/replace/restore operations inside the shared pair persister;
 - migration root/plan ports plus focused journal, target-pair persistence, target-verification, source-archive, and archived-source-verification capabilities;
 - validate `validationRepositoryReader` and `legacyRequirementsValidator`, history `historyRepositoryReader`/`historyGitReader`, and contributors `contributorsRepositoryReader`/`contributorsGitReader` read-only capabilities;
+- evidence query and archive use cases with explicit family, identity, digest, and confirmation inputs;
 - plugin-index `pluginIndexSourceReader`, query/builder/persister command ports, and persistence-specific directory/stat/atomic-replacement operations;
 - `gitCommandRunner` inside the single active `GitReleaseCoordinator` and shared journal common-dir mechanics.
 - `GitHubActionsWorkflowDispatchClient` and injected HTTP transport.
@@ -513,7 +516,7 @@ The post-refactor verification found one bounded deviation from the strict prese
 - Completed stages: 9 / 9
 - Remaining stages: 0
 - Release Plugin refactor: completed
-- Completed roadmap milestones: H1 — Make V1 compensation interruption-safe; H2 — Make pair and migration crash recovery explicit
-- Next milestone: H3 — Add evidence-safe journal inspection and lifecycle support
+- Completed roadmap milestones: H1 — Make V1 compensation interruption-safe; H2 — Make pair and migration crash recovery explicit; H3 — Add evidence-safe journal inspection and lifecycle support
+- Next milestone: C1 — Decide and deprecate V1 compatibility surfaces
 
-H1, H2, and the later milestones are maintained in [post-refactor-roadmap.md](post-refactor-roadmap.md). Roadmap milestones are not refactor stages; the historical refactor ledger remains closed.
+H1, H2, H3, and the later milestones are maintained in [post-refactor-roadmap.md](post-refactor-roadmap.md). Roadmap milestones are not refactor stages; the historical refactor ledger remains closed.

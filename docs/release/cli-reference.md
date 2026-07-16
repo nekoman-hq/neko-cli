@@ -54,6 +54,9 @@ neko release minor --unit api
 neko release major --unit api
 neko release resume --unit api
 neko release resume --unit api --dry-run
+neko release evidence
+neko release evidence --family release-execution
+neko release evidence-archive --family release-execution --identity <sha256> --digest-sha256 <sha256> --confirm-archive
 neko release plugin-index
 neko release plugin-index --check
 neko release plugin-index --output /tmp/plugin-index.json
@@ -100,6 +103,8 @@ For `delivery: github-actions`, V2 config must include `workflow: ".github/workf
 
 The execution journal records V2 release phases and recovery evidence under the Git common directory. The dispatch contract targets GitHub.com remotes only, uses `GITHUB_TOKEN` with repository Actions write permission, sends the existing unit tag as `ref`, and sends exactly four inputs: `unit`, `version`, `tag`, and `release_sha`. No public standalone dispatch or retry command exists.
 
+`neko release evidence` is read-only. It inspects release-execution journals, dispatch journals, migration journals, V1 compensation evidence, and V2 pair-recovery evidence with redacted summaries and diagnostics for corrupt, unsupported, conflicting, terminal, unresolved, and completed evidence. `neko release evidence-archive` supports only `archive-completed` for completed `release-execution`, `v1-compensation`, and completed `v2-pair-recovery` evidence. It requires `--family`, `--identity`, the current `--digest-sha256` from inspection output, and `--confirm-archive`; it writes an exact private archive before removing the completed source evidence. It does not repair, retry, infer remote state, or archive dispatch/migration evidence.
+
 `neko release plugin-index` generates the public plugin registry index from V2 plugin units, `.neko/release.state.json`, and plugin manifests. The generated `plugin-index.json` is not committed as source and is not published by this command. Plugin release workflows publish or replace it as the `plugin-index.json` asset on the mutable `plugin-registry` GitHub Release after successful plugin releases. Runtime `neko plugin available`, `install`, and `update` use that asset as the source of truth and do not use `/releases/latest` or release-prefix fallback discovery for plugin discovery.
 
 ## Resume
@@ -123,6 +128,7 @@ history
 contributors
 validate
 resume
+evidence
 ```
 
 It is required for unit-bound commands when a V2 repository defines multiple units.

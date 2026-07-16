@@ -472,6 +472,46 @@ neko release resume --unit <unit-id> [flags]
 
 ---
 
+### `neko release evidence`
+
+Inspect release evidence without mutating recovery state.
+
+**Usage:**
+```bash
+neko release evidence [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--family` | string | | Filter by `release-execution`, `dispatch`, `migration`, `v1-compensation`, or `v2-pair-recovery` |
+| `--unit` | string | | Filter records by release unit when the evidence records one |
+
+The command reports redacted summaries plus diagnostics for corrupt, unsupported, conflicting, unresolved, terminal, and completed evidence. It does not print tokens, request headers, raw response bodies, process output, environment values, or full evidence files.
+
+### `neko release evidence-archive`
+
+Archive one completed evidence file through a guarded lifecycle operation.
+
+**Usage:**
+```bash
+neko release evidence-archive --family <family> --identity <sha256> --digest-sha256 <sha256> --confirm-archive
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--family` | string | | Required evidence family |
+| `--identity` | string | | Evidence identity from `neko release evidence --output json` |
+| `--digest-sha256` | string | | Current evidence digest from inspection output |
+| `--confirm-archive` | bool | `false` | Required explicit confirmation |
+
+Only completed `release-execution`, completed `v1-compensation`, and completed `v2-pair-recovery` evidence can be archived. The command re-inspects the evidence, rejects stale digests, writes an exact `0600` archive copy in a private `0700` archive directory, verifies the copy, and only then removes the completed source evidence. It does not support force, repair, retry, arbitrary paths, dispatch archival, or migration archival.
+
+---
+
 ## Configuration
 
 ### V1 Configuration File
