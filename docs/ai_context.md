@@ -170,19 +170,21 @@ return &plugin.Response{
 }, nil
 ```
 
-### Tool Registration (Release Systems)
-
-Release tools register themselves via `init()`:
+### Release Tool Composition
 
 ```go
-// In tool/goreleaser/goreleaser.go
-func init() {
-    release.Register(&GoReleaser{})
+v1Executors := []release.V1Executor{
+    goreleaser.NewV1Executor(),
+    jreleaser.NewV1Executor(),
+    releaseit.NewV1Executor(),
 }
 
-// Import in main.go to trigger init()
-import _ "github.com/nekoman-hq/neko-cli/plugin/release/pkg/release/tool"
+resp, err := release.HandleReleaseWithV1Executors(req, release.Patch, v1Executors...)
 ```
+
+The legacy `release.Register` / `release.Get` registry remains available only as
+a compatibility surface for old embedders. New code should compose explicit
+`V1Executor` values and pass them to `HandleReleaseWithV1Executors`.
 
 ## Building & Testing
 

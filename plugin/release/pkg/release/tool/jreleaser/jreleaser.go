@@ -140,6 +140,9 @@ func (j *JReleaser) Init(cfg *config2.V1ReleaseConfig) error {
 	return nil
 }
 
+// Execute preserves the legacy Tool method shape.
+//
+// Deprecated: use Run with V1ExecutorRequest instead.
 func (j *JReleaser) Execute(ctx *release2.ReleaseExecutionContext) error {
 	if ctx == nil {
 		return fmt.Errorf("release execution context is missing")
@@ -158,6 +161,9 @@ func (j *JReleaser) Run(request release2.V1ExecutorRequest) error {
 	return j.release(request.Plan.RepositoryRoot, version)
 }
 
+// Release preserves the legacy cwd-based direct release method.
+//
+// Deprecated: use Run with V1ExecutorRequest instead.
 func (j *JReleaser) Release(v *semver.Version) error {
 	return j.release("", v)
 }
@@ -204,9 +210,11 @@ func (j *JReleaser) release(repositoryRoot string, v *semver.Version) error {
 	return nil
 }
 
+// RevertRelease preserves the legacy rollback method name.
+//
+// Deprecated: use Rollback instead.
 func (j *JReleaser) RevertRelease() error {
-	j.ensureDependencies()
-	return j.rollback.Rollback(j.repositoryRoot, j.CompensationState())
+	return j.Rollback()
 }
 
 func (j *JReleaser) CompensationState() release2.GitReleaseState {
@@ -221,7 +229,10 @@ func (j *JReleaser) CompensationState() release2.GitReleaseState {
 	}
 }
 
-func (j *JReleaser) Rollback() error { return j.RevertRelease() }
+func (j *JReleaser) Rollback() error {
+	j.ensureDependencies()
+	return j.rollback.Rollback(j.repositoryRoot, j.CompensationState())
+}
 
 func (j *JReleaser) runJReleaserInit(repositoryRoot string, cfg *config2.V1ReleaseConfig) error {
 	log.PluginV(log.Init, "Generating JReleaser configuration...")

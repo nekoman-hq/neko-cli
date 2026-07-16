@@ -195,6 +195,9 @@ func emptyFallback(value, fallback string) string {
 
 // V2ExecutionUnavailableResponse preserves the existing compatibility helper
 // while delegating response construction to the deterministic mapper boundary.
+//
+// Deprecated: use MapCommandFailure with a command-specific CommandFailure
+// instead.
 func V2ExecutionUnavailableResponse(command string) *plugin.Response {
 	failure := failureFromMessage(
 		"V2_EXECUTION_UNAVAILABLE",

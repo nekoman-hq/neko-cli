@@ -30,10 +30,17 @@ var (
 	latestVersionTag   = git.LatestTag
 )
 
+// VersionGuard preserves the legacy V1 version guard with remote tag refresh.
+//
+// Deprecated: use PlanV1Release with explicit latest-tag evidence instead.
 func VersionGuard(cfg *config.V1ReleaseConfig) (*semver.Version, error) {
 	return VersionGuardWithOptions(cfg, VersionGuardOptions{AllowRemoteRefresh: true})
 }
 
+// VersionGuardWithOptions preserves the legacy V1 version guard while making
+// remote tag refresh explicit.
+//
+// Deprecated: use PlanV1Release with explicit latest-tag evidence instead.
 func VersionGuardWithOptions(cfg *config.V1ReleaseConfig, opts VersionGuardOptions) (*semver.Version, error) {
 	log.PluginV(log.Guard, "Running Version Guard checks")
 	if opts.AllowRemoteRefresh {

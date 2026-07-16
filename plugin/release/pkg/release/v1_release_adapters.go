@@ -107,7 +107,12 @@ func (executor *registeredV1ReleaseExecutor) Run(request V1ExecutorRequest) erro
 	})
 }
 
-func (executor *registeredV1ReleaseExecutor) Rollback() error { return executor.tool.RevertRelease() }
+func (executor *registeredV1ReleaseExecutor) Rollback() error {
+	if rollback, ok := executor.tool.(interface{ Rollback() error }); ok {
+		return rollback.Rollback()
+	}
+	return executor.tool.RevertRelease()
+}
 
 func (executor *registeredV1ReleaseExecutor) CompensationState() GitReleaseState {
 	if source, ok := executor.tool.(interface{ CompensationState() GitReleaseState }); ok {
@@ -140,7 +145,12 @@ func (executor *directV1ReleaseExecutor) Run(request V1ExecutorRequest) error {
 	return executor.tool.Release(version)
 }
 
-func (executor *directV1ReleaseExecutor) Rollback() error { return executor.tool.RevertRelease() }
+func (executor *directV1ReleaseExecutor) Rollback() error {
+	if rollback, ok := executor.tool.(interface{ Rollback() error }); ok {
+		return rollback.Rollback()
+	}
+	return executor.tool.RevertRelease()
+}
 
 func (executor *directV1ReleaseExecutor) CompensationState() GitReleaseState {
 	if source, ok := executor.tool.(interface{ CompensationState() GitReleaseState }); ok {

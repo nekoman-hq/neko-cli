@@ -15,19 +15,35 @@ import (
 // Service preserves the former exported V1 entry points. Active command
 // composition no longer uses this type; both methods delegate to the isolated
 // V1 planner/application and contain no release orchestration.
+//
+// Deprecated: use HandleReleaseWithV1Executors with explicit V1Executor values
+// for release execution, or PlanV1Release for version planning.
 type Service struct {
 	cfg *releaseconfig.V1ReleaseConfig
 	ctx *ReleaseExecutionContext
 }
 
+// NewReleaseService constructs the legacy V1 service facade.
+//
+// Deprecated: use HandleReleaseWithV1Executors with explicit V1Executor values
+// for release execution, or PlanV1Release for version planning.
 func NewReleaseService(cfg *releaseconfig.V1ReleaseConfig) *Service {
 	return &Service{cfg: cfg}
 }
 
+// NewReleaseServiceWithContext constructs the legacy V1 service facade with a
+// compatibility execution context.
+//
+// Deprecated: use HandleReleaseWithV1Executors with explicit V1Executor values
+// for release execution, or PlanV1Release for version planning.
 func NewReleaseServiceWithContext(cfg *releaseconfig.V1ReleaseConfig, ctx *ReleaseExecutionContext) *Service {
 	return &Service{cfg: cfg, ctx: ctx}
 }
 
+// Run executes a release through the legacy service facade.
+//
+// Deprecated: use HandleReleaseWithV1Executors with explicit V1Executor values
+// instead.
 func (service *Service) Run(releaseType Type) error {
 	root := service.repositoryRoot()
 	repository := releaseconfig.NormalizeV1Repository(root, service.cfg)
@@ -52,6 +68,10 @@ func (service *Service) Run(releaseType Type) error {
 	return &FatalCommandError{failure: failure}
 }
 
+// GetNewVersion returns the current and next V1 versions through the legacy
+// service facade.
+//
+// Deprecated: use PlanV1Release with explicit latest-tag evidence instead.
 func (service *Service) GetNewVersion(releaseType Type) (*semver.Version, *semver.Version, error) {
 	root := service.repositoryRoot()
 	repository := releaseconfig.NormalizeV1Repository(root, service.cfg)

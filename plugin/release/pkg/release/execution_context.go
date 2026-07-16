@@ -36,6 +36,9 @@ type ReleaseExecutionContext struct {
 // BuildReleaseExecutionContext is a compatibility facade for callers that
 // still pass a normalized repository containing either source format. Active
 // command composition selects the source first and uses the V2-only builder.
+//
+// Deprecated: use BuildV2ReleaseExecutionContext for V2 release contexts, or
+// PlanV1Release for V1 planning.
 func BuildReleaseExecutionContext(repository *releaseconfig.ReleaseRepository, unit releaseconfig.ReleaseUnit, releaseType Type, dryRun bool) (*ReleaseExecutionContext, error) {
 	if repository == nil {
 		return nil, fmt.Errorf("release repository is missing")

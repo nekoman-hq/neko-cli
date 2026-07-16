@@ -133,6 +133,9 @@ func (g *GoReleaser) Init(_ *config.V1ReleaseConfig) error {
 	return nil
 }
 
+// Execute preserves the legacy Tool method shape.
+//
+// Deprecated: use Run with V1ExecutorRequest instead.
 func (g *GoReleaser) Execute(ctx *release2.ReleaseExecutionContext) error {
 	if ctx == nil {
 		return fmt.Errorf("release execution context is missing")
@@ -151,6 +154,9 @@ func (g *GoReleaser) Run(request release2.V1ExecutorRequest) error {
 	return g.release(request.Plan.RepositoryRoot, version)
 }
 
+// Release preserves the legacy cwd-based direct release method.
+//
+// Deprecated: use Run with V1ExecutorRequest instead.
 func (g *GoReleaser) Release(v *semver.Version) error {
 	return g.release("", v)
 }
@@ -201,9 +207,11 @@ func (g *GoReleaser) release(repositoryRoot string, v *semver.Version) error {
 	return nil
 }
 
+// RevertRelease preserves the legacy rollback method name.
+//
+// Deprecated: use Rollback instead.
 func (g *GoReleaser) RevertRelease() error {
-	g.ensureDependencies()
-	return g.rollback.Rollback(g.repositoryRoot, g.CompensationState())
+	return g.Rollback()
 }
 
 func (g *GoReleaser) CompensationState() release2.GitReleaseState {
@@ -218,7 +226,10 @@ func (g *GoReleaser) CompensationState() release2.GitReleaseState {
 	}
 }
 
-func (g *GoReleaser) Rollback() error { return g.RevertRelease() }
+func (g *GoReleaser) Rollback() error {
+	g.ensureDependencies()
+	return g.rollback.Rollback(g.repositoryRoot, g.CompensationState())
+}
 
 func (g *GoReleaser) runGoreleaserInit(repositoryRoot string) error {
 	exists, err := g.goreleaserConfigExists(repositoryRoot)

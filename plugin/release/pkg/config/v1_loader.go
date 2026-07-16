@@ -24,14 +24,12 @@ const V1FileName = ".release.neko.json"
 
 // V1Exists checks if the legacy configuration file exists.
 //
-// Deprecated: V1 is supported only as the legacy compatibility format.
+// Deprecated: use V1ConfigExistsAt with an explicit repository root instead.
 func V1Exists() bool {
 	return V1ConfigExistsAt(".")
 }
 
 // V1ConfigExistsAt checks for a V1 release config in a specific root.
-//
-// Deprecated: V1 is supported only as the legacy compatibility format.
 func V1ConfigExistsAt(root string) bool {
 	_, err := os.Stat(filepath.Join(root, V1FileName))
 	return err == nil
@@ -39,15 +37,13 @@ func V1ConfigExistsAt(root string) bool {
 
 // V1LoadConfig loads the legacy config from the current working directory.
 //
-// Deprecated: V1 is supported only as the legacy compatibility format.
+// Deprecated: use V1LoadConfigAt with an explicit path instead.
 func V1LoadConfig() (*V1ReleaseConfig, error) {
 	return V1LoadConfigAt(V1FileName)
 }
 
 // V1LoadConfigAt reads a legacy .release.neko.json file without changing the
 // public V1 schema fields used by existing init and release flows.
-//
-// Deprecated: V1 is supported only as the legacy compatibility format.
 func V1LoadConfigAt(path string) (*V1ReleaseConfig, error) {
 	log.PluginV(log.Config, "Loading config from file...")
 
@@ -119,14 +115,12 @@ func V1Validate(cfg *V1ReleaseConfig) error {
 
 // V1SaveConfig writes the legacy .release.neko.json file.
 //
-// Deprecated: V1 is supported only as the legacy compatibility format.
+// Deprecated: use V1SaveConfigAt with an explicit repository root instead.
 func V1SaveConfig(config V1ReleaseConfig) error {
 	return V1SaveConfigAt(".", config)
 }
 
 // V1SaveConfigAt writes the canonical legacy file within repositoryRoot.
-//
-// Deprecated: V1 is supported only as the legacy compatibility format.
 func V1SaveConfigAt(repositoryRoot string, config V1ReleaseConfig) error {
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {

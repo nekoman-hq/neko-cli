@@ -170,6 +170,9 @@ func (r *ReleaseIt) Init(cfg *config.V1ReleaseConfig) error {
 	return nil
 }
 
+// Execute preserves the legacy Tool method shape.
+//
+// Deprecated: use Run with V1ExecutorRequest instead.
 func (r *ReleaseIt) Execute(ctx *release2.ReleaseExecutionContext) error {
 	if ctx == nil {
 		return fmt.Errorf("release execution context is missing")
@@ -188,6 +191,9 @@ func (r *ReleaseIt) Run(request release2.V1ExecutorRequest) error {
 	return r.release(request.Plan.RepositoryRoot, version)
 }
 
+// Release preserves the legacy cwd-based direct release method.
+//
+// Deprecated: use Run with V1ExecutorRequest instead.
 func (r *ReleaseIt) Release(v *semver.Version) error {
 	return r.release("", v)
 }
@@ -223,9 +229,11 @@ func (r *ReleaseIt) release(repositoryRoot string, v *semver.Version) error {
 	return nil
 }
 
+// RevertRelease preserves the legacy rollback method name.
+//
+// Deprecated: use Rollback instead.
 func (r *ReleaseIt) RevertRelease() error {
-	r.ensureDependencies()
-	return r.rollback.Rollback(r.repositoryRoot, r.CompensationState())
+	return r.Rollback()
 }
 
 func (r *ReleaseIt) CompensationState() release2.GitReleaseState {
@@ -240,7 +248,10 @@ func (r *ReleaseIt) CompensationState() release2.GitReleaseState {
 	}
 }
 
-func (r *ReleaseIt) Rollback() error { return r.RevertRelease() }
+func (r *ReleaseIt) Rollback() error {
+	r.ensureDependencies()
+	return r.rollback.Rollback(r.repositoryRoot, r.CompensationState())
+}
 
 func (r *ReleaseIt) runReleaseItInit(repositoryRoot string, cfg *config.V1ReleaseConfig) error {
 	exists, err := r.files.Exists(repositoryRoot, ".release-it.json")

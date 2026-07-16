@@ -1,4 +1,7 @@
 // Package tool retains the legacy side-effect registration surface.
+//
+// Deprecated: import concrete executor packages and pass NewV1Executor values
+// to release.HandleReleaseWithV1Executors instead.
 package tool
 
 /*
