@@ -192,7 +192,7 @@ Priority means:
 - **P2** — bounded architectural or compatibility debt;
 - **P3** — optional cleanup.
 
-No P0 issue was found. The active V2 GitHub Actions path preserves evidence around uncertain operations, blocks ambiguous retry, and has a complete pending-action boundary around its unsafe mutations. H1 resolved the active V1 P1 items below; the remaining P1 risks require a process or machine interruption during pair persistence or migration.
+No P0 issue was found. The active V2 GitHub Actions path preserves evidence around uncertain operations, blocks ambiguous retry, and has a complete pending-action boundary around its unsafe mutations. H1 resolved the active V1 P1 items below. H2 resolved the remaining pair and migration P1 crash-recovery risks by adding explicit durable pair evidence, deterministic next-process recovery, and migration refusal for owner-ambiguous evidence.
 
 ### D-01 — Destructive V1 compensation was best-effort and non-journaled
 
@@ -210,31 +210,27 @@ No P0 issue was found. The active V2 GitHub Actions path preserves evidence arou
 - **Remaining boundary:** The old raw `pkg/git` helper remains an exported compatibility candidate for C2, but active V1 compensation cannot reach it.
 - **Completed milestone:** **H1 — Make V1 compensation interruption-safe**.
 
-### D-03 — V2 config/state pair persistence is not crash-atomic
+### D-03 — V2 config/state pair persistence is crash-recoverable but not cross-file atomic
 
-- **Affected files or symbols:** `pkg/config/v2_pair_persister.go`; `V2ReleasePairPersister.Persist`; `restoreV2File`; init, unit-add, and migration pair writers.
-- **Current behavior:** Both temporary files are fully prepared before config then state replacement. Returned replacement failures attempt exact restoration of both snapshots. A process, kernel, machine, or filesystem failure between successful renames can expose a mixed config/state pair.
-- **Why it remains:** Portable filesystems do not offer one atomic rename for two independent files. The completed refactor deliberately claimed bounded rollback rather than false cross-file atomicity.
-- **Risk:** A crash window can leave a pair that strict loading rejects, and an interrupted create can leave one target without the other.
-- **User or developer impact:** The next command can fail validation and require manual restoration even though no Go error was returned to the interrupted process.
-- **Removal or improvement preconditions:** Select and document a crash-recovery protocol, such as a pair journal or generation/manifest pointer; preserve exact bytes, modes, schemas, and existing restoration behavior; add process-interruption recovery tests.
-- **Recommended action:** **Harden**, without claiming impossible cross-file atomicity.
-- **Priority:** **P1**.
-- **Proposed milestone:** **H2 — Make pair and migration crash recovery explicit**.
-- **Blocking new features:** Blocks features that add more multi-file config/state mutations. It does not block read-only features.
+- **Status:** **Resolved by H2** for init, unit-add, and migration pair writes.
+- **Affected files or symbols:** `pkg/config/v2_pair_persister.go`; `pkg/config/v2_pair_recovery.go`; `V2ReleasePairPersister.Persist`; init, unit-add, and migration pair writers.
+- **Current behavior:** `V2ReleasePairPersister` creates durable schema-versioned evidence at `.neko/release.pair-recovery.json` before unsafe replacement. It records pending intent before each target rename, verifies exact bytes before confirmation, verifies the complete intended pair before completion, and closes evidence only after the pair is strict-valid. A later process closes already-complete intended pairs, restores exact prior bytes/modes/existence for supported partial application, or fails closed with evidence-preserving manual guidance.
+- **Why it remains non-atomic:** Portable filesystems do not offer one atomic rename for two independent files. H2 deliberately implemented recovery evidence instead of claiming impossible cross-file atomicity.
+- **Remaining boundary:** Corrupt, unsupported, owner-ambiguous, externally edited, or hash/mode-conflicting evidence requires manual recovery. A failed new-pair attempt may still leave an empty `.neko` directory.
+- **User or developer impact:** Supported process or machine interruptions are deterministic on the next pair-writing command. Unsupported evidence no longer silently repairs or guesses.
+- **Completed milestone:** **H2 — Make pair and migration crash recovery explicit**.
+- **Blocking new features:** No longer blocks ordinary multi-file config/state callers that use the shared pair persister and preserve its evidence contract.
 
-### D-04 — Migration retains effect/journal crash windows
+### D-04 — Migration crash recovery is evidence-driven
 
-- **Affected files or symbols:** `pkg/migrate/execution.go`; `migrationPlanExecution.Execute`; `filesystemMigrationJournalOperations`; `filesystemMigrationSourceArchiver`; `release.migration.json`.
-- **Current behavior:** Migration journals intent, persists and verifies the V2 pair, archives V1, verifies the backup, and removes the journal. A crash can occur after pair replacement or source rename but before journal confirmation. Recovery classifies compatible hashes and evidence, but it does not universally repair arbitrary corruption.
-- **Why it remains:** Stage 8 isolated and characterized deterministic returned-error recovery without introducing a generic transaction engine or changing the journal schema.
-- **Risk:** Interrupted pair replacement can expose mixed targets; interruption around source archival can leave the journal behind its real effect. Hash evidence handles supported states but not missing or externally modified evidence.
-- **User or developer impact:** A migration can require manual recovery; the V1 source or backup may be the only trustworthy copy.
-- **Removal or improvement preconditions:** Align with the pair crash-recovery protocol, enumerate crash points, retain byte-identical source evidence, and define refusal/manual-recovery behavior for every unsupported state before any schema change.
-- **Recommended action:** **Harden** with evidence-driven recovery, not automatic guessing.
-- **Priority:** **P1**.
-- **Proposed milestone:** **H2 — Make pair and migration crash recovery explicit**.
-- **Blocking new features:** Blocks expansion to multi-unit or nested migration and any migration schema change. It does not block unrelated release features.
+- **Status:** **Resolved by H2** for the supported V1-to-V2 migration crash windows.
+- **Affected files or symbols:** `pkg/migrate/execution.go`; `pkg/migrate/policy.go`; `migrationPlanExecution.Execute`; `filesystemMigrationJournalOperations`; `filesystemMigrationSourceArchiver`; `release.migration.json`; `.neko/release.pair-recovery.json`.
+- **Current behavior:** Migration journals intent, persists the V2 pair through the shared crash-recoverable persister, verifies exact target bytes and strict V2 validity, archives V1 only after target proof, verifies the byte-identical backup, and removes the migration journal last. If migration and pair-recovery evidence coexist, the next run classifies the interrupted pair through the persister before continuing source recovery. Pair-recovery evidence without a migration journal is refused as owner-ambiguous.
+- **Why it remains conservative:** Migration still refuses arbitrary corruption, missing trustworthy source/backup evidence, unsupported journal versions, and externally edited files. It does not infer that an unproven filesystem effect completed.
+- **Remaining boundary:** Manual recovery is required when the active V1 source and backup cannot be matched to migration evidence, when pair evidence conflicts, or when an operator deletes the migration journal but leaves pair evidence behind.
+- **User or developer impact:** Supported interruption windows are recoverable or safely completable; unsupported states now produce explicit refusal instead of implicit best-effort behavior.
+- **Completed milestone:** **H2 — Make pair and migration crash recovery explicit**.
+- **Blocking new features:** Multi-unit or nested migration must preserve this owner relationship before broadening migration format or schema behavior.
 
 ### D-05 — Compatibility tool registry is mutable and process-global
 
@@ -368,15 +364,16 @@ No P0 issue was found. The active V2 GitHub Actions path preserves evidence arou
 
 ### D-15 — Failed new-pair creation can leave an empty `.neko` directory
 
+- **Status:** Retained after H2 as a bounded cosmetic limitation.
 - **Affected files or symbols:** `V2ReleasePairPersister.Persist`; `osV2PairPersistenceDisk.CreateDirectory`.
 - **Current behavior:** The directory is created before snapshots and temporary files. A later returned failure cleans temporary files and restores targets but does not remove a newly created empty directory.
-- **Why it remains:** The directory is harmless, and tracking/restoring parent-directory existence would add another compatibility effect to pair persistence.
+- **Why it remains:** H2 made pair file recovery explicit and intentionally avoided directory deletion that could remove user-created content. The directory is harmless, and tracking/restoring parent-directory existence would add another compatibility effect to pair persistence.
 - **Risk:** Cosmetic filesystem residue can confuse scripts that treat directory presence as configuration presence without checking files.
 - **User or developer impact:** No valid config/state is fabricated; manual cleanup may be desired.
 - **Removal or improvement preconditions:** Characterize directory-mode/existence behavior and ensure cleanup never removes a directory containing unrelated files.
-- **Recommended action:** **Defer** or **Harden** alongside H2 if a safe empty-directory cleanup contract is proven.
+- **Recommended action:** **Defer** unless a real consumer needs stronger empty-directory cleanup semantics.
 - **Priority:** **P3**.
-- **Proposed milestone:** **H2 — Make pair and migration crash recovery explicit**.
+- **Proposed milestone:** none.
 - **Blocking new features:** Not blocking.
 
 ### D-16 — Successive V2 release planning after completed-journal exclusion is less directly characterized
@@ -472,7 +469,7 @@ No code is labeled dead solely from an IDE result. Classification uses productio
 
 ### Bounded technical debt
 
-- P1 config/state pair and migration crash windows; the former V1 rollback/network items were resolved for active execution by H1;
+- no unresolved P1 issue remains in the active release safety model after H1 and H2; manual recovery boundaries are explicit compatibility and safety policy;
 - P2 mutable compatibility globals, process cwd, broad public compatibility surfaces, inactive paths, and absent journal lifecycle tooling;
 - P3 arbitrary plugin-index output policy, empty-directory residue, repeated-release characterization gap, and superseded raw Git helpers.
 
@@ -482,4 +479,4 @@ No code is labeled dead solely from an IDE result. Classification uses productio
 
 The violation does not change the historical ledger: all nine planned refactor stages were completed. It means “completed” is a closed milestone record, not a claim that no future architecture maintenance exists.
 
-The prioritized implementation sequence, acceptance criteria, and commit boundaries are defined in [post-refactor-roadmap.md](post-refactor-roadmap.md). H1 is completed. The recommended next milestone is **H2 — Make pair and migration crash recovery explicit**.
+The prioritized implementation sequence, acceptance criteria, and commit boundaries are defined in [post-refactor-roadmap.md](post-refactor-roadmap.md). H1 and H2 are completed. The recommended next milestone is **H3 — Add evidence-safe journal inspection and lifecycle support**.

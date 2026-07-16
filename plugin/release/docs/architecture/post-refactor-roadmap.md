@@ -7,7 +7,8 @@ The behavior-preserving Release Plugin refactor is closed at 9 / 9 stages. This 
 - Refactor: completed
 - Post-refactor review: completed
 - H1: completed
-- Next roadmap milestone: **H2 — Make pair and migration crash recovery explicit**
+- H2: completed
+- Next roadmap milestone: **H3 — Add evidence-safe journal inspection and lifecycle support**
 
 The architecture evidence, debt ranking, compatibility inventory, and removal candidates behind this roadmap are in [post-refactor-review.md](post-refactor-review.md). The detailed runtime and disk contracts remain in [current-state.md](current-state.md). Every implementation milestone remains subject to `plugin/release/RULES.md`.
 
@@ -20,7 +21,7 @@ Milestone namespaces distinguish the nature of future work:
 | `DX` | Developer experience | Clarify presentation, composition, and filesystem policies |
 | `F` | New features | Add separately authorized user-facing capabilities |
 
-H1 — Make V1 compensation interruption-safe is completed. The recommended next milestone is **H2 — Make pair and migration crash recovery explicit**. H2 addresses the remaining P1 crash windows across V2 config/state pair replacement and migration. Compatibility cleanup still does not have to precede unrelated product work; read-only F1 may proceed independently when it does not touch H2 files or contracts.
+H1 — Make V1 compensation interruption-safe and H2 — Make pair and migration crash recovery explicit are completed. The recommended next milestone is **H3 — Add evidence-safe journal inspection and lifecycle support**. H3 builds on the durable evidence families from H1 and H2 without changing their conservative manual-recovery boundaries. Compatibility cleanup still does not have to precede unrelated product work; read-only F1 may proceed independently when it does not touch H2 files or contracts.
 
 ## Sequencing and gates
 
@@ -38,7 +39,7 @@ F2  (decision milestone; implementation requires a later approved design)
 ```
 
 - H1 established the durable V1 compensation baseline; new V1 mutation work must preserve it.
-- H2 precedes changes that add multi-file config/state writes or broaden migration.
+- H2 established the required evidence protocol for changes that add multi-file config/state writes or broaden migration.
 - H3 precedes any journal schema change or automated repair behavior.
 - C1 must establish support and deprecation policy before C2 removes exported compatibility code.
 - DX1 should precede substantial edits to active V2 orchestration files.
@@ -61,15 +62,14 @@ F2  (decision milestone; implementation requires a later approved design)
 
 ### H2 — Make pair and migration crash recovery explicit
 
-- **Objective:** Define and implement a crash-recovery protocol for V2 config/state pair replacement and align migration recovery with that protocol without claiming impossible cross-file atomicity.
-- **User value:** After process or machine interruption, the next command can deterministically recover a complete valid pair or preserve evidence and explain a safe manual action.
-- **Characterize first:** Exercise every boundary before and after temp-file sync, target replacement, restoration, migration target verification, source archive, backup verification, and journal removal. Preserve byte, mode, missing-file, directory, and symlink observations.
-- **Scope:** `V2ReleasePairPersister`, init/unit-add/migration consumers, pair-generation or pair-journal evidence, migration crash classification, exact restoration, and safe cleanup of a newly created empty `.neko` directory if proven.
-- **Non-goals:** A general filesystem transaction library, silent repair of externally edited files, migration format expansion, config/state schema redesign, or weakening strict loaders.
-- **Dependencies:** A documented portable filesystem protocol; compatibility analysis for persisted evidence; recovery ownership that remains separate from release execution and dispatch journals.
-- **Risks:** More evidence files can introduce conflicting states; filesystem durability differs across platforms; automatic cleanup could remove user-created content if directory ownership is not proven.
-- **Acceptance criteria:** Every enumerated crash point resolves to a verified complete pair, exact restoration, or evidence-preserving refusal; migration never archives the only trustworthy V1 source before a valid V2 pair is proven; recovery is idempotent; modes and bytes remain stable; no unrelated directory is removed; Linux and macOS tests cover the protocol where CI permits.
-- **Expected commit boundaries:** (1) crash-point characterization and protocol decision; (2) pair evidence/persistence mechanics; (3) init and unit-add adoption; (4) migration alignment and recovery; (5) cleanup policy plus documentation. Do not combine schema changes with use-case adoption.
+- **Status:** **Completed.** Init, unit-add, and migration now use one explicit crash-recoverable V2 pair writer. Migration recovery classifies pair evidence together with its migration journal and refuses owner-ambiguous evidence.
+- **Evidence ownership:** Schema version 1 lives at `.neko/release.pair-recovery.json`. The record stores the target paths, exact prior and intended config/state bytes, hashes, modes, existence, per-target replacement status, restoration status, and completion flag. Strict decoding rejects unknown schema, invalid status values, invalid hashes, invalid modes, impossible state order, and completed evidence without confirmed target replacement.
+- **Operation order:** create `.neko`; resolve unresolved pair evidence; capture prior snapshots; persist pair-recovery evidence; create, write, and sync both target-local temp files; record config replacement pending; replace and verify config; confirm config replacement; record state replacement pending; replace and verify state; confirm state replacement; strict-validate the intended complete pair; mark evidence complete; remove evidence.
+- **Automatic continuation:** A later pair-writing command closes evidence when the intended pair is already complete and strict-valid. It restores exact prior bytes, modes, and absence for supported partial application when every observed target matches either prior or intended evidence. It then proceeds with the newly requested pair write.
+- **Migration alignment:** A migration journal owns migration recovery. If migration and pair-recovery evidence coexist, migration delegates pair repair to the shared persister before continuing target/source verification. Pair-recovery evidence without a migration journal is refused as owner-ambiguous.
+- **Manual recovery boundary:** Corrupt, unsupported, externally edited, hash/mode-conflicting, owner-ambiguous, or source/backup-untrustworthy evidence fails closed with preserved files. No generic transaction engine, generation pointer, silent repair, remote inference, or strict-loader weakening was added.
+- **Compatibility:** Existing V2 config/state file schemas and modes are unchanged. The new evidence file is private recovery state for interrupted pair writes. A failed new-pair attempt may still leave an empty `.neko` directory; H2 deliberately avoided deleting a directory that might contain user-created content.
+- **Delivered commits:** H2.1 characterization `1c1f388`; H2.2 pair evidence and persister recovery `69540e0`; H2.3 migration recovery alignment `2a09633`; H2.4 documentation and roadmap closure uses commit message `docs(release): complete h2 crash recovery hardening`.
 
 ### H3 — Add evidence-safe journal inspection and lifecycle support
 
@@ -78,7 +78,7 @@ F2  (decision milestone; implementation requires a later approved design)
 - **Characterize first:** Pin corrupt, unsupported-version, conflicting, terminal, unresolved, and missing-evidence behavior for each journal owner, plus a complete second-release scenario after handoff-ready exclusion.
 - **Scope:** Typed inspection facts, redacted human/structured output, immutable backups before any lifecycle mutation, explicit confirmation, completed-journal archival policy, repeated-release characterization, and schema migration only when a concrete new schema exists.
 - **Non-goals:** Automatic remote reconciliation, clearing pending actions by assumption, blind retry, a generic journal repository, or changing terminal dispatch semantics.
-- **Dependencies:** H2 for pair/migration evidence integration; H1 if V1 compensation evidence is included; an explicit retention and schema-support policy.
+- **Dependencies:** completed H2 pair/migration evidence integration; completed H1 V1 compensation evidence if included; an explicit retention and schema-support policy.
 - **Risks:** A repair command can legitimize unsafe operator guesses; output may reveal sensitive request context; premature schema abstraction can merge intentionally distinct journal contracts.
 - **Acceptance criteria:** Inspection is token-free and read-only; corrupt/unknown evidence is preserved; any mutation creates an exact private backup and requires explicit authorization; no operation converts uncertainty into completion; second-release tests prove completed journals are not reopened; schema versions remain owner-specific.
 - **Expected commit boundaries:** (1) characterization including repeated release; (2) typed read-only inspection; (3) output/redaction mapping; (4) optional archival lifecycle; (5) schema migration only as a separate commit with a real format need.
@@ -156,7 +156,7 @@ F2  (decision milestone; implementation requires a later approved design)
 - **Characterize first:** Pin existing dry-run calculations and outputs for V1/V2, unit selection, version/tag rules, materialization validation, unresolved-journal checks, and structured/fatal response boundaries.
 - **Scope:** A dedicated query/use-case boundary, typed facts, human and structured response mapping, manifest/docs changes if a new command is selected, and reuse of pure planning capabilities.
 - **Non-goals:** Token resolution, file writes, Git mutation, workflow dispatch, remote probing, retry, or changing existing dry-run behavior incidentally.
-- **Dependencies:** Completed refactor planning seams; no dependency on C1 or C2. H2 is the recommended next overall milestone, but F1 may proceed independently when work does not overlap.
+- **Dependencies:** Completed refactor planning seams; no dependency on C1 or C2. H3 is the recommended next overall milestone, but F1 may proceed independently when work does not overlap.
 - **Risks:** Reusing a runner facade could accidentally construct mutating adapters; duplicated planning could drift; exposing filesystem details may create a new public contract.
 - **Acceptance criteria:** Tests prove zero writes/process mutations/network/token reads; calculations match canonical release planning; selected paths are validated; results are typed until presentation; command and manifest contracts agree; V1 compatibility is explicit rather than inferred.
 - **Expected commit boundaries:** (1) behavior/contract characterization; (2) typed query and pure planning reuse; (3) response mapping and command/manifest integration; (4) docs and architecture guards.
@@ -188,6 +188,6 @@ The following are not backlog omissions. They remain deliberate boundaries until
 
 ## Roadmap completion reporting
 
-Roadmap progress is reported independently from the historical refactor ledger: “Refactor stages: 9 / 9 completed; roadmap milestone H1: completed; next milestone: H2 — Make pair and migration crash recovery explicit.” H1 must not be reported as Stage 10.
+Roadmap progress is reported independently from the historical refactor ledger: “Refactor stages: 9 / 9 completed; roadmap milestones H1 and H2: completed; next milestone: H3 — Add evidence-safe journal inspection and lifecycle support.” H1 and H2 must not be reported as Stage 10.
 
 Each milestone begins with characterization, retains independently revertible commit boundaries, runs the full uncached Release Plugin and repository validation required by `plugin/release/RULES.md`, and updates this roadmap plus the architecture review when evidence changes a priority or recommendation.
