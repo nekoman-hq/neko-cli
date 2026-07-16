@@ -11,19 +11,23 @@ const (
 	migrationIncompleteTarget
 	migrationSourceTargetConflict
 	migrationSourceMissing
+	migrationPairRecoveryWithoutJournal
 )
 
 type migrationRepositoryEvidence struct {
-	journalExists bool
-	sourceExists  bool
-	configExists  bool
-	stateExists   bool
+	journalExists      bool
+	pairRecoveryExists bool
+	sourceExists       bool
+	configExists       bool
+	stateExists        bool
 }
 
 func classifyMigrationEvidence(evidence migrationRepositoryEvidence) migrationRecoveryClassification {
 	switch {
 	case evidence.journalExists:
 		return migrationPartiallyApplied
+	case evidence.pairRecoveryExists:
+		return migrationPairRecoveryWithoutJournal
 	case evidence.configExists && evidence.stateExists && !evidence.sourceExists:
 		return migrationAlreadyComplete
 	case evidence.configExists != evidence.stateExists:
@@ -46,6 +50,7 @@ const (
 	inspectUnsupportedMigrationSource
 	refuseIncompleteMigrationTarget
 	refuseMigrationSourceTargetConflict
+	refusePairRecoveryWithoutMigrationJournal
 )
 
 func selectMigrationPlanningOperation(classification migrationRecoveryClassification) (migrationPlanningOperation, error) {
@@ -62,6 +67,8 @@ func selectMigrationPlanningOperation(classification migrationRecoveryClassifica
 		return refuseIncompleteMigrationTarget, nil
 	case migrationSourceTargetConflict:
 		return refuseMigrationSourceTargetConflict, nil
+	case migrationPairRecoveryWithoutJournal:
+		return refusePairRecoveryWithoutMigrationJournal, nil
 	default:
 		return 0, fmt.Errorf("migration recovery failed: unknown migration classification %d", classification)
 	}

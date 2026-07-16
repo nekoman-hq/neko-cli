@@ -2,6 +2,8 @@
 package migrate
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -333,6 +335,49 @@ func TestRunTreatsCompletedMigrationWithRetainedJournalAsAlreadyCompleted(t *tes
 	assertV2State(t, plan.StatePath)
 }
 
+func TestRunRecoversInterruptedPairPersistenceDuringMigration(t *testing.T) {
+	root := withGitRepo(t)
+	writeFile(t, filepath.Join(root, releaseconfig.V1FileName), v1Fixture)
+	plan, err := ResolvePlan(root)
+	if err != nil {
+		t.Fatalf("ResolvePlan: %v", err)
+	}
+	writeJournalForTest(t, root, journalForPlan(t, plan, journalStagePrepared))
+	writePairRecoveryEvidenceForTest(t, root, plan)
+	writeFile(t, plan.ConfigPath, plan.ConfigJSON)
+
+	recovered, err := Run(root, false)
+	if err != nil {
+		t.Fatalf("Run recovery: %v", err)
+	}
+	if !recovered.Recovery {
+		t.Fatalf("expected recovery plan, got %#v", recovered)
+	}
+	if exists(plan.SourcePath) || !exists(plan.BackupPath) || exists(plan.JournalPath) || exists(releaseconfig.V2PairRecoveryPath(root)) {
+		t.Fatalf("migration did not close pair, source, and journal recovery evidence")
+	}
+	assertV2Config(t, plan.ConfigPath)
+	assertV2State(t, plan.StatePath)
+}
+
+func TestRunRefusesPairRecoveryEvidenceWithoutMigrationJournal(t *testing.T) {
+	root := withGitRepo(t)
+	writeFile(t, filepath.Join(root, releaseconfig.V1FileName), v1Fixture)
+	plan, err := ResolvePlan(root)
+	if err != nil {
+		t.Fatalf("ResolvePlan: %v", err)
+	}
+	writePairRecoveryEvidenceForTest(t, root, plan)
+
+	_, err = Run(root, false)
+	if err == nil || !strings.Contains(err.Error(), "pair recovery evidence exists without migration journal") {
+		t.Fatalf("Run error = %v, want pair recovery refusal", err)
+	}
+	if !exists(plan.SourcePath) || exists(plan.BackupPath) {
+		t.Fatalf("refusal mutated migration source or backup")
+	}
+}
+
 func TestHandleMigrateDryRun(t *testing.T) {
 	root := withGitRepo(t)
 	writeFile(t, filepath.Join(root, releaseconfig.V1FileName), v1Fixture)
@@ -451,6 +496,60 @@ func writeJournalForTest(t *testing.T, root string, j *journal) {
 		t.Fatalf("marshal journal: %v", err)
 	}
 	writeFile(t, filepath.Join(root, releaseconfig.V2Directory, journalFileName), string(append(data, '\n')))
+}
+
+func writePairRecoveryEvidenceForTest(t *testing.T, root string, plan *Plan) {
+	t.Helper()
+	evidence := struct {
+		SchemaVersion     int    `json:"schemaVersion"`
+		ConfigPath        string `json:"configPath"`
+		StatePath         string `json:"statePath"`
+		PriorConfig       any    `json:"priorConfig"`
+		PriorState        any    `json:"priorState"`
+		IntendedConfig    any    `json:"intendedConfig"`
+		IntendedState     any    `json:"intendedState"`
+		ConfigReplacement string `json:"configReplacement"`
+		StateReplacement  string `json:"stateReplacement"`
+		Restoration       string `json:"restoration"`
+		Completed         bool   `json:"completed"`
+	}{
+		SchemaVersion:     1,
+		ConfigPath:        plan.ConfigPath,
+		StatePath:         plan.StatePath,
+		PriorConfig:       missingPairRecoveryFileForTest(),
+		PriorState:        missingPairRecoveryFileForTest(),
+		IntendedConfig:    pairRecoveryFileForTest([]byte(plan.ConfigJSON), 0644),
+		IntendedState:     pairRecoveryFileForTest([]byte(plan.StateJSON), 0644),
+		ConfigReplacement: "confirmed",
+		StateReplacement:  "not-started",
+		Restoration:       "not-started",
+	}
+	data, err := json.MarshalIndent(evidence, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal pair recovery evidence: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, releaseconfig.V2Directory), 0755); err != nil {
+		t.Fatalf("mkdir .neko: %v", err)
+	}
+	writeFile(t, releaseconfig.V2PairRecoveryPath(root), string(append(data, '\n')))
+}
+
+func pairRecoveryFileForTest(data []byte, mode os.FileMode) map[string]any {
+	return map[string]any{
+		"exists": true,
+		"mode":   mode,
+		"sha256": sha256ForMigrationTest(data),
+		"data":   data,
+	}
+}
+
+func missingPairRecoveryFileForTest() map[string]any {
+	return map[string]any{"exists": false}
+}
+
+func sha256ForMigrationTest(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
 }
 
 func withGitRepo(t *testing.T) string {

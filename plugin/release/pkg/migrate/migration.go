@@ -103,10 +103,11 @@ type filesystemMigrationPlanResolver struct{}
 func (filesystemMigrationPlanResolver) Resolve(root string) (migrationPlan, error) {
 	paths := migrationPaths(root)
 	evidence := migrationRepositoryEvidence{
-		journalExists: exists(paths.journal),
-		sourceExists:  exists(paths.source),
-		configExists:  exists(paths.config),
-		stateExists:   exists(paths.state),
+		journalExists:      exists(paths.journal),
+		pairRecoveryExists: exists(paths.pairRecovery),
+		sourceExists:       exists(paths.source),
+		configExists:       exists(paths.config),
+		stateExists:        exists(paths.state),
 	}
 	operation, err := selectMigrationPlanningOperation(classifyMigrationEvidence(evidence))
 	if err != nil {
@@ -125,6 +126,8 @@ func (filesystemMigrationPlanResolver) Resolve(root string) (migrationPlan, erro
 		return migrationPlan{}, fmt.Errorf("incomplete V2 configuration: both %s and %s are required", paths.config, paths.state)
 	case refuseMigrationSourceTargetConflict:
 		return migrationPlan{}, fmt.Errorf("migration conflict: active V1 config and V2 files exist without migration journal")
+	case refusePairRecoveryWithoutMigrationJournal:
+		return migrationPlan{}, fmt.Errorf("migration recovery failed: V2 pair recovery evidence exists without migration journal: %s", paths.pairRecovery)
 	case planNewMigration:
 		return resolveNewMigrationPlan(root, paths)
 	case inspectUnsupportedMigrationSource:
@@ -262,6 +265,9 @@ func validateMigrationJournalStage(stage migrationJournalStage) error {
 
 func recoveryActions(paths migrationPathSet, j *journal) []string {
 	actions := []string{"validate migration journal"}
+	if exists(paths.pairRecovery) {
+		actions = append(actions, "recover interrupted V2 config/state pair")
+	}
 	if !exists(paths.config) {
 		actions = append(actions, "write missing .neko/release.config.json")
 	}
@@ -294,20 +300,22 @@ func captureMigrationFile(path string) (migrationFileSnapshot, error) {
 }
 
 type migrationPathSet struct {
-	source  string
-	config  string
-	state   string
-	backup  string
-	journal string
+	source       string
+	config       string
+	state        string
+	backup       string
+	journal      string
+	pairRecovery string
 }
 
 func migrationPaths(root string) migrationPathSet {
 	return migrationPathSet{
-		source:  filepath.Join(root, releaseconfig.V1FileName),
-		config:  releaseconfig.V2ConfigPath(root),
-		state:   releaseconfig.V2StatePath(root),
-		backup:  filepath.Join(root, backupFileName),
-		journal: filepath.Join(root, releaseconfig.V2Directory, journalFileName),
+		source:       filepath.Join(root, releaseconfig.V1FileName),
+		config:       releaseconfig.V2ConfigPath(root),
+		state:        releaseconfig.V2StatePath(root),
+		backup:       filepath.Join(root, backupFileName),
+		journal:      filepath.Join(root, releaseconfig.V2Directory, journalFileName),
+		pairRecovery: releaseconfig.V2PairRecoveryPath(root),
 	}
 }
 

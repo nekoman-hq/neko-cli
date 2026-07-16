@@ -115,10 +115,28 @@ func TestMigrationExecutionReusesPairPersistenceAndRetainsSafeCleanupOrder(t *te
 	if !strings.Contains(initRepository, "config.NewV2ReleasePairPersister(root)") {
 		t.Fatal("init must retain the shared pair persister")
 	}
+
+	migration := readQueryArchitectureFile(t, "pkg/migrate/migration.go")
+	if !strings.Contains(migration, "releaseconfig.V2PairRecoveryPath(root)") {
+		t.Fatal("migration planning must explicitly detect unresolved V2 pair recovery evidence")
+	}
+	for _, forbidden := range []string{
+		"newV2PairRecovery",
+		"CreatePairRecoveryEvidence",
+		"RecordConfigReplacementPending",
+		"ConfirmStateReplacement",
+		"restoreV2File(",
+	} {
+		if strings.Contains(migration, forbidden) || strings.Contains(adapters, forbidden) {
+			t.Fatalf("migration must not own pair recovery mechanics %q", forbidden)
+		}
+	}
 }
 
 func TestMigrationRefactorIntroducesNoGenericWorkflowFramework(t *testing.T) {
 	for _, path := range []string{
+		"pkg/config/v2_pair_recovery.go",
+		"pkg/config/v2_pair_persister.go",
 		"pkg/migrate/model.go",
 		"pkg/migrate/policy.go",
 		"pkg/migrate/planner.go",
@@ -140,6 +158,13 @@ func TestMigrationRefactorIntroducesNoGenericWorkflowFramework(t *testing.T) {
 			"StateMachine",
 			"Pipeline",
 			"[]Step",
+			"TransactionManager",
+			"TransactionEngine",
+			"RecoveryManager",
+			"RecoveryEngine",
+			"ApplyState",
+			"Advance(",
+			"Transition(",
 		} {
 			if strings.Contains(source, forbidden) {
 				t.Fatalf("%s introduces forbidden workflow abstraction %q", path, forbidden)
