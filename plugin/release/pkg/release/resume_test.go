@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
 )
 
 func TestHandleResumeDryRunReadsExistingJournalWithoutTokenOrMutation(t *testing.T) {
@@ -80,6 +81,38 @@ func TestHandleResumeRequiresExistingJournalAndDoesNotCalculateFreshVersion(t *t
 	}
 	if after := mustReadString(t, statePath); after != beforeState {
 		t.Fatalf("resume without journal changed state:\n%s", after)
+	}
+}
+
+func TestHandleResumeAtUsesExplicitRootWithoutProcessWorkingDirectory(t *testing.T) {
+	rootPath := newGitHubActionsDispatchRepository(t)
+	statePath := filepath.Join(rootPath, ".neko", "release.state.json")
+	beforeState := mustReadString(t, statePath)
+	otherRoot := t.TempDir()
+	root, err := workspace.ValidateRepositoryRoot(rootPath)
+	if err != nil {
+		t.Fatalf("ValidateRepositoryRoot: %v", err)
+	}
+	withWorkingDirectoryRoot(t, otherRoot)
+
+	resp, err := HandleResumeAt(root, plugin.Request{
+		Command: "resume",
+		Flags: map[string]any{
+			"unit":    "api",
+			"dry-run": true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("HandleResumeAt: %v", err)
+	}
+	if resp.Status != "error" || resp.Error.Code != "NO_RESUMABLE_JOURNAL" {
+		t.Fatalf("expected no journal error, got %#v", resp)
+	}
+	if after := mustReadString(t, statePath); after != beforeState {
+		t.Fatalf("resume without journal changed explicit-root state:\n%s", after)
+	}
+	if _, err := os.Stat(filepath.Join(otherRoot, ".neko")); !os.IsNotExist(err) {
+		t.Fatalf("HandleResumeAt touched process cwd; stat err=%v", err)
 	}
 }
 

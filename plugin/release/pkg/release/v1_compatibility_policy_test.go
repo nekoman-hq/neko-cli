@@ -12,7 +12,9 @@ import (
 func TestC1ReleaseEntryPointsKeepProductionOffMutableRegistry(t *testing.T) {
 	handler := readCommandBoundarySource(t, "command_handler.go")
 	for _, required := range []string{
-		"return handleReleaseWithStarter(req, releaseType, newReleaseStartOperation())",
+		"workspace.ResolveRepositoryRoot(req.Context.WorkingDir)",
+		"return HandleReleaseAt(root, req, releaseType)",
+		"return HandleReleaseWithV1ExecutorsAt(root, req, releaseType, executors...)",
 		"newFixedV1ReleaseExecutorCatalog(executors...)",
 	} {
 		if !strings.Contains(handler, required) {
@@ -21,7 +23,7 @@ func TestC1ReleaseEntryPointsKeepProductionOffMutableRegistry(t *testing.T) {
 	}
 
 	start := readCommandBoundarySource(t, "handler.go")
-	if !strings.Contains(start, "return newReleaseStartOperationWithV1Executors(registeredV1ReleaseExecutorCatalog{})") {
+	if !strings.Contains(start, "return newReleaseStartOperationWithV1ExecutorsAt(root, registeredV1ReleaseExecutorCatalog{})") {
 		t.Fatal("registry-backed release startup is no longer confined to the compatibility HandleRelease path")
 	}
 

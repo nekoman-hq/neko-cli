@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
 )
 
 type releaseCommandStarter interface {
@@ -50,14 +51,35 @@ func (handler resumeCommandHandler) Handle(ctx context.Context, req plugin.Reque
 
 // HandleRelease handles the patch, minor, and major release commands.
 func HandleRelease(req plugin.Request, releaseType Type) (*plugin.Response, error) {
-	return handleReleaseWithStarter(req, releaseType, newReleaseStartOperation())
+	root, err := workspace.ResolveRepositoryRoot(req.Context.WorkingDir)
+	if err != nil {
+		return nil, err
+	}
+	return HandleReleaseAt(root, req, releaseType)
+}
+
+// HandleReleaseAt handles the patch, minor, and major release commands at an
+// explicit repository root without changing process cwd.
+func HandleReleaseAt(root workspace.RepositoryRoot, req plugin.Request, releaseType Type) (*plugin.Response, error) {
+	return handleReleaseWithStarter(req, releaseType, newReleaseStartOperationAt(root))
 }
 
 // HandleReleaseWithV1Executors is the production composition entry point. It
 // keeps V1 executor selection explicit and independent from the compatibility
 // registry retained for direct callers of HandleRelease.
 func HandleReleaseWithV1Executors(req plugin.Request, releaseType Type, executors ...V1Executor) (*plugin.Response, error) {
-	starter := newReleaseStartOperationWithV1Executors(newFixedV1ReleaseExecutorCatalog(executors...))
+	root, err := workspace.ResolveRepositoryRoot(req.Context.WorkingDir)
+	if err != nil {
+		return nil, err
+	}
+	return HandleReleaseWithV1ExecutorsAt(root, req, releaseType, executors...)
+}
+
+// HandleReleaseWithV1ExecutorsAt is the canonical embedder entry point for
+// release command composition. The supplied root is the only repository root
+// used by the command.
+func HandleReleaseWithV1ExecutorsAt(root workspace.RepositoryRoot, req plugin.Request, releaseType Type, executors ...V1Executor) (*plugin.Response, error) {
+	starter := newReleaseStartOperationWithV1ExecutorsAt(root, newFixedV1ReleaseExecutorCatalog(executors...))
 	return handleReleaseWithStarter(req, releaseType, starter)
 }
 
@@ -72,8 +94,18 @@ func handleReleaseWithStarter(req plugin.Request, releaseType Type, starter rele
 
 // HandleResume handles read-only recovery assessment and conservative resume.
 func HandleResume(req plugin.Request) (*plugin.Response, error) {
+	root, err := workspace.ResolveRepositoryRoot(req.Context.WorkingDir)
+	if err != nil {
+		return nil, err
+	}
+	return HandleResumeAt(root, req)
+}
+
+// HandleResumeAt handles read-only recovery assessment and conservative resume
+// at an explicit repository root without changing process cwd.
+func HandleResumeAt(root workspace.RepositoryRoot, req plugin.Request) (*plugin.Response, error) {
 	handler := resumeCommandHandler{
-		resumer: newResumeReleaseUseCase("."),
+		resumer: newResumeReleaseUseCase(root.Path()),
 		clock:   systemReleaseClock{},
 	}
 	return handler.Handle(context.Background(), req)

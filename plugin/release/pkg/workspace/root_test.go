@@ -147,6 +147,42 @@ func TestResolveProjectRootPreservesSymlinkRootSpelling(t *testing.T) {
 	}
 }
 
+func TestResolveRepositoryRootReturnsTypedResolvedRoot(t *testing.T) {
+	repoRoot := t.TempDir()
+	startDir := filepath.Join(repoRoot, "cmd", "release")
+
+	mustMkdirAll(t, filepath.Join(repoRoot, gitMarker))
+	mustMkdirAll(t, startDir)
+
+	root, err := ResolveRepositoryRoot(startDir)
+	if err != nil {
+		t.Fatalf("ResolveRepositoryRoot: %v", err)
+	}
+	if root.Path() != repoRoot || root.String() != repoRoot {
+		t.Fatalf("root = path %q string %q, want %q", root.Path(), root.String(), repoRoot)
+	}
+}
+
+func TestValidateRepositoryRootRequiresResolvedRoot(t *testing.T) {
+	repoRoot := t.TempDir()
+	nestedDir := filepath.Join(repoRoot, "cmd", "release")
+
+	mustMkdirAll(t, filepath.Join(repoRoot, gitMarker))
+	mustMkdirAll(t, nestedDir)
+
+	if _, err := ValidateRepositoryRoot(nestedDir); err == nil {
+		t.Fatal("expected nested directory to be rejected as unresolved root")
+	}
+
+	root, err := ValidateRepositoryRoot(repoRoot)
+	if err != nil {
+		t.Fatalf("ValidateRepositoryRoot: %v", err)
+	}
+	if root.Path() != repoRoot {
+		t.Fatalf("root path = %q, want %q", root.Path(), repoRoot)
+	}
+}
+
 func TestChangeToProjectRootSwitchesProcessDirectory(t *testing.T) {
 	originalDir, getwdErr := os.Getwd()
 	if getwdErr != nil {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
 )
 
 const releaseSecretSentinel = "NEKO_TEST_TOKEN_MUST_NOT_APPEAR"
@@ -63,6 +64,35 @@ func TestHandleReleaseV2CommandContractPlansPatchMinorAndMajor(t *testing.T) {
 				t.Fatalf("%s dry-run response contract changed: %#v", tt.releaseType, resp)
 			}
 		})
+	}
+}
+
+func TestHandleReleaseAtUsesExplicitRootWithoutProcessWorkingDirectory(t *testing.T) {
+	rootPath := newGitHubActionsDispatchRepository(t)
+	otherRoot := t.TempDir()
+	root, err := workspace.ValidateRepositoryRoot(rootPath)
+	if err != nil {
+		t.Fatalf("ValidateRepositoryRoot: %v", err)
+	}
+	t.Setenv("GITHUB_TOKEN", "")
+	withWorkingDirectoryRoot(t, otherRoot)
+
+	resp, err := HandleReleaseAt(root, plugin.Request{
+		Command: "patch",
+		Flags: map[string]any{
+			"dry-run": true,
+			"unit":    "api",
+		},
+	}, Patch)
+
+	if err != nil || resp.Status != "success" {
+		t.Fatalf("explicit-root dry-run failed: response=%#v err=%v", resp, err)
+	}
+	if got := responseValueForProperty(t, resp.Data["items"], "New Version"); got != "0.2.1" {
+		t.Fatalf("dry-run next version = %s, expected 0.2.1", got)
+	}
+	if _, err := os.Stat(releaseconfig.V2ConfigPath(otherRoot)); !os.IsNotExist(err) {
+		t.Fatalf("HandleReleaseAt touched process cwd; stat err=%v", err)
 	}
 }
 

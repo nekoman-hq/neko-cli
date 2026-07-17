@@ -14,6 +14,7 @@ import (
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
 )
 
 const (
@@ -36,8 +37,18 @@ var pluginInitFlagNames = []string{
 
 // HandleInit handles the init command in plugin mode.
 func HandleInit(req plugin.Request) (*plugin.Response, error) {
+	root, err := workspace.ResolveRepositoryRoot(req.Context.WorkingDir)
+	if err != nil {
+		return nil, err
+	}
+	return HandleInitAt(root, req)
+}
+
+// HandleInitAt handles the init command at an explicit repository root without
+// changing process cwd.
+func HandleInitAt(root workspace.RepositoryRoot, req plugin.Request) (*plugin.Response, error) {
 	log.PluginPrint(log.Init, "Starting release initialization")
-	repository := newV2Repository(".")
+	repository := newV2Repository(root.Path())
 	useCase := initializeV2RepositoryUseCase{
 		presenceReader: repository,
 		validator:      repository,
@@ -60,8 +71,18 @@ func HandleInit(req plugin.Request) (*plugin.Response, error) {
 
 // HandleUnitAdd appends one unit to an existing V2 release configuration.
 func HandleUnitAdd(req plugin.Request) (*plugin.Response, error) {
+	root, err := workspace.ResolveRepositoryRoot(req.Context.WorkingDir)
+	if err != nil {
+		return nil, err
+	}
+	return HandleUnitAddAt(root, req)
+}
+
+// HandleUnitAddAt appends one unit at an explicit repository root without
+// changing process cwd.
+func HandleUnitAddAt(root workspace.RepositoryRoot, req plugin.Request) (*plugin.Response, error) {
 	log.PluginPrint(log.Init, "Starting release unit append")
-	repository := newV2Repository(".")
+	repository := newV2Repository(root.Path())
 	useCase := addV2ReleaseUnitUseCase{
 		presenceReader: repository,
 		loader:         repository,

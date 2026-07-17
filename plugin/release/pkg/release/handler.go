@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
 )
 
 type releaseRepositoryReader interface {
@@ -42,10 +43,11 @@ type v2ReleaseApplication interface {
 }
 
 type releaseStartOperation struct {
-	repositories releaseRepositoryReader
-	v1           v1ReleaseApplication
-	v2           v2ReleaseApplication
-	progress     ReleaseProgress
+	repositoryRoot string
+	repositories   releaseRepositoryReader
+	v1             v1ReleaseApplication
+	v2             v2ReleaseApplication
+	progress       ReleaseProgress
 }
 
 func newReleaseStartOperation() releaseStartOperation {
@@ -53,12 +55,25 @@ func newReleaseStartOperation() releaseStartOperation {
 }
 
 func newReleaseStartOperationWithV1Executors(executors v1ReleaseExecutorCatalog) releaseStartOperation {
+	return newReleaseStartOperationWithRepositoryRoot(".", executors)
+}
+
+func newReleaseStartOperationAt(root workspace.RepositoryRoot) releaseStartOperation {
+	return newReleaseStartOperationWithV1ExecutorsAt(root, registeredV1ReleaseExecutorCatalog{})
+}
+
+func newReleaseStartOperationWithV1ExecutorsAt(root workspace.RepositoryRoot, executors v1ReleaseExecutorCatalog) releaseStartOperation {
+	return newReleaseStartOperationWithRepositoryRoot(root.Path(), executors)
+}
+
+func newReleaseStartOperationWithRepositoryRoot(repositoryRoot string, executors v1ReleaseExecutorCatalog) releaseStartOperation {
 	progress := newTerminalReleaseProgress()
 	return releaseStartOperation{
-		repositories: releaseConfigRepositoryReader{},
-		v1:           composeV1ReleaseCommandApplication(executors),
-		v2:           v2ReleaseCommandApplication{progress: progress},
-		progress:     progress,
+		repositoryRoot: repositoryRoot,
+		repositories:   releaseConfigRepositoryReader{},
+		v1:             composeV1ReleaseCommandApplication(executors),
+		v2:             v2ReleaseCommandApplication{progress: progress},
+		progress:       progress,
 	}
 }
 
@@ -68,7 +83,7 @@ func (operation releaseStartOperation) Start(ctx context.Context, request Releas
 		ReleaseType: string(request.ReleaseType),
 	})
 
-	repository, err := operation.repositories.Load(".")
+	repository, err := operation.repositories.Load(operation.repositoryRoot)
 	if err != nil {
 		return nil, &CommandFailure{
 			Code:  "CONFIG_NOT_FOUND",

@@ -9,6 +9,7 @@ import (
 
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
 )
 
 func TestGetAvailableOptionsExposesV2OnlyInitOptions(t *testing.T) {
@@ -146,6 +147,38 @@ func TestHandleInitCreatesV2LocalConfigAndState(t *testing.T) {
 	}
 	if _, err := releaseconfig.LoadV2Repository("."); err != nil {
 		t.Fatalf("generated V2 repository must validate: %v", err)
+	}
+}
+
+func TestHandleInitAtUsesExplicitRootWithoutProcessWorkingDirectory(t *testing.T) {
+	repositoryRoot := t.TempDir()
+	otherRoot := t.TempDir()
+	root, err := workspace.ValidateRepositoryRoot(repositoryRoot)
+	if err != nil {
+		t.Fatalf("ValidateRepositoryRoot: %v", err)
+	}
+	withWorkingDirectoryRoot(t, otherRoot)
+
+	resp, err := HandleInitAt(root, plugin.Request{Flags: map[string]any{
+		"unit":         "api",
+		"display-name": "API",
+		"version":      "1.2.3",
+		"executor":     "goreleaser",
+		"delivery":     "local",
+		"tag-prefix":   "api/v",
+		"paths":        "apps/api/**",
+	}})
+	if err != nil {
+		t.Fatalf("HandleInitAt: %v", err)
+	}
+	if resp.Status != "success" {
+		t.Fatalf("expected success, got %#v", resp)
+	}
+	if _, err := releaseconfig.LoadV2Repository(repositoryRoot); err != nil {
+		t.Fatalf("LoadV2Repository explicit root: %v", err)
+	}
+	if _, err := os.Stat(releaseconfig.V2ConfigPath(otherRoot)); !os.IsNotExist(err) {
+		t.Fatalf("HandleInitAt touched process cwd; stat err=%v", err)
 	}
 }
 
@@ -1294,6 +1327,22 @@ func withWorkingDirectory(t *testing.T) {
 	tempDir := t.TempDir()
 	if err := os.Chdir(tempDir); err != nil {
 		t.Fatalf("chdir: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(cwd); err != nil {
+			t.Fatalf("restore cwd: %v", err)
+		}
+	})
+}
+
+func withWorkingDirectoryRoot(t *testing.T, root string) {
+	t.Helper()
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir %s: %v", root, err)
 	}
 	t.Cleanup(func() {
 		if err := os.Chdir(cwd); err != nil {
