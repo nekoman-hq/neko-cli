@@ -111,6 +111,38 @@ func TestAtomicPluginIndexOutputPersisterStopsAtFilesystemFailures(t *testing.T)
 	})
 }
 
+func TestAtomicPluginIndexOutputPersisterKeepsExistingFilesystemOnTargetCollisions(t *testing.T) {
+	t.Run("parent is a file", func(t *testing.T) {
+		root := t.TempDir()
+		parent := filepath.Join(root, "registry")
+		outputPath := filepath.Join(parent, "plugin-index.json")
+		if err := os.WriteFile(parent, []byte("not a directory"), 0600); err != nil {
+			t.Fatalf("write parent file: %v", err)
+		}
+
+		err := newPluginIndexOutputPersister(pluginIndexPersistenceDisk{}).Persist(outputPath, []byte("output"))
+		if err == nil {
+			t.Fatalf("Persist succeeded with file parent")
+		}
+		assertPersistedPluginIndex(t, parent, "not a directory", 0600)
+	})
+
+	t.Run("target is a directory", func(t *testing.T) {
+		root := t.TempDir()
+		outputPath := filepath.Join(root, "plugin-index.json")
+		if err := os.Mkdir(outputPath, 0700); err != nil {
+			t.Fatalf("mkdir target: %v", err)
+		}
+
+		err := newPluginIndexOutputPersister(pluginIndexPersistenceDisk{}).Persist(outputPath, []byte("output"))
+		if err == nil {
+			t.Fatalf("Persist succeeded with directory target")
+		}
+		assertPluginIndexPathMode(t, outputPath, 0700)
+		assertNoPluginIndexTemporaryFiles(t, root, outputPath)
+	})
+}
+
 type faultInjectPluginIndexFilesystem struct {
 	delegate   pluginIndexPersistenceDisk
 	writeErr   error

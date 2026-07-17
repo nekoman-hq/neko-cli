@@ -3,6 +3,7 @@ package pluginindex
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -179,6 +180,26 @@ func TestGeneratePluginIndexUseCaseMakesModesAndStopPointsExplicit(t *testing.T)
 			t.Fatalf("Run: %v", err)
 		}
 		if result.OutputPath != "dist/plugin-index.json" || persister.path != result.OutputPath || string(persister.output) != "complete output" {
+			t.Fatalf("result/persistence = %#v/%#v", result, persister)
+		}
+		assertPluginIndexCalls(t, query, builder, persister, 1, 1, 1)
+	})
+
+	t.Run("absolute output path remains a compatibility artifact target", func(t *testing.T) {
+		query := &fakePluginIndexQuerier{index: sampleCommandIndex()}
+		builder := &fakePluginIndexOutputBuilder{output: []byte("complete output")}
+		persister := &fakePluginIndexOutputPersister{}
+		outputPath := filepath.Join(t.TempDir(), "plugin-index.json")
+		useCase := newGeneratePluginIndexUseCase(query, builder, persister)
+
+		result, err := useCase.Run(context.Background(), pluginIndexCommandRequest{
+			Mode:       pluginIndexPersistMode,
+			OutputPath: outputPath,
+		})
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		if result.OutputPath != outputPath || persister.path != outputPath || string(persister.output) != "complete output" {
 			t.Fatalf("result/persistence = %#v/%#v", result, persister)
 		}
 		assertPluginIndexCalls(t, query, builder, persister, 1, 1, 1)
