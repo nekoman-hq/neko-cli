@@ -1,5 +1,6 @@
 package release
 
+//nolint:govet // Planning facts follow the canonical V2 release-planning sequence.
 type v2ReleasePlanningFacts struct {
 	ExecutionContext    *ReleaseExecutionContext
 	ReleasePlan         ReleasePlan

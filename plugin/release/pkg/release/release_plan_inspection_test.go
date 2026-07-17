@@ -99,7 +99,7 @@ func TestInspectReleasePlanV1ReturnsExplicitLegacyFactsAndLimitations(t *testing
   "release-system": "goreleaser",
   "version": "1.2.3"
 }`
-	if err := os.WriteFile(filepath.Join(root, releaseconfig.V1FileName), []byte(configContent), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, legacyReleaseConfigFileName), []byte(configContent), 0644); err != nil {
 		t.Fatalf("write v1 config: %v", err)
 	}
 	useCase := newReleasePlanInspectionUseCase(root)
@@ -115,14 +115,14 @@ func TestInspectReleasePlanV1ReturnsExplicitLegacyFactsAndLimitations(t *testing
 	if inspection.CurrentVersion != "1.2.3" || inspection.NextVersion != "1.3.0" || inspection.Tag != "v1.3.0" {
 		t.Fatalf("unexpected v1 version plan: %#v", inspection)
 	}
-	if got := materializedOutputPaths(inspection.MaterializedOutputs); strings.Join(got, ", ") != releaseconfig.V1FileName {
+	if got := materializedOutputPaths(inspection.MaterializedOutputs); strings.Join(got, ", ") != legacyReleaseConfigFileName {
 		t.Fatalf("v1 materialized outputs = %#v", got)
 	}
 	if len(inspection.KnownReleaseFiles) != 0 || !inspectionHasLimitation(inspection, "v1-known-release-files") ||
 		!inspectionHasLimitation(inspection, "v1-latest-tag-evidence") {
 		t.Fatalf("v1 limitations not explicit: %#v", inspection)
 	}
-	if got := mustReadString(t, filepath.Join(root, releaseconfig.V1FileName)); got != configContent {
+	if got := mustReadString(t, filepath.Join(root, legacyReleaseConfigFileName)); got != configContent {
 		t.Fatalf("inspection rewrote v1 config:\n%s", got)
 	}
 }

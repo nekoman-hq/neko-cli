@@ -64,10 +64,7 @@ func (handler releasePlanCommandHandler) Handle(ctx context.Context, req plugin.
 	if parseFailure != nil {
 		return MapCommandFailure("plan", parseFailure, timestamp), nil
 	}
-	inspection, failure := handler.inspector.Inspect(ctx, ReleasePlanInspectionRequest{
-		ReleaseType: request.ReleaseType,
-		UnitID:      request.UnitID,
-	})
+	inspection, failure := handler.inspector.Inspect(ctx, ReleasePlanInspectionRequest(request))
 	if failure != nil {
 		return MapCommandFailure("plan", failure, timestamp), nil
 	}

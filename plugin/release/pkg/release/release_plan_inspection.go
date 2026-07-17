@@ -17,6 +17,8 @@ const (
 	LocalPlanUnsupported LocalPlanReadiness = "unsupported"
 )
 
+const legacyReleaseConfigFileName = ".release.neko.json"
+
 type ReleasePlanInspectionRequest struct {
 	ReleaseType Type
 	UnitID      string
@@ -139,7 +141,7 @@ func inspectV1ReleasePlan(repository *releaseconfig.ReleaseRepository, request R
 		UnitRoot:         repository.RepositoryRoot,
 		MaterializedOutputs: []PlannedMaterializedOutput{
 			{
-				Path:                     releaseconfig.V1FileName,
+				Path:                     legacyReleaseConfigFileName,
 				Reason:                   "sync V1 release config version with release plan",
 				RequiredForReleaseCommit: true,
 				Exists:                   true,
