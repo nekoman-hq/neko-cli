@@ -72,6 +72,40 @@ func TestHandleRequestAtIsolatesPluginIndexAcrossRepositories(t *testing.T) {
 	assertProcessWorkingDirectory(t, otherRoot)
 }
 
+func TestHandleRequestAtIsolatesPluginIndexOutputAcrossRepositories(t *testing.T) {
+	firstRoot := t.TempDir()
+	secondRoot := t.TempDir()
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get current cwd: %v", err)
+	}
+	writeExplicitRootPluginRepository(t, firstRoot, "plugin-release", "release", "4.0.7")
+	writeExplicitRootPluginRepository(t, secondRoot, "plugin-audit", "audit", "0.3.0")
+	first := mustValidateRepositoryRoot(t, firstRoot)
+	second := mustValidateRepositoryRoot(t, secondRoot)
+
+	firstResp, err := handleRequestAt(first, plugin.Request{Command: "plugin-index", Flags: map[string]any{"output": "dist/plugin-index.json"}}, nil)
+	if err != nil {
+		t.Fatalf("plugin-index output first: %v", err)
+	}
+	secondResp, err := handleRequestAt(second, plugin.Request{Command: "plugin-index", Flags: map[string]any{"output": "dist/plugin-index.json"}}, nil)
+	if err != nil {
+		t.Fatalf("plugin-index output second: %v", err)
+	}
+
+	firstOutput := readExplicitRootFile(t, filepath.Join(firstRoot, "dist", "plugin-index.json"))
+	secondOutput := readExplicitRootFile(t, filepath.Join(secondRoot, "dist", "plugin-index.json"))
+	if !strings.Contains(firstOutput, `"name": "release"`) || strings.Contains(firstOutput, `"name": "audit"`) {
+		t.Fatalf("first output leaked or missed data: %s", firstOutput)
+	}
+	if !strings.Contains(secondOutput, `"name": "audit"`) || strings.Contains(secondOutput, `"name": "release"`) {
+		t.Fatalf("second output leaked or missed data: %s", secondOutput)
+	}
+	assertRootIsolationOutputItem(t, firstResp, "dist/plugin-index.json")
+	assertRootIsolationOutputItem(t, secondResp, "dist/plugin-index.json")
+	assertProcessWorkingDirectory(t, cwd)
+}
+
 func writeExplicitRootReleaseRepository(t *testing.T, root, unitID, version string) {
 	t.Helper()
 	configJSON := fmt.Sprintf(`{"schemaVersion":2,"units":[{"id":"%s","paths":["**"],"workingDirectory":".","tagPrefix":"%s/v","executor":{"type":"goreleaser","delivery":"local"}}]}`, unitID, unitID)
@@ -97,6 +131,23 @@ func writeExplicitRootFile(t *testing.T, path, content string) {
 	}
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+func readExplicitRootFile(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	return string(data)
+}
+
+func assertRootIsolationOutputItem(t *testing.T, resp *plugin.Response, want string) {
+	t.Helper()
+	items := fmt.Sprint(resp.Data["items"])
+	if !strings.Contains(items, "Output") || !strings.Contains(items, want) {
+		t.Fatalf("response output item = %s, want %s", items, want)
 	}
 }
 

@@ -88,6 +88,7 @@ func TestReadOnlyQueryExtractionIntroducesNoGenericManager(t *testing.T) {
 		"pkg/pluginindex/index.go",
 		"pkg/pluginindex/command_use_case.go",
 		"pkg/pluginindex/output_builder.go",
+		"pkg/pluginindex/output_path.go",
 		"pkg/pluginindex/output_persister.go",
 	} {
 		source := readQueryArchitectureFile(t, path)
@@ -97,6 +98,10 @@ func TestReadOnlyQueryExtractionIntroducesNoGenericManager(t *testing.T) {
 			"InspectionManager",
 			"ReleaseQueryCoordinator",
 			"QueryRegistry",
+			"OutputManager",
+			"PathManager",
+			"FilesystemManager",
+			"GeneratedFileService",
 		} {
 			if strings.Contains(source, forbidden) {
 				t.Fatalf("%s introduces forbidden generic abstraction %q", path, forbidden)
@@ -159,6 +164,40 @@ func TestPluginIndexDiscoveryBuildingAndPersistenceRemainSeparated(t *testing.T)
 	for _, forbidden := range []string{"V2ReleaseConfig", "V2ReleaseState", "pluginManifest", "PluginEntry", "Generate(", "plugin.Response"} {
 		if strings.Contains(persister, forbidden) {
 			t.Fatalf("plugin-index persister must not contain %q", forbidden)
+		}
+	}
+}
+
+func TestGeneratedOutputPathPolicyUsesExplicitRootAndFocusedOwner(t *testing.T) {
+	handler := readQueryArchitectureFile(t, "pkg/pluginindex/handler.go")
+	if !strings.Contains(handler, "newGeneratePluginIndexUseCaseAt(") || !strings.Contains(handler, "root.Path()") {
+		t.Fatal("plugin-index handler must pass the explicit repository root into the output owner")
+	}
+
+	useCase := readQueryArchitectureFile(t, "pkg/pluginindex/command_use_case.go")
+	if !strings.Contains(useCase, "resolvePluginIndexOutputTarget(useCase.repositoryRoot, request.OutputPath, index)") {
+		t.Fatal("plugin-index use case must resolve output targets from its explicit repository root")
+	}
+	for _, forbidden := range []string{"os.Getwd", "os.Chdir", "workspace.ResolveRepositoryRoot"} {
+		if strings.Contains(useCase, forbidden) {
+			t.Fatalf("plugin-index use case must not depend on process-global repository discovery through %q", forbidden)
+		}
+	}
+
+	pathOwner := readQueryArchitectureFile(t, "pkg/pluginindex/output_path.go")
+	for _, required := range []string{
+		"resolvePluginIndexOutputTarget",
+		"validatePluginIndexOutputTarget",
+		"repositoryRelativePluginIndexPath",
+		"rejectProtectedPluginIndexRepositoryPath",
+	} {
+		if !strings.Contains(pathOwner, required) {
+			t.Fatalf("plugin-index output path owner must contain %q", required)
+		}
+	}
+	for _, forbidden := range []string{"os.Getwd", "os.Chdir", "strings.HasPrefix(repositoryRoot", "strings.HasPrefix(candidate"} {
+		if strings.Contains(pathOwner, forbidden) {
+			t.Fatalf("plugin-index output path owner contains prohibited path behavior %q", forbidden)
 		}
 	}
 }
