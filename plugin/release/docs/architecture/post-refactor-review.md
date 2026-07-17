@@ -43,7 +43,7 @@ No package move or idealized layer tree is implied by this direction. The bounda
 
 ## Production composition and command presentation
 
-`main.main` remains the stdin/stdout protocol and composition root. It decodes `plugin.Request`, applies process-wide metadata and verbose mode, resolves and changes to the project root, constructs the three V1 executors, routes one command, converts unexpected Go errors to fatal protocol output, and encodes one `plugin.Response`.
+`main.main` remains the stdin/stdout protocol and composition root. It decodes `plugin.Request`, applies process-wide metadata and verbose mode, resolves one `workspace.RepositoryRoot`, constructs the three V1 executors, routes one command through `handleRequestAt`, converts unexpected Go errors to fatal protocol output, and encodes one `plugin.Response`. Production routing no longer changes process cwd.
 
 The verified command boundaries are:
 
@@ -60,6 +60,8 @@ The verified command boundaries are:
 | `init-options` | `GetAvailableOptions` | none; this is a static presentation query | `GetAvailableOptions` |
 
 Raw `plugin.Request` and flag-map access are confined to the presentation handlers and parser files. The static `init-options` command directly constructs a response because it has no application or infrastructure work.
+
+DX2 added explicit-root composition across the command surfaces used by production routing: `HandleInitAt`, `HandleUnitAddAt`, `HandleReleaseAt`, `HandleReleaseWithV1ExecutorsAt`, `HandleResumeAt`, `HandleValidateAt`, `HandleHistoryAt`, `HandleContributorsAt`, `HandleEvidenceAt`, `HandleEvidenceArchiveAt`, and `HandlePluginIndexAt`. Their existing non-`At` handlers remain compatibility facades that resolve the root from `plugin.Request.Context.WorkingDir` or current cwd. `migrate.HandleMigrateAt` exists for embedders, while production keeps `migrate.HandleMigrate` to preserve migration's legacy Git-root discovery and nested-V1 refusal behavior.
 
 ## Active V2 release ownership
 
@@ -110,13 +112,13 @@ Validate, history, and contributors retain distinct command intentions and consu
 - history uses repository-wide legacy tag/count behavior for V1 and exact `TagSpec` plus selected paths for V2;
 - contributors uses repository-wide shortlog for V1 and selected-unit path filtering for V2.
 
-Their use cases return typed facts and failures, do not construct responses, and receive no mutation capability. Source-format checks in these queries select format-specific read semantics; they are not release-workflow selection.
+Their use cases return typed facts and failures, do not construct responses, and receive no mutation capability. Source-format checks in these queries select format-specific read semantics; they are not release-workflow selection. Since DX2, repository loading and Git reads receive the same explicit root; the old `pkg/git` query helpers remain cwd facades over root-aware `At` helpers.
 
 ## Plugin-index ownership
 
 `generatePluginIndexUseCase` exposes the explicit `query -> build -> persist` sequence. `pluginIndexQueryUseCase` loads and validates config, state, and plugin manifests and orders entries by plugin name. `jsonPluginIndexOutputBuilder` creates complete stable bytes. `atomicPluginIndexOutputPersister` alone performs the requested single-file effect.
 
-Check mode stops after the query. Render mode stops after byte construction. Output mode passes complete bytes and the unchanged requested path to the persister. Public `Generate`, `Write`, and `WriteWithOptions` remain narrow compatibility surfaces over the canonical query and builder.
+Check mode stops after the query. Render mode stops after byte construction. Output mode passes complete bytes and the unchanged requested path to the persister. Command composition supplies the explicit repository root to the query use case. Public `Generate`, `Write`, and `WriteWithOptions` remain narrow compatibility surfaces over the canonical query and builder.
 
 ## Migration ownership
 
@@ -266,18 +268,18 @@ No P0 issue was found. The active V2 GitHub Actions path preserves evidence arou
 - **Proposed milestone:** **C1 — Decide and deprecate V1 compatibility surfaces** completed the support/deprecation decision. C2 retained the version-evidence seams because the public `VersionGuard` compatibility behavior and two-pass evidence semantics remain supported.
 - **Blocking new features:** Not blocking unrelated features; blocks parallel V1 execution support.
 
-### D-07 — Working-directory ownership remains process-global
+### D-07 — Production command roots are explicit; cwd compatibility facades remain
 
-- **Affected files or symbols:** `pkg/workspace/root.go`; `ChangeToProjectRoot`; `ToolBase.InUnitRoot`; `inV1Repository`; relative-path command composition.
-- **Current behavior:** `main` changes cwd once for every request. Compatibility helpers temporarily change cwd and restore it. Many adapters therefore receive `.` or an empty root as a meaningful legacy value.
-- **Why it remains:** The plugin is a single-request executable, and V1 compatibility historically depends on current-directory behavior.
-- **Risk:** In-process parallel use is unsafe, restoration errors are ignored, and implicit cwd makes ownership harder to inspect.
-- **User or developer impact:** Normal CLI execution is bounded; embedders and parallel tests cannot safely invoke commands concurrently.
-- **Removal or improvement preconditions:** Inventory every relative-path contract, pass explicit roots through public composition, and preserve nested-start-directory resolution semantics.
-- **Recommended action:** **Defer** for the executable, then **Replace** only when an embedding or parallel-execution requirement justifies the compatibility change.
-- **Priority:** **P2**.
-- **Proposed milestone:** **DX2 — Make command roots explicit for embedders**.
-- **Blocking new features:** Blocks safe in-process concurrency. It does not block single-request CLI features.
+- **Status:** **Resolved by DX2** for production command routing and canonical embedder entry points.
+- **Affected files or symbols:** `pkg/workspace/root.go`; `main.handleRequestAt`; command `Handle*At` entry points; root-aware query and Git adapters; retained `ChangeToProjectRoot`; retained `ToolBase.InUnitRoot`; retained cwd-based V1 config facades.
+- **Current behavior:** `main` resolves one `workspace.RepositoryRoot` and routes through explicit-root handlers without changing process cwd. Init, unit-add, release, resume, validation, history, contributors, evidence, and plugin-index command composition now receive a resolved root. Migration exposes `HandleMigrateAt`, while production keeps the legacy Git-root discovery facade to preserve nested-V1 behavior.
+- **Remaining boundary:** Compatibility helpers still intentionally expose cwd semantics: `ChangeToProjectRoot`, cwd V1 config facades, selected `ToolBase` behavior, `Service` cwd fallback, and legacy `pkg/git` query facades. They are compatibility surfaces, not production composition dependencies.
+- **Risk:** Passing an incorrect explicit root can still target the wrong repository; retained compatibility facades are still unsafe for parallel in-process use if callers choose them.
+- **User or developer impact:** Embedders have canonical explicit-root command APIs, and tests prove two in-process repositories can be queried independently without cwd mutation. Existing CLI root discovery and relative response contracts remain intact.
+- **Recommended action:** **Keep** the explicit-root APIs as the canonical embedder path. Do not remove cwd compatibility facades without a later C-family milestone and downstream evidence.
+- **Priority:** **P2** for retained compatibility facades only.
+- **Completed milestone:** **DX2 — Make command roots explicit for embedders**.
+- **Blocking new features:** No longer blocks ordinary in-process embedding that uses the explicit-root APIs. It still blocks claims of full concurrent safety for legacy compatibility facades.
 
 ### D-08 — Inactive V2-local transaction remains; coordinator convenience was retired by C2
 
@@ -482,7 +484,7 @@ No code is labeled dead solely from an IDE result. Classification uses productio
 ### Bounded technical debt
 
 - no unresolved P1 issue remains in the active release safety model after H1 and H2; manual recovery boundaries are explicit compatibility and safety policy;
-- P2 mutable compatibility globals, process cwd, broad public compatibility surfaces, inactive paths, and future schema repair/migration policy;
+- P2 mutable compatibility globals, retained cwd compatibility facades, broad public compatibility surfaces, inactive paths, and future schema repair/migration policy;
 - P3 arbitrary plugin-index output policy and empty-directory residue.
 
 ### Architecture violation
@@ -491,4 +493,4 @@ DX1 removed the last active presentation-boundary deviation known at this review
 
 This does not change the historical ledger: all nine planned refactor stages were completed. It means “completed” is a closed milestone record, not a claim that no future architecture maintenance exists.
 
-The prioritized implementation sequence, acceptance criteria, and commit boundaries are defined in [post-refactor-roadmap.md](post-refactor-roadmap.md). H1, H2, H3, C1, C2, and DX1 are completed. The recommended next milestone is **DX2 — Make command roots explicit for embedders**.
+The prioritized implementation sequence, acceptance criteria, and commit boundaries are defined in [post-refactor-roadmap.md](post-refactor-roadmap.md). H1, H2, H3, C1, C2, DX1, and DX2 are completed. The recommended next milestone is **DX3 — Clarify generated-output path policy**.

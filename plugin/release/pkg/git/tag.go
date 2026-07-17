@@ -229,10 +229,6 @@ func gitPathspecArgs(paths []string) []string {
 	return args
 }
 
-func gitOutput(args ...string) (string, error) {
-	return gitOutputAt("", args...)
-}
-
 func gitOutputAt(repositoryRoot string, args ...string) (string, error) {
 	cmd := gitCommandAt(repositoryRoot, args...)
 	out, err := cmd.CombinedOutput()

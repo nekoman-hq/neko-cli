@@ -18,10 +18,12 @@ The plugin is a stdin/stdout JSON executable:
 
 1. `main.main` decodes one `plugin.Request` from stdin.
 2. It sets global plugin metadata and verbose logging.
-3. `workspace.ChangeToProjectRoot` changes the process working directory.
-4. A command switch invokes one handler.
+3. `workspace.ResolveRepositoryRoot` resolves the release root once at the CLI boundary without changing process cwd.
+4. `handleRequestAt` routes the command through explicit-root handlers where supported.
 5. The handler normally returns a `plugin.Response`; an unexpected Go error is converted by `main` to fatal `EXECUTION_ERROR` output.
 6. `main` JSON-encodes the response to stdout.
+
+The retained `workspace.ChangeToProjectRoot` function remains a compatibility helper for direct callers that still rely on process-wide cwd mutation. Production command routing no longer calls it. The migration command keeps its legacy Git-root discovery facade for CLI compatibility while also exposing an explicit-root handler for embedders.
 
 The public command contract is duplicated between `manifest.json` and the switch in `main.go`. `manifest_test.go` characterizes their agreement and also checks the repository command documentation.
 
@@ -29,8 +31,8 @@ The public command contract is duplicated between `manifest.json` and the switch
 
 | Area | Current responsibility | Important symbols | Notes |
 | --- | --- | --- | --- |
-| `main` | Plugin protocol entry, workspace change, command routing, fatal error fallback | `main` | Uses a command switch rather than a command registry. |
-| `pkg/workspace` | Select V2 Git root or legacy nearest-V1 root, then change process cwd | `ResolveProjectRoot`, `ChangeToProjectRoot` | Process-global `os.Chdir` is an implicit dependency of every handler. |
+| `main` | Plugin protocol entry, explicit root resolution, command routing, fatal error fallback | `main`, `handleRequestAt` | Uses a command switch rather than a command registry. Production routing passes a resolved root instead of changing cwd. |
+| `pkg/workspace` | Select V2 Git root or legacy nearest-V1 root, expose a typed repository root, and retain cwd switching compatibility | `RepositoryRoot`, `ResolveRepositoryRoot`, `ValidateRepositoryRoot`, `ResolveProjectRoot`, `ChangeToProjectRoot` | `ChangeToProjectRoot` is retained for compatibility; production command routing no longer depends on `os.Chdir`. |
 | `pkg/config` | V1/V2 disk models, strict loading, validation, normalization, unit and tag selection, atomic file writes, and canonical crash-recoverable V2 pair persistence | `ReleaseRepository`, `ReleaseUnit`, `LoadReleaseRepository`, `ValidateV2`, `ResolveReleaseUnit`, `TagSpec`, `AtomicWriteFile`, `V2ReleasePairPersister` | `ReleaseRepository` is the shared normalized model. Init and migration reuse one V2 config/state writer and one pair-recovery evidence protocol. V1 remains a compatibility source. |
 | `pkg/init` | Typed init/unit-add command boundaries, focused initialization use cases, pure unit/pair construction, and explicit file policy | `HandleInit`, `HandleUnitAdd`, `initializeV2RepositoryUseCase`, `addV2ReleaseUnitUseCase` | Handlers parse, invoke one use case, and map a typed result/failure; validated pairs are passed to the shared config persister. |
 | `pkg/migrate` | Typed command presentation, source discovery, pure target planning/recovery policy, ordered failure-aware execution, journaling, and root V1-to-V2 migration | `HandleMigrate`, `migrationUseCase`, `migrationPlan`, `migrationPlanExecution`, `ResolvePlan`, `Run` | Uses focused filesystem operations and a worktree migration journal distinct from release journals. |
@@ -53,7 +55,7 @@ The public command contract is duplicated between `manifest.json` and the switch
 
 ### `init`
 
-- Entry: `main.main` -> `init.HandleInit`.
+- Entry: `main.main` -> `handleRequestAt` -> `init.HandleInitAt`. `init.HandleInit` remains a compatibility facade that resolves the root from `plugin.Request.Context.WorkingDir` or current cwd.
 - Request parsing: `parseInitCommandRequest` is the only init path that reads the untyped flag map and produces `initCommandRequest`; wrong raw types retain the prior zero-value/default behavior.
 - Application boundary: `initializeV2RepositoryUseCase.Execute` applies the pure V1/V2/force policy, constructs one normal or plugin unit, creates a complete config/state pair, validates it, and passes it to the pair writer.
 - Domain ownership: `unit_constructor.go` owns defaults and normal/plugin construction; `policy.go` owns side-effect-free file-presence decisions; `repository.go` owns complete pair creation and repository validation.
@@ -65,7 +67,7 @@ The public command contract is duplicated between `manifest.json` and the switch
 
 ### `unit-add`
 
-- Entry: `main.main` -> `init.HandleUnitAdd`.
+- Entry: `main.main` -> `handleRequestAt` -> `init.HandleUnitAddAt`. `init.HandleUnitAdd` remains a compatibility facade that resolves the root from `plugin.Request.Context.WorkingDir` or current cwd.
 - Request parsing: `parseUnitAddCommandRequest` produces a distinct typed request and records unsupported `force` presence without retaining the raw flag map.
 - Application boundary: `addV2ReleaseUnitUseCase.Execute` applies the pure V1/V2 presence policy, preserves required-unit/force precedence, constructs the unit, loads the pair once, rejects duplicate state identity, produces an appended copy, validates it, and invokes the same pair writer.
 - State mutation: `appendV2ReleaseUnit` clones existing slices, plugin metadata, and the state map before appending one config unit and one state entry; existing units are not overwritten or mutated.
@@ -83,6 +85,7 @@ The public command contract is duplicated between `manifest.json` and the switch
 ### `migrate`
 
 - Entry: `main.main` -> `migrate.HandleMigrate`. The handler parses a typed request, invokes `migrationUseCase.Migrate` once, and maps the typed outcome/failure with an injected response clock. `Run` remains a compatibility facade over the same path.
+- Explicit-root embedding: `migrate.HandleMigrateAt` composes a fixed migration root without changing process cwd. The CLI route keeps `HandleMigrate` so migration's existing Git-root discovery and nested-V1 refusal behavior stay unchanged.
 - Discovery and planning: the root resolver and filesystem plan resolver classify new migration, recovery, already-complete, and conflict states. `constructMigrationPlan` builds and validates the complete target pair without filesystem access; pure policy functions select one typed planning intention and the target/source operations required by disk evidence. `ResolvePlan` remains a compatibility facade.
 - Execution order: start or read the journal; persist the target pair when needed through `config.V2ReleasePairPersister`; confirm target persistence; verify exact target bytes plus strict V2 loading/validation; archive the V1 source when needed; confirm the archive; verify the byte-identical backup; remove the journal.
 - Recovery: the immutable plan selects `persistMigrationTarget` or `retainMigrationTarget` and `archiveMigrationSource` or `retainArchivedMigrationSource`. Recovery skips effects already proven by the journal and filesystem evidence instead of replaying a generic transition machine. If pair-recovery evidence exists with a migration journal, the target persistence step lets the shared pair persister restore or close it before rewriting the intended pair; pair-recovery evidence without a migration journal is refused as ambiguous.
@@ -93,7 +96,7 @@ The public command contract is duplicated between `manifest.json` and the switch
 
 ### `patch`, `minor`, and `major`
 
-- Entry: `main.main` constructs the three V1 executors and calls `release.HandleReleaseWithV1Executors` -> `releaseCommandHandler` with a typed `release.Type`. `HandleRelease` remains the registry-backed compatibility entry.
+- Entry: `main.main` constructs the three V1 executors and calls `release.HandleReleaseWithV1ExecutorsAt` with the resolved root -> `releaseCommandHandler` with a typed `release.Type`. `HandleRelease` and `HandleReleaseWithV1Executors` remain compatibility facades that resolve the root before delegating to their explicit-root counterparts.
 - Parsing: `ParseReleaseCommandRequest` is the only release-start code that reads the untyped plugin flag map and produces `ReleaseCommandRequest`. Missing or wrongly typed flags preserve the existing zero-value defaults.
 - Application boundary: the handler invokes `releaseCommandStarter.Start` exactly once. `releaseStartOperation` loads the canonical repository once and `releaseApplicationPathSelector` selects exactly one V1 or V2 application from `ReleaseRepository.SourceFormat`; the selected application does not reselect.
 - Branch: V1 receives a typed intent and distinct preview or execution use case. V2 alone builds `ReleaseExecutionContext`. Active V1 does not call `Service`, fatal `Preflight`, the mixed execution-context builder, or the mutable registry.
@@ -145,7 +148,7 @@ The public command contract is duplicated between `manifest.json` and the switch
 
 ### `resume`
 
-- Entry: `main.main` -> `release.HandleResume` -> `resumeCommandHandler` -> `resumeReleaseUseCase`.
+- Entry: `main.main` -> `release.HandleResumeAt` -> `resumeCommandHandler` -> `resumeReleaseUseCase`. `HandleResume` remains a compatibility facade that resolves the root before delegating.
 - Parsing and response: `ParseResumeCommandRequest` creates the typed request; the handler invokes `releaseResumer.Resume` once and maps a sealed `ResumeCommandOutcome` or `CommandFailure` with its injected response clock.
 - Discovery: `locateResumableExecution` requires V2, resolves one unit and its current upstream remote, and finds exactly one unresolved execution journal matching remote URL and unit.
 - Assessment: `AssessReleaseExecutionRecovery` verifies journal structure, known-file hashes, and local tag evidence through an injected tag inspector without remote access. Non-dry continuation separately reconstructs the journal-bound execution context and rejects current-config drift.
@@ -160,31 +163,35 @@ The public command contract is duplicated between `manifest.json` and the switch
 
 ### `history`
 
-- Entry: `history.HandleHistory` parses `historyQueryRequest`, invokes `historyQueryUseCase.Query` once, and maps the typed result/failure with a response clock.
+- Entry: `history.HandleHistoryAt` parses `historyQueryRequest`, invokes `historyQueryUseCase.Query` once, and maps the typed result/failure with a response clock. `HandleHistory` remains a compatibility facade that resolves the root before delegating.
 - Read ownership: `historyRepositoryReader` loads the canonical repository; the command-owned `historyGitReader` exposes only legacy tags/counts and V2 unit-tags/path-counts. No mutating Git capability enters the use case.
+- Root ownership: the query use case and Git adapter receive the same explicit root. Legacy `pkg/git` helper functions remain cwd facades while the handler uses the root-aware `At` variants.
 - V1: uses all local tags and direct commit counts. The legacy adapter intentionally retains the established empty-success/zero-count behavior when its package functions suppress Git errors.
 - V2: exact unit-prefixed tags reachable from `HEAD`, ordered by history, with counts constrained to unit pathspecs. Unit-tag and count errors map to `GIT_HISTORY_FAILED` with a nil handler Go error.
 - Tests: parser, one-invocation handler, fixed mapper, focused stop-point, same-commit ordering, empty result, real-Git path filtering, and worktree/index/ref immutability tests supplement `git/tag_test.go`.
 
 ### `contributors`
 
-- Entry: `contributors.HandleContributors` parses `contributorsQueryRequest`, invokes `contributorsQueryUseCase.Query` once, and maps its typed result/failure.
+- Entry: `contributors.HandleContributorsAt` parses `contributorsQueryRequest`, invokes `contributorsQueryUseCase.Query` once, and maps its typed result/failure. `HandleContributors` remains a compatibility facade that resolves the root before delegating.
 - Read ownership: a command-owned repository reader and contributor-only Git port expose repository-wide or selected-path shortlog reads; the use case preserves the adapter's deterministic order and clones returned entries.
+- Root ownership: repository and Git reads use the same explicit root. Legacy `pkg/git` helper functions remain cwd facades while the handler uses the root-aware `At` variants.
 - V1: repository-wide `git shortlog`; V2: selected-unit pathspecs. Git failures remain structured `GIT_CONTRIBUTORS_FAILED` responses with nil handler Go errors.
 - Tests: typed defaults, handler invocation/mapping, V1/V2 capability selection, dependency stopping, empty results, selected paths, response contracts, and worktree/index/HEAD immutability are explicit.
 
 ### `validate`
 
-- Entry: `validate.HandleValidate` parses `validationQueryRequest`, invokes `validationQueryUseCase.Query` once, and maps typed validation facts/failures outside application code.
+- Entry: `validate.HandleValidateAt` parses `validationQueryRequest`, invokes `validationQueryUseCase.Query` once, and maps typed validation facts/failures outside application code. `HandleValidate` remains a compatibility facade that resolves the root before delegating.
 - Read ownership: `validationRepositoryReader` returns canonical repository data plus the presence fact needed to preserve `CONFIG_NOT_FOUND` versus `CONFIG_INVALID`; `legacyRequirementsValidator` is the only V1 environment/filesystem requirements capability.
+- Root ownership: V1 and V2 validation read from the explicit root. The V1 requirements adapter uses `release.ValidateRequirementsAt`; `release.ValidateRequirements` remains the current-cwd facade.
 - V2: strict load/validation already occurred in `LoadReleaseRepository`; optional `--show` returns cloned normalized unit facts for pure response formatting. It remains token-independent and non-mutating.
 - V1: resolves the legacy unit, revalidates the model, then invokes the established token/executor requirements adapter in that order. The token requirement remains characterized compatibility behavior, not a recommendation.
 - Tests: typed defaults, fixed response mapping, load/presence classification, V1 validation/requirements stop order, V2 dependency isolation and no-alias behavior, stable rows/errors, and exact config/state immutability supplement config/workflow tests.
 
 ### `plugin-index`
 
-- Entry: `pluginindex.HandlePluginIndex` parses one typed render/check/persist mode, invokes `generatePluginIndexUseCase.Run` once, and maps a typed result. `--check` with `--output`, discovery, building, and persistence failures intentionally remain Go errors and therefore top-level `EXECUTION_ERROR` values.
+- Entry: `pluginindex.HandlePluginIndexAt` parses one typed render/check/persist mode, invokes `generatePluginIndexUseCase.Run` once, and maps a typed result. `HandlePluginIndex` remains a compatibility facade that resolves the root before delegating. `--check` with `--output`, discovery, building, and persistence failures intentionally remain Go errors and therefore top-level `EXECUTION_ERROR` values.
 - Discovery and validation: `pluginIndexQueryUseCase` owns config/state/manifest reads through `pluginIndexSourceReader`; pure candidate/completion functions validate state SemVer and manifest identity, duplicate checks retain their prior order, and entries are stably sorted by plugin name. Public `Generate` is the compatibility facade over this query.
+- Root ownership: command composition passes the explicit root into `generatePluginIndexUseCase`; public `Generate` retains its existing `GenerateOptions.Root` contract.
 - Output building: `jsonPluginIndexOutputBuilder` alone creates complete pretty or compact JSON bytes with the stable schema/order and trailing newline. It chooses no path, reads no files, and constructs no response. `Write` and `WriteWithOptions` remain public compatibility wrappers over those complete bytes.
 - Persistence: output mode passes complete bytes and the unchanged requested path to `atomicPluginIndexOutputPersister`. It creates requested parent directories as `0755`, overwrites the arbitrary requested target, uses `0644` for a new file, preserves an existing target's mode, writes/fsyncs/closes a target-local temporary file, then renames it and discards any unconsumed temporary file. A returned pre-replace/write/replace failure preserves the prior target; no config, state, manifest, Git, journal, or unrelated file is mutated.
 - Modes: check performs discovery only; default render performs discovery then building and returns raw JSON; output performs discovery, building, and the explicit single-file command effect. There is still no output-path confinement policy, publication action, cancellation source beyond the supplied context, or schema change.
@@ -348,7 +355,7 @@ V2 pair recovery has a separate focused record at `.neko/release.pair-recovery.j
 
 | Dependency | Current access | Test seam | Risk |
 | --- | --- | --- | --- |
-| Working directory | `workspace.ChangeToProjectRoot`, `ToolBase.InUnitRoot`, many relative paths | temp dirs plus `os.Chdir` | Process-global state prevents parallel handler tests and hides path dependencies. |
+| Working directory | production `handleRequestAt` receives `workspace.RepositoryRoot`; compatibility `workspace.ChangeToProjectRoot`, `ToolBase.InUnitRoot`, and cwd facades remain | explicit-root isolation tests plus retained cwd compatibility tests | Production command routing no longer mutates cwd. Compatibility facades still expose process-global cwd semantics when callers choose them. |
 | Filesystem | shared config pair persistence; focused init, plugin-index, migration, V1 materialization, compensation evidence/config, preflight, and executor config/file boundaries | pair replacement seams; V1 evidence-store/config ports; command-owned file/config ports; temporary directories | V1 uses its canonical single-file writer plus a private `0700` common-dir evidence directory and atomically replaced `0600` record; it intentionally does not share the V2 pair transaction. Inactive paths retain some direct `os.*`. |
 | Git | active V2 release/resume use one `GitReleaseCoordinator`; active V1 uses `SystemV1GitWriter`, root-aware named compensation adapters, and a preflight repository port; direct compatibility callers may still use `V1ReleaseRollback`; queries retain command-owned read ports | fake V1 Git/evidence capabilities, coordinator runner, query capabilities, and real temp repositories | V1 destructive compensation uses a fixed V1-only evidence contract and remains intentionally isolated from V2 recovery. |
 | Environment/token | V1-owned legacy token/environment ports; V2 `EnvironmentGitHubActionsDispatchTokenResolver` returning `GitHubActionsDispatchToken` | sentinel fake token/environment/process adapters | V1 and V2 intentionally retain different token types, variable injection, messages, and behavior. |
@@ -529,7 +536,7 @@ DX1 resolved the prior bounded presentation deviation: active V2 application and
 - Completed stages: 9 / 9
 - Remaining stages: 0
 - Release Plugin refactor: completed
-- Completed roadmap milestones: H1 — Make V1 compensation interruption-safe; H2 — Make pair and migration crash recovery explicit; H3 — Add evidence-safe journal inspection and lifecycle support; C1 — Decide and deprecate V1 compatibility surfaces; C2 — Retire superseded and inactive release paths; DX1 — Isolate release progress reporting
-- Next milestone: DX2 — Make command roots explicit for embedders
+- Completed roadmap milestones: H1 — Make V1 compensation interruption-safe; H2 — Make pair and migration crash recovery explicit; H3 — Add evidence-safe journal inspection and lifecycle support; C1 — Decide and deprecate V1 compatibility surfaces; C2 — Retire superseded and inactive release paths; DX1 — Isolate release progress reporting; DX2 — Make command roots explicit for embedders
+- Next milestone: DX3 — Clarify generated-output path policy
 
-H1, H2, H3, C1, C2, DX1, and the later milestones are maintained in [post-refactor-roadmap.md](post-refactor-roadmap.md). Roadmap milestones are not refactor stages; the historical refactor ledger remains closed.
+H1, H2, H3, C1, C2, DX1, DX2, and the later milestones are maintained in [post-refactor-roadmap.md](post-refactor-roadmap.md). Roadmap milestones are not refactor stages; the historical refactor ledger remains closed.

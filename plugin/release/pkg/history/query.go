@@ -47,9 +47,9 @@ type historyGitReader interface {
 }
 
 type historyQueryUseCase struct {
-	repositoryRoot string
 	repositories   historyRepositoryReader
 	git            historyGitReader
+	repositoryRoot string
 }
 
 func newHistoryQueryUseCase(repositories historyRepositoryReader, gitReader historyGitReader) historyQueryUseCase {

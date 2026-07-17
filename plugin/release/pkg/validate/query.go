@@ -52,9 +52,9 @@ type legacyRequirementsValidator interface {
 }
 
 type validationQueryUseCase struct {
-	repositoryRoot string
 	repositories   validationRepositoryReader
 	requirements   legacyRequirementsValidator
+	repositoryRoot string
 }
 
 func newValidationQueryUseCase(repositories validationRepositoryReader, requirements legacyRequirementsValidator) validationQueryUseCase {

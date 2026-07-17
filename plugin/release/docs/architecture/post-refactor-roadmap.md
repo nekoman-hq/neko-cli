@@ -12,7 +12,8 @@ The behavior-preserving Release Plugin refactor is closed at 9 / 9 stages. This 
 - C1: completed
 - C2: completed
 - DX1: completed
-- Next roadmap milestone: **DX2 — Make command roots explicit for embedders**
+- DX2: completed
+- Next roadmap milestone: **DX3 — Clarify generated-output path policy**
 
 The architecture evidence, debt ranking, compatibility inventory, and removal candidates behind this roadmap are in [post-refactor-review.md](post-refactor-review.md). The detailed runtime and disk contracts remain in [current-state.md](current-state.md). Every implementation milestone remains subject to `plugin/release/RULES.md`.
 
@@ -25,7 +26,7 @@ Milestone namespaces distinguish the nature of future work:
 | `DX` | Developer experience | Clarify presentation, composition, and filesystem policies |
 | `F` | New features | Add separately authorized user-facing capabilities |
 
-H1 — Make V1 compensation interruption-safe, H2 — Make pair and migration crash recovery explicit, H3 — Add evidence-safe journal inspection and lifecycle support, C1 — Decide and deprecate V1 compatibility surfaces, C2 — Retire superseded and inactive release paths, and DX1 — Isolate release progress reporting are completed. The recommended next milestone is **DX2 — Make command roots explicit for embedders**. Compatibility cleanup still does not have to precede unrelated product work; read-only F1 may proceed independently when it does not touch H2/H3 files or contracts.
+H1 — Make V1 compensation interruption-safe, H2 — Make pair and migration crash recovery explicit, H3 — Add evidence-safe journal inspection and lifecycle support, C1 — Decide and deprecate V1 compatibility surfaces, C2 — Retire superseded and inactive release paths, DX1 — Isolate release progress reporting, and DX2 — Make command roots explicit for embedders are completed. The recommended next milestone is **DX3 — Clarify generated-output path policy**. Compatibility cleanup still does not have to precede unrelated product work; read-only F1 may proceed independently when it does not touch H2/H3 files or contracts.
 
 ## Sequencing and gates
 
@@ -47,7 +48,7 @@ F2  (decision milestone; implementation requires a later approved design)
 - H3 precedes any journal schema change or automated repair behavior.
 - C1 established support and deprecation policy; C2 removed only candidates whose call-site evidence, replacement, and policy gates were satisfied.
 - DX1 isolated active V2 progress reporting before substantial edits to active V2 orchestration files.
-- DX2 should precede in-process embedder work that depends on multiple repository roots or parallel command execution.
+- DX2 established explicit-root command composition for embedders; retained cwd compatibility facades still do not imply full concurrent safety.
 - F1 does not wait for compatibility cleanup. It may follow H1 or run independently when file ownership and validation remain isolated.
 - F2 is evaluation only. A positive decision creates a new, separately reviewed implementation milestone; it does not activate the existing scaffold.
 
@@ -141,6 +142,7 @@ F2  (decision milestone; implementation requires a later approved design)
 
 ### DX2 — Make command roots explicit for embedders
 
+- **Status:** **Completed.** Production command routing now resolves one typed `workspace.RepositoryRoot`, passes it through explicit-root handlers, and no longer changes process cwd. Existing cwd-based facades remain compatibility surfaces.
 - **Objective:** Offer explicit-root composition so in-process callers do not depend on process-global cwd, while preserving the single-request CLI's existing root discovery.
 - **User value:** Embedders and parallel tests can safely run against separate repositories without changing each other's working directory.
 - **Characterize first:** Pin nested-start-directory discovery, V1 cwd facades, temporary restoration behavior, relative paths, and main's one-request lifecycle.
@@ -149,7 +151,10 @@ F2  (decision milestone; implementation requires a later approved design)
 - **Dependencies:** C1 support decisions for cwd-based public facades; a real embedding or concurrency requirement before broad replacement.
 - **Risks:** Passing the wrong root can alter Git/config ownership; mixed explicit and implicit paths can be harder to reason about than cwd alone.
 - **Acceptance criteria:** New canonical embedder APIs take a resolved root; two in-process test repositories do not interfere; main behavior remains unchanged; legacy cwd facades are documented and, if policy permits, deprecated rather than silently changed.
-- **Expected commit boundaries:** (1) root-contract characterization; (2) explicit-root composition; (3) adapter migrations by command area; (4) concurrency tests and docs; (5) optional deprecation under C1.
+- **Delivered commit boundaries:** DX2.1 `8feb3dd` characterized root and cwd contracts; DX2.2 `4fa6ab4` added typed root command composition; DX2.3 `9082e66` propagated roots through command/query/Git adapters; DX2.4 `a50162c` proved in-process root isolation; DX2.5 documentation closure uses commit message `docs(release): document explicit root embedding`.
+- **Explicit-root APIs:** `workspace.RepositoryRoot`, `workspace.ResolveRepositoryRoot`, `workspace.ValidateRepositoryRoot`, `init.HandleInitAt`, `init.HandleUnitAddAt`, `release.HandleReleaseAt`, `release.HandleReleaseWithV1ExecutorsAt`, `release.HandleResumeAt`, `validate.HandleValidateAt`, `history.HandleHistoryAt`, `contributors.HandleContributorsAt`, `evidence.HandleEvidenceAt`, `evidence.HandleEvidenceArchiveAt`, `migrate.HandleMigrateAt`, and `pluginindex.HandlePluginIndexAt`.
+- **Retained compatibility:** Non-`At` handlers resolve roots from `plugin.Request.Context.WorkingDir` or current cwd and delegate where safe. `workspace.ChangeToProjectRoot`, cwd V1 config facades, `ToolBase` cwd helpers, `Service` cwd fallback, and legacy `pkg/git` query facades remain compatibility surfaces. Production migration routing keeps `HandleMigrate` to preserve legacy Git-root discovery and nested-V1 behavior while embedders may use `HandleMigrateAt` with an already selected migration root.
+- **Isolation proof:** `command_root_isolation_test.go` proves two in-process repositories can be validated and indexed through `handleRequestAt` without changing process cwd or leaking root-specific data.
 
 ### DX3 — Clarify generated-output path policy
 
@@ -199,11 +204,11 @@ The following are not backlog omissions. They remain deliberate boundaries until
 - no V1 removal beyond C2's completed removal record without fresh consumers, policy, replacements, and deprecation evidence;
 - no V2 local execution before F2 and a subsequent implementation milestone prove executor ownership and recovery;
 - no journal schema migration or repair command without a concrete format/support need and an inspection-first design;
-- no process-wide cwd rewrite before an embedding/concurrency requirement justifies DX2;
+- no claim of full concurrent safety for retained cwd compatibility facades without a later compatibility milestone;
 - no plugin-index confinement change before DX3 resolves the product policy.
 
 ## Roadmap completion reporting
 
-Roadmap progress is reported independently from the historical refactor ledger: “Refactor stages: 9 / 9 completed; roadmap milestones H1, H2, H3, C1, C2, and DX1: completed; next milestone: DX2 — Make command roots explicit for embedders.” H1, H2, H3, C1, C2, DX1, and later roadmap milestones must not be reported as Stage 10.
+Roadmap progress is reported independently from the historical refactor ledger: “Refactor stages: 9 / 9 completed; roadmap milestones H1, H2, H3, C1, C2, DX1, and DX2: completed; next milestone: DX3 — Clarify generated-output path policy.” H1, H2, H3, C1, C2, DX1, DX2, and later roadmap milestones must not be reported as Stage 10.
 
 Each milestone begins with characterization, retains independently revertible commit boundaries, runs the full uncached Release Plugin and repository validation required by `plugin/release/RULES.md`, and updates this roadmap plus the architecture review when evidence changes a priority or recommendation.

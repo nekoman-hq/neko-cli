@@ -38,9 +38,9 @@ type contributorsGitReader interface {
 }
 
 type contributorsQueryUseCase struct {
-	repositoryRoot string
 	repositories   contributorsRepositoryReader
 	git            contributorsGitReader
+	repositoryRoot string
 }
 
 func newContributorsQueryUseCase(repositories contributorsRepositoryReader, gitReader contributorsGitReader) contributorsQueryUseCase {

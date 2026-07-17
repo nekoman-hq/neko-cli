@@ -27,10 +27,10 @@ type pluginIndexOutputPersister interface {
 }
 
 type generatePluginIndexUseCase struct {
-	repositoryRoot string
 	query          pluginIndexQuerier
 	builder        pluginIndexOutputBuilder
 	persister      pluginIndexOutputPersister
+	repositoryRoot string
 }
 
 func newGeneratePluginIndexUseCase(

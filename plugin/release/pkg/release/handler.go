@@ -43,19 +43,11 @@ type v2ReleaseApplication interface {
 }
 
 type releaseStartOperation struct {
-	repositoryRoot string
 	repositories   releaseRepositoryReader
 	v1             v1ReleaseApplication
 	v2             v2ReleaseApplication
 	progress       ReleaseProgress
-}
-
-func newReleaseStartOperation() releaseStartOperation {
-	return newReleaseStartOperationWithV1Executors(registeredV1ReleaseExecutorCatalog{})
-}
-
-func newReleaseStartOperationWithV1Executors(executors v1ReleaseExecutorCatalog) releaseStartOperation {
-	return newReleaseStartOperationWithRepositoryRoot(".", executors)
+	repositoryRoot string
 }
 
 func newReleaseStartOperationAt(root workspace.RepositoryRoot) releaseStartOperation {
