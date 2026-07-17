@@ -163,9 +163,6 @@ func TestC1DeprecationMarkersMatchCompatibilityPolicy(t *testing.T) {
 		"version_guard.go": {
 			"// Deprecated: use PlanV1Release with explicit latest-tag evidence instead.",
 		},
-		"command_response.go": {
-			"// Deprecated: use MapCommandFailure with a command-specific CommandFailure\n// instead.",
-		},
 		"../config/v1_loader.go": {
 			"// Deprecated: use V1ConfigExistsAt with an explicit repository root instead.",
 			"// Deprecated: use V1LoadConfigAt with an explicit path instead.",

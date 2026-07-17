@@ -38,39 +38,6 @@ func newGitReleaseCoordinatorWithRunner(runner gitCommandRunner) *GitReleaseCoor
 	return &GitReleaseCoordinator{runner: runner}
 }
 
-func (coordinator *GitReleaseCoordinator) Coordinate(ctx *ReleaseExecutionContext, files KnownReleaseFiles) (*GitReleaseResult, error) {
-	result := newGitReleaseResult(ctx, files)
-	if ctx.DryRun {
-		result.RecoveryGuidance = "Dry run only: no release files were staged, committed, tagged, pushed, published, or dispatched."
-		return result, nil
-	}
-	log.PluginPrint(log.Exec, "Coordinating V2 git release for unit=%s tag=%s", ctx.Unit.ID, ctx.Tag)
-	if err := coordinator.Stage(ctx, files); err != nil {
-		return result, err
-	}
-	result.ReachedPhase = string(ExecutionPhaseReleaseFilesStaged)
-	commitSHA, err := coordinator.Commit(ctx, files)
-	if err != nil {
-		return result, err
-	}
-	result.CommitSHA = commitSHA
-	result.CommitCreated = true
-	result.ReachedPhase = "commit-created"
-	result.RecoveryGuidance = recoveryGuidanceCommitCreated(commitSHA, ctx.Unit.ID, ctx.Tag)
-	tagCreated, err := coordinator.CreateTag(ctx, commitSHA)
-	if err != nil {
-		return result, err
-	}
-	result.TagCreated = tagCreated
-	result.ReachedPhase = "tag-created"
-	if err := coordinator.Push(ctx, commitSHA, result); err != nil {
-		return result, err
-	}
-	result.ReachedPhase = string(ExecutionPhaseCompleted)
-	result.RecoveryGuidance = recoveryGuidanceComplete(commitSHA, ctx.Unit.ID, ctx.Tag)
-	return result, nil
-}
-
 func (coordinator *GitReleaseCoordinator) Stage(ctx *ReleaseExecutionContext, files KnownReleaseFiles) error {
 	if ctx.DryRun {
 		return fmt.Errorf("dry run does not stage V2 release files")

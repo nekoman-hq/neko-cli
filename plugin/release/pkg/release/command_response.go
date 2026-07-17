@@ -192,16 +192,3 @@ func emptyFallback(value, fallback string) string {
 	}
 	return value
 }
-
-// V2ExecutionUnavailableResponse preserves the existing compatibility helper
-// while delegating response construction to the deterministic mapper boundary.
-//
-// Deprecated: use MapCommandFailure with a command-specific CommandFailure
-// instead.
-func V2ExecutionUnavailableResponse(command string) *plugin.Response {
-	failure := failureFromMessage(
-		"V2_EXECUTION_UNAVAILABLE",
-		"release schema v2 has Local Delivery and ExecutorContext prepared, but actual V2 release execution is not available until the next milestone",
-	)
-	return MapCommandFailure(command, failure, systemReleaseClock{}.Now())
-}
