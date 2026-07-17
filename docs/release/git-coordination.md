@@ -1,6 +1,6 @@
 # Git Release Coordination
 
-Milestone 5A adds the internal V2 `GitReleaseCoordinator`. It implements Option A:
+The internal V2 `GitReleaseCoordinator` implements repository-owned Git coordination:
 
 ```text
 Neko CLI owns:

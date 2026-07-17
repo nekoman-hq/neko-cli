@@ -6,7 +6,7 @@ Before modifying Release Plugin files:
 
 - Read `plugin/release/RULES.md` completely.
 - Consult `plugin/release/docs/architecture/current-state.md` for the affected flow.
-- Consult `plugin/release/docs/architecture/refactor-plan.md` for planned boundary work.
+- Consult `plugin/release/docs/architecture/refactor-history.md` for completed boundary context and `plugin/release/docs/architecture/architecture-evolution.md` for pending architecture decisions.
 - Inspect the current implementation, tests, and `git status --short --branch`; current code is authoritative.
 
 Release correctness and long-term maintainability are joint acceptance criteria. Characterize risky behavior before refactoring version/tag selection, exact commit contents, side-effect ordering, journals, dispatch, retry/resume, error codes, responses, or secret handling.
@@ -19,4 +19,4 @@ Do not silently change stable error codes, response schemas/item ordering, journ
 
 Do not weaken, delete, skip, or broaden tests merely to make a change pass. Reject an implementation that passes tests but violates `RULES.md`; extraction alone is not success when responsibilities, dependencies, abstraction levels, or control flow remain mixed. Run focused tests while working and final repository validation described in `RULES.md`. Update architecture, rules, command, and user documentation whenever boundaries or contracts change.
 
-When a requested milestone is complete and validated, create atomic Conventional Commit-style commits with the `release` scope automatically. Never stage or commit unrelated work. Do not amend, squash, rebase, reset, push, tag, release, dispatch, publish, or modify remote state unless the user explicitly requests that exact operation.
+When a requested change is complete and validated, create atomic Conventional Commit-style commits with the `release` scope automatically. Never stage or commit unrelated work. Do not amend, squash, rebase, reset, push, tag, release, dispatch, publish, or modify remote state unless the user explicitly requests that exact operation.

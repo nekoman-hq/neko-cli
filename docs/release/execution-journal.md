@@ -1,6 +1,6 @@
 # Release Execution Journal
 
-Milestone 5C3B uses this durable journal for public V2 GitHub Actions release execution. It is separate from the GitHub Actions dispatch journal.
+Public V2 GitHub Actions release execution uses this durable journal before workflow dispatch. It is separate from the GitHub Actions dispatch journal.
 
 ## Purpose
 

@@ -1,6 +1,6 @@
 # GitHub Actions Release Flow
 
-Milestone 5C3B activates public V2 releases for `delivery: github-actions`.
+Public V2 releases support `delivery: github-actions`.
 
 ```bash
 neko release patch --unit api

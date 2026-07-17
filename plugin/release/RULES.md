@@ -8,7 +8,7 @@ Before modifying Release Plugin files:
 
 1. Read `plugin/release/AGENTS.md` and this file.
 2. Read `plugin/release/docs/architecture/current-state.md` for the affected flow.
-3. Read `plugin/release/docs/architecture/refactor-plan.md` when implementing a planned boundary.
+3. Read `plugin/release/docs/architecture/refactor-history.md` for completed boundary context and `plugin/release/docs/architecture/architecture-evolution.md` for pending architecture decisions.
 4. Inspect the current code and tests. Plans and documents do not override current behavior.
 5. Inspect `git status --short --branch` and preserve all pre-existing work.
 
@@ -446,7 +446,7 @@ A change that fails any check must be redesigned before commit unless the deviat
 Update documentation in the same change when its contract changes:
 
 - update `docs/architecture/current-state.md` when responsibilities, dependencies, states, or production call paths change;
-- update `docs/architecture/refactor-plan.md` when a milestone is completed, reordered, or invalidated;
+- update `docs/architecture/architecture-evolution.md` when architecture decisions, responsibilities, or pending capabilities change;
 - update `RULES.md` when engineering policy changes;
 - update `plugin/release/manifest.json`, `docs/plugins/release.md`, and `docs/release/*` when public behavior changes;
 - update tests that demonstrate every documented contract.
@@ -489,7 +489,7 @@ Do not install new global tools merely to satisfy a documentation task. If a can
 
 ## 15. Commit policy
 
-Codex automatically commits completed work without waiting for separate confirmation when the requested milestone is fully implemented and validated.
+Codex automatically commits completed work without waiting for separate confirmation when the requested change is fully implemented and validated.
 
 - Give each coherent behavior-preserving refactor its own commit.
 - Give each independently usable feature its own commit.
