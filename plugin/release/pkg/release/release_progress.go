@@ -15,6 +15,7 @@ const (
 
 	ReleaseProgressRepositoryContext ReleaseProgressEventKind = "repository-context"
 	ReleaseProgressReleasePlan       ReleaseProgressEventKind = "release-plan"
+	ReleaseProgressDryRunPlan        ReleaseProgressEventKind = "dry-run-plan"
 
 	ReleaseProgressDryRunBoundary     ReleaseProgressEventKind = "dry-run-boundary"
 	ReleaseProgressDryRunDispatchPlan ReleaseProgressEventKind = "dry-run-dispatch-plan"
@@ -26,6 +27,7 @@ const (
 	ReleaseProgressMaterializationPlanningCompleted ReleaseProgressEventKind = "materialization-planning-completed"
 	ReleaseProgressKnownFiles                       ReleaseProgressEventKind = "known-files"
 
+	ReleaseProgressGitPreflightUnitStarted        ReleaseProgressEventKind = "git-preflight-unit-started"
 	ReleaseProgressGitPreflightStarted            ReleaseProgressEventKind = "git-preflight-started"
 	ReleaseProgressGitPreflightRepositoryVerified ReleaseProgressEventKind = "git-preflight-repository-verified"
 	ReleaseProgressGitPreflightBranch             ReleaseProgressEventKind = "git-preflight-branch"
@@ -127,6 +129,7 @@ type ReleaseProgressEvent struct {
 	SafeRemoteURL    string
 	Count            int
 	CommitSHA        string
+	CommitMessage    string
 	TargetSHA        string
 	Path             string
 	Identity         string
@@ -134,6 +137,7 @@ type ReleaseProgressEvent struct {
 	PendingAction    string
 	DispatchState    string
 	DispatchRunURL   string
+	Guidance         string
 	Owner            string
 	Repository       string
 	Ref              string
@@ -155,4 +159,17 @@ func releaseProgressOrNoop(progress ReleaseProgress) ReleaseProgress {
 		return noopReleaseProgress{}
 	}
 	return progress
+}
+
+func reportReleaseProgress(progress ReleaseProgress, event ReleaseProgressEvent) {
+	releaseProgressOrNoop(progress).ReportReleaseProgress(event)
+}
+
+func releaseProgressInputs(inputs map[string]string) []ReleaseProgressInput {
+	keys := sortedDispatchInputKeys(inputs)
+	progressInputs := make([]ReleaseProgressInput, 0, len(keys))
+	for _, key := range keys {
+		progressInputs = append(progressInputs, ReleaseProgressInput{Name: key, Value: inputs[key]})
+	}
+	return progressInputs
 }

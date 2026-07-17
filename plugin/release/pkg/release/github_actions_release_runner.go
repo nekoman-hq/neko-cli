@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/nekoman-hq/neko-cli/pkg/log"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
@@ -16,6 +15,7 @@ type GitHubActionsReleaseRunner struct {
 	tokenResolver  GitHubActionsDispatchTokenResolver
 	dispatchClient GitHubActionsWorkflowDispatchClient
 	clock          ReleaseClock
+	progress       ReleaseProgress
 }
 
 type GitHubActionsReleaseRunnerOption func(*GitHubActionsReleaseRunner)
@@ -27,6 +27,7 @@ func NewGitHubActionsReleaseRunner(options ...GitHubActionsReleaseRunnerOption) 
 		tokenResolver:  EnvironmentGitHubActionsDispatchTokenResolver{},
 		dispatchClient: client,
 		clock:          systemReleaseClock{},
+		progress:       noopReleaseProgress{},
 	}
 	for _, option := range options {
 		if option != nil {
@@ -62,6 +63,23 @@ func WithGitHubActionsReleaseDispatchClient(client GitHubActionsWorkflowDispatch
 	}
 }
 
+func WithGitHubActionsReleaseProgress(progress ReleaseProgress) GitHubActionsReleaseRunnerOption {
+	return func(runner *GitHubActionsReleaseRunner) {
+		runner.progress = releaseProgressOrNoop(progress)
+		if runner.coordinator != nil {
+			runner.coordinator.progress = runner.progress
+		}
+	}
+}
+
+func withGitHubActionsReleaseGitDiagnostics(diagnostics gitReleaseDiagnostics) GitHubActionsReleaseRunnerOption {
+	return func(runner *GitHubActionsReleaseRunner) {
+		if runner.coordinator != nil {
+			runner.coordinator.diagnostics = gitReleaseDiagnosticsOrNoop(diagnostics)
+		}
+	}
+}
+
 // GitHubActionsReleaseResult is safe user-facing release execution metadata.
 type GitHubActionsReleaseResult struct {
 	Unit                 string
@@ -81,7 +99,7 @@ func (runner *GitHubActionsReleaseRunner) Run(ctx context.Context, execCtx *Rele
 	if err := validateGitHubActionsReleaseRequest(execCtx); err != nil {
 		return nil, err
 	}
-	logGitHubActionsReleaseRequest(execCtx)
+	reportGitHubActionsReleaseRequest(runner.progress, execCtx)
 	return runner.newUseCase(execCtx.RepositoryRoot).Run(ctx, execCtx)
 }
 
@@ -101,12 +119,23 @@ func validateGitHubActionsReleaseRequest(execCtx *ReleaseExecutionContext) error
 	return nil
 }
 
-func logGitHubActionsReleaseRequest(execCtx *ReleaseExecutionContext) {
-	log.PluginPrint(log.Config, "Repository root: %s", execCtx.RepositoryRoot)
-	log.PluginPrint(log.Config, "Release source format: %s", execCtx.SourceFormat)
-	log.PluginPrint(log.Config, "Selected unit: %s", execCtx.Unit.ID)
-	log.PluginPrint(log.Config, "Config path: %s", releaseconfig.V2ConfigPath(execCtx.RepositoryRoot))
-	log.PluginPrint(log.Config, "State path: %s", releaseconfig.V2StatePath(execCtx.RepositoryRoot))
-	log.PluginPrint(log.Exec, "Planning V2 release: current=%s next=%s tag=%s", execCtx.CurrentVersion, execCtx.NextVersion, execCtx.Tag)
-	log.PluginPrint(log.Exec, "Executor=%s delivery=%s workflow=%s tagPrefix=%s", execCtx.Executor, execCtx.Delivery, execCtx.Workflow, execCtx.TagSpec.Prefix)
+func reportGitHubActionsReleaseRequest(progress ReleaseProgress, execCtx *ReleaseExecutionContext) {
+	reportReleaseProgress(progress, ReleaseProgressEvent{
+		Kind:           ReleaseProgressRepositoryContext,
+		RepositoryRoot: execCtx.RepositoryRoot,
+		SourceFormat:   string(execCtx.SourceFormat),
+		UnitID:         execCtx.Unit.ID,
+		ConfigPath:     releaseconfig.V2ConfigPath(execCtx.RepositoryRoot),
+		StatePath:      releaseconfig.V2StatePath(execCtx.RepositoryRoot),
+	})
+	reportReleaseProgress(progress, ReleaseProgressEvent{
+		Kind:           ReleaseProgressReleasePlan,
+		CurrentVersion: execCtx.CurrentVersion,
+		NextVersion:    execCtx.NextVersion,
+		Tag:            execCtx.Tag,
+		Executor:       execCtx.Executor,
+		Delivery:       execCtx.Delivery,
+		Workflow:       execCtx.Workflow,
+		TagPrefix:      execCtx.TagSpec.Prefix,
+	})
 }

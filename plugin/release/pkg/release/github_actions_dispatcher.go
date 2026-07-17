@@ -3,8 +3,6 @@ package release
 import (
 	"context"
 	"fmt"
-
-	"github.com/nekoman-hq/neko-cli/pkg/log"
 )
 
 // GitHubActionsDispatchResult summarizes an internal dispatch attempt without
@@ -32,6 +30,7 @@ type GitHubActionsDispatcher struct {
 	client        GitHubActionsWorkflowDispatchClient
 	tokenResolver GitHubActionsDispatchTokenResolver
 	clock         ReleaseClock
+	progress      ReleaseProgress
 }
 
 // GitHubActionsDispatcherOption configures internal dispatch dependencies.
@@ -48,6 +47,7 @@ func NewGitHubActionsDispatcher(repositoryRoot string, options ...GitHubActionsD
 		client:        client,
 		tokenResolver: EnvironmentGitHubActionsDispatchTokenResolver{},
 		clock:         systemReleaseClock{},
+		progress:      noopReleaseProgress{},
 	}
 	for _, option := range options {
 		if option == nil {
@@ -107,6 +107,13 @@ func WithGitHubActionsDispatcherStore(store *DispatchJournalStore) GitHubActions
 	}
 }
 
+func WithGitHubActionsDispatcherProgress(progress ReleaseProgress) GitHubActionsDispatcherOption {
+	return func(dispatcher *GitHubActionsDispatcher) error {
+		dispatcher.progress = releaseProgressOrNoop(progress)
+		return nil
+	}
+}
+
 // Dispatch performs one internal workflow_dispatch attempt if the durable
 // journal is still in prepared state.
 func (dispatcher *GitHubActionsDispatcher) Dispatch(ctx context.Context, request *ReleaseDispatchRequest) (*GitHubActionsDispatchResult, error) {
@@ -130,36 +137,42 @@ func (dispatcher *GitHubActionsDispatcher) dispatch(ctx context.Context, request
 	if err != nil {
 		return &GitHubActionsDispatchResult{Identity: request.Identity, Error: err.Error()}, err
 	}
-	log.PluginPrint(log.Exec, "GitHub Actions target resolved: %s/%s workflow=%s ref=%s", target.Owner, target.Repository, request.WorkflowPath, request.Tag)
-	log.PluginPrint(log.Exec, "Preparing GitHub Actions dispatch journal")
+	reportReleaseProgress(dispatcher.progress, ReleaseProgressEvent{
+		Kind:       ReleaseProgressGitHubActionsTarget,
+		Owner:      target.Owner,
+		Repository: target.Repository,
+		Workflow:   request.WorkflowPath,
+		Ref:        request.Tag,
+	})
+	reportReleaseProgress(dispatcher.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitHubActionsJournal})
 	resolution, err := dispatcher.store.Prepare(request)
 	if err != nil {
 		return nil, err
 	}
-	log.PluginPrint(log.Exec, "Dispatch journal path: %s", resolution.Path)
+	reportReleaseProgress(dispatcher.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitHubActionsJournalPath, Path: resolution.Path})
 	if resolution.Blocked {
-		log.PluginPrint(log.Exec, "Dispatch blocked by existing journal state: %s", resolution.Journal.State)
+		reportReleaseProgress(dispatcher.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitHubActionsBlocked, DispatchState: string(resolution.Journal.State)})
 		return dispatchResultFromJournal(resolution.Path, resolution.Journal, false), nil
 	}
 	if token.secretValue() == "" {
-		log.PluginPrint(log.Exec, "Resolving GitHub Actions dispatch token")
+		reportReleaseProgress(dispatcher.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitHubActionsTokenResolving})
 		token, err = dispatcher.tokenResolver.ResolveGitHubActionsDispatchToken(ctx)
 		if err != nil {
 			return dispatchResultFromJournal(resolution.Path, resolution.Journal, false), err
 		}
 	}
-	log.PluginPrint(log.Exec, "GitHub Actions dispatch token available")
+	reportReleaseProgress(dispatcher.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitHubActionsTokenAvailable})
 	startedAt := dispatcher.clock.Now().UTC()
 	// request-started is persisted before the HTTP request because after this
 	// point a transport failure may hide whether GitHub accepted the dispatch.
-	log.PluginPrint(log.Exec, "Recording dispatch request-started before HTTP call")
+	reportReleaseProgress(dispatcher.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitHubActionsRequestStarting})
 	started, err := dispatcher.store.Transition(request, DispatchJournalRequestStarted, DispatchJournalMetadata{
 		RequestStartedAt: startedAt,
 	}, "")
 	if err != nil {
 		return nil, err
 	}
-	log.PluginPrint(log.Exec, "Sending workflow_dispatch request")
+	reportReleaseProgress(dispatcher.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitHubActionsRequestSending})
 	response, clientErr := dispatcher.client.Dispatch(ctx, target, request, token)
 	if clientErr != nil {
 		response = GitHubActionsDispatchResponse{
@@ -171,7 +184,7 @@ func (dispatcher *GitHubActionsDispatcher) dispatch(ctx context.Context, request
 	if response.State == "" {
 		response.State = DispatchJournalUnknown
 	}
-	log.PluginPrint(log.Exec, "workflow_dispatch response state=%s status=%d", response.State, response.HTTPStatus)
+	reportReleaseProgress(dispatcher.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitHubActionsResponse, DispatchState: string(response.State), HTTPStatus: response.HTTPStatus})
 	finishedAt := dispatcher.clock.Now().UTC()
 	metadata := DispatchJournalMetadata{
 		RunID:             response.WorkflowRunID,
@@ -187,7 +200,7 @@ func (dispatcher *GitHubActionsDispatcher) dispatch(ctx context.Context, request
 	if err != nil {
 		return dispatchResultFromJournal(started.Path, started.Journal, true), err
 	}
-	log.PluginPrint(log.Exec, "Dispatch journal finalized with state: %s", final.Journal.State)
+	reportReleaseProgress(dispatcher.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitHubActionsJournalFinalized, DispatchState: string(final.Journal.State)})
 	result := dispatchResultFromJournal(final.Path, final.Journal, true)
 	result.HTTPStatus = response.HTTPStatus
 	result.WorkflowRunID = response.WorkflowRunID

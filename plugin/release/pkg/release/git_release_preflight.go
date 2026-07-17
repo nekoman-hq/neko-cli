@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/nekoman-hq/neko-cli/pkg/log"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
@@ -18,28 +17,28 @@ type GitReleasePreflight struct {
 }
 
 func (coordinator *GitReleaseCoordinator) Preflight(ctx *ReleaseExecutionContext, files KnownReleaseFiles) (GitReleasePreflight, error) {
-	if err := validateGitReleaseInputs(ctx, files); err != nil {
+	if err := validateGitReleaseInputs(ctx, files, coordinator.diagnostics); err != nil {
 		return GitReleasePreflight{}, err
 	}
-	log.PluginPrint(log.Exec, "Starting V2 git preflight for unit=%s tag=%s", ctx.Unit.ID, ctx.Tag)
+	reportReleaseProgress(coordinator.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitPreflightUnitStarted, UnitID: ctx.Unit.ID, Tag: ctx.Tag})
 	if err := coordinator.ensureRepositoryRoot(ctx.RepositoryRoot); err != nil {
 		return GitReleasePreflight{}, err
 	}
-	log.PluginPrint(log.Exec, "Git preflight: repository root verified")
+	reportReleaseProgress(coordinator.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitPreflightRepositoryVerified})
 	branch, err := coordinator.currentBranch(ctx.RepositoryRoot)
 	if err != nil {
 		return GitReleasePreflight{}, err
 	}
-	log.PluginPrint(log.Exec, "Git preflight: current branch=%s", branch)
+	reportReleaseProgress(coordinator.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitPreflightBranch, Branch: branch})
 	remote, upstreamBranch, err := coordinator.upstream(ctx.RepositoryRoot, branch)
 	if err != nil {
 		return GitReleasePreflight{}, err
 	}
-	log.PluginPrint(log.Exec, "Git preflight: upstream=%s/%s", remote, upstreamBranch)
+	reportReleaseProgress(coordinator.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitPreflightUpstream, Remote: remote, UpstreamBranch: upstreamBranch})
 	if cleanErr := coordinator.ensureCleanWorktreeAndIndex(ctx.RepositoryRoot); cleanErr != nil {
 		return GitReleasePreflight{}, cleanErr
 	}
-	log.PluginPrint(log.Exec, "Git preflight: worktree and index are clean")
+	reportReleaseProgress(coordinator.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitPreflightClean})
 	existingCommit, err := coordinator.tagCommit(ctx.RepositoryRoot, ctx.Tag)
 	if err != nil {
 		return GitReleasePreflight{}, err
@@ -47,7 +46,7 @@ func (coordinator *GitReleaseCoordinator) Preflight(ctx *ReleaseExecutionContext
 	if existingCommit != "" {
 		return GitReleasePreflight{}, fmt.Errorf("tag %q already exists before V2 release commit creation; expected a new unit tag", ctx.Tag)
 	}
-	log.PluginPrint(log.Exec, "Git preflight: unit tag %s is available", ctx.Tag)
+	reportReleaseProgress(coordinator.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitPreflightTagAvailable, Tag: ctx.Tag})
 	return GitReleasePreflight{
 		Branch:         branch,
 		Remote:         remote,
@@ -55,7 +54,7 @@ func (coordinator *GitReleaseCoordinator) Preflight(ctx *ReleaseExecutionContext
 	}, nil
 }
 
-func validateGitReleaseInputs(ctx *ReleaseExecutionContext, files KnownReleaseFiles) error {
+func validateGitReleaseInputs(ctx *ReleaseExecutionContext, files KnownReleaseFiles, diagnostics gitReleaseDiagnostics) error {
 	if ctx == nil {
 		return fmt.Errorf("release execution context is missing")
 	}
@@ -85,7 +84,7 @@ func validateGitReleaseInputs(ctx *ReleaseExecutionContext, files KnownReleaseFi
 	if absoluteContextRoot != absoluteFilesRoot {
 		return fmt.Errorf("known release files root %s does not match context repository root %s", absoluteFilesRoot, absoluteContextRoot)
 	}
-	log.PluginV(log.Exec, "Validated V2 git inputs for unit=%s tag=%s files=%s", ctx.Unit.ID, ctx.Tag, strings.Join(files.RelativePaths(), ", "))
+	gitReleaseDiagnosticsOrNoop(diagnostics).GitInputsValidated(ctx.Unit.ID, ctx.Tag, files.RelativePaths())
 	return nil
 }
 
@@ -116,7 +115,7 @@ func (coordinator *GitReleaseCoordinator) ensureRepositoryRoot(repositoryRoot st
 	if physicalTopLevel != physicalRoot {
 		return fmt.Errorf("repository root %s does not match git toplevel %s", physicalRoot, physicalTopLevel)
 	}
-	log.PluginV(log.Exec, "Git toplevel resolved to %s", physicalTopLevel)
+	coordinator.diagnostics.GitTopLevelResolved(physicalTopLevel)
 	return nil
 }
 
@@ -149,7 +148,7 @@ func (coordinator *GitReleaseCoordinator) upstream(repositoryRoot, branch string
 	if _, err := coordinator.gitOutput(repositoryRoot, "remote", "get-url", remote); err != nil {
 		return "", "", fmt.Errorf("branch %q upstream remote %q is not resolvable: %w", branch, remote, err)
 	}
-	log.PluginV(log.Exec, "Resolved upstream for branch %s: remote=%s branch=%s", branch, remote, upstreamBranch)
+	coordinator.diagnostics.GitUpstreamResolved(branch, remote, upstreamBranch)
 	return remote, upstreamBranch, nil
 }
 
@@ -161,6 +160,6 @@ func (coordinator *GitReleaseCoordinator) ensureCleanWorktreeAndIndex(repository
 	if strings.TrimSpace(status) != "" {
 		return fmt.Errorf("%s Current status:\n%s", v2CleanlinessMessage, strings.TrimSpace(status))
 	}
-	log.PluginV(log.Exec, "Git status is clean")
+	coordinator.diagnostics.GitStatusClean()
 	return nil
 }

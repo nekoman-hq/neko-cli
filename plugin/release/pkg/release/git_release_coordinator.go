@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/nekoman-hq/neko-cli/pkg/log"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
@@ -27,25 +26,55 @@ func (execGitRunner) Run(repositoryRoot string, args ...string) (string, error) 
 }
 
 type GitReleaseCoordinator struct {
-	runner gitCommandRunner
+	runner      gitCommandRunner
+	progress    ReleaseProgress
+	diagnostics gitReleaseDiagnostics
 }
 
-func NewGitReleaseCoordinator() *GitReleaseCoordinator {
-	return &GitReleaseCoordinator{runner: execGitRunner{}}
+type GitReleaseCoordinatorOption func(*GitReleaseCoordinator)
+
+func NewGitReleaseCoordinator(options ...GitReleaseCoordinatorOption) *GitReleaseCoordinator {
+	coordinator := &GitReleaseCoordinator{
+		runner:      execGitRunner{},
+		progress:    noopReleaseProgress{},
+		diagnostics: noopGitReleaseDiagnostics{},
+	}
+	for _, option := range options {
+		if option != nil {
+			option(coordinator)
+		}
+	}
+	return coordinator
+}
+
+func WithGitReleaseProgress(progress ReleaseProgress) GitReleaseCoordinatorOption {
+	return func(coordinator *GitReleaseCoordinator) {
+		coordinator.progress = releaseProgressOrNoop(progress)
+	}
+}
+
+func WithGitReleaseDiagnostics(diagnostics gitReleaseDiagnostics) GitReleaseCoordinatorOption {
+	return func(coordinator *GitReleaseCoordinator) {
+		coordinator.diagnostics = gitReleaseDiagnosticsOrNoop(diagnostics)
+	}
 }
 
 func newGitReleaseCoordinatorWithRunner(runner gitCommandRunner) *GitReleaseCoordinator {
-	return &GitReleaseCoordinator{runner: runner}
+	return &GitReleaseCoordinator{
+		runner:      runner,
+		progress:    noopReleaseProgress{},
+		diagnostics: noopGitReleaseDiagnostics{},
+	}
 }
 
 func (coordinator *GitReleaseCoordinator) Stage(ctx *ReleaseExecutionContext, files KnownReleaseFiles) error {
 	if ctx.DryRun {
 		return fmt.Errorf("dry run does not stage V2 release files")
 	}
-	if err := validateGitReleaseInputs(ctx, files); err != nil {
+	if err := validateGitReleaseInputs(ctx, files, coordinator.diagnostics); err != nil {
 		return err
 	}
-	log.PluginPrint(log.Exec, "Checking V2 release worktree before staging")
+	reportReleaseProgress(coordinator.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitWorktreeChecking})
 	if err := coordinator.ensureOnlyKnownStatus(ctx.RepositoryRoot, files); err != nil {
 		return err
 	}
@@ -53,7 +82,7 @@ func (coordinator *GitReleaseCoordinator) Stage(ctx *ReleaseExecutionContext, fi
 	if len(paths) == 0 {
 		return fmt.Errorf("known release files are missing")
 	}
-	log.PluginPrint(log.Exec, "Staging V2 release files: %s", strings.Join(paths, ", "))
+	reportReleaseProgress(coordinator.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitStagingFiles, Files: paths})
 	if _, err := coordinator.gitOutput(ctx.RepositoryRoot, append([]string{"add", "--"}, paths...)...); err != nil {
 		_ = coordinator.UnstageKnown(files)
 		return fmt.Errorf("stage V2 release files %s: %w", strings.Join(paths, ", "), err)
@@ -62,12 +91,12 @@ func (coordinator *GitReleaseCoordinator) Stage(ctx *ReleaseExecutionContext, fi
 		_ = coordinator.UnstageKnown(files)
 		return err
 	}
-	log.PluginPrint(log.Exec, "Verified staged V2 release files")
+	reportReleaseProgress(coordinator.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitStagedFilesVerified})
 	return nil
 }
 
 func (coordinator *GitReleaseCoordinator) VerifyStagedFiles(ctx *ReleaseExecutionContext, files KnownReleaseFiles) error {
-	if err := validateGitReleaseInputs(ctx, files); err != nil {
+	if err := validateGitReleaseInputs(ctx, files, coordinator.diagnostics); err != nil {
 		return err
 	}
 	staged, err := coordinator.gitOutput(ctx.RepositoryRoot, "diff", "--cached", "--name-only")
@@ -79,7 +108,7 @@ func (coordinator *GitReleaseCoordinator) VerifyStagedFiles(ctx *ReleaseExecutio
 	if !sameStringSet(actual, expected) {
 		return fmt.Errorf("staged V2 release files differ from expected set; expected [%s], got [%s]", strings.Join(expected, ", "), strings.Join(actual, ", "))
 	}
-	log.PluginV(log.Exec, "Staged file set matches expected release files: %s", strings.Join(expected, ", "))
+	coordinator.diagnostics.GitStagedFilesMatch(expected)
 	return nil
 }
 
@@ -91,7 +120,7 @@ func (coordinator *GitReleaseCoordinator) Commit(ctx *ReleaseExecutionContext, f
 		return "", err
 	}
 	message := ReleaseCommitMessage(ctx)
-	log.PluginPrint(log.Exec, "Creating V2 release commit: %s", message)
+	reportReleaseProgress(coordinator.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitReleaseCommitCreating, CommitMessage: message})
 	if _, err := coordinator.gitOutput(ctx.RepositoryRoot, "commit", "-m", message); err != nil {
 		return "", fmt.Errorf("create V2 release commit %q: %w", message, err)
 	}
@@ -102,7 +131,7 @@ func (coordinator *GitReleaseCoordinator) Commit(ctx *ReleaseExecutionContext, f
 	if err := coordinator.VerifyCommit(ctx, files, commitSHA); err != nil {
 		return "", err
 	}
-	log.PluginPrint(log.Exec, "Verified V2 release commit: %s", commitSHA)
+	reportReleaseProgress(coordinator.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitReleaseCommitVerified, CommitSHA: commitSHA})
 	return commitSHA, nil
 }
 
@@ -138,7 +167,7 @@ func (coordinator *GitReleaseCoordinator) VerifyCommit(ctx *ReleaseExecutionCont
 	if unitState.Version != ctx.NextVersion {
 		return fmt.Errorf("release commit %s state unit %q version = %q, expected %q", commitSHA, ctx.Unit.ID, unitState.Version, ctx.NextVersion)
 	}
-	log.PluginV(log.Exec, "Release commit %s contains expected state version %s for unit %s", commitSHA, ctx.NextVersion, ctx.Unit.ID)
+	coordinator.diagnostics.GitCommitContainsState(commitSHA, ctx.NextVersion, ctx.Unit.ID)
 	return nil
 }
 
@@ -155,12 +184,12 @@ func (coordinator *GitReleaseCoordinator) CreateTag(ctx *ReleaseExecutionContext
 	}
 	if existingCommit != "" {
 		if existingCommit == commitSHA {
-			log.PluginPrint(log.Exec, "Unit tag already points to release commit: %s -> %s", ctx.Tag, commitSHA)
+			reportReleaseProgress(coordinator.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitUnitTagAlreadyExists, Tag: ctx.Tag, CommitSHA: commitSHA})
 			return false, nil
 		}
 		return false, fmt.Errorf("tag %q already points to %s, expected release commit %s", ctx.Tag, existingCommit, commitSHA)
 	}
-	log.PluginPrint(log.Exec, "Creating V2 unit tag: %s -> %s", ctx.Tag, commitSHA)
+	reportReleaseProgress(coordinator.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitUnitTagCreating, Tag: ctx.Tag, CommitSHA: commitSHA})
 	if _, tagErr := coordinator.gitOutput(ctx.RepositoryRoot, "tag", ctx.Tag, commitSHA); tagErr != nil {
 		return false, fmt.Errorf("create lightweight V2 unit tag %q on %s: %w", ctx.Tag, commitSHA, tagErr)
 	}
@@ -171,7 +200,7 @@ func (coordinator *GitReleaseCoordinator) CreateTag(ctx *ReleaseExecutionContext
 	if tagCommit != commitSHA {
 		return false, fmt.Errorf("tag %q points to %s after creation, expected %s", ctx.Tag, tagCommit, commitSHA)
 	}
-	log.PluginPrint(log.Exec, "Verified V2 unit tag: %s", ctx.Tag)
+	reportReleaseProgress(coordinator.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitUnitTagVerified, Tag: ctx.Tag})
 	return true, nil
 }
 
@@ -220,11 +249,16 @@ func (coordinator *GitReleaseCoordinator) PushCommit(ctx *ReleaseExecutionContex
 	if ctx.DryRun {
 		return fmt.Errorf("dry run does not push V2 release commits")
 	}
-	log.PluginPrint(log.Exec, "Pushing V2 release commit %s to %s/%s", commitSHA, remote, upstreamBranch)
+	reportReleaseProgress(coordinator.progress, ReleaseProgressEvent{
+		Kind:           ReleaseProgressGitReleaseCommitPushing,
+		CommitSHA:      commitSHA,
+		Remote:         remote,
+		UpstreamBranch: upstreamBranch,
+	})
 	if _, err := coordinator.gitOutput(ctx.RepositoryRoot, "push", remote, "HEAD:refs/heads/"+upstreamBranch); err != nil {
 		return fmt.Errorf("push V2 release commit %s for unit %q before tag %q failed: %w", commitSHA, ctx.Unit.ID, ctx.Tag, err)
 	}
-	log.PluginPrint(log.Exec, "Pushed V2 release commit %s", commitSHA)
+	reportReleaseProgress(coordinator.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitReleaseCommitPushed, CommitSHA: commitSHA})
 	return nil
 }
 
@@ -232,11 +266,11 @@ func (coordinator *GitReleaseCoordinator) PushTag(ctx *ReleaseExecutionContext, 
 	if ctx.DryRun {
 		return fmt.Errorf("dry run does not push V2 release tags")
 	}
-	log.PluginPrint(log.Exec, "Pushing V2 unit tag %s to %s", tag, remote)
+	reportReleaseProgress(coordinator.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitUnitTagPushing, Tag: tag, Remote: remote})
 	if _, err := coordinator.gitOutput(ctx.RepositoryRoot, "push", remote, "refs/tags/"+tag+":refs/tags/"+tag); err != nil {
 		return fmt.Errorf("push V2 unit tag %q failed after release commit %s was pushed for unit %q: %w", tag, commitSHA, ctx.Unit.ID, err)
 	}
-	log.PluginPrint(log.Exec, "Pushed V2 unit tag %s", tag)
+	reportReleaseProgress(coordinator.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitUnitTagPushed, Tag: tag})
 	return nil
 }
 
@@ -245,7 +279,7 @@ func (coordinator *GitReleaseCoordinator) UnstageKnown(files KnownReleaseFiles) 
 	if len(paths) == 0 {
 		return nil
 	}
-	log.PluginPrint(log.Exec, "Unstaging V2 release files: %s", strings.Join(paths, ", "))
+	reportReleaseProgress(coordinator.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitKnownFilesUnstaging, Files: paths})
 	if _, err := coordinator.gitOutput(files.RepositoryRoot, append([]string{"restore", "--staged", "--"}, paths...)...); err != nil {
 		return fmt.Errorf("unstage V2 release files %s: %w", strings.Join(paths, ", "), err)
 	}
@@ -306,13 +340,13 @@ func (coordinator *GitReleaseCoordinator) headCommit(repositoryRoot string) (str
 }
 
 func (coordinator *GitReleaseCoordinator) gitOutput(repositoryRoot string, args ...string) (string, error) {
-	log.PluginV(log.Exec, "Running command: git -C %s %s", repositoryRoot, formatCommandArgsForLog(args))
+	coordinator.diagnostics.GitCommandRunning(repositoryRoot, args)
 	output, err := coordinator.runner.Run(repositoryRoot, args...)
 	if err != nil {
-		log.PluginV(log.Exec, "Command failed: git %s (%s)", formatCommandArgsForLog(args), summarizeCommandOutput(output))
+		coordinator.diagnostics.GitCommandFailed(args, output)
 		return output, err
 	}
-	log.PluginV(log.Exec, "Command succeeded: git %s (%s)", formatCommandArgsForLog(args), summarizeCommandOutput(output))
+	coordinator.diagnostics.GitCommandSucceeded(args, output)
 	return output, nil
 }
 

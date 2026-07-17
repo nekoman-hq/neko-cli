@@ -21,6 +21,7 @@ func TestGitHubActionsReleaseProgressCharacterization(t *testing.T) {
 	runner := NewGitHubActionsReleaseRunner(
 		WithGitHubActionsReleaseTokenResolver(staticDispatchTokenResolver{token: "dx1-secret-token"}),
 		WithGitHubActionsReleaseDispatchClient(client),
+		WithGitHubActionsReleaseProgress(newTerminalReleaseProgress()),
 	)
 
 	_, stderr := captureReleaseProgressOutput(t, func() {
@@ -154,6 +155,7 @@ func TestReleaseVerboseProgressCharacterization(t *testing.T) {
 			_, err := (applyGitHubActionsReleaseMaterialization{
 				journal:      recordingVerboseProgressJournal{},
 				transactions: recordingVerboseProgressTransactions{},
+				progress:     newTerminalReleaseProgress(),
 			}).Apply(preparedGitHubActionsReleaseExecution{Identity: ReleaseExecutionIdentity{SHA256: "execution"}}, &MaterializationPlan{})
 			if err != nil {
 				t.Fatalf("Apply: %v", err)

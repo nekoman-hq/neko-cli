@@ -6,7 +6,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/nekoman-hq/neko-cli/pkg/log"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
@@ -144,14 +143,16 @@ func (adapter githubActionsReleaseGitAdapter) PushTag(execCtx *ReleaseExecutionC
 	return adapter.coordinator.PushTag(execCtx, remote, tag, commitSHA)
 }
 
-type versionMaterializationReleasePlanner struct{}
+type versionMaterializationReleasePlanner struct {
+	progress ReleaseProgress
+}
 
-func (versionMaterializationReleasePlanner) Plan(execCtx *ReleaseExecutionContext) (plannedGitHubActionsRelease, error) {
+func (operation versionMaterializationReleasePlanner) Plan(execCtx *ReleaseExecutionContext) (plannedGitHubActionsRelease, error) {
 	materializer, err := ResolveVersionMaterializer(execCtx.Executor)
 	if err != nil {
 		return plannedGitHubActionsRelease{}, err
 	}
-	log.PluginPrint(log.Exec, "Planning materialized files")
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressMaterializationPlanningStarted})
 	plan, err := materializer.Plan(execCtx)
 	if err != nil {
 		return plannedGitHubActionsRelease{}, err
@@ -159,41 +160,47 @@ func (versionMaterializationReleasePlanner) Plan(execCtx *ReleaseExecutionContex
 	if validationErr := materializer.Validate(plan); validationErr != nil {
 		return plannedGitHubActionsRelease{}, validationErr
 	}
-	log.PluginPrint(log.Exec, "Planned materialized files: %s", materializedFilesValue(plan))
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressMaterializationPlanningCompleted, Files: []string{materializedFilesValue(plan)}})
 	knownFiles, err := NewKnownReleaseFiles(execCtx, plan)
 	if err != nil {
 		return plannedGitHubActionsRelease{}, err
 	}
-	log.PluginPrint(log.Exec, "Known release files: %s", strings.Join(knownFiles.RelativePaths(), ", "))
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressKnownFiles, Files: knownFiles.RelativePaths()})
 	return plannedGitHubActionsRelease{MaterializationPlan: plan, KnownFiles: knownFiles}, nil
 }
 
 type validateGitHubActionsReleasePreflight struct {
 	git                  githubActionsReleasePreflightGit
 	unresolvedExecutions unresolvedReleaseExecutionFinder
+	progress             ReleaseProgress
 }
 
 func (operation validateGitHubActionsReleasePreflight) Validate(execCtx *ReleaseExecutionContext, files KnownReleaseFiles) (validatedGitHubActionsReleasePreflight, error) {
-	log.PluginPrint(log.Exec, "Running git preflight checks")
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitPreflightStarted})
 	preflight, err := operation.git.Preflight(execCtx, files)
 	if err != nil {
 		return validatedGitHubActionsReleasePreflight{}, err
 	}
-	log.PluginPrint(log.Exec, "Git preflight: branch=%s remote=%s upstream=%s", preflight.Branch, preflight.Remote, preflight.UpstreamBranch)
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{
+		Kind:           ReleaseProgressGitPreflightSummary,
+		Branch:         preflight.Branch,
+		Remote:         preflight.Remote,
+		UpstreamBranch: preflight.UpstreamBranch,
+	})
 	remoteURL, err := operation.git.RemoteURL(execCtx.RepositoryRoot, preflight.Remote)
 	if err != nil {
 		return validatedGitHubActionsReleasePreflight{}, err
 	}
-	log.PluginPrint(log.Exec, "Git preflight: remote URL=%s", sanitizeRemoteForLog(remoteURL))
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitPreflightRemoteURL, SafeRemoteURL: sanitizeRemoteForLog(remoteURL)})
 	if _, targetErr := ResolveGitHubRepositoryTarget(preflight.Remote, remoteURL); targetErr != nil {
 		return validatedGitHubActionsReleasePreflight{}, targetErr
 	}
-	log.PluginPrint(log.Exec, "Git preflight: workflow validation passed for %s", execCtx.Workflow)
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitPreflightWorkflowValidated, Workflow: execCtx.Workflow})
 	unresolved, err := operation.unresolvedExecutions.FindUnresolved(remoteURL, execCtx.Unit.ID)
 	if err != nil {
 		return validatedGitHubActionsReleasePreflight{}, err
 	}
-	log.PluginPrint(log.Exec, "Execution journal preflight: unresolved journals=%d", len(unresolved))
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitPreflightUnresolvedJournals, Count: len(unresolved)})
 	if len(unresolved) > 0 {
 		return validatedGitHubActionsReleasePreflight{}, fmt.Errorf("unresolved V2 release execution journal exists for unit %q; use neko release resume --unit %s", execCtx.Unit.ID, execCtx.Unit.ID)
 	}
@@ -201,13 +208,14 @@ func (operation validateGitHubActionsReleasePreflight) Validate(execCtx *Release
 	if err != nil {
 		return validatedGitHubActionsReleasePreflight{}, err
 	}
-	log.PluginPrint(log.Exec, "Base commit before release: %s", baseSHA)
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressGitPreflightBaseCommit, CommitSHA: baseSHA})
 	return validatedGitHubActionsReleasePreflight{Git: preflight, RemoteURL: remoteURL, BaseCommitSHA: baseSHA}, nil
 }
 
 type prepareGitHubActionsReleaseExecution struct {
-	journal releaseExecutionJournalPreparation
-	clock   ReleaseClock
+	journal  releaseExecutionJournalPreparation
+	clock    ReleaseClock
+	progress ReleaseProgress
 }
 
 func (operation prepareGitHubActionsReleaseExecution) Prepare(execCtx *ReleaseExecutionContext, files KnownReleaseFiles, preflight validatedGitHubActionsReleasePreflight) (preparedGitHubActionsReleaseExecution, error) {
@@ -215,100 +223,106 @@ func (operation prepareGitHubActionsReleaseExecution) Prepare(execCtx *ReleaseEx
 	if err != nil {
 		return preparedGitHubActionsReleaseExecution{}, err
 	}
-	log.PluginPrint(log.Exec, "Preparing execution journal")
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressExecutionJournalPreparing})
 	resolution, err := operation.journal.Prepare(journal)
 	if err != nil {
 		return preparedGitHubActionsReleaseExecution{}, err
 	}
-	log.PluginPrint(log.Exec, "Execution journal path: %s", resolution.Path)
-	log.PluginPrint(log.Exec, "Execution journal identity: %s", journal.Identity.SHA256)
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{
+		Kind:     ReleaseProgressExecutionJournalPrepared,
+		Path:     resolution.Path,
+		Identity: journal.Identity.SHA256,
+	})
 	journal = resolution.Journal
 	if _, err := operation.journal.ConfirmPhase(journal.Identity, ReleaseExecutionPreflightValidated, ReleaseExecutionJournalUpdate{}); err != nil {
 		return preparedGitHubActionsReleaseExecution{}, err
 	}
-	log.PluginPrint(log.Exec, "Execution phase: %s", ReleaseExecutionPreflightValidated)
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressExecutionPhase, Phase: string(ReleaseExecutionPreflightValidated)})
 	return preparedGitHubActionsReleaseExecution{Identity: journal.Identity, Path: resolution.Path}, nil
 }
 
 type applyGitHubActionsReleaseMaterialization struct {
 	journal      releaseExecutionJournalMutations
 	transactions releaseMaterializationTransactionFactory
+	progress     ReleaseProgress
 }
 
 func (operation applyGitHubActionsReleaseMaterialization) Apply(execution preparedGitHubActionsReleaseExecution, plan *MaterializationPlan) (releaseMaterializationRollback, error) {
 	transaction := operation.transactions.New(plan)
-	log.PluginPrint(log.Exec, "Capturing materialization snapshots")
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressMaterializationSnapshotCapturing})
 	if err := transaction.CaptureSnapshots(); err != nil {
 		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
 		return nil, err
 	}
-	log.PluginPrint(log.Exec, "Materialization snapshots captured")
-	log.PluginV(log.Exec, "Starting release action: %s", ReleaseExecutionPendingApplyMaterialization)
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressMaterializationSnapshotCaptured})
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressPendingActionStarting, PendingAction: string(ReleaseExecutionPendingApplyMaterialization)})
 	if _, err := operation.journal.BeginPending(execution.Identity, ReleaseExecutionPendingApplyMaterialization); err != nil {
 		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
 		return nil, err
 	}
-	log.PluginV(log.Exec, "Execution journal pending action recorded: %s", ReleaseExecutionPendingApplyMaterialization)
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressPendingActionRecorded, PendingAction: string(ReleaseExecutionPendingApplyMaterialization)})
 	if _, err := transaction.Apply(); err != nil {
 		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
 		return nil, err
 	}
-	log.PluginV(log.Exec, "Release action completed: %s", ReleaseExecutionPendingApplyMaterialization)
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressPendingActionFinished, PendingAction: string(ReleaseExecutionPendingApplyMaterialization)})
 	if _, err := operation.journal.ConfirmPhase(execution.Identity, ReleaseExecutionMaterializationApplied, ReleaseExecutionJournalUpdate{}); err != nil {
 		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
 		return nil, err
 	}
-	log.PluginV(log.Exec, "Execution phase confirmed: %s", ReleaseExecutionMaterializationApplied)
-	log.PluginPrint(log.Exec, "Applied materialized files: %s", materializedFilesValue(plan))
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressExecutionPhaseConfirmed, Phase: string(ReleaseExecutionMaterializationApplied)})
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressMaterializedFilesApplied, Files: []string{materializedFilesValue(plan)}})
 	return transaction, nil
 }
 
 type writeGitHubActionsReleaseState struct {
 	journal      releaseExecutionJournalMutations
 	transactions releaseStateTransactionFactory
+	progress     ReleaseProgress
 }
 
 func (operation writeGitHubActionsReleaseState) Write(execCtx *ReleaseExecutionContext, execution preparedGitHubActionsReleaseExecution, materialization releaseMaterializationRollback) (releaseStateRollback, error) {
 	transaction := operation.transactions.New(execCtx.RepositoryRoot)
-	log.PluginPrint(log.Exec, "Capturing V2 state snapshot")
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressStateSnapshotCapturing})
 	if err := transaction.CaptureSnapshot(); err != nil {
 		_ = materialization.Restore()
 		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
 		return nil, err
 	}
-	log.PluginPrint(log.Exec, "V2 state snapshot captured: %s", releaseconfig.V2StatePath(execCtx.RepositoryRoot))
-	log.PluginPrint(log.Exec, "Writing V2 state update: %s -> %s", execCtx.Unit.ID, execCtx.NextVersion)
-	log.PluginV(log.Exec, "Starting release action: %s", ReleaseExecutionPendingWriteState)
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressStateSnapshotCaptured, Path: releaseconfig.V2StatePath(execCtx.RepositoryRoot)})
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressStateUpdateWriting, UnitID: execCtx.Unit.ID, NextVersion: execCtx.NextVersion})
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressPendingActionStarting, PendingAction: string(ReleaseExecutionPendingWriteState)})
 	if _, err := operation.journal.BeginPending(execution.Identity, ReleaseExecutionPendingWriteState); err != nil {
 		_ = materialization.Restore()
 		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
 		return nil, err
 	}
-	log.PluginV(log.Exec, "Execution journal pending action recorded: %s", ReleaseExecutionPendingWriteState)
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressPendingActionRecorded, PendingAction: string(ReleaseExecutionPendingWriteState)})
 	if err := transaction.WriteUnitVersion(execCtx.Unit.ID, execCtx.NextVersion); err != nil {
 		_ = materialization.Restore()
 		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
 		return nil, err
 	}
-	log.PluginV(log.Exec, "Release action completed: %s", ReleaseExecutionPendingWriteState)
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressPendingActionFinished, PendingAction: string(ReleaseExecutionPendingWriteState)})
 	if _, err := operation.journal.ConfirmPhase(execution.Identity, ReleaseExecutionStateWritten, ReleaseExecutionJournalUpdate{}); err != nil {
 		_ = materialization.Restore()
 		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
 		return nil, err
 	}
-	log.PluginV(log.Exec, "Execution phase confirmed: %s", ReleaseExecutionStateWritten)
-	log.PluginPrint(log.Exec, "State update written")
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressExecutionPhaseConfirmed, Phase: string(ReleaseExecutionStateWritten)})
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressStateUpdateWritten})
 	return transaction, nil
 }
 
 type stageGitHubActionsReleaseFiles struct {
-	journal releaseExecutionJournalMutations
-	git     githubActionsReleaseStagingGit
+	journal  releaseExecutionJournalMutations
+	git      githubActionsReleaseStagingGit
+	progress ReleaseProgress
 }
 
 func (operation stageGitHubActionsReleaseFiles) Stage(execCtx *ReleaseExecutionContext, execution preparedGitHubActionsReleaseExecution, files KnownReleaseFiles, state releaseStateRollback, materialization releaseMaterializationRollback) error {
-	log.PluginPrint(log.Exec, "Staging targeted release files: %s", strings.Join(files.RelativePaths(), ", "))
-	log.PluginV(log.Exec, "Starting release action: %s", ReleaseExecutionPendingStageReleaseFiles)
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressStagingTargetedFiles, Files: files.RelativePaths()})
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressPendingActionStarting, PendingAction: string(ReleaseExecutionPendingStageReleaseFiles)})
 	if _, err := operation.journal.BeginPending(execution.Identity, ReleaseExecutionPendingStageReleaseFiles); err != nil {
 		_ = state.RestoreSnapshot()
 		_ = materialization.Restore()
@@ -316,7 +330,7 @@ func (operation stageGitHubActionsReleaseFiles) Stage(execCtx *ReleaseExecutionC
 		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
 		return err
 	}
-	log.PluginV(log.Exec, "Execution journal pending action recorded: %s", ReleaseExecutionPendingStageReleaseFiles)
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressPendingActionRecorded, PendingAction: string(ReleaseExecutionPendingStageReleaseFiles)})
 	if err := operation.git.Stage(execCtx, files); err != nil {
 		_ = state.RestoreSnapshot()
 		_ = materialization.Restore()
@@ -324,7 +338,7 @@ func (operation stageGitHubActionsReleaseFiles) Stage(execCtx *ReleaseExecutionC
 		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
 		return err
 	}
-	log.PluginV(log.Exec, "Release action completed: %s", ReleaseExecutionPendingStageReleaseFiles)
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressPendingActionFinished, PendingAction: string(ReleaseExecutionPendingStageReleaseFiles)})
 	if _, err := operation.journal.ConfirmPhase(execution.Identity, ReleaseExecutionReleaseFilesStaged, ReleaseExecutionJournalUpdate{}); err != nil {
 		_ = state.RestoreSnapshot()
 		_ = materialization.Restore()
@@ -332,22 +346,23 @@ func (operation stageGitHubActionsReleaseFiles) Stage(execCtx *ReleaseExecutionC
 		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
 		return err
 	}
-	log.PluginV(log.Exec, "Execution phase confirmed: %s", ReleaseExecutionReleaseFilesStaged)
-	log.PluginPrint(log.Exec, "Targeted release files staged")
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressExecutionPhaseConfirmed, Phase: string(ReleaseExecutionReleaseFilesStaged)})
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressTargetedFilesStaged})
 	return nil
 }
 
 type createGitHubActionsReleaseCommit struct {
-	journal releaseExecutionJournalMutations
-	git     githubActionsReleaseCommitGit
+	journal  releaseExecutionJournalMutations
+	git      githubActionsReleaseCommitGit
+	progress ReleaseProgress
 }
 
 func (operation createGitHubActionsReleaseCommit) Create(execCtx *ReleaseExecutionContext, execution preparedGitHubActionsReleaseExecution, files KnownReleaseFiles) (string, error) {
 	if _, err := operation.journal.BeginPending(execution.Identity, ReleaseExecutionPendingCreateReleaseCommit); err != nil {
 		return "", err
 	}
-	log.PluginV(log.Exec, "Execution journal pending action recorded: %s", ReleaseExecutionPendingCreateReleaseCommit)
-	log.PluginPrint(log.Exec, "Creating release commit: %s", ReleaseCommitMessage(execCtx))
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressPendingActionRecorded, PendingAction: string(ReleaseExecutionPendingCreateReleaseCommit)})
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressReleaseCommitCreating, CommitMessage: ReleaseCommitMessage(execCtx)})
 	commitSHA, err := operation.git.Commit(execCtx, files)
 	if err == nil {
 		_, err = operation.journal.ConfirmPhase(execution.Identity, ReleaseExecutionCommitCreated, ReleaseExecutionJournalUpdate{ReleaseCommitSHA: commitSHA})
@@ -356,22 +371,23 @@ func (operation createGitHubActionsReleaseCommit) Create(execCtx *ReleaseExecuti
 		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
 		return "", err
 	}
-	log.PluginV(log.Exec, "Execution phase confirmed: %s", ReleaseExecutionCommitCreated)
-	log.PluginPrint(log.Exec, "Release commit created: %s", commitSHA)
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressExecutionPhaseConfirmed, Phase: string(ReleaseExecutionCommitCreated)})
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressReleaseCommitCreated, CommitSHA: commitSHA})
 	return commitSHA, nil
 }
 
 type createGitHubActionsReleaseTag struct {
-	journal releaseExecutionJournalMutations
-	git     githubActionsReleaseTagGit
+	journal  releaseExecutionJournalMutations
+	git      githubActionsReleaseTagGit
+	progress ReleaseProgress
 }
 
 func (operation createGitHubActionsReleaseTag) Create(execCtx *ReleaseExecutionContext, execution preparedGitHubActionsReleaseExecution, commitSHA string) error {
 	if _, err := operation.journal.BeginPending(execution.Identity, ReleaseExecutionPendingCreateUnitTag); err != nil {
 		return err
 	}
-	log.PluginV(log.Exec, "Execution journal pending action recorded: %s", ReleaseExecutionPendingCreateUnitTag)
-	log.PluginPrint(log.Exec, "Creating unit tag: %s", execCtx.Tag)
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressPendingActionRecorded, PendingAction: string(ReleaseExecutionPendingCreateUnitTag)})
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressUnitTagCreating, Tag: execCtx.Tag})
 	if _, err := operation.git.CreateTag(execCtx, commitSHA); err != nil {
 		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
 		return err
@@ -379,7 +395,7 @@ func (operation createGitHubActionsReleaseTag) Create(execCtx *ReleaseExecutionC
 	if _, err := operation.journal.ConfirmPhase(execution.Identity, ReleaseExecutionTagCreated, ReleaseExecutionJournalUpdate{TagTargetSHA: commitSHA}); err != nil {
 		return err
 	}
-	log.PluginV(log.Exec, "Execution phase confirmed: %s", ReleaseExecutionTagCreated)
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressExecutionPhaseConfirmed, Phase: string(ReleaseExecutionTagCreated)})
 	return nil
 }
 
@@ -414,6 +430,7 @@ type prepareGitHubActionsReleaseDispatch struct {
 	journal  releaseExecutionJournalMutations
 	dispatch releaseDispatchJournalPreparation
 	requests releaseDispatchRequestBuilder
+	progress ReleaseProgress
 }
 
 func (operation prepareGitHubActionsReleaseDispatch) Prepare(execCtx *ReleaseExecutionContext, execution preparedGitHubActionsReleaseExecution, preflight validatedGitHubActionsReleasePreflight, files KnownReleaseFiles, commitSHA string) (preparedGitHubActionsReleaseDispatch, error) {
@@ -425,81 +442,89 @@ func (operation prepareGitHubActionsReleaseDispatch) Prepare(execCtx *ReleaseExe
 	if _, pendingErr := operation.journal.BeginPending(execution.Identity, ReleaseExecutionPendingCreateDispatchJournal); pendingErr != nil {
 		return preparedGitHubActionsReleaseDispatch{}, pendingErr
 	}
-	log.PluginV(log.Exec, "Execution journal pending action recorded: %s", ReleaseExecutionPendingCreateDispatchJournal)
-	log.PluginPrint(log.Exec, "Preparing dispatch journal")
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressPendingActionRecorded, PendingAction: string(ReleaseExecutionPendingCreateDispatchJournal)})
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressDispatchJournalPrepare})
 	resolution, err := operation.dispatch.Prepare(request)
 	if err != nil {
 		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
 		return preparedGitHubActionsReleaseDispatch{}, err
 	}
-	log.PluginPrint(log.Exec, "Dispatch journal path: %s", resolution.Path)
-	log.PluginPrint(log.Exec, "Dispatch inputs: %s", dispatchInputsValue(request.Inputs))
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressDispatchJournalReady, Path: resolution.Path})
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressDispatchInputs, Inputs: releaseProgressInputs(request.Inputs)})
 	if _, err := operation.journal.ConfirmPhase(execution.Identity, ReleaseExecutionDispatchJournalPrepared, ReleaseExecutionJournalUpdate{DispatchJournalIdentity: request.Identity.SHA256}); err != nil {
 		return preparedGitHubActionsReleaseDispatch{}, err
 	}
-	log.PluginV(log.Exec, "Execution phase confirmed: %s", ReleaseExecutionDispatchJournalPrepared)
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressExecutionPhaseConfirmed, Phase: string(ReleaseExecutionDispatchJournalPrepared)})
 	return preparedGitHubActionsReleaseDispatch{Request: request, Path: resolution.Path}, nil
 }
 
 type pushGitHubActionsReleaseCommit struct {
-	journal releaseExecutionJournalMutations
-	git     githubActionsReleaseCommitPushGit
+	journal  releaseExecutionJournalMutations
+	git      githubActionsReleaseCommitPushGit
+	progress ReleaseProgress
 }
 
 func (operation pushGitHubActionsReleaseCommit) Push(execCtx *ReleaseExecutionContext, execution preparedGitHubActionsReleaseExecution, preflight validatedGitHubActionsReleasePreflight, commitSHA string) error {
-	log.PluginPrint(log.Exec, "Pushing release commit %s to %s/%s", commitSHA, preflight.Git.Remote, preflight.Git.UpstreamBranch)
-	log.PluginV(log.Exec, "Starting release action: %s", ReleaseExecutionPendingPushReleaseCommit)
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{
+		Kind:           ReleaseProgressReleaseCommitPushing,
+		CommitSHA:      commitSHA,
+		Remote:         preflight.Git.Remote,
+		UpstreamBranch: preflight.Git.UpstreamBranch,
+	})
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressPendingActionStarting, PendingAction: string(ReleaseExecutionPendingPushReleaseCommit)})
 	if _, err := operation.journal.BeginPending(execution.Identity, ReleaseExecutionPendingPushReleaseCommit); err != nil {
 		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
 		return err
 	}
-	log.PluginV(log.Exec, "Execution journal pending action recorded: %s", ReleaseExecutionPendingPushReleaseCommit)
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressPendingActionRecorded, PendingAction: string(ReleaseExecutionPendingPushReleaseCommit)})
 	if err := operation.git.PushCommit(execCtx, preflight.Git.Remote, preflight.Git.UpstreamBranch, commitSHA); err != nil {
 		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
 		return err
 	}
-	log.PluginV(log.Exec, "Release action completed: %s", ReleaseExecutionPendingPushReleaseCommit)
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressPendingActionFinished, PendingAction: string(ReleaseExecutionPendingPushReleaseCommit)})
 	if _, err := operation.journal.ConfirmPhase(execution.Identity, ReleaseExecutionCommitPushed, ReleaseExecutionJournalUpdate{CommitPushStatus: "pushed"}); err != nil {
 		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
 		return err
 	}
-	log.PluginV(log.Exec, "Execution phase confirmed: %s", ReleaseExecutionCommitPushed)
-	log.PluginPrint(log.Exec, "Release commit push succeeded")
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressExecutionPhaseConfirmed, Phase: string(ReleaseExecutionCommitPushed)})
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressReleaseCommitPushDone})
 	return nil
 }
 
 type pushGitHubActionsReleaseTag struct {
-	journal releaseExecutionJournalMutations
-	git     githubActionsReleaseTagPushGit
+	journal  releaseExecutionJournalMutations
+	git      githubActionsReleaseTagPushGit
+	progress ReleaseProgress
 }
 
 func (operation pushGitHubActionsReleaseTag) Push(execCtx *ReleaseExecutionContext, execution preparedGitHubActionsReleaseExecution, preflight validatedGitHubActionsReleasePreflight, commitSHA string) error {
-	log.PluginPrint(log.Exec, "Pushing unit tag %s", execCtx.Tag)
-	log.PluginV(log.Exec, "Starting release action: %s", ReleaseExecutionPendingPushUnitTag)
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressUnitTagPushPreparing, Tag: execCtx.Tag})
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressPendingActionStarting, PendingAction: string(ReleaseExecutionPendingPushUnitTag)})
 	if _, err := operation.journal.BeginPending(execution.Identity, ReleaseExecutionPendingPushUnitTag); err != nil {
 		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
 		return err
 	}
-	log.PluginV(log.Exec, "Execution journal pending action recorded: %s", ReleaseExecutionPendingPushUnitTag)
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressPendingActionRecorded, PendingAction: string(ReleaseExecutionPendingPushUnitTag)})
 	if err := operation.git.PushTag(execCtx, preflight.Git.Remote, execCtx.Tag, commitSHA); err != nil {
 		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
 		return err
 	}
-	log.PluginV(log.Exec, "Release action completed: %s", ReleaseExecutionPendingPushUnitTag)
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressPendingActionFinished, PendingAction: string(ReleaseExecutionPendingPushUnitTag)})
 	if _, err := operation.journal.ConfirmPhase(execution.Identity, ReleaseExecutionTagPushed, ReleaseExecutionJournalUpdate{TagPushStatus: "pushed"}); err != nil {
 		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
 		return err
 	}
-	log.PluginV(log.Exec, "Execution phase confirmed: %s", ReleaseExecutionTagPushed)
-	log.PluginPrint(log.Exec, "Unit tag push succeeded")
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressExecutionPhaseConfirmed, Phase: string(ReleaseExecutionTagPushed)})
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressUnitTagPushDone})
 	return nil
 }
 
 type dispatchGitHubActionsReleaseWorkflow struct {
-	client  GitHubActionsWorkflowDispatchClient
-	journal releaseExecutionErrorRecorder
-	store   *DispatchJournalStore
-	clock   ReleaseClock
+	client   GitHubActionsWorkflowDispatchClient
+	journal  releaseExecutionErrorRecorder
+	store    *DispatchJournalStore
+	clock    ReleaseClock
+	progress ReleaseProgress
 }
 
 func (operation dispatchGitHubActionsReleaseWorkflow) Dispatch(ctx context.Context, execCtx *ReleaseExecutionContext, execution preparedGitHubActionsReleaseExecution, dispatch preparedGitHubActionsReleaseDispatch, token GitHubActionsDispatchToken) (*GitHubActionsDispatchResult, error) {
@@ -507,18 +532,19 @@ func (operation dispatchGitHubActionsReleaseWorkflow) Dispatch(ctx context.Conte
 		WithGitHubActionsDispatcherClient(operation.client),
 		WithGitHubActionsDispatcherStore(operation.store),
 		WithGitHubActionsDispatcherClock(operation.clock),
+		WithGitHubActionsDispatcherProgress(operation.progress),
 	)
 	if err != nil {
 		return nil, err
 	}
-	log.PluginPrint(log.Exec, "Dispatching workflow %s for ref %s", execCtx.Workflow, execCtx.Tag)
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressWorkflowDispatching, Workflow: execCtx.Workflow, Ref: execCtx.Tag})
 	result, err := dispatcher.dispatchWithToken(ctx, dispatch.Request, token)
 	if err != nil {
 		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
 		return nil, err
 	}
-	log.PluginPrint(log.Exec, "Dispatch state: %s", result.State)
-	log.PluginPrint(log.Exec, "Dispatch run: %s", emptyFallback(result.HTMLURL, "not resolved"))
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressDispatchState, DispatchState: string(result.State)})
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressDispatchRun, DispatchRunURL: result.HTMLURL})
 	if !result.Accepted {
 		_, _ = operation.journal.RecordLastError(execution.Identity, result.RecoveryGuidance)
 	}
@@ -541,30 +567,34 @@ func (runner *GitHubActionsReleaseRunner) newUseCase(repositoryRoot string) *git
 	dispatchVerifier := gitReleaseDispatchVerifier{coordinator: runner.coordinator}
 	return &githubActionsReleaseUseCase{
 		tokenResolver:      runner.tokenResolver,
-		planner:            versionMaterializationReleasePlanner{},
-		preflightValidator: validateGitHubActionsReleasePreflight{git: git, unresolvedExecutions: executionJournal},
-		executionPreparer:  prepareGitHubActionsReleaseExecution{journal: executionJournal, clock: runner.clock},
+		planner:            versionMaterializationReleasePlanner{progress: runner.progress},
+		preflightValidator: validateGitHubActionsReleasePreflight{git: git, unresolvedExecutions: executionJournal, progress: runner.progress},
+		executionPreparer:  prepareGitHubActionsReleaseExecution{journal: executionJournal, clock: runner.clock, progress: runner.progress},
 		materialization: applyGitHubActionsReleaseMaterialization{
 			journal:      executionJournal,
 			transactions: defaultReleaseMaterializationTransactionFactory{},
+			progress:     runner.progress,
 		},
 		stateWriter: writeGitHubActionsReleaseState{
 			journal:      executionJournal,
 			transactions: defaultReleaseStateTransactionFactory{},
+			progress:     runner.progress,
 		},
-		fileStager:       stageGitHubActionsReleaseFiles{journal: executionJournal, git: git},
-		commitCreator:    createGitHubActionsReleaseCommit{journal: executionJournal, git: git},
-		tagCreator:       createGitHubActionsReleaseTag{journal: executionJournal, git: git},
-		dispatchPreparer: prepareGitHubActionsReleaseDispatch{journal: executionJournal, dispatch: dispatchJournal, requests: verifiedReleaseDispatchRequestBuilder{git: dispatchVerifier}},
-		commitPusher:     pushGitHubActionsReleaseCommit{journal: executionJournal, git: git},
-		tagPusher:        pushGitHubActionsReleaseTag{journal: executionJournal, git: git},
+		fileStager:       stageGitHubActionsReleaseFiles{journal: executionJournal, git: git, progress: runner.progress},
+		commitCreator:    createGitHubActionsReleaseCommit{journal: executionJournal, git: git, progress: runner.progress},
+		tagCreator:       createGitHubActionsReleaseTag{journal: executionJournal, git: git, progress: runner.progress},
+		dispatchPreparer: prepareGitHubActionsReleaseDispatch{journal: executionJournal, dispatch: dispatchJournal, requests: verifiedReleaseDispatchRequestBuilder{git: dispatchVerifier}, progress: runner.progress},
+		commitPusher:     pushGitHubActionsReleaseCommit{journal: executionJournal, git: git, progress: runner.progress},
+		tagPusher:        pushGitHubActionsReleaseTag{journal: executionJournal, git: git, progress: runner.progress},
 		workflowDispatcher: dispatchGitHubActionsReleaseWorkflow{
-			client:  runner.dispatchClient,
-			journal: executionJournal,
-			store:   dispatchJournal,
-			clock:   runner.clock,
+			client:   runner.dispatchClient,
+			journal:  executionJournal,
+			store:    dispatchJournal,
+			clock:    runner.clock,
+			progress: runner.progress,
 		},
 		handoffConfirmer: confirmGitHubActionsReleaseHandoff{journal: executionJournal},
+		progress:         runner.progress,
 	}
 }
 

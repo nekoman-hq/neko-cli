@@ -105,6 +105,71 @@ func TestActiveV2TokenBoundaryHasNoStaticResolverAdapter(t *testing.T) {
 	}
 }
 
+func TestDX1ActiveV2ProgressDoesNotImportGlobalTerminalLogger(t *testing.T) {
+	for _, path := range []string{
+		"handler.go",
+		"github_actions_release_runner.go",
+		"github_actions_release_use_case.go",
+		"github_actions_release_operations.go",
+		"github_actions_dispatcher.go",
+		"git_release_preflight.go",
+		"git_release_coordinator.go",
+	} {
+		source := readCommandBoundarySource(t, path)
+		for _, forbidden := range []string{
+			"github.com/nekoman-hq/neko-cli/pkg/log",
+			"log.PluginPrint",
+			"log.PluginV",
+		} {
+			if strings.Contains(source, forbidden) {
+				t.Fatalf("%s still depends on global terminal logger through %q", path, forbidden)
+			}
+		}
+	}
+}
+
+func TestDX1TerminalRenderingIsOwnedByAdapters(t *testing.T) {
+	for _, path := range []string{"release_progress_terminal.go", "git_release_diagnostics_terminal.go"} {
+		source := readCommandBoundarySource(t, path)
+		if !strings.Contains(source, "github.com/nekoman-hq/neko-cli/pkg/log") {
+			t.Fatalf("%s is expected to own terminal logger access", path)
+		}
+	}
+}
+
+func TestDX1ProgressBoundaryDoesNotConstructResponsesOrEventInfrastructure(t *testing.T) {
+	for _, path := range []string{"release_progress.go", "release_progress_terminal.go"} {
+		source := readCommandBoundarySource(t, path)
+		for _, forbidden := range []string{
+			"plugin.Response",
+			"github.com/nekoman-hq/neko-cli/pkg/plugin",
+			"ProgressManager",
+			"ProgressCoordinator",
+			"ProgressService",
+			"EventBus",
+			"Subscribe(",
+			"Publish(",
+			"[]ReleaseProgress{",
+			"chan ReleaseProgress",
+			"func(",
+		} {
+			if strings.Contains(source, forbidden) {
+				t.Fatalf("%s contains prohibited progress architecture %q", path, forbidden)
+			}
+		}
+	}
+}
+
+func TestDX1ReleaseProgressReporterIsInfallible(t *testing.T) {
+	source := readCommandBoundarySource(t, "release_progress.go")
+	if !strings.Contains(source, "ReportReleaseProgress(event ReleaseProgressEvent)") {
+		t.Fatal("ReleaseProgress must remain a narrow typed event reporter")
+	}
+	if strings.Contains(source, "ReportReleaseProgress(event ReleaseProgressEvent) error") {
+		t.Fatal("ReleaseProgress reporter must not return errors")
+	}
+}
+
 func readCommandBoundarySource(t *testing.T, path string) string {
 	t.Helper()
 	data, err := os.ReadFile(path)

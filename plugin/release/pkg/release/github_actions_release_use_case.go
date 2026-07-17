@@ -3,8 +3,6 @@ package release
 import (
 	"context"
 	"fmt"
-
-	"github.com/nekoman-hq/neko-cli/pkg/log"
 )
 
 type plannedGitHubActionsRelease struct {
@@ -105,15 +103,16 @@ type githubActionsReleaseUseCase struct {
 	tagPusher          githubActionsReleaseTagPusher
 	workflowDispatcher githubActionsReleaseWorkflowDispatcher
 	handoffConfirmer   githubActionsReleaseHandoffConfirmer
+	progress           ReleaseProgress
 }
 
 func (useCase *githubActionsReleaseUseCase) Run(ctx context.Context, execCtx *ReleaseExecutionContext) (*GitHubActionsReleaseResult, error) {
-	log.PluginPrint(log.Exec, "GitHub token preflight: resolving token without printing it")
+	reportReleaseProgress(useCase.progress, ReleaseProgressEvent{Kind: ReleaseProgressTokenPreflightResolving})
 	token, err := useCase.tokenResolver.ResolveGitHubActionsDispatchToken(ctx)
 	if err != nil {
 		return nil, err
 	}
-	log.PluginPrint(log.Exec, "GitHub token preflight: token available")
+	reportReleaseProgress(useCase.progress, ReleaseProgressEvent{Kind: ReleaseProgressTokenPreflightAvailable})
 
 	planned, err := useCase.planner.Plan(execCtx)
 	if err != nil {
@@ -167,8 +166,14 @@ func (useCase *githubActionsReleaseUseCase) Run(ctx context.Context, execCtx *Re
 		return nil, err
 	}
 
-	log.PluginPrint(log.Exec, "Execution state: %s", ReleaseExecutionHandoffReady)
-	log.PluginPrint(log.Exec, "Recovery guidance: GitHub Actions dispatch accepted. GitHub Actions owns build and publish from the pushed tag.")
+	reportReleaseProgress(useCase.progress, ReleaseProgressEvent{
+		Kind:  ReleaseProgressExecutionState,
+		Phase: string(ReleaseExecutionHandoffReady),
+	})
+	reportReleaseProgress(useCase.progress, ReleaseProgressEvent{
+		Kind:     ReleaseProgressRecoveryGuidance,
+		Guidance: "GitHub Actions dispatch accepted. GitHub Actions owns build and publish from the pushed tag.",
+	})
 	return acceptedGitHubActionsReleaseResult(execCtx, execution, commitSHA, dispatchResult), nil
 }
 

@@ -11,7 +11,6 @@ import (
 	"context"
 	"strings"
 
-	"github.com/nekoman-hq/neko-cli/pkg/log"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
@@ -46,6 +45,7 @@ type releaseStartOperation struct {
 	repositories releaseRepositoryReader
 	v1           v1ReleaseApplication
 	v2           v2ReleaseApplication
+	progress     ReleaseProgress
 }
 
 func newReleaseStartOperation() releaseStartOperation {
@@ -53,15 +53,20 @@ func newReleaseStartOperation() releaseStartOperation {
 }
 
 func newReleaseStartOperationWithV1Executors(executors v1ReleaseExecutorCatalog) releaseStartOperation {
+	progress := newTerminalReleaseProgress()
 	return releaseStartOperation{
 		repositories: releaseConfigRepositoryReader{},
 		v1:           composeV1ReleaseCommandApplication(executors),
-		v2:           v2ReleaseCommandApplication{},
+		v2:           v2ReleaseCommandApplication{progress: progress},
+		progress:     progress,
 	}
 }
 
 func (operation releaseStartOperation) Start(ctx context.Context, request ReleaseCommandRequest) (ReleaseCommandOutcome, *CommandFailure) {
-	log.PluginPrint(log.Exec, "Starting %s release", string(request.ReleaseType))
+	reportReleaseProgress(operation.progress, ReleaseProgressEvent{
+		Kind:        ReleaseProgressReleaseStarted,
+		ReleaseType: string(request.ReleaseType),
+	})
 
 	repository, err := operation.repositories.Load(".")
 	if err != nil {
@@ -89,9 +94,11 @@ func (operation releaseStartOperation) Start(ctx context.Context, request Releas
 	}
 }
 
-type v2ReleaseCommandApplication struct{}
+type v2ReleaseCommandApplication struct {
+	progress ReleaseProgress
+}
 
-func (v2ReleaseCommandApplication) Start(
+func (application v2ReleaseCommandApplication) Start(
 	ctx context.Context,
 	repository *config.ReleaseRepository,
 	request ReleaseCommandRequest,
@@ -104,15 +111,18 @@ func (v2ReleaseCommandApplication) Start(
 	if err != nil {
 		return nil, failureFromError("EXECUTION_CONTEXT_FAILED", err)
 	}
-	return startV2Release(ctx, execCtx)
+	return startV2Release(ctx, execCtx, application.progress)
 }
 
-func startV2Release(ctx context.Context, execCtx *ReleaseExecutionContext) (ReleaseCommandOutcome, *CommandFailure) {
+func startV2Release(ctx context.Context, execCtx *ReleaseExecutionContext, progress ReleaseProgress) (ReleaseCommandOutcome, *CommandFailure) {
 	if execCtx.DryRun {
-		return planV2Release(execCtx)
+		return planV2Release(execCtx, progress)
 	}
 	if execCtx.Delivery == string(config.DeliveryGitHubActions) {
-		result, err := NewGitHubActionsReleaseRunner().Run(ctx, execCtx)
+		result, err := NewGitHubActionsReleaseRunner(
+			WithGitHubActionsReleaseProgress(progress),
+			withGitHubActionsReleaseGitDiagnostics(newTerminalGitReleaseDiagnostics()),
+		).Run(ctx, execCtx)
 		if err != nil {
 			return nil, failureFromError("V2_GITHUB_ACTIONS_RELEASE_FAILED", err)
 		}
@@ -124,7 +134,7 @@ func startV2Release(ctx context.Context, execCtx *ReleaseExecutionContext) (Rele
 	return nil, failureFromMessage("V2_PUBLICATION_ADAPTERS_UNAVAILABLE", v2GitCoordinationUnavailableMessage)
 }
 
-func planV2Release(execCtx *ReleaseExecutionContext) (ReleaseCommandOutcome, *CommandFailure) {
+func planV2Release(execCtx *ReleaseExecutionContext, progress ReleaseProgress) (ReleaseCommandOutcome, *CommandFailure) {
 	if execCtx == nil {
 		return nil, failureFromMessage("EXECUTION_CONTEXT_FAILED", "release execution context is missing")
 	}
@@ -151,24 +161,38 @@ func planV2Release(execCtx *ReleaseExecutionContext) (ReleaseCommandOutcome, *Co
 	if err != nil {
 		return nil, failureFromError("DISPATCH_CONTRACT_FAILED", err)
 	}
-	logV2DryRunPlan(execCtx, materializationPlan, knownFiles, dispatchSummary)
+	reportV2DryRunPlan(progress, execCtx, materializationPlan, knownFiles, dispatchSummary)
 	return newV2ReleasePreview(execCtx, plan, materializationPlan, knownFiles, dispatchSummary), nil
 }
 
-func logV2DryRunPlan(execCtx *ReleaseExecutionContext, materializationPlan *MaterializationPlan, knownFiles KnownReleaseFiles, dispatchSummary *ReleaseDispatchDryRunSummary) {
-	log.PluginPrint(log.Config, "Repository root: %s", execCtx.RepositoryRoot)
-	log.PluginPrint(log.Config, "Release source format: %s", execCtx.SourceFormat)
-	log.PluginPrint(log.Config, "Selected unit: %s", execCtx.Unit.ID)
-	log.PluginPrint(log.Config, "Config path: %s", config.V2ConfigPath(execCtx.RepositoryRoot))
-	log.PluginPrint(log.Config, "State path: %s", config.V2StatePath(execCtx.RepositoryRoot))
-	log.PluginPrint(log.Exec, "Planning V2 dry-run: current=%s next=%s tag=%s", execCtx.CurrentVersion, execCtx.NextVersion, execCtx.Tag)
-	log.PluginPrint(log.Exec, "Executor=%s delivery=%s workflow=%s tagPrefix=%s", execCtx.Executor, execCtx.Delivery, workflowValue(execCtx.Workflow), execCtx.TagSpec.Prefix)
-	log.PluginPrint(log.Exec, "Planned materialized files: %s", materializedFilesValue(materializationPlan))
-	log.PluginPrint(log.Exec, "Known release files: %s", strings.Join(knownFiles.RelativePaths(), ", "))
-	log.PluginPrint(log.Exec, "Dry run only: no token required, no journal created, no commit/tag/push/dispatch")
+func reportV2DryRunPlan(progress ReleaseProgress, execCtx *ReleaseExecutionContext, materializationPlan *MaterializationPlan, knownFiles KnownReleaseFiles, dispatchSummary *ReleaseDispatchDryRunSummary) {
+	reportReleaseProgress(progress, ReleaseProgressEvent{
+		Kind:           ReleaseProgressRepositoryContext,
+		RepositoryRoot: execCtx.RepositoryRoot,
+		SourceFormat:   string(execCtx.SourceFormat),
+		UnitID:         execCtx.Unit.ID,
+		ConfigPath:     config.V2ConfigPath(execCtx.RepositoryRoot),
+		StatePath:      config.V2StatePath(execCtx.RepositoryRoot),
+	})
+	reportReleaseProgress(progress, ReleaseProgressEvent{
+		Kind:           ReleaseProgressDryRunPlan,
+		CurrentVersion: execCtx.CurrentVersion,
+		NextVersion:    execCtx.NextVersion,
+		Tag:            execCtx.Tag,
+		Executor:       execCtx.Executor,
+		Delivery:       execCtx.Delivery,
+		Workflow:       execCtx.Workflow,
+		TagPrefix:      execCtx.TagSpec.Prefix,
+	})
+	reportReleaseProgress(progress, ReleaseProgressEvent{Kind: ReleaseProgressMaterializationPlanningCompleted, Files: []string{materializedFilesValue(materializationPlan)}})
+	reportReleaseProgress(progress, ReleaseProgressEvent{Kind: ReleaseProgressKnownFiles, Files: knownFiles.RelativePaths()})
+	reportReleaseProgress(progress, ReleaseProgressEvent{Kind: ReleaseProgressDryRunBoundary})
 	if dispatchSummary != nil {
-		log.PluginPrint(log.Exec, "Planned dispatch ref: %s", dispatchSummary.Ref)
-		log.PluginPrint(log.Exec, "Planned dispatch inputs: %s", dispatchInputsValue(dispatchSummary.Inputs))
+		reportReleaseProgress(progress, ReleaseProgressEvent{
+			Kind:   ReleaseProgressDryRunDispatchPlan,
+			Ref:    dispatchSummary.Ref,
+			Inputs: releaseProgressInputs(dispatchSummary.Inputs),
+		})
 	}
 }
 
