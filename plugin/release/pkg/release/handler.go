@@ -142,34 +142,12 @@ func startV2Release(ctx context.Context, execCtx *ReleaseExecutionContext, progr
 }
 
 func planV2Release(execCtx *ReleaseExecutionContext, progress ReleaseProgress) (ReleaseCommandOutcome, *CommandFailure) {
-	if execCtx == nil {
-		return nil, failureFromMessage("EXECUTION_CONTEXT_FAILED", "release execution context is missing")
+	facts, failure := planV2ReleaseFacts(execCtx)
+	if failure != nil {
+		return nil, failure
 	}
-	if err := ValidateRequirementsForContext(execCtx); err != nil {
-		return nil, failureFromError("VALIDATION_FAILED", err)
-	}
-	plan := BuildReleasePlan(execCtx)
-	materializer, err := ResolveVersionMaterializer(execCtx.Executor)
-	if err != nil {
-		return nil, failureFromError("MATERIALIZATION_FAILED", err)
-	}
-	materializationPlan, err := materializer.Plan(execCtx)
-	if err != nil {
-		return nil, failureFromError("MATERIALIZATION_FAILED", err)
-	}
-	if validationErr := materializer.Validate(materializationPlan); validationErr != nil {
-		return nil, failureFromError("MATERIALIZATION_FAILED", validationErr)
-	}
-	knownFiles, err := NewKnownReleaseFiles(execCtx, materializationPlan)
-	if err != nil {
-		return nil, failureFromError("GIT_COORDINATION_FAILED", err)
-	}
-	dispatchSummary, err := BuildReleaseDispatchDryRunSummary(execCtx)
-	if err != nil {
-		return nil, failureFromError("DISPATCH_CONTRACT_FAILED", err)
-	}
-	reportV2DryRunPlan(progress, execCtx, materializationPlan, knownFiles, dispatchSummary)
-	return newV2ReleasePreview(execCtx, plan, materializationPlan, knownFiles, dispatchSummary), nil
+	reportV2DryRunPlan(progress, facts.ExecutionContext, facts.MaterializationPlan, facts.KnownFiles, facts.Dispatch)
+	return facts.ReleasePreview(), nil
 }
 
 func reportV2DryRunPlan(progress ReleaseProgress, execCtx *ReleaseExecutionContext, materializationPlan *MaterializationPlan, knownFiles KnownReleaseFiles, dispatchSummary *ReleaseDispatchDryRunSummary) {
