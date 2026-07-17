@@ -64,13 +64,19 @@ Operational state remains separately owned by its existing components: config/st
 
 Check, render, and planning modes remain write-free. The plugin-index JSON schema/order and command response schema are unchanged.
 
-## Pending architecture decisions
-
 ### Release plan inspection
 
-A future release-plan inspection command could provide token-free, read-only facts about selected source/unit, current and next version, tag, planned materialization, known release files, and local blockers without starting execution.
+`neko release plan` provides token-free, read-only facts about selected source/unit, current and next version, requested version change, tag, planned materialization, known release files, local blockers, and explicit limitations without starting execution.
 
-Such a command must reuse canonical planning facts, avoid token reads and mutation, keep output response mapping at the command boundary, and preserve existing dry-run behavior unless an explicit compatibility change is approved.
+The command has its own typed request, read-only use case, typed result, command-boundary mapper, and manifest entry. It uses canonical release source selection, V1 pure planning through `PlanV1Release`, V2 context construction through `BuildV2ReleaseExecutionContext`, and the shared V2 planning facts used by dry-run. It does not run release execution in a no-op mode.
+
+The inspection use case receives no token resolver, remote client, journal writer, evidence writer, Git mutator, executor runner, state persister, materialization transaction, dispatcher, or recovery capability. It does not inspect execution journals, dispatch journals, recovery evidence, remote tags, remote releases, workflow runs, token availability, provider authorization, or publication readiness.
+
+Existing `patch`, `minor`, and `major --dry-run` behavior remains a separate compatibility surface. Dry-run keeps its established response order and progress output while sharing V2 planning facts below the presentation boundary.
+
+V1 inspection is supported as a local planning subset: it reports the legacy source, virtual `default` unit, current and next version, tag, executor, planned `.release.neko.json` materialization, and limitations. It does not use the old cwd-based latest-tag evidence facade.
+
+## Pending architecture decisions
 
 ### V2 local delivery evaluation
 

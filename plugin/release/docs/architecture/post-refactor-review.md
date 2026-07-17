@@ -50,6 +50,7 @@ The verified command boundaries are:
 | Command area | Presentation boundary | Application boundary | Response owner |
 | --- | --- | --- | --- |
 | `patch`, `minor`, `major` | `releaseCommandHandler` and `ParseReleaseCommandRequest` | `releaseStartOperation`, then the selected V1 or V2 application | `MapReleaseCommandOutcome` and `MapCommandFailure` |
+| `plan` | `releasePlanCommandHandler` and `ParsePlanCommandRequest` | `releasePlanInspectionUseCase` | `MapReleasePlanInspection` and `MapCommandFailure` |
 | `resume` | `resumeCommandHandler` and `ParseResumeCommandRequest` | `resumeReleaseUseCase` | `MapResumeCommandOutcome` and `MapCommandFailure` |
 | `init`, `unit-add` | `HandleInit` / `HandleUnitAdd` plus command-specific parsers | `initializeV2RepositoryUseCase` / `addV2ReleaseUnitUseCase` | `response_mapper.go` in `pkg/init` |
 | `migrate` | `migrationCommandHandler` and `parseMigrationCommandRequest` | `migrationUseCase` and `migrationPlanExecution` | `pkg/migrate/response_mapper.go` |
@@ -68,6 +69,8 @@ explicit-root composition added explicit-root composition across the command sur
 `releaseStartOperation` loads the normalized repository and delegates exactly one release source decision to `selectReleaseApplicationPath`. `v2ReleaseCommandApplication` resolves the selected unit and builds a V2-only `ReleaseExecutionContext`.
 
 V2 dry-run is owned by `planV2Release`. It validates requirements, builds the version plan, plans and validates materialization, derives `KnownReleaseFiles`, and builds the immutable dispatch summary. It resolves no token and invokes no mutation adapter.
+
+Read-only release plan inspection is owned by `releasePlanInspectionUseCase`. It selects the canonical source once, resolves one unit, reuses `PlanV1Release` for the V1 subset and `planV2ReleaseFacts` for V2 facts, and maps typed planning data only at the command boundary. It receives no token resolver, remote client, journal writer, evidence writer, Git mutator, state persister, materialization executor, dispatcher, release runner, or recovery capability.
 
 V2 GitHub Actions execution is owned by `githubActionsReleaseUseCase.Run`. Its consumer-owned capabilities make the safety order explicit:
 
@@ -493,4 +496,4 @@ typed release progress reporting removed the last active presentation-boundary d
 
 This does not change the historical ledger: all nine planned refactor stages were completed. It means “completed” is a closed architecture record, not a claim that no future architecture maintenance exists.
 
-The architecture decision backlog, acceptance criteria, and commit-boundary guidance are defined in [architecture-evolution.md](architecture-evolution.md). V1 compensation interruption safety, V2 pair and migration crash recovery, evidence inspection and archival, V1 compatibility policy, retired-path cleanup, typed release progress reporting, and explicit-root composition are completed. The recommended next architecture decision is **generated-output path policy**.
+The architecture decision backlog, acceptance criteria, and commit-boundary guidance are defined in [architecture-evolution.md](architecture-evolution.md). V1 compensation interruption safety, V2 pair and migration crash recovery, evidence inspection and archival, V1 compatibility policy, retired-path cleanup, typed release progress reporting, explicit-root composition, generated-output path policy, and release plan inspection are completed. The recommended next architecture decision is **V2 local delivery evaluation**.
