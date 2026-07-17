@@ -120,14 +120,10 @@ type ReleaseProgressEvent struct {
 	Workflow       string
 	TagPrefix      string
 
-	Files  []string
-	Inputs []ReleaseProgressInput
-
 	Branch           string
 	Remote           string
 	UpstreamBranch   string
 	SafeRemoteURL    string
-	Count            int
 	CommitSHA        string
 	CommitMessage    string
 	TargetSHA        string
@@ -141,8 +137,11 @@ type ReleaseProgressEvent struct {
 	Owner            string
 	Repository       string
 	Ref              string
-	HTTPStatus       int
 	UnitStateVersion string
+	Files            []string
+	Inputs           []ReleaseProgressInput
+	Count            int
+	HTTPStatus       int
 }
 
 type ReleaseProgressInput struct {

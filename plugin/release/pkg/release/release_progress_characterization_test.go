@@ -229,11 +229,11 @@ func captureReleaseProgressOutput(t *testing.T, run func()) (string, string) {
 
 	run()
 
-	if err := stdoutWriter.Close(); err != nil {
-		t.Fatalf("close stdout writer: %v", err)
+	if closeErr := stdoutWriter.Close(); closeErr != nil {
+		t.Fatalf("close stdout writer: %v", closeErr)
 	}
-	if err := stderrWriter.Close(); err != nil {
-		t.Fatalf("close stderr writer: %v", err)
+	if closeErr := stderrWriter.Close(); closeErr != nil {
+		t.Fatalf("close stderr writer: %v", closeErr)
 	}
 	os.Stdout = originalStdout
 	os.Stderr = originalStderr
