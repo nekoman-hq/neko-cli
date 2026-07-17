@@ -20,10 +20,6 @@ type v1ReleaseCommandApplication struct {
 	execution v1ReleaseExecutorUseCase
 }
 
-func newV1ReleaseCommandApplication() v1ReleaseCommandApplication {
-	return composeV1ReleaseCommandApplication(registeredV1ReleaseExecutorCatalog{})
-}
-
 func composeV1ReleaseCommandApplication(executors v1ReleaseExecutorCatalog) v1ReleaseCommandApplication {
 	evidence := legacyV1VersionEvidence{}
 	v1GitRunner := newSystemV1GitCommandRunner()

@@ -155,14 +155,6 @@ func planV2Release(execCtx *ReleaseExecutionContext) (ReleaseCommandOutcome, *Co
 	return newV2ReleasePreview(execCtx, plan, materializationPlan, knownFiles, dispatchSummary), nil
 }
 
-func startLegacyRelease(execCtx *ReleaseExecutionContext, cfg *config.V1ReleaseConfig) (ReleaseCommandOutcome, *CommandFailure) { //nolint:staticcheck // V1 compatibility path intentionally uses the deprecated V1 schema.
-	repository := config.NormalizeV1Repository(execCtx.RepositoryRoot, cfg)
-	return newV1ReleaseCommandApplication().Start(context.Background(), repository, ReleaseCommandRequest{
-		ReleaseType: execCtx.ReleaseKind,
-		DryRun:      execCtx.DryRun,
-	})
-}
-
 func logV2DryRunPlan(execCtx *ReleaseExecutionContext, materializationPlan *MaterializationPlan, knownFiles KnownReleaseFiles, dispatchSummary *ReleaseDispatchDryRunSummary) {
 	log.PluginPrint(log.Config, "Repository root: %s", execCtx.RepositoryRoot)
 	log.PluginPrint(log.Config, "Release source format: %s", execCtx.SourceFormat)

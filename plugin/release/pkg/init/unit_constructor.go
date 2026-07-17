@@ -156,13 +156,6 @@ func commonV2Unit(initConfig v2InitConfig) config.V2Unit {
 	}
 }
 
-// buildV2InitConfigFromFlags remains as a narrow compatibility seam for tests
-// and internal callers while command handlers use typed requests directly.
-func buildV2InitConfigFromFlags(flags map[string]any) (v2InitConfig, error) {
-	constructed, err := constructV2Unit(parseV2UnitRequest(flags))
-	return constructed.Config, err
-}
-
 func parsePaths(value string) ([]string, error) {
 	parts := strings.Split(value, ",")
 	paths := make([]string, 0, len(parts))
