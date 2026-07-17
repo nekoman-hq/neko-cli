@@ -10,7 +10,8 @@ The behavior-preserving Release Plugin refactor is closed at 9 / 9 stages. This 
 - H2: completed
 - H3: completed
 - C1: completed
-- Next roadmap milestone: **C2 — Retire superseded and inactive release paths**
+- C2: completed
+- Next roadmap milestone: **DX1 — Isolate release progress reporting**
 
 The architecture evidence, debt ranking, compatibility inventory, and removal candidates behind this roadmap are in [post-refactor-review.md](post-refactor-review.md). The detailed runtime and disk contracts remain in [current-state.md](current-state.md). Every implementation milestone remains subject to `plugin/release/RULES.md`.
 
@@ -23,7 +24,7 @@ Milestone namespaces distinguish the nature of future work:
 | `DX` | Developer experience | Clarify presentation, composition, and filesystem policies |
 | `F` | New features | Add separately authorized user-facing capabilities |
 
-H1 — Make V1 compensation interruption-safe, H2 — Make pair and migration crash recovery explicit, H3 — Add evidence-safe journal inspection and lifecycle support, and C1 — Decide and deprecate V1 compatibility surfaces are completed. The recommended next milestone is **C2 — Retire superseded and inactive release paths**. Compatibility cleanup still does not have to precede unrelated product work; read-only F1 may proceed independently when it does not touch H2/H3 files or contracts.
+H1 — Make V1 compensation interruption-safe, H2 — Make pair and migration crash recovery explicit, H3 — Add evidence-safe journal inspection and lifecycle support, C1 — Decide and deprecate V1 compatibility surfaces, and C2 — Retire superseded and inactive release paths are completed. The recommended next milestone is **DX1 — Isolate release progress reporting**. Compatibility cleanup still does not have to precede unrelated product work; read-only F1 may proceed independently when it does not touch H2/H3 files or contracts.
 
 ## Sequencing and gates
 
@@ -43,7 +44,7 @@ F2  (decision milestone; implementation requires a later approved design)
 - H1 established the durable V1 compensation baseline; new V1 mutation work must preserve it.
 - H2 established the required evidence protocol for changes that add multi-file config/state writes or broaden migration.
 - H3 precedes any journal schema change or automated repair behavior.
-- C1 established support and deprecation policy before C2 removes exported compatibility code.
+- C1 established support and deprecation policy; C2 removed only candidates whose call-site evidence, replacement, and policy gates were satisfied.
 - DX1 should precede substantial edits to active V2 orchestration files.
 - F1 does not wait for compatibility cleanup. It may follow H1 or run independently when file ownership and validation remain isolated.
 - F2 is evaluation only. A positive decision creates a new, separately reviewed implementation milestone; it does not activate the existing scaffold.
@@ -101,19 +102,22 @@ F2  (decision milestone; implementation requires a later approved design)
 - **Risks:** Unseen Go consumers may compile against exported symbols; fatal and cwd behavior may be observable; partial deprecation can leave two apparent canonical paths.
 - **Acceptance criteria:** Every retained surface has an owner and support status; every deprecated surface points to a tested replacement; production stays on fixed explicit composition; globals have no new consumers; direct `Rollback` owns canonical executor rollback behavior before `RevertRelease` is considered removable; no public symbol is deleted in C1.
 - **Completed commit boundaries:** C1.1 `test(release): characterize v1 compatibility surfaces`; C1.2 `docs(release): decide v1 compatibility policy`; C1.3 `refactor(release): deprecate v1 compatibility surfaces`; C1.4 documentation closure uses commit message `docs(release): complete c1 compatibility deprecation`.
-- **Completion record:** Production remains on `HandleReleaseWithV1Executors` and fixed concrete V1 executors. `Service`, registry functions, registry package init, mixed execution-context builder, mutable version guards, cwd V1 config facades, selected executor legacy methods, and `V2ExecutionUnavailableResponse` now have precise deprecation comments. `Preflight`, `Tool`, `ToolBase`, legacy executor `Init`, explicit V1 config operations, pure `EnsureVersionIsValid`, system constructors, migration/plugin-index programmatic APIs, and undecided V2-local scaffolding were kept or deferred because no exact replacement/removal decision exists. `Rollback` owns concrete executor rollback behavior; `RevertRelease` is a deprecated direct delegate. No public symbol was removed.
+- **Completion record:** Production remains on `HandleReleaseWithV1Executors` and fixed concrete V1 executors. `Service`, registry functions, registry package init, mixed execution-context builder, mutable version guards, cwd V1 config facades, and selected executor legacy methods now have precise deprecation comments. `Preflight`, `Tool`, `ToolBase`, legacy executor `Init`, explicit V1 config operations, pure `EnsureVersionIsValid`, system constructors, migration/plugin-index programmatic APIs, and undecided V2-local scaffolding were kept or deferred because no exact replacement/removal decision exists. `Rollback` owns concrete executor rollback behavior; `RevertRelease` is a deprecated direct delegate. No public symbol was removed in C1.
 
 ### C2 — Retire superseded and inactive release paths
 
+- **Status:** **Completed.** C2 removed only paths with repository call-site evidence and an explicit replacement or unsupported decision, while retaining compatibility surfaces whose C1/F2 preconditions were not met.
 - **Objective:** Remove only code whose consumer audit and deprecation window prove it is superseded, test-only, or an unselected future scaffold.
 - **User value:** The supported release path becomes easier to understand and safer to extend, without breaking acknowledged consumers.
 - **Characterize first:** Re-run repository and downstream reference searches; move tests from private bridges to canonical boundaries; prove production uses named V2 operations and fixed V1 executors.
-- **Scope:** Eligible internal V1 bridges, inactive `ReleaseTransaction` preparation, `GitReleaseCoordinator.Coordinate`, `V2ExecutionUnavailableResponse`, `buildV2InitConfigFromFlags`, registry internals after C1, and the exact unused raw `pkg/git` helpers listed in the review.
+- **Scope:** Eligible internal V1 bridges, `GitReleaseCoordinator.Coordinate`, `V2ExecutionUnavailableResponse`, `buildV2InitConfigFromFlags`, and the exact unused raw `pkg/git` helpers listed in the review. `ReleaseTransaction` preparation and registry internals were audited but retained because their removal preconditions were not met.
 - **Non-goals:** Removing active `git.Current` or query/preflight helpers, deleting public APIs without policy, implementing V2 local execution, or combining cleanup with behavior changes.
 - **Dependencies:** completed C1 support decisions for exported V1 surfaces; F2 decision for local-execution scaffolding; deprecation window and downstream evidence.
 - **Risks:** Reflection, blank imports, or external packages may make a symbol reachable outside repository search; deleting test scaffolds can reduce failure coverage if tests are not moved first.
 - **Acceptance criteria:** Each deletion has call-site evidence and a replacement or explicit unsupported decision; architecture guards prevent reintroduction of competing orchestration; all behavior tests remain; release binaries and public docs contain no stale reference; removals are independently revertible by family.
-- **Expected commit boundaries:** (1) test migration; (2) private bridge removal; (3) inactive V2-local path decision/removal; (4) raw Git helper removal; (5) exported compatibility removals by separately announced family.
+- **Delivered commit boundaries:** C2.1 test migration `76252dd`; C2.2 private bridge removal `f3f0113`; C2.3 obsolete exported/internal helper removal `ddd687b`; C2.4 documentation closure uses commit message `docs(release): complete c2 path retirement`.
+- **Removal record:** C2 removed `release.startLegacyRelease`, `release.newV1ReleaseCommandApplication`, `init.buildV2InitConfigFromFlags`, `release.V2ExecutionUnavailableResponse`, `(*release.GitReleaseCoordinator).Coordinate`, and raw `plugin/release/pkg/git` helpers `LastCommit`, `TotalCommits`, `FilesCount`, `RepoSize`, `DeleteGithubRelease`, `Head`, `CleanUntracked`, `DeleteLocalTag`, `DeleteRemoteTag`, `RevertCommit`, `CreateCommit`, and `HardResetTo`.
+- **Retained record:** `ReleaseTransaction` and its preparation helpers remain blocked inactive scaffold pending F2. `Register`, `Get`, `tools`, and `pkg/release/tool` remain compatibility registry support while `HandleRelease` and `Service` are retained. `Service`, `Preflight`, `Tool`, `ToolBase`, executor legacy methods, `BuildReleaseExecutionContext`, cwd V1 config facades, `VersionGuard` helpers, migration/plugin-index APIs, and production constructors remain governed by the C1 policy register.
 
 ## Developer experience
 
@@ -173,8 +177,8 @@ F2  (decision milestone; implementation requires a later approved design)
 - **User value:** Users receive either a credible path to local V2 delivery or a clear explanation that GitHub Actions remains the supported owner.
 - **Characterize first:** Pin the current explicit block, executor capabilities, release-it ownership of Git actions, known-file/state requirements, and all V2 journal/recovery invariants.
 - **Scope:** Product use cases, executor feasibility, ownership of materialization/state/Git, state-in-commit proof, journal model, failure matrix, and migration/compatibility impact.
-- **Non-goals:** Activating `ReleaseTransaction`, using `GitReleaseCoordinator.Coordinate` as-is, implementing code, weakening GitHub Actions safety, or treating an executor subprocess as safely recoverable without proof.
-- **Dependencies:** Product approval, executor-specific experiments, and architecture review. A positive result creates a later implementation milestone; a negative result unlocks relevant C2 cleanup.
+- **Non-goals:** Activating `ReleaseTransaction`, reintroducing the removed `GitReleaseCoordinator.Coordinate` convenience path, implementing code, weakening GitHub Actions safety, or treating an executor subprocess as safely recoverable without proof.
+- **Dependencies:** Product approval, executor-specific experiments, and architecture review. A positive result creates a later implementation milestone; a negative result unlocks a later cleanup milestone for retained V2-local scaffold.
 - **Risks:** Some executors own commit/tag/push internally and cannot satisfy exact known-file or interruption guarantees; two active publication owners can drift.
 - **Acceptance criteria:** The decision is recorded per executor; any positive design proves exact state inclusion, commit/tag/push ownership, pending evidence, resume/refusal semantics, and token boundaries; no production path is activated by this milestone.
 - **Expected commit boundaries:** (1) characterization; (2) executor feasibility evidence; (3) architecture decision record; (4) roadmap update selecting a new feature milestone or C2 removal.
@@ -186,7 +190,7 @@ The following are not backlog omissions. They remain deliberate boundaries until
 - no blind retry of ambiguous push or uncertain workflow dispatch;
 - no remote-state inference that converts an observation into proof of safe retry;
 - no generic workflow pipeline, universal state-machine engine, dependency bag, or shared journal repository;
-- no V1 removal before C2 re-runs consumers, policy, replacements, and the deprecation window established by C1;
+- no V1 removal beyond C2's completed removal record without fresh consumers, policy, replacements, and deprecation evidence;
 - no V2 local execution before F2 and a subsequent implementation milestone prove executor ownership and recovery;
 - no journal schema migration or repair command without a concrete format/support need and an inspection-first design;
 - no process-wide cwd rewrite before an embedding/concurrency requirement justifies DX2;
@@ -194,6 +198,6 @@ The following are not backlog omissions. They remain deliberate boundaries until
 
 ## Roadmap completion reporting
 
-Roadmap progress is reported independently from the historical refactor ledger: “Refactor stages: 9 / 9 completed; roadmap milestones H1, H2, H3, and C1: completed; next milestone: C2 — Retire superseded and inactive release paths.” H1, H2, H3, C1, and later roadmap milestones must not be reported as Stage 10.
+Roadmap progress is reported independently from the historical refactor ledger: “Refactor stages: 9 / 9 completed; roadmap milestones H1, H2, H3, C1, and C2: completed; next milestone: DX1 — Isolate release progress reporting.” H1, H2, H3, C1, C2, and later roadmap milestones must not be reported as Stage 10.
 
 Each milestone begins with characterization, retains independently revertible commit boundaries, runs the full uncached Release Plugin and repository validation required by `plugin/release/RULES.md`, and updates this roadmap plus the architecture review when evidence changes a priority or recommendation.

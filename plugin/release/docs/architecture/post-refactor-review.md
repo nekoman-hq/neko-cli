@@ -134,7 +134,7 @@ Active V1 compensation remains intentionally separate from V2 recovery. Its stri
 
 ## Git ownership
 
-Active V2 release and resume use one `GitReleaseCoordinator` instance per composed operation graph. Consumer-owned adapters expose only the preflight, stage, commit, tag, push, verification, or inspection methods needed by each operation. `GitReleaseCoordinator.Coordinate` is not selected by production.
+Active V2 release and resume use one `GitReleaseCoordinator` instance per composed operation graph. Consumer-owned adapters expose only the preflight, stage, commit, tag, push, verification, or inspection methods needed by each operation. The former `GitReleaseCoordinator.Coordinate` convenience method was removed in C2.
 
 Active V1 execution uses `SystemV1GitWriter`, root-aware named compensation adapters, the V1 compensation evidence store, and the V1 preflight repository adapter because its commit, push, and destructive-compensation contracts differ from V2. `V1ReleaseRollback` remains reachable only through direct compatibility calls. Read-only query adapters use `pkg/git` for their legacy and selected-path reads. Migration has a migration-owned Git-root resolver.
 
@@ -170,8 +170,8 @@ The following families remain outside canonical production composition or wrap i
 
 - registry-backed release entry: `HandleRelease`, `Register`, `Get`, and the opt-in `pkg/release/tool` aggregator;
 - legacy V1 command and tool surfaces: `Service`, `Preflight`, `Tool`, `ToolBase`, and executor `Init` / `Execute` / `Release` / `RevertRelease` methods;
-- mixed-model builder and old internal bridges: `BuildReleaseExecutionContext`, `startLegacyRelease`, and `newV1ReleaseCommandApplication`;
-- inactive V2-local scaffolding: `ReleaseTransaction`, its preparation path, and `GitReleaseCoordinator.Coordinate`;
+- mixed-model builder: `BuildReleaseExecutionContext`; the old internal bridges `startLegacyRelease` and `newV1ReleaseCommandApplication` were removed by C2;
+- inactive V2-local scaffolding: `ReleaseTransaction` and its preparation path; the former `GitReleaseCoordinator.Coordinate` convenience path was removed by C2;
 - public query/migration wrappers: migration `ResolvePlan` / `Run` and plugin-index `Generate` / `Write` / `WriteWithOptions`;
 - public constructors with system defaults for release/dispatch journals, dispatch, Git coordination, and the active runner.
 
@@ -242,7 +242,7 @@ No P0 issue was found. The active V2 GitHub Actions path preserves evidence arou
 - **Removal or improvement preconditions:** Audit downstream imports, publish a deprecation window, offer explicit executor composition to embedders, and retain characterized lookup/overwrite behavior until removal.
 - **Recommended action:** **Replace** with explicit composition for all known consumers, then remove after compatibility policy permits.
 - **Priority:** **P2**.
-- **Proposed milestone:** **C1 — Decide and deprecate V1 compatibility surfaces** completed the support/deprecation decision; removal remains gated by **C2 — Retire superseded and inactive release paths**.
+- **Proposed milestone:** **C1 — Decide and deprecate V1 compatibility surfaces** completed the support/deprecation decision. C2 retained the registry because `HandleRelease` and `Service` still intentionally preserve registry-backed compatibility behavior.
 - **Blocking new features:** Not blocking product features; blocks adding new registry-based executors.
 
 ### D-06 — V1 version-evidence seams are mutable package globals
@@ -255,7 +255,7 @@ No P0 issue was found. The active V2 GitHub Actions path preserves evidence arou
 - **Removal or improvement preconditions:** Retain two-pass evidence semantics, inject the evidence source at compatibility composition, and keep public `VersionGuard` behavior characterized.
 - **Recommended action:** **Replace** the globals with explicit compatibility composition.
 - **Priority:** **P2**.
-- **Proposed milestone:** **C1 — Decide and deprecate V1 compatibility surfaces** completed the support/deprecation decision; removal remains gated by **C2 — Retire superseded and inactive release paths**.
+- **Proposed milestone:** **C1 — Decide and deprecate V1 compatibility surfaces** completed the support/deprecation decision. C2 retained the version-evidence seams because the public `VersionGuard` compatibility behavior and two-pass evidence semantics remain supported.
 - **Blocking new features:** Not blocking unrelated features; blocks parallel V1 execution support.
 
 ### D-07 — Working-directory ownership remains process-global
@@ -271,17 +271,17 @@ No P0 issue was found. The active V2 GitHub Actions path preserves evidence arou
 - **Proposed milestone:** **DX2 — Make command roots explicit for embedders**.
 - **Blocking new features:** Blocks safe in-process concurrency. It does not block single-request CLI features.
 
-### D-08 — Inactive V2-local transaction and coordinator convenience paths remain
+### D-08 — Inactive V2-local transaction remains; coordinator convenience was retired by C2
 
-- **Affected files or symbols:** `pkg/release/release_transaction.go`; `ReleaseTransaction`; `prepareReleaseFilesForCoordinator`; `MutationTracker`; `GitReleaseCoordinator.Coordinate`.
-- **Current behavior:** `ReleaseTransaction.Execute` always blocks non-dry-run V2 execution. Its private preparation and rollback-before-uncertainty code is exercised only by tests. `GitReleaseCoordinator.Coordinate` is functional and tested but production uses named operation adapters instead.
-- **Why it remains:** The refactor prohibited deleting public or potentially useful compatibility/scaffold code without a separate proof and support decision.
-- **Risk:** Readers can mistake these paths for active orchestration, and future work may accidentally extend the wrong path or create a second release sequence.
+- **Affected files or symbols:** `pkg/release/release_transaction.go`; `ReleaseTransaction`; `prepareReleaseFilesForCoordinator`; `MutationTracker`. C2 removed `GitReleaseCoordinator.Coordinate`.
+- **Current behavior:** `ReleaseTransaction.Execute` always blocks non-dry-run V2 execution. Its private preparation and rollback-before-uncertainty code is exercised only by tests. Active V2 release/resume use named operation adapters and focused coordinator methods; there is no longer a one-call coordinator convenience method.
+- **Why it remains:** `ReleaseTransaction` is exported/inactive V2-local scaffold, and F2 has not decided whether local delivery is a product goal. C2 did have enough evidence to remove `GitReleaseCoordinator.Coordinate` because production did not call it and tests moved to focused coordinator methods.
+- **Risk:** Readers can still mistake `ReleaseTransaction` preparation for active orchestration, and future work may accidentally extend the wrong scaffold.
 - **User or developer impact:** No current command behavior is affected; maintenance and onboarding cost remain.
-- **Removal or improvement preconditions:** Search downstream consumers, decide whether V2 local execution is a real product goal, preserve any public compatibility contract, and prove all active production call sites use named operations.
-- **Recommended action:** **Remove** internal test-only preparation if local execution is rejected; otherwise keep it isolated as a deliberately redesigned future feature. Deprecate public convenience paths before removal.
+- **Removal or improvement preconditions:** Search downstream consumers, decide whether V2 local execution is a real product goal, preserve any public compatibility contract, and prove all active production call sites keep using named operations.
+- **Recommended action:** **Defer** `ReleaseTransaction` until F2. Keep C2's guard that prevents reintroducing `GitReleaseCoordinator.Coordinate`.
 - **Priority:** **P2**.
-- **Proposed milestone:** **C2 — Retire superseded and inactive release paths**.
+- **Proposed milestone:** **F2 — Evaluate V2 local delivery** for `ReleaseTransaction`; C2 completed the coordinator convenience removal.
 - **Blocking new features:** Blocks implementation of V2 local execution on the current scaffold. It does not block GitHub Actions features.
 
 ### D-09 — V2 local execution remains blocked
@@ -326,15 +326,15 @@ No P0 issue was found. The active V2 GitHub Actions path preserves evidence arou
 
 ### D-12 — Public compatibility wrappers remain broad
 
-- **Affected files or symbols:** the complete compatibility inventory below, including `HandleRelease`, `Service`, `Preflight`, `Tool`, `ToolBase`, executor legacy methods, mixed context construction, query/migration facades, and system-default constructors.
-- **Current behavior:** Some wrappers directly delegate; others preserve fatal exit, cwd, registry, default-construction, or legacy method-shape behavior. Production composition bypasses most V1 wrappers.
+- **Affected files or symbols:** the complete compatibility inventory below, including `HandleRelease`, `Service`, `Preflight`, `Tool`, `ToolBase`, executor legacy methods, mixed context construction, query/migration facades, and system-default constructors. C2 removed `V2ExecutionUnavailableResponse`, `GitReleaseCoordinator.Coordinate`, private test bridges, and exact raw Git helpers whose gates were satisfied.
+- **Current behavior:** Some retained wrappers directly delegate; others preserve fatal exit, cwd, registry, default-construction, or legacy method-shape behavior. Production composition bypasses most V1 wrappers.
 - **Why it remains:** The Go packages are public and no downstream compatibility-removal decision was authorized.
 - **Risk:** Unknown consumers constrain signature cleanup and can make inactive code appear canonical.
 - **User or developer impact:** Existing embedders retain source compatibility; maintainers carry extra surfaces and tests.
 - **Removal or improvement preconditions:** Downstream reference audit, deprecation policy, replacement examples, release notes, and an explicit support/removal decision.
-- **Recommended action:** Follow the C1 policy register: keep, deprecate, defer, or mark as removal candidate by family. Remove or replace only through C2 or a later compatibility milestone with fresh evidence.
+- **Recommended action:** Follow the C1 policy register and C2 completion record: keep, deprecate, defer, or remove only by family with fresh evidence and a documented replacement.
 - **Priority:** **P2**.
-- **Proposed milestone:** **C1 — Decide and deprecate V1 compatibility surfaces** is completed; **C2 — Retire superseded and inactive release paths** owns proven removals.
+- **Proposed milestone:** **C1 — Decide and deprecate V1 compatibility surfaces** and **C2 — Retire superseded and inactive release paths** are completed; later compatibility removals need a new gate.
 - **Blocking new features:** Not generally blocking. New code must not depend on these wrappers.
 
 ### D-13 — Active V2 progress logging crosses the presentation boundary
@@ -391,17 +391,17 @@ No P0 issue was found. The active V2 GitHub Actions path preserves evidence arou
 - **Proposed milestone:** none.
 - **Blocking new features:** Not blocking while the characterization remains in place.
 
-### D-17 — Superseded raw Git helpers have no internal production consumers
+### D-17 — Superseded raw Git helpers were removed by C2
 
-- **Affected files or symbols:** `pkg/git/repository.go`; `LastCommit`, `TotalCommits`, `FilesCount`, `RepoSize`, `Head`, `CleanUntracked`, `DeleteLocalTag`, `DeleteRemoteTag`, `RevertCommit`, `CreateCommit`, and `HardResetTo`.
-- **Current behavior:** These exported cwd-based helpers remain compiled. Repository-wide search found no production consumer for them; active V1 compensation uses root-aware focused adapters, while direct legacy rollback uses `systemV1RollbackGit`, `cmd/version.go` still consumes `git.Current`, and query paths consume other `pkg/git` reads.
-- **Why it remains:** Exported symbols may have downstream consumers, and Stage 9 did not authorize compatibility deletion.
-- **Risk:** The destructive helpers can be mistaken for the canonical V1 rollback adapter and bypass repository-root, environment-redaction, and test seams.
-- **User or developer impact:** No current command uses them, but external embedders may.
-- **Removal or improvement preconditions:** Audit downstream imports, deprecate exact symbols, retain `Current` and actively used query/preflight functions, and prove no generated/plugin entry point references them.
-- **Recommended action:** **Remove** only after the compatibility window; until then mark them explicitly non-canonical.
+- **Affected files or symbols:** `pkg/git/repository.go`; `LastCommit`, `TotalCommits`, `FilesCount`, `RepoSize`, `Head`, `CleanUntracked`, `DeleteLocalTag`, `DeleteRemoteTag`, `RevertCommit`, `CreateCommit`, `HardResetTo`, and `DeleteGithubRelease`.
+- **Current behavior:** These exported cwd-based helpers are no longer compiled. C2 kept active `git.Current`, query/preflight helpers, and unit/history/contributor readers while removing only the raw unused helpers.
+- **Why it remains:** Resolved by C2.
+- **Risk:** The former destructive helpers can no longer be mistaken for the canonical V1 rollback adapter inside the repository.
+- **User or developer impact:** Active command behavior is unchanged. External consumers of those exported helper symbols must use caller-owned Git code or release-owned focused adapters.
+- **Removal or improvement preconditions:** Completed in C2: repository and generated-entry reference audit, tests migrated, active helpers retained, and architecture guards added.
+- **Recommended action:** **Keep** the C2 guard and do not reintroduce cwd-based destructive helpers.
 - **Priority:** **P3**.
-- **Proposed milestone:** **C2 — Retire superseded and inactive release paths**.
+- **Proposed milestone:** **Completed in C2 — Retire superseded and inactive release paths**.
 - **Blocking new features:** Not blocking; new code must not call them.
 
 ## Compatibility wrapper inventory
@@ -420,12 +420,12 @@ The inventory distinguishes the plugin executable's active composition from publ
 | `JReleaser.Init`, `Execute`, `Release`, `RevertRelease`, `ValidateRequirements`, `ResolveFiles` | `pkg/release/tool/jreleaser` | same pattern as GoReleaser | Preserve concrete legacy tool API | Direct compatibility delegates around canonical executor logic; `RevertRelease` delegates to canonical `Rollback` after C1 | High | Same C1 result |
 | `ReleaseIt.Init`, `Execute`, `Release`, `RevertRelease`, `ValidateRequirements`, `ResolveFiles` | `pkg/release/tool/releaseit` | same pattern as GoReleaser | Preserve concrete legacy tool API | Direct compatibility delegates around canonical executor logic; `RevertRelease` delegates to canonical `Rollback` after C1 | High | Same C1 result |
 | `release.BuildReleaseExecutionContext` | `pkg/release` | tests only; production uses `BuildV2ReleaseExecutionContext` | Preserve a mixed V1/V2 normalized-repository builder | Contains source-specific unit-root selection, then delegates to common assembly | Medium to high | Deprecated by C1; retain until external callers migrate |
-| `release.startLegacyRelease`, `newV1ReleaseCommandApplication` | `pkg/release` | compatibility tests only | Preserve internal test/transition entry points from the old path | Delegate to the isolated V1 application | Low internally | Safe removal candidates in C2 after tests move to canonical entry points |
+| `release.startLegacyRelease`, `newV1ReleaseCommandApplication` | `pkg/release` | none; removed in C2 | Former internal test/transition entry points from the old path | Tests now use canonical V1 application composition/public boundaries | Low internally | Removed by C2 after tests moved to canonical entry points |
 | `config.V1Exists`, `V1LoadConfig`, `V1SaveConfig` | `pkg/config` | compatibility tests; canonical code uses explicit-root/path variants | Preserve cwd-based V1 config API | Direct delegates to `V1ConfigExistsAt`, `V1LoadConfigAt`, and `V1SaveConfigAt` | High because exported and deprecated | Deprecated by C1 with explicit-root/path replacements |
 | `release.VersionGuard`, `VersionGuardWithOptions`, `EnsureVersionIsValid` | `pkg/release` | compatibility tests; active V1 application uses its planning evidence adapter | Preserve legacy version-guard API and warnings | `VersionGuard` and `VersionGuardWithOptions` retain mutable evidence globals; `EnsureVersionIsValid` is pure | Medium to high | `VersionGuard` and `VersionGuardWithOptions` deprecated by C1; pure `EnsureVersionIsValid` kept |
-| `release.V2ExecutionUnavailableResponse` | `pkg/release` | none found | Preserve an exported response helper from command extraction | Directly maps a classified failure through the canonical response mapper | Medium unknown-consumer risk | Deprecated by C1; remove in C2 if downstream audit is clean |
-| `release.ReleaseTransaction`, `NewReleaseTransaction`, `ReleaseTransaction.Execute` | `pkg/release` | tests only | Preserve inactive V2-local scaffold/public shape | Constructor builds preparation state; `Execute` always blocks | High because exported despite inactive behavior | Decide product direction first; deprecate/remove in C2 if local delivery is rejected |
-| `GitReleaseCoordinator.Coordinate` | `pkg/release` | tests only; active release/resume use focused methods through adapters | Preserve the earlier one-call Git sequence | Contains a complete stage/commit/tag/push convenience sequence | Medium to high | Deprecate in C2 to prevent a competing orchestration path |
+| `release.V2ExecutionUnavailableResponse` | `pkg/release` | none; removed in C2 | Former exported response helper from command extraction | Use `MapCommandFailure` with a command-specific `CommandFailure` | Medium unknown-consumer risk before removal | Removed by C2 after repository audit found no consumer |
+| `release.ReleaseTransaction`, `NewReleaseTransaction`, `ReleaseTransaction.Execute` | `pkg/release` | tests only | Preserve inactive V2-local scaffold/public shape | Constructor builds preparation state; `Execute` always blocks | High because exported despite inactive behavior | Decide product direction in F2 first; deprecate/remove later only if local delivery is rejected |
+| `GitReleaseCoordinator.Coordinate` | `pkg/release` | none; removed in C2 | Former one-call Git sequence | Active release/resume use focused coordinator methods through named operations | Medium before removal | Removed by C2 to prevent a competing orchestration path |
 | `migrate.ResolvePlan`, `migrate.Run`, exported `migrate.Plan` | `pkg/migrate` | tests only; command uses `migrationUseCase` | Preserve programmatic migration preview/execution | Narrow facades over canonical root/plan/use-case paths | Medium | Keep unless a public API policy removes them; they do not violate direction |
 | `pluginindex.Generate`, `Write`, `WriteWithOptions` | `pkg/pluginindex` | tests and possible programmatic callers; command uses injected query/builder | Preserve programmatic index generation/serialization | Direct delegates to canonical query and builder | Low to medium | Keep; these are cohesive public APIs, not urgent debt |
 | `NewReleaseExecutionJournalStore`, `NewDispatchJournalStore`, `NewGitHubActionsDispatcher`, `NewGitHubActionsReleaseRunner`, `NewGitReleaseCoordinator` and their options | `pkg/release` | active production composition plus tests/direct callers | Provide system-default production adapters and substitution options | Construct explicit system defaults; active use cases receive their resulting capabilities | Low | Keep; review only if a constructor hides new infrastructure in application code |
@@ -436,16 +436,16 @@ No code is labeled dead solely from an IDE result. Classification uses productio
 
 | Code | Reachability evidence | Classification | Recommendation |
 | --- | --- | --- | --- |
-| `release.startLegacyRelease`, `newV1ReleaseCommandApplication` | referenced only by V1 compatibility tests | **Test support** and **Safe removal candidate** | Move tests to public/canonical boundaries, then remove in C2 |
+| `release.startLegacyRelease`, `newV1ReleaseCommandApplication` | no remaining definitions or call sites | **Removed in C2** | Tests moved to canonical boundaries; C2 guard prevents reintroduction |
 | `registeredV1ReleaseExecutorCatalog`, `registeredV1ReleaseExecutor`, `directV1ReleaseExecutorCatalog`, `directV1ReleaseExecutor` | reached only from `HandleRelease` / `Service`, not production `main` | **Internal compatibility** | Keep while those public facades remain; remove with them |
 | `pkg/release/tool` package initializer | reached only when deliberately imported; production does not import it | **Public compatibility** | Keep as explicit opt-in until registry deprecation completes |
 | `ReleaseTransaction.Execute` | production-callable but always blocked; tests cover the refusal | **Future feature scaffold** and **Unknown consumer risk** | Do not extend; decide F2 versus C2 |
 | `ReleaseTransaction.prepareReleaseFilesForCoordinator`, callback hooks, `ensureGitClean`, and `unstageKnownFiles` | private and referenced only by transaction tests | **Test support**, **Future feature scaffold**, and **Safe removal candidate** | Remove in C2 if F2 rejects the scaffold; otherwise redesign before activation |
-| `GitReleaseCoordinator.Coordinate` | no production call site; coordinator's focused methods are active | **Public compatibility** and **Unknown consumer risk** | Deprecate before removal; never call from new production code |
-| `V2ExecutionUnavailableResponse` | no repository call site | **Public compatibility** and **Unknown consumer risk** | Candidate for C2 after downstream audit |
-| `buildV2InitConfigFromFlags` | private and referenced only by `pkg/init/handler_test.go` | **Test support** and **Safe removal candidate** | Move the test to typed parser/constructor coverage, then remove |
-| `pkg/git` raw metrics helpers `LastCommit`, `TotalCommits`, `FilesCount`, `RepoSize` | no repository production consumers | **Unknown consumer risk** and **Safe removal candidate** | Deprecate and remove in C2 after import audit |
-| `pkg/git` raw destructive helpers `Head`, `CleanUntracked`, `DeleteLocalTag`, `DeleteRemoteTag`, `RevertCommit`, `CreateCommit`, `HardResetTo` | no repository production consumers; active rollback uses focused root-aware adapters | **Superseded implementation**, **Unknown consumer risk**, and **Safe removal candidate** | Mark non-canonical now; deprecate/remove in C2 |
+| `GitReleaseCoordinator.Coordinate` | no remaining definition or call site | **Removed in C2** | Active release/resume use focused coordinator methods through named operations; C2 guard prevents reintroduction |
+| `V2ExecutionUnavailableResponse` | no remaining definition or call site | **Removed in C2** | Use `MapCommandFailure` with a command-specific `CommandFailure`; C2 guard prevents reintroduction |
+| `buildV2InitConfigFromFlags` | no remaining definition or call site | **Removed in C2** | Tests cover typed parser/constructor behavior directly; C2 guard prevents reintroduction |
+| `pkg/git` raw metrics helpers `LastCommit`, `TotalCommits`, `FilesCount`, `RepoSize` | no remaining definitions or call sites | **Removed in C2** | Use command-owned query readers or caller-owned Git code; C2 guard prevents reintroduction |
+| `pkg/git` raw destructive helpers `Head`, `CleanUntracked`, `DeleteLocalTag`, `DeleteRemoteTag`, `RevertCommit`, `CreateCommit`, `HardResetTo`, `DeleteGithubRelease` | no remaining definitions or call sites; active rollback uses focused root-aware adapters | **Removed in C2** | Use root-aware release adapters or caller-owned Git code; C2 guard prevents reintroduction |
 | `BuildReleaseExecutionContext` mixed builder | tests and potential external callers only; production selected V2 path uses the V2-only builder | **Public compatibility** | Keep through C1; remove only after caller migration |
 | V2 executor capability and delivery facts describing local execution | read by planning and the blocked transaction but do not activate execution | **Future feature scaffold** | Keep only while F2 remains a plausible product decision |
 
@@ -473,7 +473,7 @@ No code is labeled dead solely from an IDE result. Classification uses productio
 
 - no unresolved P1 issue remains in the active release safety model after H1 and H2; manual recovery boundaries are explicit compatibility and safety policy;
 - P2 mutable compatibility globals, process cwd, broad public compatibility surfaces, inactive paths, and future schema repair/migration policy;
-- P3 arbitrary plugin-index output policy, empty-directory residue, and superseded raw Git helpers.
+- P3 arbitrary plugin-index output policy and empty-directory residue.
 
 ### Architecture violation
 
@@ -481,4 +481,4 @@ No code is labeled dead solely from an IDE result. Classification uses productio
 
 The violation does not change the historical ledger: all nine planned refactor stages were completed. It means “completed” is a closed milestone record, not a claim that no future architecture maintenance exists.
 
-The prioritized implementation sequence, acceptance criteria, and commit boundaries are defined in [post-refactor-roadmap.md](post-refactor-roadmap.md). H1, H2, H3, and C1 are completed. The recommended next milestone is **C2 — Retire superseded and inactive release paths**.
+The prioritized implementation sequence, acceptance criteria, and commit boundaries are defined in [post-refactor-roadmap.md](post-refactor-roadmap.md). H1, H2, H3, C1, and C2 are completed. The recommended next milestone is **DX1 — Isolate release progress reporting**.

@@ -6,7 +6,7 @@ This document describes the Release Plugin as it exists in the current checkout.
 
 The verified final dependency view, compatibility inventory, and debt classification are maintained in [post-refactor-review.md](post-refactor-review.md). Future safety, compatibility, developer-experience, and feature milestones are maintained in [post-refactor-roadmap.md](post-refactor-roadmap.md). This document remains the detailed behavioral and data-contract reference.
 
-The C1 support decision for retained V1 compatibility surfaces is recorded in [v1-compatibility-policy.md](v1-compatibility-policy.md). That register is the authoritative source for Keep, Deprecate, Defer, and Removal candidate decisions until C2 re-runs the consumer audit.
+The C1 support decision and C2 removal record for retained V1 compatibility surfaces are recorded in [v1-compatibility-policy.md](v1-compatibility-policy.md). That register is the authoritative source for Keep, Deprecate, Defer, Removed, and future-removal decisions.
 
 The audit follows the current command routes in `plugin/release/main.go`, every production package under `plugin/release/pkg`, the tests under `plugin/release`, the plugin manifest, the repository V2 release files, and the release workflows. Existing repository-wide release documentation was used only as supporting context where the source and tests confirmed it.
 
@@ -38,11 +38,11 @@ The public command contract is duplicated between `manifest.json` and the switch
 | `pkg/history` | Typed history query, format-specific read-only Git capabilities, and response mapping | `HandleHistory`, `historyQueryUseCase`, `historyGitReader` | V1 deliberately retains non-erroring tag/count queries; V2 uses exact `TagSpec` matches and structured Git failures. |
 | `pkg/contributors` | Typed contributor query, repository/unit selection, focused shortlog capabilities, and response mapping | `HandleContributors`, `contributorsQueryUseCase`, `contributorsGitReader` | V1 repository-wide and V2 path-filtered reads share one command-owned read port without mutation capabilities. |
 | `pkg/pluginindex` | Typed command modes, deterministic discovery/validation/order, pure JSON output building, and atomic requested-path persistence | `HandlePluginIndex`, `pluginIndexQueryUseCase`, `jsonPluginIndexOutputBuilder`, `atomicPluginIndexOutputPersister` | Check/render/persist retain their established outputs; all command failures remain Go errors that become top-level `EXECUTION_ERROR`. |
-| `pkg/git` | Legacy Git queries and the underlying compatibility operations used by focused V1 adapters | `IsClean`, `LatestTag`, `UnitTagsInHistory`, `DeleteGithubRelease` | Direct process/HTTP details remain below release-owned V1 ports; active V1 application code does not import them. |
+| `pkg/git` | Legacy Git queries and the underlying compatibility operations used by focused V1 adapters | `IsClean`, `LatestTag`, `UnitTagsInHistory`, `Current`, `Contributors`, `ContributorsForPaths` | Direct process details remain below release-owned V1 ports; active V1 application code does not import retired raw C2 helpers. |
 | `pkg/release` planning | Version bump, execution context, delivery/capability descriptions, materialization plan | `PlanUnitVersionBump`, `BuildReleaseExecutionContext`, `ResolveDelivery`, `ResolveExecutorCapabilities`, `ResolveVersionMaterializer` | Useful typed models exist, but some capability data describes inactive V2 local behavior. |
 | `pkg/release` V1 | Typed V1 intent/planning/preview/execution/failures, focused requirements/preflight/materialization/Git/rollback adapters, and explicit executor selection | `V1ReleaseIntent`, `PlanV1Release`, `v1ReleasePreviewUseCase`, `v1ReleaseExecutionUseCase`, `V1Executor` | Production uses a fixed executor catalog. `Service`, `Preflight`, `Tool`, `ToolBase`, and `Register/Get` are bounded compatibility facades. |
 | `pkg/release` V2 GitHub Actions | Typed command boundary, active release use case, named journaled operations, and production facade | `releaseCommandHandler`, `releaseStartOperation`, `githubActionsReleaseUseCase.Run`, `GitHubActionsReleaseRunner.Run` | The facade composes one coordinator, one typed token boundary, and one clock; the use case owns the visible safety order and delegates each mutation to a focused operation. |
-| `pkg/release` V2 Git | Preflight, targeted staging, exact commit verification, tag creation, ordered pushes, dispatch verification, and recovery tag inspection | `GitReleaseCoordinator`, `githubActionsReleaseGitAdapter`, `gitReleaseDispatchVerifier`, `resumeGitAdapter` | Active release/resume share one coordinator instance through consumer-owned capabilities; `Coordinate` remains an inactive convenience path. |
+| `pkg/release` V2 Git | Preflight, targeted staging, exact commit verification, tag creation, ordered pushes, dispatch verification, and recovery tag inspection | `GitReleaseCoordinator`, `githubActionsReleaseGitAdapter`, `gitReleaseDispatchVerifier`, `resumeGitAdapter` | Active release/resume share one coordinator instance through consumer-owned capabilities; the former one-call `Coordinate` convenience path was removed in C2. |
 | `pkg/release` state/files | Plan and apply version files; update and restore V2 state | `MaterializationTransaction`, `StateTransaction`, `KnownReleaseFiles` | Snapshots support bounded local restore before commit uncertainty. |
 | `pkg/release` execution journal | Durable intended-release identity, monotonic phases, pending actions, and execution-specific persistence | `ReleaseExecutionJournal`, `ReleaseExecutionJournalStore` | Store-specific validation/mutations use the shared fixed journal location and secure-write mechanics below the Git common directory. |
 | `pkg/release` dispatch | Immutable workflow request, dispatch-specific persistence/classification, typed token, GitHub target, and HTTP client | `ReleaseDispatchRequest`, `DispatchJournalStore`, `GitHubActionsDispatchToken`, `GitHubActionsDispatcher`, `GitHubActionsDispatchClient` | Explicit accepted/rejected/unknown outcomes; the token stays typed and redacted through dispatch adapters. |
@@ -252,7 +252,7 @@ Bounded limitations remain:
 - pending/uncertain remote deletion or push, a pending revert, release-it failure, and executor push/publication ambiguity intentionally require manual recovery rather than remote inference or blind retry;
 - the active release invocation is recorded as one pending executor effect, so interruption inside an executor is conservatively classified as manual instead of inferred from remote state;
 - the single `current.json` record is retained after completion and may be replaced by a later attempt; inspection, archival, and schema-lifecycle tooling remain deferred to H3;
-- `ReleaseTransaction` retains inactive V2-local preparation tests, but production blocks V2 local execution and no concrete V1 executor implements or branches into that path. The former JReleaser V2-local bypass was removed rather than activated;
+- `ReleaseTransaction` retains inactive V2-local preparation tests because F2 has not decided whether local V2 delivery is a product goal. Production blocks V2 local execution, no concrete V1 executor implements or branches into that path, and the former JReleaser V2-local bypass was removed rather than activated;
 - process-global workspace selection and compatibility current-directory facades remain outside this stage.
 
 ## Important data models
@@ -287,7 +287,7 @@ The source-of-truth disk models are:
 - `releaseJournalFiles` is not a generic store: it owns only the two fixed journal directories, common-dir resolution, canonical JSON bytes, `0700` directory creation, and atomic `0600` replacement used identically by both stores.
 - `EnvironmentGitHubActionsDispatchTokenResolver` is the only production V2 environment reader and returns `GitHubActionsDispatchToken`; formatting is redacted, and only dispatch adapters unwrap it for authorization and error sanitization.
 - `ReleaseClock` is the active release/resume timestamp capability. One injected clock supplies command responses and the composed V2 execution/dispatch stores and dispatcher; model-level zero-time fallbacks remain compatibility behavior for direct callers.
-- Public store, dispatcher, and runner constructors remain compatibility entry points with production defaults. The isolated V1 application/adapters, migration-specific root/filesystem adapters, inactive `ReleaseTransaction`, and `GitReleaseCoordinator.Coordinate` remain deliberately outside active V2 composition and do not compete with it.
+- Public store, dispatcher, and runner constructors remain compatibility entry points with production defaults. The isolated V1 application/adapters, migration-specific root/filesystem adapters, and inactive `ReleaseTransaction` remain deliberately outside active V2 composition and do not compete with it. The former `GitReleaseCoordinator.Coordinate` convenience method was removed in C2; active code uses focused coordinator methods through release/resume operations.
 
 ### Git and delivery results
 
@@ -421,11 +421,11 @@ The following are current behavior. They are not statements that every behavior 
 
 ### Parallel transaction paths
 
-`ReleaseTransaction` and `GitReleaseCoordinator.Coordinate` still overlap with concepts used by the active release use case. `ReleaseTransaction.Execute` is deliberately blocked, while its private V2 preparation logic is tested. No concrete V1 executor plugs into it, and the former JReleaser V2 source-format bypass was removed. `Coordinate` is functional but bypassed by the active use case, whose named operations call coordinator methods directly to interleave journal transitions. These are bounded post-refactor limitations, not an active second orchestration path or a planned Stage 10.
+`ReleaseTransaction` still overlaps with concepts used by the active release use case, but `ReleaseTransaction.Execute` is deliberately blocked while F2 remains undecided. Its private V2 preparation logic is tested only as retained scaffold. No concrete V1 executor plugs into it, and the former JReleaser V2 source-format bypass was removed. C2 removed `GitReleaseCoordinator.Coordinate`; the active use case continues to call focused coordinator methods directly through named operations that interleave journal transitions. This is a bounded post-refactor limitation, not an active second orchestration path or a planned Stage 10.
 
 ### Init and configuration persistence
 
-`HandleInit` and `HandleUnitAdd` are command boundaries: each parses one distinct typed request, invokes one focused use case, and maps one typed result or failure. Raw flags stop in `command_request.go`; pure normal/plugin unit construction, file-presence policy, and complete pair creation/append are separate. `buildV2InitConfigFromFlags` remains only as a narrow compatibility seam over the typed parser and constructor.
+`HandleInit` and `HandleUnitAdd` are command boundaries: each parses one distinct typed request, invokes one focused use case, and maps one typed result or failure. Raw flags stop in `command_request.go`; pure normal/plugin unit construction, file-presence policy, and complete pair creation/append are separate. C2 removed the private `buildV2InitConfigFromFlags` bridge after tests moved to typed parser/constructor coverage.
 
 `config.V2ReleasePairPersister` is the canonical pair writer shared by init, unit-add, and migration. It canonicalizes both values, creates `.neko`, resolves any unresolved pair evidence, captures exact bytes/modes/existence for both targets, persists `.neko/release.pair-recovery.json`, creates and fully writes/fsyncs both temporary files, records config replacement pending, renames config, verifies config bytes, confirms config replacement, records state replacement pending, renames state, verifies state bytes, confirms state replacement, strictly validates the complete intended pair, marks the evidence complete, and removes the evidence.
 
@@ -492,7 +492,7 @@ Important missing seams include:
 
 1. Active V1 compensation is interruption-safe for supported local actions, but deliberately requires manual recovery for pending/uncertain remote actions, pending revert, corrupt evidence, and uncertain executor outcomes; direct legacy rollback callers remain best-effort.
 2. Pair and migration crash recovery is evidence-driven for supported config/state and archival windows, but it still refuses corrupt, externally edited, unsupported, or owner-ambiguous evidence and does not claim cross-file atomicity.
-3. `ReleaseTransaction` preparation and `GitReleaseCoordinator.Coordinate` remain inactive/convenience paths; production does not select them.
+3. `ReleaseTransaction` preparation remains inactive while F2 is undecided; production does not select it. The former `GitReleaseCoordinator.Coordinate` convenience path was removed in C2.
 4. Process-global workspace selection and compatibility current-directory facades still limit parallel in-process command execution.
 5. Completed V2 release behavior after journal exclusion and subsequent planning remains less directly characterized than the primary release/recovery matrix.
 6. Plugin-index symlink/output-confinement policy remains deliberately undefined; the established arbitrary requested-path behavior is preserved.
@@ -520,7 +520,7 @@ The post-refactor verification found one bounded deviation from the strict prese
 - Completed stages: 9 / 9
 - Remaining stages: 0
 - Release Plugin refactor: completed
-- Completed roadmap milestones: H1 — Make V1 compensation interruption-safe; H2 — Make pair and migration crash recovery explicit; H3 — Add evidence-safe journal inspection and lifecycle support; C1 — Decide and deprecate V1 compatibility surfaces
-- Next milestone: C2 — Retire superseded and inactive release paths
+- Completed roadmap milestones: H1 — Make V1 compensation interruption-safe; H2 — Make pair and migration crash recovery explicit; H3 — Add evidence-safe journal inspection and lifecycle support; C1 — Decide and deprecate V1 compatibility surfaces; C2 — Retire superseded and inactive release paths
+- Next milestone: DX1 — Isolate release progress reporting
 
 H1, H2, H3, C1, and the later milestones are maintained in [post-refactor-roadmap.md](post-refactor-roadmap.md). Roadmap milestones are not refactor stages; the historical refactor ledger remains closed.
