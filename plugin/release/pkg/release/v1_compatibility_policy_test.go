@@ -32,9 +32,9 @@ func TestC1ReleaseEntryPointsKeepProductionOffMutableRegistry(t *testing.T) {
 		"goreleaser.NewV1Executor()",
 		"jreleaser.NewV1Executor()",
 		"releaseit.NewV1Executor()",
-		"release.HandleReleaseWithV1Executors(req, release.Patch, v1Executors...)",
-		"release.HandleReleaseWithV1Executors(req, release.Minor, v1Executors...)",
-		"release.HandleReleaseWithV1Executors(req, release.Major, v1Executors...)",
+		"release.HandleReleaseWithV1ExecutorsAt(root, req, release.Patch, v1Executors...)",
+		"release.HandleReleaseWithV1ExecutorsAt(root, req, release.Minor, v1Executors...)",
+		"release.HandleReleaseWithV1ExecutorsAt(root, req, release.Major, v1Executors...)",
 	} {
 		if !strings.Contains(mainSource, required) {
 			t.Fatalf("production main no longer uses explicit fixed V1 composition %q", required)

@@ -15,6 +15,7 @@ import (
 	"github.com/nekoman-hq/neko-cli/pkg/log"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
 )
 
 type validateCommandHandler struct {
@@ -24,10 +25,21 @@ type validateCommandHandler struct {
 
 // HandleValidate validates the release configuration.
 func HandleValidate(req plugin.Request) (*plugin.Response, error) {
+	root, err := workspace.ResolveRepositoryRoot(req.Context.WorkingDir)
+	if err != nil {
+		return nil, err
+	}
+	return HandleValidateAt(root, req)
+}
+
+// HandleValidateAt validates the release configuration at an explicit
+// repository root without changing process cwd.
+func HandleValidateAt(root workspace.RepositoryRoot, req plugin.Request) (*plugin.Response, error) {
 	handler := validateCommandHandler{
-		query: newValidationQueryUseCase(
+		query: newValidationQueryUseCaseAt(
+			root.Path(),
 			validationReleaseRepositoryReader{},
-			legacyReleaseRequirementsValidator{},
+			legacyReleaseRequirementsValidator{repositoryRoot: root.Path()},
 		),
 		clock: systemValidationResponseClock{},
 	}

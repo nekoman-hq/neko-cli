@@ -10,6 +10,7 @@ import (
 	"github.com/nekoman-hq/neko-cli/pkg/log"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
 )
 
 type historyCommandHandler struct {
@@ -18,10 +19,21 @@ type historyCommandHandler struct {
 }
 
 func HandleHistory(req plugin.Request) (*plugin.Response, error) {
+	root, err := workspace.ResolveRepositoryRoot(req.Context.WorkingDir)
+	if err != nil {
+		return nil, err
+	}
+	return HandleHistoryAt(root, req)
+}
+
+// HandleHistoryAt returns release history at an explicit repository root
+// without changing process cwd.
+func HandleHistoryAt(root workspace.RepositoryRoot, req plugin.Request) (*plugin.Response, error) {
 	handler := historyCommandHandler{
-		query: newHistoryQueryUseCase(
+		query: newHistoryQueryUseCaseAt(
+			root.Path(),
 			historyReleaseRepositoryReader{},
-			historyGitAdapter{},
+			historyGitAdapter{repositoryRoot: root.Path()},
 		),
 		clock: systemHistoryResponseClock{},
 	}

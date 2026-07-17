@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
 )
 
 const CommandName = "plugin-index"
@@ -15,8 +16,19 @@ type pluginIndexCommandHandler struct {
 
 // HandlePluginIndex generates the public plugin registry index.
 func HandlePluginIndex(req plugin.Request) (*plugin.Response, error) {
+	root, err := workspace.ResolveRepositoryRoot(req.Context.WorkingDir)
+	if err != nil {
+		return nil, err
+	}
+	return HandlePluginIndexAt(root, req)
+}
+
+// HandlePluginIndexAt generates the public plugin registry index at an explicit
+// repository root without changing process cwd.
+func HandlePluginIndexAt(root workspace.RepositoryRoot, req plugin.Request) (*plugin.Response, error) {
 	handler := pluginIndexCommandHandler{
-		useCase: newGeneratePluginIndexUseCase(
+		useCase: newGeneratePluginIndexUseCaseAt(
+			root.Path(),
 			pluginIndexQueryUseCase{sources: pluginIndexDiskSourceReader{}},
 			jsonPluginIndexOutputBuilder{},
 			newPluginIndexOutputPersister(pluginIndexPersistenceDisk{}),

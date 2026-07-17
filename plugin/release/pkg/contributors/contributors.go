@@ -3,6 +3,7 @@ package contributors
 import (
 	"github.com/nekoman-hq/neko-cli/pkg/log"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
 )
 
 type contributorsCommandHandler struct {
@@ -11,10 +12,21 @@ type contributorsCommandHandler struct {
 }
 
 func HandleContributors(req plugin.Request) (*plugin.Response, error) {
+	root, err := workspace.ResolveRepositoryRoot(req.Context.WorkingDir)
+	if err != nil {
+		return nil, err
+	}
+	return HandleContributorsAt(root, req)
+}
+
+// HandleContributorsAt returns contributors at an explicit repository root
+// without changing process cwd.
+func HandleContributorsAt(root workspace.RepositoryRoot, req plugin.Request) (*plugin.Response, error) {
 	handler := contributorsCommandHandler{
-		query: newContributorsQueryUseCase(
+		query: newContributorsQueryUseCaseAt(
+			root.Path(),
 			contributorsReleaseRepositoryReader{},
-			contributorsGitAdapter{},
+			contributorsGitAdapter{repositoryRoot: root.Path()},
 		),
 		clock: systemContributorsResponseClock{},
 	}

@@ -52,16 +52,21 @@ type legacyRequirementsValidator interface {
 }
 
 type validationQueryUseCase struct {
-	repositories validationRepositoryReader
-	requirements legacyRequirementsValidator
+	repositoryRoot string
+	repositories   validationRepositoryReader
+	requirements   legacyRequirementsValidator
 }
 
 func newValidationQueryUseCase(repositories validationRepositoryReader, requirements legacyRequirementsValidator) validationQueryUseCase {
-	return validationQueryUseCase{repositories: repositories, requirements: requirements}
+	return newValidationQueryUseCaseAt(".", repositories, requirements)
+}
+
+func newValidationQueryUseCaseAt(root string, repositories validationRepositoryReader, requirements legacyRequirementsValidator) validationQueryUseCase {
+	return validationQueryUseCase{repositoryRoot: root, repositories: repositories, requirements: requirements}
 }
 
 func (useCase validationQueryUseCase) Query(request validationQueryRequest) (validationQueryResult, *validationQueryFailure) {
-	repository, configurationPresent, err := useCase.repositories.Read(".")
+	repository, configurationPresent, err := useCase.repositories.Read(useCase.repositoryRoot)
 	if err != nil {
 		if configurationPresent {
 			return validationQueryResult{}, validationFailure("CONFIG_INVALID", err)
@@ -140,8 +145,10 @@ func (validationReleaseRepositoryReader) Read(root string) (*config.ReleaseRepos
 	return nil, present, err
 }
 
-type legacyReleaseRequirementsValidator struct{}
+type legacyReleaseRequirementsValidator struct {
+	repositoryRoot string
+}
 
-func (legacyReleaseRequirementsValidator) Validate(cfg *config.V1ReleaseConfig) error {
-	return release.ValidateRequirements(cfg)
+func (validator legacyReleaseRequirementsValidator) Validate(cfg *config.V1ReleaseConfig) error {
+	return release.ValidateRequirementsAt(validator.repositoryRoot, cfg)
 }

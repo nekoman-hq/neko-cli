@@ -45,10 +45,15 @@ func LatestTag() string {
 
 // GetTags returns a list of all git tags
 func GetTags() []string {
+	return GetTagsAt("")
+}
+
+// GetTagsAt returns all git tags from an explicit repository root.
+func GetTagsAt(repositoryRoot string) []string {
 	log.PluginV(log.Exec, "Fetching git tags: "+
 		log.ColorText(log.ColorGreen, "git tag"))
 
-	cmd := exec.Command("git", "tag")
+	cmd := gitCommandAt(repositoryRoot, "tag")
 	tagsOut, err := cmd.Output()
 	if err != nil {
 		errors.WriteWarning(
@@ -68,16 +73,22 @@ func GetTags() []string {
 
 // CountCommitsBetween counts commits between two references
 func CountCommitsBetween(from, to string) int {
+	return CountCommitsBetweenAt("", from, to)
+}
+
+// CountCommitsBetweenAt counts commits between two references from an explicit
+// repository root.
+func CountCommitsBetweenAt(repositoryRoot, from, to string) int {
 	var cmd *exec.Cmd
 
 	if from == "" {
 		log.PluginV(log.Exec, fmt.Sprintf("Counting commits up to %s: %s",
 			to, log.ColorText(log.ColorGreen, fmt.Sprintf("git rev-list --count %s", to))))
-		cmd = exec.Command("git", "rev-list", "--count", to)
+		cmd = gitCommandAt(repositoryRoot, "rev-list", "--count", to)
 	} else {
 		log.PluginV(log.Exec, fmt.Sprintf("Counting commits between %s and %s: %s",
 			from, to, log.ColorText(log.ColorGreen, fmt.Sprintf("git rev-list --count %s..%s", from, to))))
-		cmd = exec.Command("git", "rev-list", "--count", fmt.Sprintf("%s..%s", from, to))
+		cmd = gitCommandAt(repositoryRoot, "rev-list", "--count", fmt.Sprintf("%s..%s", from, to))
 	}
 
 	out, err := cmd.Output()
@@ -122,7 +133,13 @@ func LatestUnitTag(spec releaseconfig.TagSpec) (*UnitTag, error) {
 
 // UnitTagsInHistory returns exact TagSpec matches in HEAD history order.
 func UnitTagsInHistory(spec releaseconfig.TagSpec) ([]UnitTag, error) {
-	commits, err := gitOutput("log", "--reverse", "--format=%H", "HEAD")
+	return UnitTagsInHistoryAt("", spec)
+}
+
+// UnitTagsInHistoryAt returns exact TagSpec matches in HEAD history order from
+// an explicit repository root.
+func UnitTagsInHistoryAt(repositoryRoot string, spec releaseconfig.TagSpec) ([]UnitTag, error) {
+	commits, err := gitOutputAt(repositoryRoot, "log", "--reverse", "--format=%H", "HEAD")
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +147,7 @@ func UnitTagsInHistory(spec releaseconfig.TagSpec) ([]UnitTag, error) {
 	seen := make(map[string]struct{})
 	var result []UnitTag
 	for _, commit := range nonEmptyLines(commits) {
-		tagsAtCommit, err := gitOutput("tag", "--points-at", commit, "--list", spec.Pattern())
+		tagsAtCommit, err := gitOutputAt(repositoryRoot, "tag", "--points-at", commit, "--list", spec.Pattern())
 		if err != nil {
 			return nil, err
 		}
@@ -151,6 +168,12 @@ func UnitTagsInHistory(spec releaseconfig.TagSpec) ([]UnitTag, error) {
 
 // CountCommitsBetweenPaths counts commits in a range constrained to pathspecs.
 func CountCommitsBetweenPaths(from, to string, paths []string) (int, error) {
+	return CountCommitsBetweenPathsAt("", from, to, paths)
+}
+
+// CountCommitsBetweenPathsAt counts commits in a range constrained to
+// pathspecs from an explicit repository root.
+func CountCommitsBetweenPathsAt(repositoryRoot, from, to string, paths []string) (int, error) {
 	var rev string
 	if from == "" {
 		rev = to
@@ -160,7 +183,7 @@ func CountCommitsBetweenPaths(from, to string, paths []string) (int, error) {
 	args := []string{"rev-list", "--count", rev}
 	args = append(args, gitPathspecArgs(paths)...)
 
-	out, err := gitOutput(args...)
+	out, err := gitOutputAt(repositoryRoot, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -173,10 +196,16 @@ func CountCommitsBetweenPaths(from, to string, paths []string) (int, error) {
 
 // ContributorsForPaths returns contributors constrained to pathspecs.
 func ContributorsForPaths(paths []string) ([]Contributor, error) {
+	return ContributorsForPathsAt("", paths)
+}
+
+// ContributorsForPathsAt returns contributors constrained to pathspecs from an
+// explicit repository root.
+func ContributorsForPathsAt(repositoryRoot string, paths []string) ([]Contributor, error) {
 	args := []string{"shortlog", "-sne", "HEAD"}
 	args = append(args, gitPathspecArgs(paths)...)
 
-	out, err := gitOutput(args...)
+	out, err := gitOutputAt(repositoryRoot, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -201,12 +230,24 @@ func gitPathspecArgs(paths []string) []string {
 }
 
 func gitOutput(args ...string) (string, error) {
-	cmd := exec.Command("git", args...)
+	return gitOutputAt("", args...)
+}
+
+func gitOutputAt(repositoryRoot string, args ...string) (string, error) {
+	cmd := gitCommandAt(repositoryRoot, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("git %s failed: %s", strings.Join(args, " "), strings.TrimSpace(string(out)))
 	}
 	return string(out), nil
+}
+
+func gitCommandAt(repositoryRoot string, args ...string) *exec.Cmd {
+	cmd := exec.Command("git", args...)
+	if strings.TrimSpace(repositoryRoot) != "" {
+		cmd.Dir = repositoryRoot
+	}
+	return cmd
 }
 
 func nonEmptyLines(output string) []string {

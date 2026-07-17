@@ -26,6 +26,14 @@ func newMigrationUseCase() migrationUseCase {
 	}
 }
 
+func newMigrationUseCaseAt(root string) migrationUseCase {
+	return migrationUseCase{
+		roots:    fixedMigrationRootResolver{root: root},
+		plans:    filesystemMigrationPlanResolver{},
+		executor: newMigrationPlanExecution(),
+	}
+}
+
 func (useCase migrationUseCase) Migrate(request migrationCommandRequest) (migrationCommandResult, *migrationFailure) {
 	root, err := useCase.roots.Resolve(request.startDirectory)
 	if err != nil {
@@ -54,4 +62,12 @@ func previewMigrationPlan(plan migrationPlan) migrationPlan {
 		preview.actions = append([]string{"preview recovery of interrupted migration"}, preview.actions...)
 	}
 	return preview
+}
+
+type fixedMigrationRootResolver struct {
+	root string
+}
+
+func (resolver fixedMigrationRootResolver) Resolve(string) (string, error) {
+	return resolver.root, nil
 }

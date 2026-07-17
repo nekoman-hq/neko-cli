@@ -28,18 +28,28 @@ func ValidateRequirements(cfg *releaseconfig.V1ReleaseConfig) error {
 		return fmt.Errorf("release configuration is missing")
 	}
 
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to resolve current working directory: %w", err)
+	}
+
+	return ValidateRequirementsAt(cwd, cfg)
+}
+
+// ValidateRequirementsAt checks V1 release requirements at an explicit
+// repository root without reading process cwd.
+func ValidateRequirementsAt(repositoryRoot string, cfg *releaseconfig.V1ReleaseConfig) error {
+	if cfg == nil {
+		return fmt.Errorf("release configuration is missing")
+	}
+
 	log.PluginV(
 		log.Config,
 		"Validating release requirements for %s",
 		log.ColorText(log.ColorCyan, string(cfg.ReleaseSystem)),
 	)
 
-	cwd, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("failed to resolve current working directory: %w", err)
-	}
-
-	return validateRequirementsForExecutor(string(cfg.ReleaseSystem), cwd, true)
+	return validateRequirementsForExecutor(string(cfg.ReleaseSystem), repositoryRoot, true)
 }
 
 // ValidateRequirementsForContext checks executor requirements relative to the

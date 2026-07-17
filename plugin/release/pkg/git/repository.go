@@ -220,10 +220,16 @@ func CurrentBranch() (string, error) {
 
 // Contributors returns a list of contributors with their commit counts
 func Contributors() ([]Contributor, error) {
+	return ContributorsAt("")
+}
+
+// ContributorsAt returns a list of contributors with their commit counts from
+// an explicit repository root.
+func ContributorsAt(repositoryRoot string) ([]Contributor, error) {
 	log.PluginV(log.Exec, "Fetching contributors: "+
 		log.ColorText(log.ColorGreen, "git shortlog -sne HEAD"))
 
-	cmd := exec.Command("git", "shortlog", "-sne", "HEAD")
+	cmd := gitCommandAt(repositoryRoot, "shortlog", "-sne", "HEAD")
 	contrib, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf(

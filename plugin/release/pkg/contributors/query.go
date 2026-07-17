@@ -38,16 +38,21 @@ type contributorsGitReader interface {
 }
 
 type contributorsQueryUseCase struct {
-	repositories contributorsRepositoryReader
-	git          contributorsGitReader
+	repositoryRoot string
+	repositories   contributorsRepositoryReader
+	git            contributorsGitReader
 }
 
 func newContributorsQueryUseCase(repositories contributorsRepositoryReader, gitReader contributorsGitReader) contributorsQueryUseCase {
-	return contributorsQueryUseCase{repositories: repositories, git: gitReader}
+	return newContributorsQueryUseCaseAt(".", repositories, gitReader)
+}
+
+func newContributorsQueryUseCaseAt(root string, repositories contributorsRepositoryReader, gitReader contributorsGitReader) contributorsQueryUseCase {
+	return contributorsQueryUseCase{repositoryRoot: root, repositories: repositories, git: gitReader}
 }
 
 func (useCase contributorsQueryUseCase) Query(request contributorsQueryRequest) (contributorsQueryResult, *contributorsQueryFailure) {
-	repository, err := useCase.repositories.Load(".")
+	repository, err := useCase.repositories.Load(useCase.repositoryRoot)
 	if err != nil {
 		return contributorsQueryResult{}, contributorsFailure("CONFIG_INVALID", err)
 	}
@@ -79,15 +84,17 @@ func (contributorsReleaseRepositoryReader) Load(root string) (*config.ReleaseRep
 	return config.LoadReleaseRepository(root)
 }
 
-type contributorsGitAdapter struct{}
+type contributorsGitAdapter struct {
+	repositoryRoot string
+}
 
-func (contributorsGitAdapter) ForRepository() ([]contributorQueryEntry, error) {
-	contributors, err := git.Contributors()
+func (adapter contributorsGitAdapter) ForRepository() ([]contributorQueryEntry, error) {
+	contributors, err := git.ContributorsAt(adapter.repositoryRoot)
 	return contributorEntries(contributors), err
 }
 
-func (contributorsGitAdapter) ForPaths(paths []string) ([]contributorQueryEntry, error) {
-	contributors, err := git.ContributorsForPaths(paths)
+func (adapter contributorsGitAdapter) ForPaths(paths []string) ([]contributorQueryEntry, error) {
+	contributors, err := git.ContributorsForPathsAt(adapter.repositoryRoot, paths)
 	return contributorEntries(contributors), err
 }
 

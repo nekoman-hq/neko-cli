@@ -27,9 +27,10 @@ type pluginIndexOutputPersister interface {
 }
 
 type generatePluginIndexUseCase struct {
-	query     pluginIndexQuerier
-	builder   pluginIndexOutputBuilder
-	persister pluginIndexOutputPersister
+	repositoryRoot string
+	query          pluginIndexQuerier
+	builder        pluginIndexOutputBuilder
+	persister      pluginIndexOutputPersister
 }
 
 func newGeneratePluginIndexUseCase(
@@ -37,11 +38,20 @@ func newGeneratePluginIndexUseCase(
 	builder pluginIndexOutputBuilder,
 	persister pluginIndexOutputPersister,
 ) generatePluginIndexUseCase {
-	return generatePluginIndexUseCase{query: query, builder: builder, persister: persister}
+	return newGeneratePluginIndexUseCaseAt(".", query, builder, persister)
+}
+
+func newGeneratePluginIndexUseCaseAt(
+	root string,
+	query pluginIndexQuerier,
+	builder pluginIndexOutputBuilder,
+	persister pluginIndexOutputPersister,
+) generatePluginIndexUseCase {
+	return generatePluginIndexUseCase{repositoryRoot: root, query: query, builder: builder, persister: persister}
 }
 
 func (useCase generatePluginIndexUseCase) Run(ctx context.Context, request pluginIndexCommandRequest) (pluginIndexCommandResult, error) {
-	index, err := useCase.query.Query(ctx, GenerateOptions{Root: ".", Repository: request.Repository})
+	index, err := useCase.query.Query(ctx, GenerateOptions{Root: useCase.repositoryRoot, Repository: request.Repository})
 	if err != nil {
 		return pluginIndexCommandResult{}, err
 	}

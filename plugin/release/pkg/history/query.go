@@ -47,16 +47,21 @@ type historyGitReader interface {
 }
 
 type historyQueryUseCase struct {
-	repositories historyRepositoryReader
-	git          historyGitReader
+	repositoryRoot string
+	repositories   historyRepositoryReader
+	git            historyGitReader
 }
 
 func newHistoryQueryUseCase(repositories historyRepositoryReader, gitReader historyGitReader) historyQueryUseCase {
-	return historyQueryUseCase{repositories: repositories, git: gitReader}
+	return newHistoryQueryUseCaseAt(".", repositories, gitReader)
+}
+
+func newHistoryQueryUseCaseAt(root string, repositories historyRepositoryReader, gitReader historyGitReader) historyQueryUseCase {
+	return historyQueryUseCase{repositoryRoot: root, repositories: repositories, git: gitReader}
 }
 
 func (useCase historyQueryUseCase) Query(request historyQueryRequest) (historyQueryResult, *historyQueryFailure) {
-	repository, err := useCase.repositories.Load(".")
+	repository, err := useCase.repositories.Load(useCase.repositoryRoot)
 	if err != nil {
 		return historyQueryResult{}, historyFailure("CONFIG_INVALID", err)
 	}
@@ -128,18 +133,20 @@ func (historyReleaseRepositoryReader) Load(root string) (*config.ReleaseReposito
 	return config.LoadReleaseRepository(root)
 }
 
-type historyGitAdapter struct{}
-
-func (historyGitAdapter) LegacyTags() []string {
-	return git.GetTags()
+type historyGitAdapter struct {
+	repositoryRoot string
 }
 
-func (historyGitAdapter) LegacyCommitCount(from, to string) int {
-	return git.CountCommitsBetween(from, to)
+func (adapter historyGitAdapter) LegacyTags() []string {
+	return git.GetTagsAt(adapter.repositoryRoot)
 }
 
-func (historyGitAdapter) UnitTags(spec config.TagSpec) ([]historyUnitTag, error) {
-	tags, err := git.UnitTagsInHistory(spec)
+func (adapter historyGitAdapter) LegacyCommitCount(from, to string) int {
+	return git.CountCommitsBetweenAt(adapter.repositoryRoot, from, to)
+}
+
+func (adapter historyGitAdapter) UnitTags(spec config.TagSpec) ([]historyUnitTag, error) {
+	tags, err := git.UnitTagsInHistoryAt(adapter.repositoryRoot, spec)
 	entries := make([]historyUnitTag, 0, len(tags))
 	for _, tag := range tags {
 		entries = append(entries, historyUnitTag{Tag: tag.Tag})
@@ -147,6 +154,6 @@ func (historyGitAdapter) UnitTags(spec config.TagSpec) ([]historyUnitTag, error)
 	return entries, err
 }
 
-func (historyGitAdapter) UnitCommitCount(from, to string, paths []string) (int, error) {
-	return git.CountCommitsBetweenPaths(from, to, paths)
+func (adapter historyGitAdapter) UnitCommitCount(from, to string, paths []string) (int, error) {
+	return git.CountCommitsBetweenPathsAt(adapter.repositoryRoot, from, to, paths)
 }

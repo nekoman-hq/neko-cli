@@ -39,51 +39,18 @@ func main() {
 	// Set verbose mode from request context
 	log.Verbose = req.Context.Verbose
 
-	if err := workspace.ChangeToProjectRoot(req.Context.WorkingDir); err != nil {
+	root, err := workspace.ResolveRepositoryRoot(req.Context.WorkingDir)
+	if err != nil {
 		pluginerrors.WriteError("WORKSPACE_ERROR", err.Error())
 	}
 
-	var resp *plugin.Response
-	var err error
 	v1Executors := []release.V1Executor{
 		goreleaser.NewV1Executor(),
 		jreleaser.NewV1Executor(),
 		releaseit.NewV1Executor(),
 	}
 
-	switch req.Command {
-	case "init":
-		resp, err = initcmd.HandleInit(req)
-	case "unit-add":
-		resp, err = initcmd.HandleUnitAdd(req)
-	case "init-options":
-		resp, err = initcmd.GetAvailableOptions()
-	case "migrate":
-		resp, err = migrate.HandleMigrate(req)
-	case "patch":
-		resp, err = release.HandleReleaseWithV1Executors(req, release.Patch, v1Executors...)
-	case "minor":
-		resp, err = release.HandleReleaseWithV1Executors(req, release.Minor, v1Executors...)
-	case "major":
-		resp, err = release.HandleReleaseWithV1Executors(req, release.Major, v1Executors...)
-	case "resume":
-		resp, err = release.HandleResume(req)
-	case "evidence":
-		resp, err = evidence.HandleEvidence(req)
-	case "evidence-archive":
-		resp, err = evidence.HandleEvidenceArchive(req)
-	case "history":
-		resp, err = history.HandleHistory(req)
-	case "contributors":
-		resp, err = contributors.HandleContributors(req)
-	case "validate":
-		resp, err = validate.HandleValidate(req)
-	case "plugin-index":
-		resp, err = pluginindex.HandlePluginIndex(req)
-	default:
-		resp, err = nil, fmt.Errorf("unknown command: %s", req.Command)
-	}
-
+	resp, err := handleRequestAt(root, req, v1Executors)
 	if err != nil {
 		var fatal *release.FatalCommandError
 		if stderrors.As(err, &fatal) {
@@ -94,5 +61,40 @@ func main() {
 
 	if err := json.NewEncoder(os.Stdout).Encode(resp); err != nil {
 		pluginerrors.WriteError("RESPONSE_ERROR", fmt.Sprintf("failed to encode response: %v", err))
+	}
+}
+
+func handleRequestAt(root workspace.RepositoryRoot, req plugin.Request, v1Executors []release.V1Executor) (*plugin.Response, error) {
+	switch req.Command {
+	case "init":
+		return initcmd.HandleInitAt(root, req)
+	case "unit-add":
+		return initcmd.HandleUnitAddAt(root, req)
+	case "init-options":
+		return initcmd.GetAvailableOptions()
+	case "migrate":
+		return migrate.HandleMigrate(req)
+	case "patch":
+		return release.HandleReleaseWithV1ExecutorsAt(root, req, release.Patch, v1Executors...)
+	case "minor":
+		return release.HandleReleaseWithV1ExecutorsAt(root, req, release.Minor, v1Executors...)
+	case "major":
+		return release.HandleReleaseWithV1ExecutorsAt(root, req, release.Major, v1Executors...)
+	case "resume":
+		return release.HandleResumeAt(root, req)
+	case "evidence":
+		return evidence.HandleEvidenceAt(root, req)
+	case "evidence-archive":
+		return evidence.HandleEvidenceArchiveAt(root, req)
+	case "history":
+		return history.HandleHistoryAt(root, req)
+	case "contributors":
+		return contributors.HandleContributorsAt(root, req)
+	case "validate":
+		return validate.HandleValidateAt(root, req)
+	case "plugin-index":
+		return pluginindex.HandlePluginIndexAt(root, req)
+	default:
+		return nil, fmt.Errorf("unknown command: %s", req.Command)
 	}
 }
