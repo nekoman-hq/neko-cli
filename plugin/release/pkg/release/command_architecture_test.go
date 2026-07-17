@@ -160,6 +160,71 @@ func TestProgressBoundaryDoesNotConstructResponsesOrEventInfrastructure(t *testi
 	}
 }
 
+func TestReleasePlanInspectionUsesCanonicalPlanningBoundaries(t *testing.T) {
+	source := readCommandBoundarySource(t, "release_plan_inspection.go")
+	for _, required := range []string{
+		"selectReleaseApplicationPath",
+		"ResolveReleaseUnit",
+		"PlanV1Release",
+		"BuildV2ReleaseExecutionContext",
+		"planV2ReleaseFacts",
+	} {
+		if !strings.Contains(source, required) {
+			t.Fatalf("release plan inspection does not use canonical planning boundary %q", required)
+		}
+	}
+}
+
+func TestReleasePlanInspectionHasNoMutationTokenRemoteOrJournalDependencies(t *testing.T) {
+	source := readCommandBoundarySource(t, "release_plan_inspection.go")
+	for _, forbidden := range []string{
+		"GitHubActionsDispatchToken",
+		"TokenResolver",
+		"EnvironmentGitHubActionsDispatchTokenResolver",
+		"GITHUB_TOKEN",
+		"GitHubActionsDispatcher",
+		"GitHubActionsDispatchClient",
+		"NewGitHubActionsReleaseRunner",
+		"NewReleaseExecutionJournalStore",
+		"NewDispatchJournalStore",
+		"ReleaseExecutionJournalStore",
+		"DispatchJournalStore",
+		"NewGitReleaseCoordinator",
+		"MaterializationTransaction",
+		"StateTransaction",
+		"V1Compensation",
+		"exec.Command",
+		"os.WriteFile",
+		"os.MkdirAll",
+		"plugin.Response",
+	} {
+		if strings.Contains(source, forbidden) {
+			t.Fatalf("release_plan_inspection.go contains prohibited dependency %q", forbidden)
+		}
+	}
+}
+
+func TestReleasePlanInspectionAvoidsGenericInspectionArchitecture(t *testing.T) {
+	source := readCommandBoundarySource(t, "release_plan_inspection.go")
+	for _, forbidden := range []string{
+		"InspectionManager",
+		"PlanningManager",
+		"PipelineManager",
+		"WorkflowPipeline",
+		"TransitionEngine",
+		"DependencyBag",
+		"ServiceLocator",
+		"planOnly",
+		"inspectionMode",
+		"executeNothing",
+		"fakeDryRun",
+	} {
+		if strings.Contains(source, forbidden) {
+			t.Fatalf("release plan inspection contains prohibited architecture %q", forbidden)
+		}
+	}
+}
+
 func TestReleaseProgressReporterIsInfallible(t *testing.T) {
 	source := readCommandBoundarySource(t, "release_progress.go")
 	if !strings.Contains(source, "ReportReleaseProgress(event ReleaseProgressEvent)") {
