@@ -160,6 +160,9 @@ func resolveV2UnitRoot(repositoryRoot string, unit releaseconfig.ReleaseUnit) (s
 	if err := ensureInsideRepository(repositoryRoot, unitRoot, unit.ID); err != nil {
 		return "", err
 	}
+	if err := ensurePhysicallyInsideRepository(repositoryRoot, unitRoot, unit.ID); err != nil {
+		return "", err
+	}
 	return unitRoot, nil
 }
 
@@ -170,6 +173,25 @@ func ensureInsideRepository(repositoryRoot, unitRoot, unitID string) error {
 	}
 	if relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
 		return fmt.Errorf("unit %q workingDirectory leaves the repository", unitID)
+	}
+	return nil
+}
+
+func ensurePhysicallyInsideRepository(repositoryRoot, unitRoot, unitID string) error {
+	resolvedRoot, err := filepath.EvalSymlinks(repositoryRoot)
+	if err != nil {
+		return fmt.Errorf("unit %q repository root cannot be resolved physically: %w", unitID, err)
+	}
+	resolvedUnitRoot, err := filepath.EvalSymlinks(unitRoot)
+	if err != nil {
+		return fmt.Errorf("unit %q workingDirectory cannot be resolved physically: %w", unitID, err)
+	}
+	relative, err := filepath.Rel(resolvedRoot, resolvedUnitRoot)
+	if err != nil {
+		return fmt.Errorf("unit %q workingDirectory cannot be physically related to repository root: %w", unitID, err)
+	}
+	if relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
+		return fmt.Errorf("unit %q workingDirectory resolves outside repository", unitID)
 	}
 	return nil
 }

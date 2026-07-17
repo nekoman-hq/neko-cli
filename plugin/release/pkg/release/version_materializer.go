@@ -131,12 +131,15 @@ func ValidateMaterializationPlan(plan *MaterializationPlan) error {
 }
 
 func readMaterializedFile(path string) ([]byte, os.FileMode, bool, error) {
-	info, err := os.Stat(path)
+	info, err := os.Lstat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, 0644, false, nil
 		}
 		return nil, 0, false, fmt.Errorf("inspect materialized file %s: %w", path, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return nil, 0, false, fmt.Errorf("materialized file %s is a symlink", path)
 	}
 	if info.IsDir() {
 		return nil, 0, false, fmt.Errorf("materialized file %s is a directory", path)

@@ -73,7 +73,7 @@ func (useCase generatePluginIndexUseCase) Run(ctx context.Context, request plugi
 		result.RawOutput = string(output)
 		return result, nil
 	}
-	target, err := resolvePluginIndexOutputTarget(useCase.repositoryRoot, request.OutputPath)
+	target, err := resolvePluginIndexOutputTarget(useCase.repositoryRoot, request.OutputPath, index)
 	if err != nil {
 		return pluginIndexCommandResult{}, err
 	}

@@ -148,8 +148,8 @@ func TestHandlePluginIndexOutputDirectoryFailurePreservesExistingFile(t *testing
 	resp, err := HandlePluginIndex(pluginRequest(map[string]any{
 		"output": filepath.Join(blocker, "plugin-index.json"),
 	}))
-	if resp != nil || err == nil || !strings.Contains(err.Error(), "create plugin index output directory") {
-		t.Fatalf("HandlePluginIndex = (%#v, %v), want output directory Go error", resp, err)
+	if resp != nil || err == nil || !strings.Contains(err.Error(), "plugin index output parent") {
+		t.Fatalf("HandlePluginIndex = (%#v, %v), want output parent Go error", resp, err)
 	}
 	if got := readIndexContractFile(t, blocker); got != original {
 		t.Fatalf("failure modified existing file: got %q want %q", got, original)

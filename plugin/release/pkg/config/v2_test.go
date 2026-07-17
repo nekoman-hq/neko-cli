@@ -503,6 +503,26 @@ func TestLoadV2RepositoryPluginManifestSymlinkEscapeFails(t *testing.T) {
 	}
 }
 
+func TestLoadV2RepositoryWorkingDirectorySymlinkEscapeFails(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(root, "app")); err != nil {
+		t.Fatalf("symlink working directory: %v", err)
+	}
+	writeV2Files(t, root, validV2Config(`{
+  "id": "default",
+  "paths": ["app/**"],
+  "workingDirectory": "app",
+  "tagPrefix": "v",
+  "executor": {"type": "goreleaser"}
+}`), validV2State(`"default": {"version": "1.0.0"}`))
+
+	_, err := LoadV2Repository(root)
+	if err == nil || !strings.Contains(err.Error(), "resolves outside repository root") {
+		t.Fatalf("expected workingDirectory symlink escape error, got %v", err)
+	}
+}
+
 func validV2Config(units string) string {
 	return `{"schemaVersion":2,"units":[` + units + `]}`
 }

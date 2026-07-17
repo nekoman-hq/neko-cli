@@ -303,6 +303,23 @@ func TestMaterializationPlanRejectsDuplicateTargets(t *testing.T) {
 	}
 }
 
+func TestJReleaserMaterializerRejectsSymlinkedMaterializedFile(t *testing.T) {
+	root := newV2MaterializationRepository(t, "jreleaser")
+	realConfig := filepath.Join(root, "real-jreleaser.yml")
+	if err := os.Rename(filepath.Join(root, "jreleaser.yml"), realConfig); err != nil {
+		t.Fatalf("move jreleaser config: %v", err)
+	}
+	if err := os.Symlink(realConfig, filepath.Join(root, "jreleaser.yml")); err != nil {
+		t.Fatalf("symlink jreleaser config: %v", err)
+	}
+	ctx := mustBuildTransactionContext(t, root, Patch)
+
+	_, err := JReleaserMaterializer{}.Plan(ctx)
+	if err == nil || !strings.Contains(err.Error(), "is a symlink") {
+		t.Fatalf("expected symlink materialization error, got %v", err)
+	}
+}
+
 func newV2MaterializationRepository(t *testing.T, executor string) string {
 	t.Helper()
 	root := t.TempDir()

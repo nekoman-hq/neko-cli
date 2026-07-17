@@ -465,7 +465,12 @@ func validateWorkingDirectory(repositoryRoot, unitID, workingDirectory string) e
 		return fmt.Errorf("v2 config unit %q workingDirectory %q leaves the repository", unitID, workingDirectory)
 	}
 	if repositoryRoot != "" {
-		info, err := os.Stat(filepath.Join(repositoryRoot, clean))
+		absoluteRoot, err := filepath.Abs(repositoryRoot)
+		if err != nil {
+			return fmt.Errorf("v2 config unit %q repository root %q cannot be resolved: %w", unitID, repositoryRoot, err)
+		}
+		workingDirectoryPath := filepath.Join(absoluteRoot, clean)
+		info, err := os.Stat(workingDirectoryPath)
 		if err != nil {
 			if os.IsNotExist(err) {
 				return fmt.Errorf("v2 config unit %q workingDirectory %q does not exist", unitID, workingDirectory)
@@ -474,6 +479,17 @@ func validateWorkingDirectory(repositoryRoot, unitID, workingDirectory string) e
 		}
 		if !info.IsDir() {
 			return fmt.Errorf("v2 config unit %q workingDirectory %q is not a directory", unitID, workingDirectory)
+		}
+		resolvedRoot, err := filepath.EvalSymlinks(absoluteRoot)
+		if err != nil {
+			return fmt.Errorf("v2 config unit %q repository root %q cannot be resolved physically: %w", unitID, absoluteRoot, err)
+		}
+		resolvedWorkingDirectory, err := filepath.EvalSymlinks(workingDirectoryPath)
+		if err != nil {
+			return fmt.Errorf("v2 config unit %q workingDirectory %q cannot be resolved physically: %w", unitID, workingDirectory, err)
+		}
+		if !pathInside(resolvedRoot, resolvedWorkingDirectory) {
+			return fmt.Errorf("v2 config unit %q workingDirectory %q resolves outside repository root", unitID, workingDirectory)
 		}
 	}
 	return nil
