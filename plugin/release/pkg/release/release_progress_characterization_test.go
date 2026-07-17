@@ -19,7 +19,7 @@ func TestGitHubActionsReleaseProgressCharacterization(t *testing.T) {
 		HTTPStatus: 204,
 	}}
 	runner := NewGitHubActionsReleaseRunner(
-		WithGitHubActionsReleaseTokenResolver(staticDispatchTokenResolver{token: "dx1-secret-token"}),
+		WithGitHubActionsReleaseTokenResolver(staticDispatchTokenResolver{token: "progress-secret-token"}),
 		WithGitHubActionsReleaseDispatchClient(client),
 		WithGitHubActionsReleaseProgress(newTerminalReleaseProgress()),
 	)
@@ -81,7 +81,7 @@ func TestGitHubActionsReleaseProgressCharacterization(t *testing.T) {
 		"Execution state: handoff-ready",
 		"Recovery guidance: GitHub Actions dispatch accepted. GitHub Actions owns build and publish from the pushed tag.",
 	)
-	if strings.Contains(stderr, "dx1-secret-token") || strings.Contains(stderr, "Bearer") {
+	if strings.Contains(stderr, "progress-secret-token") || strings.Contains(stderr, "Bearer") {
 		t.Fatalf("progress output exposed a secret:\n%s", stderr)
 	}
 }
@@ -93,7 +93,7 @@ func TestV2DryRunProgressCharacterizationKeepsMachineResponseSeparate(t *testing
 		expectedRoot = "/private" + expectedRoot
 	}
 	withWorkingDirectoryRoot(t, root)
-	t.Setenv("GITHUB_TOKEN", "dx1-dry-run-secret")
+	t.Setenv("GITHUB_TOKEN", "progress-dry-run-secret")
 
 	stdout, stderr := captureReleaseProgressOutput(t, func() {
 		resp, err := HandleRelease(plugin.Request{
@@ -116,7 +116,7 @@ func TestV2DryRunProgressCharacterizationKeepsMachineResponseSeparate(t *testing
 		for _, forbidden := range []string{
 			"Starting patch release",
 			"Planning V2 dry-run",
-			"dx1-dry-run-secret",
+			"progress-dry-run-secret",
 		} {
 			if strings.Contains(string(body), forbidden) {
 				t.Fatalf("machine response contains progress or secret %q:\n%s", forbidden, body)
@@ -140,7 +140,7 @@ func TestV2DryRunProgressCharacterizationKeepsMachineResponseSeparate(t *testing
 		"Planned dispatch ref: api/v0.2.1",
 		"Planned dispatch inputs: release_sha=pending release commit tag=api/v0.2.1 unit=api version=0.2.1",
 	)
-	if strings.Contains(stderr, "dx1-dry-run-secret") || strings.Contains(stderr, "Execution state: handoff-ready") {
+	if strings.Contains(stderr, "progress-dry-run-secret") || strings.Contains(stderr, "Execution state: handoff-ready") {
 		t.Fatalf("dry-run progress exposed secret or execution progress:\n%s", stderr)
 	}
 }

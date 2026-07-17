@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestC2RetiredReleasePathsStayRemoved(t *testing.T) {
+func TestRetiredReleasePathsStayRemoved(t *testing.T) {
 	cases := []struct {
 		path      string
 		forbidden []string
@@ -46,7 +46,7 @@ func TestC2RetiredReleasePathsStayRemoved(t *testing.T) {
 		source := readCommandBoundarySource(t, tt.path)
 		for _, forbidden := range tt.forbidden {
 			if strings.Contains(source, forbidden) {
-				t.Fatalf("%s reintroduced retired C2 path %q", tt.path, forbidden)
+				t.Fatalf("%s reintroduced retired release path %q", tt.path, forbidden)
 			}
 		}
 	}

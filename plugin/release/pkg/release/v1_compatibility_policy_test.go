@@ -187,7 +187,7 @@ func TestC1DeprecationMarkersMatchCompatibilityPolicy(t *testing.T) {
 		source := readCommandBoundarySource(t, path)
 		for _, snippet := range snippets {
 			if !strings.Contains(source, snippet) {
-				t.Fatalf("%s is missing C1 deprecation marker:\n%s", path, snippet)
+				t.Fatalf("%s is missing V1 compatibility deprecation marker:\n%s", path, snippet)
 			}
 		}
 	}

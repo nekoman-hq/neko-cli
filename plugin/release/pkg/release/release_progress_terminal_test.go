@@ -82,7 +82,7 @@ func TestTerminalReleaseProgressUnknownEventIsNoop(t *testing.T) {
 }
 
 func TestTerminalReleaseProgressCannotRenderSecretFields(t *testing.T) {
-	const secret = "dx1-terminal-secret"
+	const secret = "terminal-progress-secret"
 	_, stderr := captureReleaseProgressOutput(t, func() {
 		newTerminalReleaseProgress().ReportReleaseProgress(ReleaseProgressEvent{
 			Kind:          ReleaseProgressTokenPreflightAvailable,

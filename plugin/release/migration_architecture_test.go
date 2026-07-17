@@ -99,7 +99,7 @@ func TestMigrationExecutionReusesPairPersistenceAndRetainsSafeCleanupOrder(t *te
 
 	adapters := readQueryArchitectureFile(t, "pkg/migrate/execution_adapters.go")
 	if !strings.Contains(adapters, "releaseconfig.NewV2ReleasePairPersister(root)") {
-		t.Fatal("migration target persistence must reuse the Stage 6 pair persister")
+		t.Fatal("migration target persistence must reuse the shared V2 pair persister")
 	}
 	for _, forbidden := range []string{
 		"CreateAtomicFileReplacement",

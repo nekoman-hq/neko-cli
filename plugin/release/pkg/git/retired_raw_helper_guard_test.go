@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestC2RawGitHelpersStayRemoved(t *testing.T) {
+func TestRetiredRawGitHelpersStayRemoved(t *testing.T) {
 	data, err := os.ReadFile("repository.go")
 	if err != nil {
 		t.Fatalf("read repository.go: %v", err)

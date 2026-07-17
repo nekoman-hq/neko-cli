@@ -1,4 +1,4 @@
-//nolint:staticcheck // This file temporarily adapts deprecated V1 effects pending focused Stage 9 adapters.
+//nolint:staticcheck // This file adapts deprecated V1 effects behind focused compatibility adapters.
 package release
 
 import (
