@@ -84,7 +84,7 @@ V2 GitHub Actions execution is owned by `githubActionsReleaseUseCase.Run`. Its c
 13. persist `request-started`, dispatch, and classify the result;
 14. confirm handoff only after accepted dispatch.
 
-`GitHubActionsReleaseRunner` is the public production facade. It validates the request, owns default production composition through explicit fields, and invokes the use case. It does not own the mutation order.
+`GitHubActionsReleaseRunner` is the public production facade. It validates the request, owns default production composition through explicit fields, and invokes the use case. It does not own the mutation order. Since DX1, request facts and active V2 operation progress are emitted through the typed `ReleaseProgress` port supplied by command composition rather than through package-global terminal logging in application code.
 
 V2 local non-dry-run remains blocked in `startV2Release`, and `ReleaseTransaction.Execute` independently refuses execution. No local executor is active in the V2 path.
 
@@ -175,11 +175,19 @@ The following families remain outside canonical production composition or wrap i
 - public query/migration wrappers: migration `ResolvePlan` / `Run` and plugin-index `Generate` / `Write` / `WriteWithOptions`;
 - public constructors with system defaults for release/dispatch journals, dispatch, Git coordination, and the active runner.
 
+## Progress and terminal reporting ownership
+
+DX1 moved active V2 release progress behind a narrow synchronous `ReleaseProgress` capability. Application and focused operation code reports typed `ReleaseProgressEvent` values containing only safe display facts such as unit, version, tag, workflow, safe remote display URL, file paths, journal path, commit SHA, dispatch state, and typed dispatch inputs. The reporter has no error return and no access to Git, dispatch, journals, clocks, tokens, or response construction.
+
+Terminal rendering is owned by `release_progress_terminal.go`, which wraps the established plugin stderr logger and preserves existing human text and verbose suppression through `log.Verbose`. A no-op reporter is used when no presentation reporter is supplied. Git command diagnostics remain separate from release progress through `gitReleaseDiagnostics`; the terminal diagnostics adapter is verbose-only and is composed explicitly with the production GitHub Actions runner.
+
+Progress output remains separate from final command responses. JSON response bodies are still built only by command response mappers and encoded to stdout by `main`; progress uses stderr and is captured as execution logs by the existing plugin protocol. Unknown progress events render nothing and cannot change release policy or recovery classification.
+
 ## Architecture audit result
 
 The verified architecture contains no active god function, replacement god object, generic workflow pipeline, generic state-machine engine, boolean V1/V2 workflow selector, broad dependency container, application-owned `plugin.Response`, raw flag access outside parsers, scattered active release source selection, or duplicated active release/journal infrastructure ownership.
 
-One active deviation from the strict presentation rule remains: `releaseStartOperation.Start`, `planV2Release`, `GitHubActionsReleaseRunner.Run`, `githubActionsReleaseUseCase.Run`, and focused V2 release operation adapters call the package-global terminal logger directly. The release decisions and response models remain typed, and the calls do not alter safety ordering, but progress presentation is not supplied as an explicit boundary. This is a bounded architecture violation, not an intentional compatibility requirement. It does not invalidate the historical fact that all nine planned stages were completed; it does require an explicit post-refactor recommendation rather than a claim of zero remaining architectural debt.
+DX1 resolved the prior active progress-presentation deviation. `releaseStartOperation`, `planV2Release`, `GitHubActionsReleaseRunner`, `githubActionsReleaseUseCase`, focused GitHub Actions release operations, Git preflight/coordination, and dispatch operations no longer import the package-global terminal logger directly. Response construction remains command-owned, and release decisions, journal writes, unsafe effect ordering, retry refusal, and recovery classification are unchanged.
 
 The refactor ledger therefore remains closed at 9 / 9. Future safety, compatibility, developer-experience, and feature work belongs in the separate [post-refactor roadmap](post-refactor-roadmap.md), not in a Stage 10.
 
@@ -339,16 +347,18 @@ No P0 issue was found. The active V2 GitHub Actions path preserves evidence arou
 
 ### D-13 — Active V2 progress logging crosses the presentation boundary
 
+- **Status:** **Resolved by DX1**.
 - **Affected files or symbols:** `releaseStartOperation.Start`; `planV2Release`; `logV2DryRunPlan`; `GitHubActionsReleaseRunner.Run`; `githubActionsReleaseUseCase.Run`; `github_actions_release_operations.go`; package-global `log.Verbose`.
-- **Current behavior:** Active V2 application and focused operations emit formatted terminal progress directly through `pkg/log`. Responses remain command-owned and typed, and log calls do not select workflow behavior.
-- **Why it remains:** The refactor isolated response mapping and unsafe effects but retained existing progress output to preserve behavior and snapshots.
-- **Risk:** Application tests require global log capture, presentation changes touch safety-oriented files, and the code violates the strict `RULES.md` direction even though business results remain separated.
-- **User or developer impact:** No release correctness change is known; maintenance and test isolation suffer.
-- **Removal or improvement preconditions:** Characterize required verbose/non-verbose output and secret absence, define a focused progress-event/reporting boundary, and ensure operation order remains visible without a generic event pipeline.
-- **Recommended action:** **Replace** direct application logging with an explicit narrowly scoped reporter supplied by composition.
-- **Priority:** **P2**, classified as the one active architecture violation found by this review.
-- **Proposed milestone:** **DX1 — Isolate release progress reporting**.
-- **Blocking new features:** Not blocking unrelated features. It should precede substantial edits to the active V2 orchestration files.
+- **Current behavior:** Active V2 application and focused operations emit typed release progress events through `ReleaseProgress`. Terminal rendering and verbose suppression are isolated in `release_progress_terminal.go`; Git verbose diagnostics are isolated in `git_release_diagnostics_terminal.go`. Responses remain command-owned and typed, and reporting calls do not select workflow behavior.
+- **Why it was resolved:** DX1 characterized existing output and secret behavior, introduced the typed reporter, moved active call sites to events, and added architecture guards preventing direct terminal logger imports in active V2 application/operation files.
+- **Risk:** Reintroducing ad-hoc logging could again blur presentation and release-safety changes.
+- **User or developer impact:** Release correctness and output text remain stable while tests can record typed progress without global stderr capture.
+- **Removal or improvement preconditions:** Completed by DX1.
+- **Recommended action:** **Keep** progress reporting behind `ReleaseProgress`; do not introduce a generic event bus or telemetry pipeline.
+- **Priority:** Historical **P2**, resolved.
+- **Completed milestone:** **DX1 — Isolate release progress reporting**.
+- **Resolution evidence:** `release_progress_characterization_test.go`, `release_progress_terminal_test.go`, `release_progress_test.go`, and `command_architecture_test.go` cover output ordering, stderr/stdout separation, no-op reporting, verbose suppression, secret safety, no generic event infrastructure, infallible reporter behavior, and active-file logger import guards.
+- **Blocking new features:** No longer blocking. Future active V2 orchestration edits must keep terminal rendering out of application and operation files.
 
 ### D-14 — Plugin-index output accepts an arbitrary requested path without symlink confinement
 
@@ -477,8 +487,8 @@ No code is labeled dead solely from an IDE result. Classification uses productio
 
 ### Architecture violation
 
-- active V2 application and operation code directly formats terminal progress through the package-global logger. This is bounded to reporting, does not own `plugin.Response`, and does not change release decisions or order, but it conflicts with the strict presentation dependency direction and is assigned to DX1.
+DX1 removed the last active presentation-boundary deviation known at this review level. Remaining debt is tracked by the ranked items above and by the next roadmap milestones rather than by reopening the completed refactor ledger.
 
-The violation does not change the historical ledger: all nine planned refactor stages were completed. It means “completed” is a closed milestone record, not a claim that no future architecture maintenance exists.
+This does not change the historical ledger: all nine planned refactor stages were completed. It means “completed” is a closed milestone record, not a claim that no future architecture maintenance exists.
 
-The prioritized implementation sequence, acceptance criteria, and commit boundaries are defined in [post-refactor-roadmap.md](post-refactor-roadmap.md). H1, H2, H3, C1, and C2 are completed. The recommended next milestone is **DX1 — Isolate release progress reporting**.
+The prioritized implementation sequence, acceptance criteria, and commit boundaries are defined in [post-refactor-roadmap.md](post-refactor-roadmap.md). H1, H2, H3, C1, C2, and DX1 are completed. The recommended next milestone is **DX2 — Make command roots explicit for embedders**.

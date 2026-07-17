@@ -41,7 +41,7 @@ The public command contract is duplicated between `manifest.json` and the switch
 | `pkg/git` | Legacy Git queries and the underlying compatibility operations used by focused V1 adapters | `IsClean`, `LatestTag`, `UnitTagsInHistory`, `Current`, `Contributors`, `ContributorsForPaths` | Direct process details remain below release-owned V1 ports; active V1 application code does not import retired raw C2 helpers. |
 | `pkg/release` planning | Version bump, execution context, delivery/capability descriptions, materialization plan | `PlanUnitVersionBump`, `BuildReleaseExecutionContext`, `ResolveDelivery`, `ResolveExecutorCapabilities`, `ResolveVersionMaterializer` | Useful typed models exist, but some capability data describes inactive V2 local behavior. |
 | `pkg/release` V1 | Typed V1 intent/planning/preview/execution/failures, focused requirements/preflight/materialization/Git/rollback adapters, and explicit executor selection | `V1ReleaseIntent`, `PlanV1Release`, `v1ReleasePreviewUseCase`, `v1ReleaseExecutionUseCase`, `V1Executor` | Production uses a fixed executor catalog. `Service`, `Preflight`, `Tool`, `ToolBase`, and `Register/Get` are bounded compatibility facades. |
-| `pkg/release` V2 GitHub Actions | Typed command boundary, active release use case, named journaled operations, and production facade | `releaseCommandHandler`, `releaseStartOperation`, `githubActionsReleaseUseCase.Run`, `GitHubActionsReleaseRunner.Run` | The facade composes one coordinator, one typed token boundary, and one clock; the use case owns the visible safety order and delegates each mutation to a focused operation. |
+| `pkg/release` V2 GitHub Actions | Typed command boundary, active release use case, named journaled operations, production facade, and typed progress reporting | `releaseCommandHandler`, `releaseStartOperation`, `githubActionsReleaseUseCase.Run`, `GitHubActionsReleaseRunner.Run`, `ReleaseProgress` | The facade composes one coordinator, one typed token boundary, one clock, and typed progress/diagnostic adapters; the use case owns the visible safety order and delegates each mutation to a focused operation. |
 | `pkg/release` V2 Git | Preflight, targeted staging, exact commit verification, tag creation, ordered pushes, dispatch verification, and recovery tag inspection | `GitReleaseCoordinator`, `githubActionsReleaseGitAdapter`, `gitReleaseDispatchVerifier`, `resumeGitAdapter` | Active release/resume share one coordinator instance through consumer-owned capabilities; the former one-call `Coordinate` convenience path was removed in C2. |
 | `pkg/release` state/files | Plan and apply version files; update and restore V2 state | `MaterializationTransaction`, `StateTransaction`, `KnownReleaseFiles` | Snapshots support bounded local restore before commit uncertainty. |
 | `pkg/release` execution journal | Durable intended-release identity, monotonic phases, pending actions, and execution-specific persistence | `ReleaseExecutionJournal`, `ReleaseExecutionJournalStore` | Store-specific validation/mutations use the shared fixed journal location and secure-write mechanics below the Git common directory. |
@@ -104,18 +104,27 @@ The public command contract is duplicated between `manifest.json` and the switch
 
 - Orchestration: `releaseStartOperation` -> `startV2Release` -> `planV2Release`, retaining `BuildReleaseExecutionContext` -> requirements validation -> materialization/known-file/dispatch planning order.
 - Decisions: calculate next SemVer and tag; resolve delivery and executor capabilities; plan materialization; calculate known release files; build a dispatch summary.
-- Side effects: reads config/state, executor config, manifests, and file hashes; emits logs and a timestamped response. It does not resolve a token or write journals/files/refs/remotes.
+- Side effects: reads config/state, executor config, manifests, and file hashes; emits typed progress through the configured reporter and returns a timestamped response. It does not resolve a token or write journals/files/refs/remotes.
 - Tests: all `TestHandleRelease*DryRun*` cases in `dry_run_test.go`, plus materializer and coordinator dry-run tests.
 - Missing characterization: a single dependency-spy test proving that every network, clock-independent mutation, Git mutation, and journal store remains unused across each executor/delivery combination.
 
 #### V2 GitHub Actions execution
 
-- Facade: `GitHubActionsReleaseRunner.Run` validates the execution request, logs request facts, composes production operations, and invokes `githubActionsReleaseUseCase.Run`.
+- Facade: `GitHubActionsReleaseRunner.Run` validates the execution request, reports request facts through `ReleaseProgress`, composes production operations, and invokes `githubActionsReleaseUseCase.Run`.
 - Orchestration: `githubActionsReleaseUseCase.Run` exposes the ordered story: token resolution; materialization planning; Git/unresolved-journal preflight; execution-journal preparation; materialization; state write; targeted stage; commit; tag; dispatch-journal preparation; commit push; tag push; workflow dispatch; accepted-handoff confirmation.
 - State: each named mutation operation persists its exact pending marker before the side effect and its confirmed phase afterward. Execution and dispatch stores retain separate contracts while sharing common-dir/canonical-write mechanics; all active adapters receive the facade's coordinator and clock.
 - Output: `GitHubActionsReleaseResult` is a typed command outcome mapped only in `command_response.go`.
 - Existing tests: `github_actions_release_runner_test.go` preserves real-repository happy paths and durable recovery evidence. `github_actions_release_use_case_test.go` proves the full named order, stopping at every replaceable dependency, cleanup order, rejected-dispatch behavior, and captured-log token absence. `github_actions_release_operations_test.go` injects pending-write, side-effect, and confirmation failures around all eight journaled mutations.
 - Git verification: `BuildReleaseDispatchRequest` receives `releaseDispatchGitVerifier`; production injects `gitReleaseDispatchVerifier` backed by the facade's existing coordinator. The builder no longer constructs Git infrastructure.
+
+#### V2 release progress reporting
+
+- Boundary: active V2 start/planning, runner/use-case, named operations, Git progress, and dispatch progress report `ReleaseProgressEvent` values through `ReleaseProgress`. The interface is synchronous and has no error return.
+- Terminal ownership: `release_progress_terminal.go` is the only active V2 progress renderer. It wraps the established plugin stderr logger, preserves human message text/order, and preserves verbose suppression through `log.Verbose`.
+- Diagnostics ownership: verbose Git command diagnostics are separate from release progress through `gitReleaseDiagnostics` and `git_release_diagnostics_terminal.go`.
+- Suppression: absent reporters are converted to an explicit no-op; application and operation code does not branch on JSON, quiet, interactive, or renderer configuration.
+- Machine output: final `plugin.Response` construction remains in command response mappers and stdout remains JSON-only. Progress uses stderr and is captured as execution logs by the plugin protocol.
+- Safety: progress events contain no token/header/environment/body fields or arbitrary maps; call sites pass sanitized remote display values. Reporting cannot choose release policy, retry behavior, journal state, Git/network effects, command success, or response schema.
 
 #### V2 local execution
 
@@ -346,7 +355,7 @@ V2 pair recovery has a separate focused record at `.neko/release.pair-recovery.j
 | Network | bounded, root-aware V1 GitHub Release client; injected V2 dispatch transport | fake V1 remover/client and local HTTP transport; V2 `RoundTripper` | The active V1 client has a finite timeout, bounded response reads, explicit repository root, a narrow typed-token boundary, and verified GET/DELETE/not-found behavior. |
 | Time | `ReleaseClock` for release/resume responses, active V2 persistence, and V1 compensation evidence; command-owned query clocks; JReleaser init `v1Clock` | injected fixed clocks and persisted timestamp tests | V1 evidence timestamps support auditability but do not infer completion; direct compatibility model fallbacks remain. |
 | External executables | V1-owned Git/executor process and binary-locator adapters; `du` and inactive paths retain direct execution | fake per-executor runners plus local fake processes | Exact V1 command order, environment, outputs, warnings, failures, and ownership are isolated and characterized. |
-| Logging | package-global `log.Verbose` and direct logging throughout domain/orchestration | source assertions and output inspection | Presentation concerns occur inside planning and side-effect code. |
+| Progress and logging | active V2 progress uses `ReleaseProgress` plus terminal/diagnostic adapters; V1 and legacy tooling retain package logging; `main` still sets package-global verbose mode | progress characterization, terminal-adapter tests, architecture source assertions, and output inspection | Active V2 application/operation files no longer import the terminal logger. V1 logging redesign and process-global verbose mode remain outside DX1. |
 | Tool registry | explicit compatibility-only `pkg/release/tool` aggregator | registry characterization; production fixed catalog tests | The mutable map remains for old callers but production neither imports nor reads it. |
 
 ## Confirmed behavioral invariants
@@ -515,12 +524,12 @@ Important missing seams include:
 
 The final architecture audit found no active V1/V2 mixed orchestration, scattered source-format selection in release execution, raw flags in application code, application-owned `plugin.Response`, generic workflow pipeline, dependency bag, versioned engine, boolean V1/V2 selector, replacement god function, duplicate active Git/journal implementation, or unbounded token/clock access in deterministic boundaries. Shared code is limited to identical contracts; V1-, V2-, migration-, and command-specific behavior remains isolated where semantics differ.
 
-The post-refactor verification found one bounded deviation from the strict presentation rule: active V2 application and focused operation code still emits progress through the package-global terminal logger. This does not mix response construction into application code or create a second orchestrator, but it is recorded as an architecture violation in [post-refactor-review.md](post-refactor-review.md) rather than being hidden by the completed-stage ledger.
+DX1 resolved the prior bounded presentation deviation: active V2 application and focused operation code now emits typed progress through `ReleaseProgress`, while terminal rendering is isolated in adapter files. This does not mix response construction into application code or create a second orchestrator; it keeps the completed-stage ledger closed and records ongoing roadmap work in [post-refactor-review.md](post-refactor-review.md) and [post-refactor-roadmap.md](post-refactor-roadmap.md).
 
 - Completed stages: 9 / 9
 - Remaining stages: 0
 - Release Plugin refactor: completed
-- Completed roadmap milestones: H1 — Make V1 compensation interruption-safe; H2 — Make pair and migration crash recovery explicit; H3 — Add evidence-safe journal inspection and lifecycle support; C1 — Decide and deprecate V1 compatibility surfaces; C2 — Retire superseded and inactive release paths
-- Next milestone: DX1 — Isolate release progress reporting
+- Completed roadmap milestones: H1 — Make V1 compensation interruption-safe; H2 — Make pair and migration crash recovery explicit; H3 — Add evidence-safe journal inspection and lifecycle support; C1 — Decide and deprecate V1 compatibility surfaces; C2 — Retire superseded and inactive release paths; DX1 — Isolate release progress reporting
+- Next milestone: DX2 — Make command roots explicit for embedders
 
-H1, H2, H3, C1, and the later milestones are maintained in [post-refactor-roadmap.md](post-refactor-roadmap.md). Roadmap milestones are not refactor stages; the historical refactor ledger remains closed.
+H1, H2, H3, C1, C2, DX1, and the later milestones are maintained in [post-refactor-roadmap.md](post-refactor-roadmap.md). Roadmap milestones are not refactor stages; the historical refactor ledger remains closed.

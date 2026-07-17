@@ -11,7 +11,8 @@ The behavior-preserving Release Plugin refactor is closed at 9 / 9 stages. This 
 - H3: completed
 - C1: completed
 - C2: completed
-- Next roadmap milestone: **DX1 — Isolate release progress reporting**
+- DX1: completed
+- Next roadmap milestone: **DX2 — Make command roots explicit for embedders**
 
 The architecture evidence, debt ranking, compatibility inventory, and removal candidates behind this roadmap are in [post-refactor-review.md](post-refactor-review.md). The detailed runtime and disk contracts remain in [current-state.md](current-state.md). Every implementation milestone remains subject to `plugin/release/RULES.md`.
 
@@ -24,7 +25,7 @@ Milestone namespaces distinguish the nature of future work:
 | `DX` | Developer experience | Clarify presentation, composition, and filesystem policies |
 | `F` | New features | Add separately authorized user-facing capabilities |
 
-H1 — Make V1 compensation interruption-safe, H2 — Make pair and migration crash recovery explicit, H3 — Add evidence-safe journal inspection and lifecycle support, C1 — Decide and deprecate V1 compatibility surfaces, and C2 — Retire superseded and inactive release paths are completed. The recommended next milestone is **DX1 — Isolate release progress reporting**. Compatibility cleanup still does not have to precede unrelated product work; read-only F1 may proceed independently when it does not touch H2/H3 files or contracts.
+H1 — Make V1 compensation interruption-safe, H2 — Make pair and migration crash recovery explicit, H3 — Add evidence-safe journal inspection and lifecycle support, C1 — Decide and deprecate V1 compatibility surfaces, C2 — Retire superseded and inactive release paths, and DX1 — Isolate release progress reporting are completed. The recommended next milestone is **DX2 — Make command roots explicit for embedders**. Compatibility cleanup still does not have to precede unrelated product work; read-only F1 may proceed independently when it does not touch H2/H3 files or contracts.
 
 ## Sequencing and gates
 
@@ -45,7 +46,8 @@ F2  (decision milestone; implementation requires a later approved design)
 - H2 established the required evidence protocol for changes that add multi-file config/state writes or broaden migration.
 - H3 precedes any journal schema change or automated repair behavior.
 - C1 established support and deprecation policy; C2 removed only candidates whose call-site evidence, replacement, and policy gates were satisfied.
-- DX1 should precede substantial edits to active V2 orchestration files.
+- DX1 isolated active V2 progress reporting before substantial edits to active V2 orchestration files.
+- DX2 should precede in-process embedder work that depends on multiple repository roots or parallel command execution.
 - F1 does not wait for compatibility cleanup. It may follow H1 or run independently when file ownership and validation remain isolated.
 - F2 is evaluation only. A positive decision creates a new, separately reviewed implementation milestone; it does not activate the existing scaffold.
 
@@ -123,6 +125,7 @@ F2  (decision milestone; implementation requires a later approved design)
 
 ### DX1 — Isolate release progress reporting
 
+- **Status:** **Completed.** Active V2 start/planning, runner/use-case progress, focused release operations, Git progress, and dispatch progress now report typed `ReleaseProgressEvent` values through a synchronous `ReleaseProgress` port. Terminal rendering lives in `release_progress_terminal.go`; Git verbose diagnostics use a separate `gitReleaseDiagnostics` port and terminal adapter.
 - **Objective:** Replace active V2 package-global terminal logging with a narrow reporter supplied by composition while keeping application results and unsafe operation order unchanged.
 - **User value:** Output remains stable, tests become isolated, and presentation changes no longer require editing safety-oriented application code.
 - **Characterize first:** Capture verbose and non-verbose progress order, dry-run summaries, failure output, response coexistence, and token/secret absence.
@@ -131,7 +134,10 @@ F2  (decision milestone; implementation requires a later approved design)
 - **Dependencies:** A small stable set of presentation facts; coordination with any concurrent active-runner changes.
 - **Risks:** Over-modeling events can become a second orchestration API; output snapshots can hide ordering changes; an injected no-op must not suppress required protocol responses.
 - **Acceptance criteria:** Active application/operation files do not import the terminal logger; composition owns formatting; existing output order and redaction pass characterization; use-case dependencies stay narrow; release decisions, journal writes, and unsafe operation order are byte/behavior unchanged.
-- **Expected commit boundaries:** (1) output characterization; (2) reporter contract and composition; (3) planning/start cutover; (4) runner/operation cutover; (5) architecture guard and docs.
+- **Delivered commit boundaries:** DX1.1 `583702f` characterized output, stderr separation, verbose suppression, and secret absence; DX1.2 `aa8c478` introduced the typed progress port; DX1.3 `059e0b4` moved terminal rendering and Git diagnostics behind explicit adapters; DX1.4 documentation closure uses commit message `docs(release): complete dx1 progress reporting`.
+- **Progress contract:** The reporter is synchronous and infallible: it returns no error, never selects policy, and cannot modify journals, Git, network, command results, or response schemas. No-op reporting is explicit through `releaseProgressOrNoop`.
+- **Output compatibility:** Human progress still goes through the established plugin stderr stream, verbose progress still respects `log.Verbose` inside the terminal adapter, JSON stdout remains reserved for `plugin.Response`, and unknown progress events render nothing.
+- **Secret safety:** Progress events contain no token/header/environment/body fields or arbitrary maps. Call sites pass sanitized remote display values and typed dispatch inputs; terminal tests prove unused secret-bearing fields are not rendered.
 
 ### DX2 — Make command roots explicit for embedders
 
@@ -198,6 +204,6 @@ The following are not backlog omissions. They remain deliberate boundaries until
 
 ## Roadmap completion reporting
 
-Roadmap progress is reported independently from the historical refactor ledger: “Refactor stages: 9 / 9 completed; roadmap milestones H1, H2, H3, C1, and C2: completed; next milestone: DX1 — Isolate release progress reporting.” H1, H2, H3, C1, C2, and later roadmap milestones must not be reported as Stage 10.
+Roadmap progress is reported independently from the historical refactor ledger: “Refactor stages: 9 / 9 completed; roadmap milestones H1, H2, H3, C1, C2, and DX1: completed; next milestone: DX2 — Make command roots explicit for embedders.” H1, H2, H3, C1, C2, DX1, and later roadmap milestones must not be reported as Stage 10.
 
 Each milestone begins with characterization, retains independently revertible commit boundaries, runs the full uncached Release Plugin and repository validation required by `plugin/release/RULES.md`, and updates this roadmap plus the architecture review when evidence changes a priority or recommendation.
