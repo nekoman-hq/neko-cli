@@ -77,19 +77,16 @@ func TestGitReleasePreflightRejectsKnownFileOutsideRepository(t *testing.T) {
 	}
 }
 
-func TestGitReleaseDryRunCoordinateDoesNotMutateGit(t *testing.T) {
+func TestGitReleaseStageDryRunDoesNotMutateGit(t *testing.T) {
 	root := newCleanV2GitRepositoryWithRemote(t, "goreleaser")
 	ctx := mustBuildTransactionContext(t, root, Patch)
 	ctx.DryRun = true
 	files := mustKnownReleaseFiles(t, ctx, nil)
 	beforeHead := strings.TrimSpace(gitOutput(t, root, "rev-parse", "HEAD"))
 
-	result, err := NewGitReleaseCoordinator().Coordinate(ctx, files)
-	if err != nil {
-		t.Fatalf("Coordinate dry run: %v", err)
-	}
-	if result.CommitCreated || result.TagCreated || result.CommitPushed || result.TagPushed {
-		t.Fatalf("dry run mutated result: %#v", result)
+	err := NewGitReleaseCoordinator().Stage(ctx, files)
+	if err == nil || !strings.Contains(err.Error(), "dry run does not stage") {
+		t.Fatalf("expected dry-run stage error, got %v", err)
 	}
 	if head := strings.TrimSpace(gitOutput(t, root, "rev-parse", "HEAD")); head != beforeHead {
 		t.Fatalf("dry run changed HEAD: %s != %s", head, beforeHead)
@@ -286,7 +283,7 @@ func TestGitReleaseCreateTagDryRunCreatesNoTag(t *testing.T) {
 	}
 }
 
-func TestGitReleaseCoordinatePushesCommitThenTagToBareRemote(t *testing.T) {
+func TestGitReleaseFocusedMethodsPushCommitThenTagToBareRemote(t *testing.T) {
 	root := newCleanV2MaterializationGitRepositoryWithRemote(t, "jreleaser")
 	ctx := mustBuildTransactionContext(t, root, Minor)
 	coordinator := NewGitReleaseCoordinator()
@@ -297,10 +294,7 @@ func TestGitReleaseCoordinatePushesCommitThenTagToBareRemote(t *testing.T) {
 	_, files = prepareReleaseFilesForGitCoordinator(t, root, ctx)
 	gitCmd(t, root, "tag", "foreign/v9.9.9")
 
-	result, err := coordinator.Coordinate(ctx, files)
-	if err != nil {
-		t.Fatalf("Coordinate: %v", err)
-	}
+	result := runFocusedGitRelease(t, coordinator, ctx, files)
 	if !result.CommitCreated || !result.TagCreated || !result.CommitPushed || !result.TagPushed {
 		t.Fatalf("unexpected result: %#v", result)
 	}
@@ -321,7 +315,7 @@ func TestGitReleaseCommitPushFailureSkipsTagPush(t *testing.T) {
 	runner := &recordingGitRunner{failCommitPush: true}
 	coordinator := newGitReleaseCoordinatorWithRunner(runner)
 
-	result, err := coordinator.Coordinate(ctx, files)
+	result, err := runFocusedGitReleaseUntilPush(t, coordinator, ctx, files)
 	if err == nil || !strings.Contains(err.Error(), "push V2 release commit") {
 		t.Fatalf("expected commit push failure, got %v", err)
 	}
@@ -343,7 +337,7 @@ func TestGitReleaseTagPushFailureDoesNotRollbackCommit(t *testing.T) {
 	runner := &recordingGitRunner{failTagPush: true}
 	coordinator := newGitReleaseCoordinatorWithRunner(runner)
 
-	result, err := coordinator.Coordinate(ctx, files)
+	result, err := runFocusedGitReleaseUntilPush(t, coordinator, ctx, files)
 	if err == nil || !strings.Contains(err.Error(), "push V2 unit tag") {
 		t.Fatalf("expected tag push failure, got %v", err)
 	}
@@ -370,6 +364,35 @@ func TestGitReleaseCoordinatorSourceContainsNoDestructiveRollbackOrRemoteDelete(
 			}
 		}
 	}
+}
+
+func runFocusedGitRelease(t *testing.T, coordinator *GitReleaseCoordinator, ctx *ReleaseExecutionContext, files KnownReleaseFiles) *GitReleaseResult {
+	t.Helper()
+	result, err := runFocusedGitReleaseUntilPush(t, coordinator, ctx, files)
+	if err != nil {
+		t.Fatalf("focused Git release: %v", err)
+	}
+	return result
+}
+
+func runFocusedGitReleaseUntilPush(t *testing.T, coordinator *GitReleaseCoordinator, ctx *ReleaseExecutionContext, files KnownReleaseFiles) (*GitReleaseResult, error) {
+	t.Helper()
+	if err := coordinator.Stage(ctx, files); err != nil {
+		t.Fatalf("Stage: %v", err)
+	}
+	commitSHA, err := coordinator.Commit(ctx, files)
+	if err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+	tagCreated, err := coordinator.CreateTag(ctx, commitSHA)
+	if err != nil {
+		t.Fatalf("CreateTag: %v", err)
+	}
+	result := newGitReleaseResult(ctx, files)
+	result.CommitSHA = commitSHA
+	result.CommitCreated = true
+	result.TagCreated = tagCreated
+	return result, coordinator.Push(ctx, commitSHA, result)
 }
 
 type recordingGitRunner struct {

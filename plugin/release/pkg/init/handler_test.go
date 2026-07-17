@@ -84,13 +84,13 @@ func TestGetAvailableOptionsClarifiesPluginOnlyOptions(t *testing.T) {
 	assertInitOptionContains(t, "plugin-name", rowString(t, byName["plugin-name"], "description"), "Normal repositories do not use plugin fields")
 }
 
-func TestBuildV2InitConfigRejectsLegacyFlags(t *testing.T) {
+func TestV2UnitConstructionRejectsLegacyFlags(t *testing.T) {
 	for _, legacy := range []string{"project-type", "release-system", "metadata"} {
-		_, err := buildV2InitConfigFromFlags(map[string]any{
+		_, err := constructV2Unit(parseV2UnitRequest(map[string]any{
 			"executor": "goreleaser",
 			"delivery": "local",
 			legacy:     "legacy",
-		})
+		}))
 		if err == nil || !strings.Contains(err.Error(), "V2-only") {
 			t.Fatalf("expected V2-only error for %s, got %v", legacy, err)
 		}

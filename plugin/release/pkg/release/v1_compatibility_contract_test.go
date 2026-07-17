@@ -2,6 +2,7 @@
 package release
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -239,9 +240,9 @@ func TestV1ReleaseCompatibilityUsesLocalPreviewThenRefreshedExecution(t *testing
 	latestCalls, fetchCalls := installV1VersionEvidence(t, "v1.2.3")
 	ctx := v1CompatibilityExecutionContext(t, Patch, false)
 
-	outcome, failure := startLegacyRelease(ctx, cfg)
+	outcome, failure := startV1CompatibilityApplication(t, cfg, ReleaseCommandRequest{ReleaseType: ctx.ReleaseKind, DryRun: ctx.DryRun})
 	if failure != nil {
-		t.Fatalf("startLegacyRelease failure: %#v", failure)
+		t.Fatalf("V1 compatibility application failure: %#v", failure)
 	}
 	completed, ok := outcome.(*LegacyReleaseCompleted)
 	if !ok {
@@ -273,7 +274,7 @@ func TestV1ReleaseCompatibilityRestoresConfigThroughCompensationBoundary(t *test
 	tool := &v1ObservingTool{executeError: errors.New("publish failed")}
 	installV1RegistryTool(t, tool)
 	installV1VersionEvidence(t, "v1.2.3")
-	_, failure := startLegacyRelease(v1CompatibilityExecutionContext(t, Patch, false), cfg)
+	_, failure := startV1CompatibilityApplication(t, cfg, ReleaseCommandRequest{ReleaseType: Patch})
 	if failure == nil || failure.Code != "RELEASE_FAILED" || !strings.Contains(failure.responseMessage(), "publish failed") {
 		t.Fatalf("failure = %#v", failure)
 	}
@@ -359,6 +360,16 @@ func installV1VersionEvidence(t *testing.T, latest string) (*int, *int) {
 		refreshVersionTags = originalFetch
 	})
 	return &latestCalls, &fetchCalls
+}
+
+func startV1CompatibilityApplication(t *testing.T, cfg *config.V1ReleaseConfig, request ReleaseCommandRequest) (ReleaseCommandOutcome, *CommandFailure) {
+	t.Helper()
+	root, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get working directory: %v", err)
+	}
+	repository := config.NormalizeV1Repository(root, cfg)
+	return composeV1ReleaseCommandApplication(registeredV1ReleaseExecutorCatalog{}).Start(context.Background(), repository, request)
 }
 
 func v1CompatibilityExecutionContext(t *testing.T, releaseType Type, dryRun bool) *ReleaseExecutionContext {
