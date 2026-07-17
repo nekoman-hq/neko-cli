@@ -258,7 +258,3 @@ func recoveryGuidanceCommitCreated(commitSHA, unit, tag string) string {
 func recoveryGuidanceCommitPushedTagMissing(commitSHA, unit, tag string) string {
 	return fmt.Sprintf("Release commit %s for unit %q was pushed, but tag %q was not pushed. Do not delete remote state automatically; inspect the remote commit and push the exact tag when safe.", commitSHA, unit, tag)
 }
-
-func recoveryGuidanceComplete(commitSHA, unit, tag string) string {
-	return fmt.Sprintf("Release commit %s and tag %q for unit %q were pushed. Later dispatch can target this exact tag.", commitSHA, tag, unit)
-}
