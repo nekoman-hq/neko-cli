@@ -9,6 +9,11 @@ import (
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
+const (
+	pluginIndexLegacyReleaseConfigPath = ".release.neko.json"
+	pluginIndexLegacyReleaseBackupPath = ".release.neko.json.v1.bak"
+)
+
 type pluginIndexOutputTarget struct {
 	ConfiguredPath string
 	AbsolutePath   string
@@ -97,8 +102,8 @@ func rejectProtectedPluginIndexRepositoryPath(relative string, index *Index) err
 		filepath.ToSlash(filepath.Join(releaseconfig.V2Directory, releaseconfig.V2StateFileName)):  "release state",
 		filepath.ToSlash(filepath.Join(releaseconfig.V2Directory, "release.pair-recovery.json")):   "release pair-recovery evidence",
 		filepath.ToSlash(filepath.Join(releaseconfig.V2Directory, "release.migration.json")):       "release migration evidence",
-		releaseconfig.V1FileName:             "legacy release configuration",
-		releaseconfig.V1FileName + ".v1.bak": "legacy release backup",
+		pluginIndexLegacyReleaseConfigPath: "legacy release configuration",
+		pluginIndexLegacyReleaseBackupPath: "legacy release backup",
 	}
 	if index != nil {
 		for _, entry := range index.Plugins {
@@ -161,13 +166,13 @@ func existingPluginIndexOutputParent(outputPath string) (string, error) {
 		info, err := os.Lstat(parent)
 		if err == nil {
 			if info.Mode()&os.ModeSymlink != 0 {
-				resolved, err := filepath.EvalSymlinks(parent)
-				if err != nil {
-					return "", fmt.Errorf("resolve plugin index output parent %s: %w", parent, err)
+				resolvedParent, resolveErr := filepath.EvalSymlinks(parent)
+				if resolveErr != nil {
+					return "", fmt.Errorf("resolve plugin index output parent %s: %w", parent, resolveErr)
 				}
-				resolvedInfo, err := os.Stat(resolved)
-				if err != nil {
-					return "", fmt.Errorf("inspect plugin index output parent %s: %w", parent, err)
+				resolvedInfo, statErr := os.Stat(resolvedParent)
+				if statErr != nil {
+					return "", fmt.Errorf("inspect plugin index output parent %s: %w", parent, statErr)
 				}
 				if !resolvedInfo.IsDir() {
 					return "", fmt.Errorf("plugin index output parent %s is not a directory", parent)
