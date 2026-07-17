@@ -105,7 +105,7 @@ func TestActiveV2TokenBoundaryHasNoStaticResolverAdapter(t *testing.T) {
 	}
 }
 
-func TestDX1ActiveV2ProgressDoesNotImportGlobalTerminalLogger(t *testing.T) {
+func TestActiveV2ProgressDoesNotImportGlobalTerminalLogger(t *testing.T) {
 	for _, path := range []string{
 		"handler.go",
 		"github_actions_release_runner.go",
@@ -128,7 +128,7 @@ func TestDX1ActiveV2ProgressDoesNotImportGlobalTerminalLogger(t *testing.T) {
 	}
 }
 
-func TestDX1TerminalRenderingIsOwnedByAdapters(t *testing.T) {
+func TestTerminalRenderingIsOwnedByAdapters(t *testing.T) {
 	for _, path := range []string{"release_progress_terminal.go", "git_release_diagnostics_terminal.go"} {
 		source := readCommandBoundarySource(t, path)
 		if !strings.Contains(source, "github.com/nekoman-hq/neko-cli/pkg/log") {
@@ -137,7 +137,7 @@ func TestDX1TerminalRenderingIsOwnedByAdapters(t *testing.T) {
 	}
 }
 
-func TestDX1ProgressBoundaryDoesNotConstructResponsesOrEventInfrastructure(t *testing.T) {
+func TestProgressBoundaryDoesNotConstructResponsesOrEventInfrastructure(t *testing.T) {
 	for _, path := range []string{"release_progress.go", "release_progress_terminal.go"} {
 		source := readCommandBoundarySource(t, path)
 		for _, forbidden := range []string{
@@ -160,7 +160,7 @@ func TestDX1ProgressBoundaryDoesNotConstructResponsesOrEventInfrastructure(t *te
 	}
 }
 
-func TestDX1ReleaseProgressReporterIsInfallible(t *testing.T) {
+func TestReleaseProgressReporterIsInfallible(t *testing.T) {
 	source := readCommandBoundarySource(t, "release_progress.go")
 	if !strings.Contains(source, "ReportReleaseProgress(event ReleaseProgressEvent)") {
 		t.Fatal("ReleaseProgress must remain a narrow typed event reporter")

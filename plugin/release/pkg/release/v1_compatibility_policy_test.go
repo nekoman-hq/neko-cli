@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestC1ReleaseEntryPointsKeepProductionOffMutableRegistry(t *testing.T) {
+func TestReleaseEntryPointsKeepProductionOffMutableRegistry(t *testing.T) {
 	handler := readCommandBoundarySource(t, "command_handler.go")
 	for _, required := range []string{
 		"workspace.ResolveRepositoryRoot(req.Context.WorkingDir)",
@@ -51,28 +51,28 @@ func TestC1ReleaseEntryPointsKeepProductionOffMutableRegistry(t *testing.T) {
 	}
 }
 
-func TestC1RegistryAndVersionGlobalsRemainCompatibilityOnly(t *testing.T) {
-	assertC1ProductionReferences(t, "Register(", []string{
+func TestRegistryAndVersionGlobalsRemainCompatibilityOnly(t *testing.T) {
+	assertCompatibilityProductionReferences(t, "Register(", []string{
 		"registry.go",
 		"tool/register.go",
 	})
-	assertC1ProductionReferences(t, "func Get(", []string{
+	assertCompatibilityProductionReferences(t, "func Get(", []string{
 		"registry.go",
 	})
-	assertC1ProductionReferences(t, "Get(name)", []string{
+	assertCompatibilityProductionReferences(t, "Get(name)", []string{
 		"v1_release_adapters.go",
 	})
-	assertC1ProductionReferences(t, "refreshVersionTags", []string{
+	assertCompatibilityProductionReferences(t, "refreshVersionTags", []string{
 		"version_guard.go",
 		"v1_release_adapters.go",
 	})
-	assertC1ProductionReferences(t, "latestVersionTag", []string{
+	assertCompatibilityProductionReferences(t, "latestVersionTag", []string{
 		"version_guard.go",
 		"v1_release_adapters.go",
 	})
 }
 
-func TestC1V1ConfigCurrentDirectoryFacadesRemainDirectDelegates(t *testing.T) {
+func TestV1ConfigCurrentDirectoryFacadesRemainDirectDelegates(t *testing.T) {
 	source := readCommandBoundarySource(t, "../config/v1_loader.go")
 	for _, required := range []string{
 		"func V1Exists() bool {\n\treturn V1ConfigExistsAt(\".\")\n}",
@@ -90,7 +90,7 @@ func TestC1V1ConfigCurrentDirectoryFacadesRemainDirectDelegates(t *testing.T) {
 	}
 }
 
-func TestC1ExecutorRollbackOwnsLegacyRevertReleaseDelegation(t *testing.T) {
+func TestExecutorRollbackOwnsLegacyRevertReleaseDelegation(t *testing.T) {
 	cases := []struct {
 		path           string
 		revertDelegate string
@@ -123,7 +123,7 @@ func TestC1ExecutorRollbackOwnsLegacyRevertReleaseDelegation(t *testing.T) {
 	}
 }
 
-func TestC1DocsRecommendExplicitReleaseExecutorComposition(t *testing.T) {
+func TestDocsRecommendExplicitReleaseExecutorComposition(t *testing.T) {
 	source := readCommandBoundarySource(t, "../../../../docs/ai_context.md")
 	for _, required := range []string{
 		"goreleaser.NewV1Executor()",
@@ -145,7 +145,7 @@ func TestC1DocsRecommendExplicitReleaseExecutorComposition(t *testing.T) {
 	}
 }
 
-func TestC1DeprecationMarkersMatchCompatibilityPolicy(t *testing.T) {
+func TestDeprecationMarkersMatchCompatibilityPolicy(t *testing.T) {
 	required := map[string][]string{
 		"service.go": {
 			"// Deprecated: use HandleReleaseWithV1Executors with explicit V1Executor values\n// for release execution, or PlanV1Release for version planning.",
@@ -205,7 +205,7 @@ func TestC1DeprecationMarkersMatchCompatibilityPolicy(t *testing.T) {
 	for path, signatures := range notDeprecated {
 		source := readCommandBoundarySource(t, path)
 		for _, signature := range signatures {
-			block := c1DeclarationBlock(t, source, signature)
+			block := compatibilityDeclarationBlock(t, source, signature)
 			if strings.Contains(block, "Deprecated:") {
 				t.Fatalf("%s keeps/defer surface %q was marked deprecated", path, signature)
 			}
@@ -213,9 +213,9 @@ func TestC1DeprecationMarkersMatchCompatibilityPolicy(t *testing.T) {
 	}
 }
 
-func assertC1ProductionReferences(t *testing.T, needle string, want []string) {
+func assertCompatibilityProductionReferences(t *testing.T, needle string, want []string) {
 	t.Helper()
-	got := c1ProductionReferences(t, needle)
+	got := compatibilityProductionReferences(t, needle)
 	slices.Sort(got)
 	slices.Sort(want)
 	if !reflect.DeepEqual(got, want) {
@@ -223,7 +223,7 @@ func assertC1ProductionReferences(t *testing.T, needle string, want []string) {
 	}
 }
 
-func c1ProductionReferences(t *testing.T, needle string) []string {
+func compatibilityProductionReferences(t *testing.T, needle string) []string {
 	t.Helper()
 	var references []string
 	err := filepath.WalkDir(".", func(path string, entry os.DirEntry, err error) error {
@@ -251,7 +251,7 @@ func c1ProductionReferences(t *testing.T, needle string) []string {
 	return references
 }
 
-func c1DeclarationBlock(t *testing.T, source string, signature string) string {
+func compatibilityDeclarationBlock(t *testing.T, source string, signature string) string {
 	t.Helper()
 	lines := strings.Split(source, "\n")
 	index := -1
@@ -277,7 +277,7 @@ func c1DeclarationBlock(t *testing.T, source string, signature string) string {
 	end := index + 1
 	for end < len(lines) {
 		line := strings.TrimSpace(lines[end])
-		if line == "" && c1NextNonCommentLineStartsDeclaration(lines[end+1:]) {
+		if line == "" && nextNonCommentLineStartsDeclaration(lines[end+1:]) {
 			break
 		}
 		if strings.HasPrefix(line, "func ") || strings.HasPrefix(line, "type ") {
@@ -288,7 +288,7 @@ func c1DeclarationBlock(t *testing.T, source string, signature string) string {
 	return strings.Join(lines[start:end], "\n")
 }
 
-func c1NextNonCommentLineStartsDeclaration(lines []string) bool {
+func nextNonCommentLineStartsDeclaration(lines []string) bool {
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || strings.HasPrefix(trimmed, "//") {

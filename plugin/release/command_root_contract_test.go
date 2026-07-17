@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestDX2MainOwnsOneExplicitRootBoundary(t *testing.T) {
+func TestMainOwnsOneExplicitRootBoundary(t *testing.T) {
 	sourceBytes, err := os.ReadFile("main.go")
 	if err != nil {
 		t.Fatalf("read main.go: %v", err)

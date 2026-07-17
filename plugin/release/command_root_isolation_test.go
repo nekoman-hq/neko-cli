@@ -12,15 +12,15 @@ import (
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
 )
 
-func TestDX2HandleRequestAtIsolatesValidateAcrossRepositories(t *testing.T) {
+func TestHandleRequestAtIsolatesValidateAcrossRepositories(t *testing.T) {
 	firstRoot := t.TempDir()
 	secondRoot := t.TempDir()
 	otherRoot := t.TempDir()
-	writeDX2ReleaseRepository(t, firstRoot, "api", "1.2.3")
-	writeDX2ReleaseRepository(t, secondRoot, "web", "2.0.0")
-	first := mustValidateDX2Root(t, firstRoot)
-	second := mustValidateDX2Root(t, secondRoot)
-	withDX2ProcessWorkingDirectory(t, otherRoot)
+	writeExplicitRootReleaseRepository(t, firstRoot, "api", "1.2.3")
+	writeExplicitRootReleaseRepository(t, secondRoot, "web", "2.0.0")
+	first := mustValidateRepositoryRoot(t, firstRoot)
+	second := mustValidateRepositoryRoot(t, secondRoot)
+	withProcessWorkingDirectory(t, otherRoot)
 
 	firstResp, err := handleRequestAt(first, plugin.Request{Command: "validate", Flags: map[string]any{"show": true}}, nil)
 	if err != nil {
@@ -39,18 +39,18 @@ func TestDX2HandleRequestAtIsolatesValidateAcrossRepositories(t *testing.T) {
 	if !strings.Contains(secondItems, "Unit web") || !strings.Contains(secondItems, "version=2.0.0") || strings.Contains(secondItems, "Unit api") {
 		t.Fatalf("second repository validation leaked or missed data: %s", secondItems)
 	}
-	assertDX2Cwd(t, otherRoot)
+	assertProcessWorkingDirectory(t, otherRoot)
 }
 
-func TestDX2HandleRequestAtIsolatesPluginIndexAcrossRepositories(t *testing.T) {
+func TestHandleRequestAtIsolatesPluginIndexAcrossRepositories(t *testing.T) {
 	firstRoot := t.TempDir()
 	secondRoot := t.TempDir()
 	otherRoot := t.TempDir()
-	writeDX2PluginRepository(t, firstRoot, "plugin-release", "release", "4.0.7")
-	writeDX2PluginRepository(t, secondRoot, "plugin-audit", "audit", "0.3.0")
-	first := mustValidateDX2Root(t, firstRoot)
-	second := mustValidateDX2Root(t, secondRoot)
-	withDX2ProcessWorkingDirectory(t, otherRoot)
+	writeExplicitRootPluginRepository(t, firstRoot, "plugin-release", "release", "4.0.7")
+	writeExplicitRootPluginRepository(t, secondRoot, "plugin-audit", "audit", "0.3.0")
+	first := mustValidateRepositoryRoot(t, firstRoot)
+	second := mustValidateRepositoryRoot(t, secondRoot)
+	withProcessWorkingDirectory(t, otherRoot)
 
 	firstResp, err := handleRequestAt(first, plugin.Request{Command: "plugin-index"}, nil)
 	if err != nil {
@@ -69,28 +69,28 @@ func TestDX2HandleRequestAtIsolatesPluginIndexAcrossRepositories(t *testing.T) {
 	if !strings.Contains(secondRaw, `"name": "audit"`) || !strings.Contains(secondRaw, `"tag": "plugin-audit/v0.3.0"`) || strings.Contains(secondRaw, `"name": "release"`) {
 		t.Fatalf("second plugin index leaked or missed data: %s", secondRaw)
 	}
-	assertDX2Cwd(t, otherRoot)
+	assertProcessWorkingDirectory(t, otherRoot)
 }
 
-func writeDX2ReleaseRepository(t *testing.T, root, unitID, version string) {
+func writeExplicitRootReleaseRepository(t *testing.T, root, unitID, version string) {
 	t.Helper()
 	configJSON := fmt.Sprintf(`{"schemaVersion":2,"units":[{"id":"%s","paths":["**"],"workingDirectory":".","tagPrefix":"%s/v","executor":{"type":"goreleaser","delivery":"local"}}]}`, unitID, unitID)
 	stateJSON := fmt.Sprintf(`{"schemaVersion":2,"units":{"%s":{"version":"%s"}}}`, unitID, version)
-	writeDX2File(t, releaseconfig.V2ConfigPath(root), configJSON)
-	writeDX2File(t, releaseconfig.V2StatePath(root), stateJSON)
+	writeExplicitRootFile(t, releaseconfig.V2ConfigPath(root), configJSON)
+	writeExplicitRootFile(t, releaseconfig.V2StatePath(root), stateJSON)
 }
 
-func writeDX2PluginRepository(t *testing.T, root, unitID, pluginName, version string) {
+func writeExplicitRootPluginRepository(t *testing.T, root, unitID, pluginName, version string) {
 	t.Helper()
 	manifestPath := filepath.Join("plugins", pluginName, "manifest.json")
-	writeDX2File(t, filepath.Join(root, manifestPath), fmt.Sprintf(`{"name":"%s","version":"%s","description":"%s plugin"}`, pluginName, version, pluginName))
+	writeExplicitRootFile(t, filepath.Join(root, manifestPath), fmt.Sprintf(`{"name":"%s","version":"%s","description":"%s plugin"}`, pluginName, version, pluginName))
 	configJSON := fmt.Sprintf(`{"schemaVersion":2,"units":[{"id":"%s","paths":["plugins/%s/**"],"workingDirectory":".","tagPrefix":"%s/v","kind":"plugin","plugin":{"name":"%s","manifest":"%s","assetPrefix":"%s","binaryName":"%s"},"executor":{"type":"goreleaser","delivery":"local"}}]}`, unitID, pluginName, unitID, pluginName, manifestPath, unitID, unitID)
 	stateJSON := fmt.Sprintf(`{"schemaVersion":2,"units":{"%s":{"version":"%s"}}}`, unitID, version)
-	writeDX2File(t, releaseconfig.V2ConfigPath(root), configJSON)
-	writeDX2File(t, releaseconfig.V2StatePath(root), stateJSON)
+	writeExplicitRootFile(t, releaseconfig.V2ConfigPath(root), configJSON)
+	writeExplicitRootFile(t, releaseconfig.V2StatePath(root), stateJSON)
 }
 
-func writeDX2File(t *testing.T, path, content string) {
+func writeExplicitRootFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		t.Fatalf("mkdir parent for %s: %v", path, err)
@@ -100,7 +100,7 @@ func writeDX2File(t *testing.T, path, content string) {
 	}
 }
 
-func mustValidateDX2Root(t *testing.T, root string) workspace.RepositoryRoot {
+func mustValidateRepositoryRoot(t *testing.T, root string) workspace.RepositoryRoot {
 	t.Helper()
 	resolved, err := workspace.ValidateRepositoryRoot(root)
 	if err != nil {
@@ -109,7 +109,7 @@ func mustValidateDX2Root(t *testing.T, root string) workspace.RepositoryRoot {
 	return resolved
 }
 
-func withDX2ProcessWorkingDirectory(t *testing.T, root string) {
+func withProcessWorkingDirectory(t *testing.T, root string) {
 	t.Helper()
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -125,7 +125,7 @@ func withDX2ProcessWorkingDirectory(t *testing.T, root string) {
 	})
 }
 
-func assertDX2Cwd(t *testing.T, want string) {
+func assertProcessWorkingDirectory(t *testing.T, want string) {
 	t.Helper()
 	got, err := os.Getwd()
 	if err != nil {
