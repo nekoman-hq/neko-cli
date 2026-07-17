@@ -167,10 +167,11 @@ func TestGeneratePluginIndexUseCaseMakesModesAndStopPointsExplicit(t *testing.T)
 	})
 
 	t.Run("persist receives complete built bytes", func(t *testing.T) {
+		root := t.TempDir()
 		query := &fakePluginIndexQuerier{index: sampleCommandIndex()}
 		builder := &fakePluginIndexOutputBuilder{output: []byte("complete output")}
 		persister := &fakePluginIndexOutputPersister{}
-		useCase := newGeneratePluginIndexUseCase(query, builder, persister)
+		useCase := newGeneratePluginIndexUseCaseAt(root, query, builder, persister)
 
 		result, err := useCase.Run(context.Background(), pluginIndexCommandRequest{
 			Mode:       pluginIndexPersistMode,
@@ -179,7 +180,8 @@ func TestGeneratePluginIndexUseCaseMakesModesAndStopPointsExplicit(t *testing.T)
 		if err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-		if result.OutputPath != "dist/plugin-index.json" || persister.path != result.OutputPath || string(persister.output) != "complete output" {
+		wantPath := filepath.Join(root, "dist", "plugin-index.json")
+		if result.OutputPath != "dist/plugin-index.json" || persister.path != wantPath || string(persister.output) != "complete output" {
 			t.Fatalf("result/persistence = %#v/%#v", result, persister)
 		}
 		assertPluginIndexCalls(t, query, builder, persister, 1, 1, 1)

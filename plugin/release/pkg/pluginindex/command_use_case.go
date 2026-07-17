@@ -73,7 +73,11 @@ func (useCase generatePluginIndexUseCase) Run(ctx context.Context, request plugi
 		result.RawOutput = string(output)
 		return result, nil
 	}
-	if err := useCase.persister.Persist(request.OutputPath, output); err != nil {
+	target, err := resolvePluginIndexOutputTarget(useCase.repositoryRoot, request.OutputPath)
+	if err != nil {
+		return pluginIndexCommandResult{}, err
+	}
+	if err := useCase.persister.Persist(target.AbsolutePath, output); err != nil {
 		return pluginIndexCommandResult{}, err
 	}
 	return result, nil
