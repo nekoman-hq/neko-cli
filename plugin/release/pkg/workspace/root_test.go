@@ -110,6 +110,43 @@ func TestResolveProjectRootReturnsWorkingDirWithoutMarkers(t *testing.T) {
 	}
 }
 
+func TestResolveProjectRootUsesFileParentAsStartDirectory(t *testing.T) {
+	repoRoot := t.TempDir()
+	startFile := filepath.Join(repoRoot, "packages", "release", "request.json")
+
+	mustMkdirAll(t, filepath.Join(repoRoot, gitMarker))
+	mustWriteFile(t, startFile, "{}")
+
+	root, err := ResolveProjectRoot(startFile)
+	if err != nil {
+		t.Fatalf("ResolveProjectRoot: %v", err)
+	}
+	if root != repoRoot {
+		t.Fatalf("expected file start to resolve to git root %s, got %s", repoRoot, root)
+	}
+}
+
+func TestResolveProjectRootPreservesSymlinkRootSpelling(t *testing.T) {
+	targetRoot := t.TempDir()
+	linkParent := t.TempDir()
+	linkRoot := filepath.Join(linkParent, "repo-link")
+	startDir := filepath.Join(linkRoot, "packages", "release")
+
+	mustMkdirAll(t, filepath.Join(targetRoot, gitMarker))
+	if err := os.Symlink(targetRoot, linkRoot); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	mustMkdirAll(t, startDir)
+
+	root, err := ResolveProjectRoot(startDir)
+	if err != nil {
+		t.Fatalf("ResolveProjectRoot: %v", err)
+	}
+	if root != linkRoot {
+		t.Fatalf("expected symlink root spelling %s, got %s", linkRoot, root)
+	}
+}
+
 func TestChangeToProjectRootSwitchesProcessDirectory(t *testing.T) {
 	originalDir, getwdErr := os.Getwd()
 	if getwdErr != nil {

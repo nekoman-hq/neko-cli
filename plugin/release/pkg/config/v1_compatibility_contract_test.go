@@ -114,3 +114,87 @@ func TestV1SaveCompatibilityBytesAndMode(t *testing.T) {
 		t.Fatalf("saved mode = %04o, want 0644", info.Mode().Perm())
 	}
 }
+
+func TestV1ExplicitRootOperationsIgnoreProcessWorkingDirectory(t *testing.T) {
+	repositoryRoot := t.TempDir()
+	otherRoot := t.TempDir()
+
+	initial := validV1RootContractConfig()
+	if err := V1SaveConfigAt(repositoryRoot, initial); err != nil {
+		t.Fatalf("V1SaveConfigAt initial: %v", err)
+	}
+
+	previous, getwdErr := os.Getwd()
+	if getwdErr != nil {
+		t.Fatalf("get working directory: %v", getwdErr)
+	}
+	if chdirErr := os.Chdir(otherRoot); chdirErr != nil {
+		t.Fatalf("enter unrelated directory: %v", chdirErr)
+	}
+	t.Cleanup(func() { _ = os.Chdir(previous) })
+
+	if !V1ConfigExistsAt(repositoryRoot) {
+		t.Fatal("V1ConfigExistsAt did not find config through explicit root")
+	}
+	loaded, err := V1LoadConfigAt(filepath.Join(repositoryRoot, V1FileName))
+	if err != nil {
+		t.Fatalf("V1LoadConfigAt: %v", err)
+	}
+	if loaded.Version != initial.Version {
+		t.Fatalf("loaded version = %s, want %s", loaded.Version, initial.Version)
+	}
+
+	next := initial
+	next.Version = "2.0.0"
+	if err := V1SaveConfigAt(repositoryRoot, next); err != nil {
+		t.Fatalf("V1SaveConfigAt next: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(otherRoot, V1FileName)); !os.IsNotExist(err) {
+		t.Fatalf("explicit root write touched cwd; stat err=%v", err)
+	}
+}
+
+func TestV1CwdFacadesUseProcessWorkingDirectory(t *testing.T) {
+	repositoryRoot := t.TempDir()
+	otherRoot := t.TempDir()
+
+	previous, getwdErr := os.Getwd()
+	if getwdErr != nil {
+		t.Fatalf("get working directory: %v", getwdErr)
+	}
+	if chdirErr := os.Chdir(otherRoot); chdirErr != nil {
+		t.Fatalf("enter cwd directory: %v", chdirErr)
+	}
+	t.Cleanup(func() { _ = os.Chdir(previous) })
+
+	cfg := validV1RootContractConfig()
+	if err := V1SaveConfig(cfg); err != nil {
+		t.Fatalf("V1SaveConfig: %v", err)
+	}
+	if !V1Exists() {
+		t.Fatal("V1Exists did not read process working directory")
+	}
+	loaded, err := V1LoadConfig()
+	if err != nil {
+		t.Fatalf("V1LoadConfig: %v", err)
+	}
+	if loaded.Version != cfg.Version {
+		t.Fatalf("loaded version = %s, want %s", loaded.Version, cfg.Version)
+	}
+	if _, err := os.Stat(filepath.Join(repositoryRoot, V1FileName)); !os.IsNotExist(err) {
+		t.Fatalf("cwd facade unexpectedly touched repository root; stat err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(otherRoot, V1FileName)); err != nil {
+		t.Fatalf("cwd facade did not write to cwd: %v", err)
+	}
+}
+
+func validV1RootContractConfig() V1ReleaseConfig {
+	return V1ReleaseConfig{
+		ProjectName:   "neko-cli",
+		ProjectOwner:  "nekoman-hq",
+		ProjectType:   V1ProjectTypeBackend,
+		ReleaseSystem: V1ReleaseTypeGoReleaser,
+		Version:       "1.2.3",
+	}
+}
