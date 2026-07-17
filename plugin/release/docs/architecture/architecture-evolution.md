@@ -76,13 +76,21 @@ Existing `patch`, `minor`, and `major --dry-run` behavior remains a separate com
 
 V1 inspection is supported as a local planning subset: it reports the legacy source, virtual `default` unit, current and next version, tag, executor, planned `.release.neko.json` materialization, and limitations. It does not use the old cwd-based latest-tag evidence facade.
 
-## Pending architecture decisions
-
 ### V2 local delivery evaluation
 
-V2 local delivery remains blocked. GitHub Actions is the active V2 publication owner. Local executor activation requires a product and safety decision per executor, including state-in-commit proof, exact Git ownership, journal boundaries, recovery/refusal semantics, token boundaries, and release-it feasibility.
+V2 local delivery is deliberately unsupported for executable V2 releases. `github-actions` is the only supported V2 delivery mode for committed V2 release units.
 
-A positive decision would require a new implementation design. A negative decision would unlock cleanup of retained inactive V2-local scaffold.
+The decision rejects local JReleaser activation because the existing JReleaser executor is not a publish-only adapter. Its local `full-release` flow can create tags, publish releases, and observe remote services from inside the executor process. Neko CLI cannot prove the external publication result after interruption, cannot safely retry without remote-state inference, and cannot compensate remote publication with the guarantees required by the V2 journal and recovery model. GoReleaser and release-it have the same or stronger ownership conflict for local V2 execution: the current local executor contracts can own publication and, for release-it, commit/tag/push as well.
+
+For V2, local delivery means "the executor process would be launched on the current machine"; it does not mean offline or no remote side effects. Because no supported executor currently exposes a safe publish-only boundary, V2 config validation rejects `delivery: "local"` and missing delivery defaults no longer imply local execution. Init and unit-add must present only `github-actions` for executable V2 releases, require a workflow path, and keep V1 local compatibility unchanged.
+
+Planning and dry-run remain token-free and non-mutating. Existing invalid V2 configs containing `local` are rejected before planning or execution with a clear unsupported-delivery failure. The active V2 GitHub Actions path remains unchanged: Neko CLI owns version materialization, V2 state, the release commit, the unit tag, commit push, tag push, execution journals, dispatch journals, and workflow dispatch; the workflow owns build and publication from the pushed tag.
+
+The retained inactive V2 local transaction scaffold is no longer a future production path. Any public compatibility wrapper that remains must refuse local execution directly and must not retain private preparation, rollback, or executor-invocation scaffolding. A future local delivery feature would need a fresh executor-specific design with publish-only execution, typed evidence, explicit crash windows, and compensation limits.
+
+## Pending architecture decisions
+
+No next architecture capability is documented yet.
 
 ## Preserved invariants
 
