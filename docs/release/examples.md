@@ -230,6 +230,10 @@ The generated `plugin-index.json` is not committed to the repository and this
 command does not publish it. Plugin release workflows generate and publish the
 index automatically after successful plugin releases by uploading or replacing
 the `plugin-index.json` asset on the mutable `plugin-registry` GitHub Release.
+Relative `--output` paths are resolved from the repository root. Absolute
+artifact paths such as `/tmp/plugin-index.json` remain supported for CI and
+temporary files, while repository-contained output is blocked from overwriting
+release state, evidence, Git internals, or plugin manifest inputs.
 
 ## Example F: Discover, Install, And Update Plugins
 

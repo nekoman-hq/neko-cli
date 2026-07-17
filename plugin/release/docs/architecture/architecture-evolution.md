@@ -52,13 +52,19 @@ Explicit-root entry points exist for init, unit-add, release, resume, validate, 
 
 Isolation tests prove two in-process repositories can be validated and indexed without changing process cwd or leaking root-specific data.
 
-## Pending architecture decisions
-
 ### Generated-output path policy
 
-Plugin-index output currently accepts the unchanged requested path, creates parents, atomically replaces one file, preserves existing mode, and does not confine output to the repository or define symlink behavior.
+Generated-output path policy is explicit per output family rather than shared through a universal path manager.
 
-The durable decision still needed is whether arbitrary output is an intentional CI feature or whether the command should enforce repository confinement, explicit opt-in, or symlink rejection. Check and render modes must remain write-free, and JSON schema/order must remain unchanged unless separately versioned.
+`plugin-index --output` owns the generated integration artifact path. Relative paths are clean repository-root-relative paths resolved from the explicit `workspace.RepositoryRoot`, independent of process cwd, CLI nesting, or embedder mode. Explicit absolute paths remain supported for CI and temporary artifact targets, including the plugin release workflows' runner-temp output. Repository-contained targets cannot overwrite release config/state, recovery or migration evidence, legacy release config/backup, Git internals, or the plugin manifest inputs present in the generated index. Existing target directories and target symlinks are rejected before writing. Existing repository-relative parent symlinks are allowed only when their physical target remains inside the resolved repository root. Missing parents are created only by the persister, with mode `0755`; new files use `0644`, existing file mode is preserved, and replacement remains target-local atomic.
+
+User-declared materialized release files are owned by V2 release planning and materialization. Plugin manifest paths come only from validated plugin unit metadata, and JReleaser materialization owns only `jreleaser.yml` below the unit root. V2 `workingDirectory` must be lexically and physically inside the resolved repository root, materialized target symlinks are rejected, and `KnownReleaseFiles` keeps staging identity repository-relative to the same root. `MaterializationTransaction` continues to snapshot and restore exact bytes/modes before commit uncertainty.
+
+Operational state remains separately owned by its existing components: config/state/pair recovery by config persistence, execution and dispatch journals below the Git common dir, V1 compensation evidence, migration journals/backups, and evidence archives. These files are not folded into generated-output handling merely because they are files.
+
+Check, render, and planning modes remain write-free. The plugin-index JSON schema/order and command response schema are unchanged.
+
+## Pending architecture decisions
 
 ### Release plan inspection
 
@@ -81,7 +87,8 @@ A positive decision would require a new implementation design. A negative decisi
 - No V2 local execution without executor-specific ownership and recovery proof.
 - No journal repair or schema migration without an inspection-first evidence design.
 - No claim of full concurrent safety for retained cwd compatibility facades.
-- No plugin-index confinement change before generated-output policy is decided.
+- No repository-relative generated output may infer its base from process cwd.
+- No generated integration artifact may overwrite protected release state, evidence, Git internals, or plugin manifest inputs.
 
 ## Implementation guidance
 

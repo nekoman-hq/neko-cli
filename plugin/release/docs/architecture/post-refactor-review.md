@@ -362,18 +362,18 @@ No P0 issue was found. The active V2 GitHub Actions path preserves evidence arou
 - **Resolution evidence:** `release_progress_characterization_test.go`, `release_progress_terminal_test.go`, `release_progress_test.go`, and `command_architecture_test.go` cover output ordering, stderr/stdout separation, no-op reporting, verbose suppression, secret safety, no generic event infrastructure, infallible reporter behavior, and active-file logger import guards.
 - **Blocking new features:** No longer blocking. Future active V2 orchestration edits must keep terminal rendering out of application and operation files.
 
-### D-14 — Plugin-index output accepts an arbitrary requested path without symlink confinement
+### D-14 — Plugin-index output path policy is explicit
 
 - **Affected files or symbols:** `pkg/pluginindex/output_persister.go`; `atomicPluginIndexOutputPersister.Persist`; `--output` contract.
-- **Current behavior:** The unchanged user-supplied path is created or atomically overwritten; existing mode is preserved. No repository confinement or symlink policy is applied.
-- **Why it remains:** Arbitrary requested-path output is characterized behavior, and read-only query and plugin-index extraction explicitly avoided a new path policy.
-- **Risk:** A mistaken or adversarial path can overwrite a file outside the repository with the invoking user's permissions.
-- **User or developer impact:** Flexible CI output is retained, but callers must validate their own path.
-- **Removal or improvement preconditions:** Decide whether arbitrary output is a supported feature, characterize symlink behavior, and introduce an explicit opt-in or confinement policy without silently breaking CI.
-- **Recommended action:** **Defer** until product policy is chosen; then **Harden** the boundary if repository confinement is desired.
-- **Priority:** **P3**.
-- **Proposed capability:** **generated-output path policy — Clarify generated-output path policy**.
-- **Blocking new features:** Blocks features that assume plugin-index output is repository-confined; otherwise not blocking.
+- **Current behavior:** Resolved by generated-output path policy. Relative `--output` values are clean repository-root-relative paths resolved from the explicit root. Explicit absolute output remains supported for CI/temp artifacts. Repository-contained targets cannot overwrite release config/state/evidence, Git internals, or plugin manifest inputs from the generated index. Existing target directories and target symlinks are rejected, and repository-relative parent symlinks must resolve inside the repository.
+- **Why it remains:** It no longer remains as undefined debt. Flexible absolute CI output is retained as a documented exception, while repository-relative output is confined.
+- **Risk:** Remaining risk is bounded to explicitly supplied absolute output targets, which are intentionally supported for workflow temp artifacts.
+- **User or developer impact:** Nested CLI invocation and explicit-root embedders now resolve relative output identically. Existing workflow `/tmp` and runner-temp outputs continue to work.
+- **Removal or improvement preconditions:** Further restriction of absolute output would require fresh workflow and downstream compatibility evidence.
+- **Recommended action:** **Keep** the focused output owner and guards; do not replace it with a generic path manager.
+- **Priority:** Historical **P3**, resolved.
+- **Completed capability:** **generated-output path policy — Clarify generated-output path policy**.
+- **Blocking new features:** No longer blocks features that rely on repository-relative plugin-index output.
 
 ### D-15 — Failed new-pair creation can leave an empty `.neko` directory
 

@@ -376,6 +376,8 @@ neko release plugin-index [flags]
 | `--pretty` | bool | `true` | Pretty-print generated JSON |
 | `--repository` | string | `nekoman-hq/neko-cli` | Repository identifier to include in the generated index |
 
+`--output` accepts either a clean repository-root-relative path or an explicit absolute artifact path. Relative paths are resolved from the repository root, not from the shell's current directory. Absolute paths are retained for CI temporary artifacts such as `/tmp/plugin-index.json`. Repository-contained output cannot overwrite release config/state, release recovery evidence, Git internals, or plugin manifests used as index inputs. Existing target directories and target symlinks are rejected.
+
 **Examples:**
 ```bash
 # Print the generated index JSON
