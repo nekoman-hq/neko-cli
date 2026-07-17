@@ -235,6 +235,37 @@ neko release major --dry-run
 
 ---
 
+### `neko release plan`
+
+Inspect the local release plan for a requested version change without starting release execution.
+
+**Usage:**
+```bash
+neko release plan --change=<patch|minor|major> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--change` | string | | Requested version change to inspect: `patch`, `minor`, or `major` |
+| `--unit` | string | | Select the release unit. Required when a V2 repository defines multiple units. |
+
+**Examples:**
+```bash
+# Inspect the local patch plan for a selected unit
+neko release plan --change patch --unit api
+
+# Inspect a plugin unit before deciding whether to release it
+neko release plan --change patch --unit plugin-release --output json
+```
+
+`plan` reports the selected release source and unit, current version, requested change, next version, tag, planned materialized files, known release files, local readiness, local blockers, and explicit limitations. It is strictly read-only and token-free: it does not read `GITHUB_TOKEN`, inspect remotes, inspect execution or dispatch journals, write config/state/manifests, mutate Git, dispatch workflows, publish releases, or run executors.
+
+Use `plan` when tooling or a human needs stable local planning facts. Use `patch`, `minor`, or `major --dry-run` when you want the existing release preview contract. Use `resume --dry-run` or `evidence` for already-started release execution and recovery state.
+
+---
+
 ### `neko release history`
 
 Show the release history with commit counts between versions.

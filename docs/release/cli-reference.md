@@ -18,6 +18,7 @@ V1 uses `.release.neko.json` and supports the existing release commands.
 
 ```bash
 neko release patch --dry-run
+neko release plan --change patch
 neko release patch
 neko release minor
 neko release major
@@ -49,6 +50,9 @@ neko release contributors --unit web
 neko release patch --unit api --dry-run
 neko release minor --unit api --dry-run
 neko release major --unit api --dry-run
+neko release plan --change patch --unit api
+neko release plan --change minor --unit api
+neko release plan --change major --unit api
 neko release patch --unit api
 neko release minor --unit api
 neko release major --unit api
@@ -95,6 +99,8 @@ stateCommitGuarantee
 executorStart
 ```
 
+`neko release plan --change <patch|minor|major> [--unit <unit>]` is a dedicated local plan inspection command. It reports the selected release source and unit, current version, requested change, next version, tag, planned materialized files, known release files, local readiness, local blockers, and explicit limitations. It does not read tokens, inspect remotes, inspect execution or dispatch journals, write files, mutate Git, dispatch workflows, publish releases, or start executors. It is separate from `--dry-run`: dry-run keeps the existing release preview contract, while `plan` is for stable local planning facts.
+
 Blocked:
 
 - V2 local non-dry-run release commands return `V2 local release execution is not available yet.`
@@ -126,6 +132,7 @@ neko release resume --unit api --dry-run
 patch
 minor
 major
+plan
 history
 contributors
 validate

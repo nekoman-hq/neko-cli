@@ -2,6 +2,7 @@ package release
 
 import (
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -107,6 +108,51 @@ func TestMapReleaseCommandOutcomePreservesStableRows(t *testing.T) {
 				t.Fatalf("properties = %#v, want %#v", got, tt.properties)
 			}
 		})
+	}
+}
+
+func TestMapReleasePlanInspectionResponseContract(t *testing.T) {
+	timestamp := time.Date(2026, time.July, 15, 9, 0, 0, 0, time.UTC)
+	resp := MapReleasePlanInspection(&ReleasePlanInspection{
+		Source:           "v2",
+		Unit:             ReleasePlanInspectionUnit{ID: "api", DisplayName: "API"},
+		CurrentVersion:   "1.2.3",
+		RequestedChange:  Patch,
+		NextVersion:      "1.2.4",
+		Tag:              "api/v1.2.4",
+		Executor:         "goreleaser",
+		Delivery:         "github-actions",
+		Workflow:         ".github/workflows/release-api.yml",
+		WorkingDirectory: ".",
+		UnitRoot:         "/repo",
+		MaterializedOutputs: []PlannedMaterializedOutput{
+			{Path: "plugin/release/manifest.json", Reason: "sync plugin manifest version with release plan"},
+		},
+		KnownReleaseFiles: []InspectedKnownReleaseFile{
+			{Path: ".neko/release.state.json", Reason: "v2 release state"},
+		},
+		Readiness: LocalPlanReady,
+		Limitations: []ReleasePlanLimitation{
+			{Category: "local-only", Message: "No execution is started."},
+		},
+	}, timestamp)
+
+	if resp.Status != "success" || resp.RendererHint != "table" || resp.Metadata.Command != "plan" || !resp.Metadata.Timestamp.Equal(timestamp) {
+		t.Fatalf("unexpected plan response envelope: %#v", resp)
+	}
+	want := []string{
+		"Source", "Unit", "Display Name", "Current Version", "Requested Change", "Next Version", "Tag",
+		"Executor", "Delivery", "Workflow", "Working Directory", "Unit Root", "Planned Materialized Files",
+		"Known Release Files", "Local Readiness", "Local Blockers", "Limitations", "Status",
+	}
+	if got := responseProperties(t, resp.Data["items"]); !slices.Equal(got, want) {
+		t.Fatalf("plan response properties = %#v, want %#v", got, want)
+	}
+	if got := responseValueForProperty(t, resp.Data["items"], "Planned Materialized Files"); !strings.Contains(got, "sync plugin manifest") {
+		t.Fatalf("materialized output reason missing: %q", got)
+	}
+	if got := responseValueForProperty(t, resp.Data["items"], "Local Blockers"); got != "none" {
+		t.Fatalf("empty blocker value = %q", got)
 	}
 }
 

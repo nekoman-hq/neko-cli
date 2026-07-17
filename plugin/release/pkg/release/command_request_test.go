@@ -65,3 +65,50 @@ func TestParseResumeCommandRequest(t *testing.T) {
 		})
 	}
 }
+
+func TestParsePlanCommandRequest(t *testing.T) {
+	tests := []struct {
+		name     string
+		flags    map[string]any
+		want     PlanCommandRequest
+		wantCode string
+	}{
+		{
+			name:  "typed flags",
+			flags: map[string]any{"change": "minor", "unit": "api"},
+			want:  PlanCommandRequest{ReleaseType: Minor, UnitID: "api"},
+		},
+		{
+			name:     "missing change fails",
+			wantCode: "INVALID_RELEASE_CHANGE",
+		},
+		{
+			name:     "malformed change type fails",
+			flags:    map[string]any{"change": false},
+			wantCode: "INVALID_RELEASE_CHANGE",
+		},
+		{
+			name:     "unknown change fails",
+			flags:    map[string]any{"change": "build"},
+			wantCode: "INVALID_RELEASE_CHANGE",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, failure := ParsePlanCommandRequest(plugin.Request{Flags: tt.flags})
+			if tt.wantCode != "" {
+				if failure == nil || failure.Code != tt.wantCode {
+					t.Fatalf("failure=%#v, want %s", failure, tt.wantCode)
+				}
+				return
+			}
+			if failure != nil {
+				t.Fatalf("unexpected failure: %#v", failure)
+			}
+			if got != tt.want {
+				t.Fatalf("ParsePlanCommandRequest() = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}

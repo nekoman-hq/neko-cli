@@ -15,6 +15,10 @@ type releaseResumer interface {
 	Resume(context.Context, ResumeCommandRequest) (ResumeCommandOutcome, *CommandFailure)
 }
 
+type releasePlanInspector interface {
+	Inspect(context.Context, ReleasePlanInspectionRequest) (*ReleasePlanInspection, *CommandFailure)
+}
+
 type releaseCommandHandler struct {
 	starter     releaseCommandStarter
 	clock       ReleaseClock
@@ -39,6 +43,11 @@ type resumeCommandHandler struct {
 	clock   ReleaseClock
 }
 
+type releasePlanCommandHandler struct {
+	inspector releasePlanInspector
+	clock     ReleaseClock
+}
+
 func (handler resumeCommandHandler) Handle(ctx context.Context, req plugin.Request) (*plugin.Response, error) {
 	request := ParseResumeCommandRequest(req)
 	outcome, failure := handler.resumer.Resume(ctx, request)
@@ -47,6 +56,22 @@ func (handler resumeCommandHandler) Handle(ctx context.Context, req plugin.Reque
 		return MapCommandFailure("resume", failure, timestamp), nil
 	}
 	return MapResumeCommandOutcome(outcome, timestamp)
+}
+
+func (handler releasePlanCommandHandler) Handle(ctx context.Context, req plugin.Request) (*plugin.Response, error) {
+	request, parseFailure := ParsePlanCommandRequest(req)
+	timestamp := handler.clock.Now()
+	if parseFailure != nil {
+		return MapCommandFailure("plan", parseFailure, timestamp), nil
+	}
+	inspection, failure := handler.inspector.Inspect(ctx, ReleasePlanInspectionRequest{
+		ReleaseType: request.ReleaseType,
+		UnitID:      request.UnitID,
+	})
+	if failure != nil {
+		return MapCommandFailure("plan", failure, timestamp), nil
+	}
+	return MapReleasePlanInspection(inspection, timestamp), nil
 }
 
 // HandleRelease handles the patch, minor, and major release commands.
@@ -107,6 +132,25 @@ func HandleResumeAt(root workspace.RepositoryRoot, req plugin.Request) (*plugin.
 	handler := resumeCommandHandler{
 		resumer: newResumeReleaseUseCase(root.Path()),
 		clock:   systemReleaseClock{},
+	}
+	return handler.Handle(context.Background(), req)
+}
+
+// HandlePlan handles read-only release-plan inspection.
+func HandlePlan(req plugin.Request) (*plugin.Response, error) {
+	root, err := workspace.ResolveRepositoryRoot(req.Context.WorkingDir)
+	if err != nil {
+		return nil, err
+	}
+	return HandlePlanAt(root, req)
+}
+
+// HandlePlanAt handles read-only release-plan inspection at an explicit
+// repository root without changing process cwd.
+func HandlePlanAt(root workspace.RepositoryRoot, req plugin.Request) (*plugin.Response, error) {
+	handler := releasePlanCommandHandler{
+		inspector: newReleasePlanInspectionUseCase(root.Path()),
+		clock:     systemReleaseClock{},
 	}
 	return handler.Handle(context.Background(), req)
 }

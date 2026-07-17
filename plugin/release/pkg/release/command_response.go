@@ -79,6 +79,33 @@ func MapResumeCommandOutcome(outcome ResumeCommandOutcome, timestamp time.Time) 
 	}
 }
 
+// MapReleasePlanInspection renders read-only release-plan inspection facts.
+func MapReleasePlanInspection(result *ReleasePlanInspection, timestamp time.Time) *plugin.Response {
+	if result == nil {
+		return successTableResponse("plan", timestamp, nil)
+	}
+	return successTableResponse("plan", timestamp, []map[string]any{
+		{"property": "Source", "value": string(result.Source)},
+		{"property": "Unit", "value": result.Unit.ID},
+		{"property": "Display Name", "value": emptyFallback(result.Unit.DisplayName, "not configured")},
+		{"property": "Current Version", "value": result.CurrentVersion},
+		{"property": "Requested Change", "value": string(result.RequestedChange)},
+		{"property": "Next Version", "value": result.NextVersion},
+		{"property": "Tag", "value": result.Tag},
+		{"property": "Executor", "value": result.Executor},
+		{"property": "Delivery", "value": result.Delivery},
+		{"property": "Workflow", "value": workflowResponseValue(result.Workflow)},
+		{"property": "Working Directory", "value": result.WorkingDirectory},
+		{"property": "Unit Root", "value": result.UnitRoot},
+		{"property": "Planned Materialized Files", "value": materializedOutputRows(result.MaterializedOutputs)},
+		{"property": "Known Release Files", "value": inspectedKnownReleaseFileRows(result.KnownReleaseFiles)},
+		{"property": "Local Readiness", "value": string(result.Readiness)},
+		{"property": "Local Blockers", "value": localPlanBlockerRows(result.Blockers)},
+		{"property": "Limitations", "value": releasePlanLimitationRows(result.Limitations)},
+		{"property": "Status", "value": "Release plan inspected locally; no release execution was started"},
+	})
+}
+
 func mapV2ReleasePreview(command string, result *V2ReleasePreview, timestamp time.Time) *plugin.Response {
 	items := []map[string]any{
 		{"property": "Release Type", "value": command},
@@ -191,4 +218,57 @@ func emptyFallback(value, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func materializedOutputRows(outputs []PlannedMaterializedOutput) string {
+	return formatPlanRecords(outputs, func(output PlannedMaterializedOutput) string {
+		if strings.TrimSpace(output.Reason) == "" {
+			return output.Path
+		}
+		return fmt.Sprintf("%s (%s)", output.Path, output.Reason)
+	})
+}
+
+func inspectedKnownReleaseFileRows(files []InspectedKnownReleaseFile) string {
+	return formatPlanRecords(files, func(file InspectedKnownReleaseFile) string {
+		if strings.TrimSpace(file.Reason) == "" {
+			return file.Path
+		}
+		return fmt.Sprintf("%s (%s)", file.Path, file.Reason)
+	})
+}
+
+func localPlanBlockerRows(blockers []LocalPlanBlocker) string {
+	return formatPlanCategoryMessages(blockers, func(blocker LocalPlanBlocker) (string, string) {
+		return blocker.Category, blocker.Message
+	})
+}
+
+func releasePlanLimitationRows(limitations []ReleasePlanLimitation) string {
+	return formatPlanCategoryMessages(limitations, func(limitation ReleasePlanLimitation) (string, string) {
+		return limitation.Category, limitation.Message
+	})
+}
+
+func formatPlanRecords[T any](records []T, value func(T) string) string {
+	if len(records) == 0 {
+		return "none"
+	}
+	values := make([]string, 0, len(records))
+	for _, record := range records {
+		values = append(values, value(record))
+	}
+	return strings.Join(values, ", ")
+}
+
+func formatPlanCategoryMessages[T any](records []T, value func(T) (string, string)) string {
+	if len(records) == 0 {
+		return "none"
+	}
+	values := make([]string, 0, len(records))
+	for _, record := range records {
+		category, message := value(record)
+		values = append(values, fmt.Sprintf("%s: %s", category, message))
+	}
+	return strings.Join(values, " | ")
 }

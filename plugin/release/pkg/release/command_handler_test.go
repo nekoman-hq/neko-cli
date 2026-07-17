@@ -108,6 +108,51 @@ func TestResumeCommandHandlerParsesInvokesOnceAndMapsOutcome(t *testing.T) {
 	}
 }
 
+func TestReleasePlanCommandHandlerParsesInvokesOnceAndMapsOutcome(t *testing.T) {
+	timestamp := time.Date(2026, time.July, 14, 12, 0, 0, 0, time.UTC)
+	inspector := &recordingReleasePlanInspector{
+		inspection: &ReleasePlanInspection{
+			Source:          "v2",
+			Unit:            ReleasePlanInspectionUnit{ID: "api"},
+			CurrentVersion:  "1.2.3",
+			RequestedChange: Minor,
+			NextVersion:     "1.3.0",
+			Tag:             "api/v1.3.0",
+			Executor:        "goreleaser",
+			Delivery:        "github-actions",
+			Readiness:       LocalPlanReady,
+		},
+	}
+	handler := releasePlanCommandHandler{inspector: inspector, clock: fixedReleaseClock{timestamp}}
+
+	resp, err := handler.Handle(context.Background(), plugin.Request{Flags: map[string]any{"change": "minor", "unit": "api"}})
+
+	if err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if inspector.calls != 1 || inspector.request != (ReleasePlanInspectionRequest{ReleaseType: Minor, UnitID: "api"}) {
+		t.Fatalf("inspector calls=%d request=%#v", inspector.calls, inspector.request)
+	}
+	if resp.Status != "success" || resp.Metadata.Command != "plan" || !resp.Metadata.Timestamp.Equal(timestamp) {
+		t.Fatalf("unexpected mapped response: %#v", resp)
+	}
+}
+
+func TestReleasePlanCommandHandlerMapsParseFailureWithoutUseCase(t *testing.T) {
+	timestamp := time.Date(2026, time.July, 14, 12, 30, 0, 0, time.UTC)
+	inspector := &recordingReleasePlanInspector{}
+	handler := releasePlanCommandHandler{inspector: inspector, clock: fixedReleaseClock{timestamp}}
+
+	resp, err := handler.Handle(context.Background(), plugin.Request{})
+
+	if err != nil {
+		t.Fatalf("Handle returned a Go error: %v", err)
+	}
+	if inspector.calls != 0 || resp.Status != "error" || resp.Error.Code != "INVALID_RELEASE_CHANGE" {
+		t.Fatalf("unexpected parse failure mapping: calls=%d response=%#v", inspector.calls, resp)
+	}
+}
+
 type fixedReleaseClock struct {
 	timestamp time.Time
 }
@@ -140,4 +185,17 @@ func (resumer *recordingReleaseResumer) Resume(_ context.Context, request Resume
 	resumer.calls++
 	resumer.request = request
 	return resumer.outcome, resumer.failure
+}
+
+type recordingReleasePlanInspector struct {
+	inspection *ReleasePlanInspection
+	failure    *CommandFailure
+	request    ReleasePlanInspectionRequest
+	calls      int
+}
+
+func (inspector *recordingReleasePlanInspector) Inspect(_ context.Context, request ReleasePlanInspectionRequest) (*ReleasePlanInspection, *CommandFailure) {
+	inspector.calls++
+	inspector.request = request
+	return inspector.inspection, inspector.failure
 }

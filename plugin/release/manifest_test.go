@@ -68,6 +68,10 @@ func TestManifestMatchesPublicReleaseContract(t *testing.T) {
 			"dry-run": "bool",
 			"unit":    "string",
 		},
+		"plan": {
+			"change": "string",
+			"unit":   "string",
+		},
 		"history": {
 			"unit": "string",
 		},

@@ -99,6 +99,7 @@ Neko CLI plugin unit JSON:
 neko release init ...
 neko release unit-add ...
 neko release validate --show
+neko release plan --change patch --unit <unit>
 neko release patch --unit <unit>
 neko release history --unit <unit>
 neko release contributors --unit <unit>
@@ -139,6 +140,17 @@ Not generated yet:
 
 For `github-actions` delivery, the workflow file must already exist below
 `.github/workflows/`.
+
+Inspect the local release plan before running a release:
+
+```bash
+neko release plan --change patch --unit cli
+```
+
+The plan inspection reports local source/unit selection, current and next
+version, tag, materialized files, known release files, local blockers, and
+limitations. It does not read tokens, inspect remotes or journals, write files,
+mutate Git, dispatch workflows, publish, or run executors.
 
 ## Example B: Add A Backend Or Service Unit
 

@@ -80,6 +80,8 @@ func handleRequestAt(root workspace.RepositoryRoot, req plugin.Request, v1Execut
 		return release.HandleReleaseWithV1ExecutorsAt(root, req, release.Minor, v1Executors...)
 	case "major":
 		return release.HandleReleaseWithV1ExecutorsAt(root, req, release.Major, v1Executors...)
+	case "plan":
+		return release.HandlePlanAt(root, req)
 	case "resume":
 		return release.HandleResumeAt(root, req)
 	case "evidence":

@@ -305,6 +305,28 @@
       ]
     },
     {
+      "name": "plan",
+      "description": "Inspect the local release plan without reading tokens, journals, remotes, or starting release execution",
+      "outputs": [
+        "table",
+        "json"
+      ],
+      "flags": [
+        {
+          "name": "change",
+          "type": "string",
+          "required": true,
+          "description": "Requested version change to inspect: patch, minor, or major"
+        },
+        {
+          "name": "unit",
+          "type": "string",
+          "required": false,
+          "description": "Selects the release unit. Required when a V2 repository defines multiple units."
+        }
+      ]
+    },
+    {
       "name": "resume",
       "description": "Resumes a previously journaled V2 GitHub Actions release. It never calculates a new version and does not automatically retry uncertain push or dispatch outcomes.",
       "outputs": [
