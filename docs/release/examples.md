@@ -4,6 +4,10 @@ This page contains copy-ready examples for Release V2 repositories and the
 plugin registry. Reference docs stay concise; use this page when bootstrapping a
 new repository or adding units to an existing one.
 
+For the ownership boundary between Neko CLI, GitHub Actions workflows,
+build-system adapters, and consumer-owned publication logic, see
+[Release V2 Bootstrap Product Boundary](bootstrap-product-boundary.md).
+
 ## Mental Model
 
 Release V2 has two committed repository-root files:

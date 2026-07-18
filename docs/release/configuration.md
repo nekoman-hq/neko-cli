@@ -121,7 +121,7 @@ Neko CLI plugin release units can declare registry metadata directly in `.neko/r
 
 Nekocli no longer has a plugin version map. `.plugin.release.neko.json` was removed; all releaseable versions live in `.neko/release.state.json`.
 
-See [Release V2 examples](examples.md), [Local delivery](local-delivery.md), [GitHub Actions delivery](github-actions-delivery.md), [Release executors](executors.md), [Version materialization](version-materialization.md), [Local release transaction](local-release-transaction.md), and [Git release coordination](git-coordination.md).
+See [Release V2 examples](examples.md), [Release V2 bootstrap product boundary](bootstrap-product-boundary.md), [Local delivery](local-delivery.md), [GitHub Actions delivery](github-actions-delivery.md), [Release executors](executors.md), [Version materialization](version-materialization.md), [Local release transaction](local-release-transaction.md), and [Git release coordination](git-coordination.md).
 
 ## Migration
 

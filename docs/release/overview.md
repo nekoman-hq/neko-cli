@@ -58,7 +58,7 @@ neko release contributors --unit <unit>
 neko release resume --unit <unit> --dry-run
 ```
 
-Multi-unit repositories require `--unit` for unit-scoped commands. See [Release V2 Examples](examples.md) for copy-ready CLI, service, plugin, release, registry, and install/update examples.
+Multi-unit repositories require `--unit` for unit-scoped commands. See [Release V2 Examples](examples.md) for copy-ready CLI, service, plugin, release, registry, and install/update examples. The product boundary for turning a valid V2 config into a release-ready GitHub Actions integration is defined in [Release V2 Bootstrap Product Boundary](bootstrap-product-boundary.md).
 
 ## Safety
 
@@ -109,6 +109,11 @@ Not implemented yet:
 - Automatic multi-unit migration.
 - Workflow template generation from `neko release init`.
 - Executor scaffolding from `neko release init`.
+- Stable CI release-context validation.
+- Read-only integration doctor.
+- Release unit overview.
+- Release pipeline inspection.
+- Build-system adapters such as Gradle.
 - V2 local executor execution.
 - Automated cross-platform install/update smoke testing against the published plugin registry.
 - V2 local non-dry-run release execution.

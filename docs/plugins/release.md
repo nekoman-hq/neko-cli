@@ -23,7 +23,7 @@ Plugin installation and updates resolve the newest release plugin version from t
 
 The `plugin-release` V2 unit declares `kind: "plugin"` metadata in `.neko/release.config.json`: public name `release`, manifest `plugin/release/manifest.json`, asset prefix `plugin-release`, and binary name `plugin-release`. `neko release plugin-index` generates the public `plugin-index.json` from this metadata, `.neko/release.state.json`, and plugin manifests. Runtime plugin discovery, install, and update use that index as the registry source of truth. Plugin release workflows publish it as the `plugin-index.json` asset on the mutable `plugin-registry` GitHub Release after successful plugin releases; the index is not committed as source.
 
-Copy-ready Release V2 and plugin registry examples live in [Release V2 Examples](../release/examples.md).
+Copy-ready Release V2 and plugin registry examples live in [Release V2 Examples](../release/examples.md). Bootstrap ownership across Neko CLI, GitHub Actions, adapters, and consumer workflows is defined in [Release V2 Bootstrap Product Boundary](../release/bootstrap-product-boundary.md).
 
 ---
 
@@ -595,6 +595,7 @@ The `plugin-ui` unit follows the same production pattern with `plugin-ui/vX.Y.Z`
 See:
 
 - [Release overview](../release/overview.md)
+- [Release V2 bootstrap product boundary](../release/bootstrap-product-boundary.md)
 - [Release configuration](../release/configuration.md)
 - [Release state](../release/state.md)
 - [Unit selection](../release/unit-selection.md)

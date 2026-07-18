@@ -92,6 +92,12 @@ The retained inactive V2 local transaction scaffold is no longer a future produc
 
 No next architecture capability is documented yet.
 
+Release V2 bootstrap planning is product capability planning, not a reopened
+architecture refactor stage. The current product boundary for GitHub Actions
+bootstrap, CI release-context validation, build-system adapters, and
+consumer-owned publication is maintained in
+[Release V2 Bootstrap Product Boundary](../../../../docs/release/bootstrap-product-boundary.md).
+
 ## Preserved invariants
 
 - No blind retry for ambiguous push or uncertain workflow dispatch.
