@@ -73,6 +73,8 @@ func TestInvalidHumanPropertiesFailWithoutNondeterministicFallback(t *testing.T)
 		{Properties: []plugin.HumanProperty{{Key: "unit", Label: " Unit"}}},
 		{Properties: []plugin.HumanProperty{{Key: "unit", Label: "Unit"}, {Key: "unit", Label: "Again"}}},
 		{Properties: []plugin.HumanProperty{{Key: "missing", Label: "Missing"}}},
+		{Properties: []plugin.HumanProperty{{Key: "unit", Label: "Ambiguous", Value: "direct"}}},
+		{Properties: []plugin.HumanProperty{{Label: "Missing value"}}},
 	}
 	for index := range tests {
 		response := &plugin.Response{Status: "success", Data: map[string]any{"unit": "api"}, HumanProperties: &tests[index]}

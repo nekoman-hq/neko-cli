@@ -20,7 +20,7 @@ func TestPluginOutputModesKeepHumanJSONWideAndRawJSONContracts(t *testing.T) {
 		if err := RenderTo(response, format, &output); err != nil {
 			t.Fatalf("RenderTo(%q): %v", format, err)
 		}
-		if got := output.String(); !strings.Contains(got, "PROPERTY") || !strings.Contains(got, "api") {
+		if got := output.String(); !strings.Contains(got, "Unit") || !strings.Contains(got, "api") {
 			t.Fatalf("human output for %q = %q", format, got)
 		}
 	}

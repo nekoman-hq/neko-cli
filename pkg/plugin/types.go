@@ -65,11 +65,13 @@ type HumanProperties struct {
 	Properties []HumanProperty `json:"properties"`
 }
 
-// HumanProperty maps one response Data key to a human-facing label. Slice
-// order defines display order.
+// HumanProperty declares one human-facing label and either maps it to a
+// response Data key or carries a presentation-only value. Slice order defines
+// display order. Key and Value are mutually exclusive.
 type HumanProperty struct {
-	Key   string `json:"key"`
+	Key   string `json:"key,omitempty"`
 	Label string `json:"label"`
+	Value any    `json:"value,omitempty"`
 }
 
 // HumanText declares preformatted human output for content that must remain

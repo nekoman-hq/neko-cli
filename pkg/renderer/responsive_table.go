@@ -6,7 +6,6 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/charmbracelet/x/ansi"
 	"github.com/nekoman-hq/neko-cli/pkg/log"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 )
@@ -245,7 +244,7 @@ func writeWrappedVerticalValue(writer io.Writer, key, value, prefix string, valu
 	if valueWidth <= 0 {
 		return
 	}
-	lines := strings.Split(ansi.Hardwrap(value, valueWidth, false), "\n")
+	lines := wrapVisibleLines(value, valueWidth)
 	continuation := strings.Repeat(" ", visibleWidth(prefix))
 	for index, line := range lines {
 		linePrefix := continuation
@@ -259,18 +258,4 @@ func writeWrappedVerticalValue(writer io.Writer, key, value, prefix string, valu
 		}
 		_, _ = fmt.Fprintf(writer, "%s%s\n", linePrefix, colorizeValue(key, line))
 	}
-}
-
-func visibleWidth(value string) int {
-	return ansi.StringWidth(value)
-}
-
-func truncateVisible(value string, width int) string {
-	if width <= 0 {
-		return ""
-	}
-	if visibleWidth(value) <= width {
-		return value
-	}
-	return ansi.Truncate(value, width, "…")
 }

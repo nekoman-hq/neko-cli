@@ -34,7 +34,7 @@ func TestLegacyCompactListRenderingRemainsStable(t *testing.T) {
 	}
 }
 
-func TestLegacyPropertyValueRenderingRemainsStable(t *testing.T) {
+func TestPropertyValueRenderingUsesDeterministicVerticalFallbackWithoutWidth(t *testing.T) {
 	response := &plugin.Response{
 		Status: "success",
 		Data: map[string]any{
@@ -50,10 +50,10 @@ func TestLegacyPropertyValueRenderingRemainsStable(t *testing.T) {
 		t.Fatalf("RenderTo: %v", err)
 	}
 
-	want := log.ColorCyan + log.ColorBold + "PROPERTY  VALUE  " + log.ColorReset + "\n" +
-		log.ColorBrightBlack + "─────────────────" + log.ColorReset + "\n" +
-		"Status    ready  \n" +
-		"Unit      api    \n"
+	want := log.ColorCyan + log.ColorBold + "Status" + log.ColorReset + "\n" +
+		"  ready\n\n" +
+		log.ColorCyan + log.ColorBold + "Unit" + log.ColorReset + "\n" +
+		"  api\n"
 	if output.String() != want {
 		t.Fatalf("legacy property/value output changed:\nwant %q\n got %q", want, output.String())
 	}
@@ -89,9 +89,8 @@ func TestLegacyDescribeRenderingRemainsStable(t *testing.T) {
 		"\n" + log.ColorYellow + log.ColorBold + "━━━ Execution Logs (1 entries) ━━━" + log.ColorReset + "\n" +
 		log.ColorBrightBlack + "10:11:12 " + log.ColorBrightBlack + "• " + log.ColorReset + "checked\n\n" +
 		"\n" + log.ColorGreen + log.ColorBold + "━━━ Output ━━━" + log.ColorReset + "\n" +
-		log.ColorCyan + log.ColorBold + "PROPERTY  VALUE  " + log.ColorReset + "\n" +
-		log.ColorBrightBlack + "─────────────────" + log.ColorReset + "\n" +
-		"Status    ready  \n"
+		log.ColorCyan + log.ColorBold + "Status" + log.ColorReset + "\n" +
+		"  ready\n"
 	if output.String() != want {
 		t.Fatalf("legacy describe output changed:\nwant %q\n got %q", want, output.String())
 	}

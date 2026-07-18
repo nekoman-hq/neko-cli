@@ -295,7 +295,7 @@ func renderTableWithWidth(resp *plugin.Response, w io.Writer, wide bool, widthPr
 	if rendered, err := renderHumanText(resp, w); rendered || err != nil {
 		return err
 	}
-	if rendered, err := renderHumanProperties(resp, w); rendered || err != nil {
+	if rendered, err := renderPropertyValues(resp, w, widthProvider); rendered || err != nil {
 		return err
 	}
 	if rendered, err := renderResponsiveTable(resp, w, wide, widthProvider); rendered || err != nil {
