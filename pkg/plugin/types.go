@@ -68,6 +68,8 @@ type HumanProperties struct {
 // HumanProperty declares one human-facing label and either maps it to a
 // response Data key or carries a presentation-only value. Slice order defines
 // display order. Key and Value are mutually exclusive.
+//
+//nolint:govet // Field order preserves the stable human-property wire order.
 type HumanProperty struct {
 	Key   string `json:"key,omitempty"`
 	Label string `json:"label"`

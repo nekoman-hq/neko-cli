@@ -90,8 +90,8 @@ func MapReleasePlanInspection(result *ReleasePlanInspection, timestamp time.Time
 }
 
 type releasePlanResponseProperty struct {
-	label string
 	value any
+	label string
 }
 
 func releasePlanSharedProperties(result *ReleasePlanInspection) []releasePlanResponseProperty {
