@@ -26,8 +26,16 @@ func newEvidenceQueryUseCase() evidenceQueryUseCase {
 
 func (useCase evidenceQueryUseCase) Query(_ context.Context, request evidenceQueryRequest) (evidenceQueryResult, error) {
 	var result evidenceQueryResult
+	var locations release.ReleaseEvidenceLocations
+	if includesCommonDirectoryEvidence(request.Family) {
+		var err error
+		locations, err = release.ResolveReleaseEvidenceLocations(request.RepositoryRoot)
+		if err != nil {
+			return evidenceQueryResult{}, err
+		}
+	}
 	if includeEvidenceFamily(request.Family, FamilyReleaseExecution) {
-		records, diagnostics, err := inspectReleaseExecutionJournals(request.RepositoryRoot)
+		records, diagnostics, err := inspectReleaseExecutionJournals(locations.ExecutionJournalDirectory)
 		if err != nil {
 			return evidenceQueryResult{}, err
 		}
@@ -35,7 +43,7 @@ func (useCase evidenceQueryUseCase) Query(_ context.Context, request evidenceQue
 		result.Diagnostics = append(result.Diagnostics, diagnostics...)
 	}
 	if includeEvidenceFamily(request.Family, FamilyDispatch) {
-		records, diagnostics, err := inspectDispatchJournals(request.RepositoryRoot)
+		records, diagnostics, err := inspectDispatchJournals(locations.DispatchJournalDirectory)
 		if err != nil {
 			return evidenceQueryResult{}, err
 		}
@@ -48,7 +56,7 @@ func (useCase evidenceQueryUseCase) Query(_ context.Context, request evidenceQue
 		result.Diagnostics = append(result.Diagnostics, diagnostics...)
 	}
 	if includeEvidenceFamily(request.Family, FamilyV1Compensation) {
-		record, diagnostics, err := inspectV1CompensationEvidence(request.RepositoryRoot)
+		record, diagnostics, err := inspectV1CompensationEvidence(locations.V1CompensationPath)
 		if err != nil {
 			return evidenceQueryResult{}, err
 		}
@@ -89,6 +97,12 @@ func includeEvidenceFamily(selected, family string) bool {
 	return selected == "" || selected == family
 }
 
+func includesCommonDirectoryEvidence(selected string) bool {
+	return includeEvidenceFamily(selected, FamilyReleaseExecution) ||
+		includeEvidenceFamily(selected, FamilyDispatch) ||
+		includeEvidenceFamily(selected, FamilyV1Compensation)
+}
+
 func appendFilteredEvidenceRecords(target, records []EvidenceRecord, unit string) []EvidenceRecord {
 	if strings.TrimSpace(unit) == "" {
 		return append(target, records...)
@@ -101,12 +115,8 @@ func appendFilteredEvidenceRecords(target, records []EvidenceRecord, unit string
 	return target
 }
 
-func inspectReleaseExecutionJournals(root string) ([]EvidenceRecord, []EvidenceDiagnostic, error) {
-	dir, err := release.NewReleaseExecutionJournalStore(root).JournalDirectory()
-	if err != nil {
-		return nil, nil, err
-	}
-	paths, err := sortedJSONFiles(dir)
+func inspectReleaseExecutionJournals(directory string) ([]EvidenceRecord, []EvidenceDiagnostic, error) {
+	paths, err := sortedJSONFiles(directory)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -187,12 +197,8 @@ func classifyReleaseExecution(journal release.ReleaseExecutionJournal) (string, 
 	return ClassificationActive, false, false, false, "No terminal handoff is recorded."
 }
 
-func inspectDispatchJournals(root string) ([]EvidenceRecord, []EvidenceDiagnostic, error) {
-	dir, err := release.NewDispatchJournalStore(root).JournalDirectory()
-	if err != nil {
-		return nil, nil, err
-	}
-	paths, err := sortedJSONFiles(dir)
+func inspectDispatchJournals(directory string) ([]EvidenceRecord, []EvidenceDiagnostic, error) {
+	paths, err := sortedJSONFiles(directory)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -264,11 +270,7 @@ func classifyDispatch(state release.DispatchJournalState) (string, bool, string)
 	}
 }
 
-func inspectV1CompensationEvidence(root string) ([]EvidenceRecord, []EvidenceDiagnostic, error) {
-	path, err := v1CompensationEvidencePath(root)
-	if err != nil {
-		return nil, nil, err
-	}
+func inspectV1CompensationEvidence(path string) ([]EvidenceRecord, []EvidenceDiagnostic, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil, nil
@@ -326,14 +328,6 @@ func classifyV1Compensation(decision release.V1CompensationDecision) (string, bo
 	default:
 		return ClassificationUncertain, false, false, true, "V1 compensation decision is unknown."
 	}
-}
-
-func v1CompensationEvidencePath(root string) (string, error) {
-	executionDir, err := release.NewReleaseExecutionJournalStore(root).JournalDirectory()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(filepath.Dir(executionDir), "v1-compensation", "current.json"), nil
 }
 
 type migrationJournalEvidence struct {

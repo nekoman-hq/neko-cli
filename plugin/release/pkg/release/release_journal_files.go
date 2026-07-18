@@ -19,6 +19,29 @@ type releaseJournalFiles struct {
 	repositoryRoot string
 }
 
+// ReleaseEvidenceLocations exposes the canonical read-only locations consumed
+// by Evidence inspection without granting access to journal mutations.
+type ReleaseEvidenceLocations struct {
+	ExecutionJournalDirectory string
+	DispatchJournalDirectory  string
+	V1CompensationPath        string
+}
+
+// ResolveReleaseEvidenceLocations resolves canonical release Evidence paths
+// below the Git common directory without creating directories or files.
+func ResolveReleaseEvidenceLocations(repositoryRoot string) (ReleaseEvidenceLocations, error) {
+	files := newReleaseJournalFiles(repositoryRoot, execGitRunner{})
+	releaseDirectory, err := files.releaseDirectory()
+	if err != nil {
+		return ReleaseEvidenceLocations{}, err
+	}
+	return ReleaseEvidenceLocations{
+		ExecutionJournalDirectory: filepath.Join(releaseDirectory, "executions"),
+		DispatchJournalDirectory:  filepath.Join(releaseDirectory, "dispatches"),
+		V1CompensationPath:        filepath.Join(releaseDirectory, "v1-compensation", "current.json"),
+	}, nil
+}
+
 func newReleaseJournalFiles(repositoryRoot string, git gitCommandRunner) releaseJournalFiles {
 	return releaseJournalFiles{
 		repositoryRoot: repositoryRoot,
