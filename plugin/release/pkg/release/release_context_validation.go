@@ -177,9 +177,6 @@ func validateReleaseContextRequestSyntax(request ReleaseContextValidationRequest
 }
 
 func validateReleaseContextVersion(unit releaseconfig.ReleaseUnit, dispatchedVersion string) *CommandFailure {
-	if _, err := semver.StrictNewVersion(unit.Version); err != nil {
-		return failureFromMessage("V2_CONTEXT_SOURCE_INVALID", "the authoritative V2 state version is not canonical semantic version syntax")
-	}
 	if unit.Version != dispatchedVersion {
 		return failureFromMessage("RELEASE_VERSION_MISMATCH", "the dispatched version does not match the authoritative current V2 state version")
 	}
