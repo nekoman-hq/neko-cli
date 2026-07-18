@@ -139,6 +139,23 @@ func TestGitHubWorkflowSelectionRequiresExactChoiceForMultiplePaths(t *testing.T
 		t.Fatalf("units using workflow = %#v", preview.Data["units_using_workflow"])
 	}
 
+	pathPreview, err := HandleGitHubWorkflowInitAt(root, plugin.Request{
+		Command: githubWorkflowInitCommandName,
+		Flags: map[string]any{
+			"path":    ".github/workflows/release-web.yml",
+			"dry-run": true,
+		},
+	})
+	if err != nil || pathPreview.Status != "success" {
+		t.Fatalf("path selection failed: response=%#v err=%v", pathPreview, err)
+	}
+	if pathPreview.Data["target"] != ".github/workflows/release-web.yml" || pathPreview.Data["selected_unit"] != "" {
+		t.Fatalf("unexpected path selection: %#v", pathPreview.Data)
+	}
+	if !reflect.DeepEqual(pathPreview.Data["units_using_workflow"], []string{"web"}) {
+		t.Fatalf("path selection units = %#v", pathPreview.Data["units_using_workflow"])
+	}
+
 	mismatch, err := HandleGitHubWorkflowInitAt(root, plugin.Request{
 		Command: githubWorkflowInitCommandName,
 		Flags: map[string]any{

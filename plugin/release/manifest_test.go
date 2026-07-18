@@ -169,6 +169,32 @@ func TestReleaseContextValidationManifestContract(t *testing.T) {
 	}
 }
 
+func TestGitHubWorkflowScaffoldManifestContract(t *testing.T) {
+	command, present := loadManifestCommands(t)["github-workflow-init"]
+	if !present {
+		t.Fatal("github-workflow-init command is missing")
+	}
+	if !reflect.DeepEqual(command.Outputs, []string{"table", "json"}) {
+		t.Fatalf("outputs = %#v", command.Outputs)
+	}
+	wantFlags := []string{"unit", "path", "dry-run"}
+	gotFlags := make([]string, 0, len(command.Flags))
+	for _, flag := range command.Flags {
+		gotFlags = append(gotFlags, flag.Name)
+		if flag.Required {
+			t.Fatalf("workflow scaffold flag %s must be optional", flag.Name)
+		}
+	}
+	if !reflect.DeepEqual(gotFlags, wantFlags) {
+		t.Fatalf("flag order = %#v, want %#v", gotFlags, wantFlags)
+	}
+	for _, forbidden := range []string{"provider", "force", "update", "consumer-command"} {
+		if _, present := flagDescriptions(command)[forbidden]; present {
+			t.Fatalf("workflow scaffold manifest exposes unsupported flag %q", forbidden)
+		}
+	}
+}
+
 func TestManifestClarifiesReleaseAndPluginUnitFlagDescriptions(t *testing.T) {
 	commands := loadManifestCommands(t)
 	initDescriptions := flagDescriptions(commands["init"])
