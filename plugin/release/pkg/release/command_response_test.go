@@ -156,6 +156,31 @@ func TestMapReleasePlanInspectionResponseContract(t *testing.T) {
 	}
 }
 
+func TestReleasePlanMappingPreservesTypedLimitationsAndMachineRow(t *testing.T) {
+	limitations := []ReleasePlanLimitation{
+		{Category: "local-only", Message: "This inspection uses local facts only."},
+		{Category: "no-remote-checks", Message: "Remote release state is not inspected."},
+		{Category: "token-free", Message: "Tokens are not read or reported."},
+	}
+	result := &ReleasePlanInspection{
+		Source:      "v2",
+		Unit:        ReleasePlanInspectionUnit{ID: "cli"},
+		Limitations: append([]ReleasePlanLimitation(nil), limitations...),
+	}
+
+	response := MapReleasePlanInspection(result, time.Date(2026, time.July, 18, 18, 0, 0, 0, time.UTC))
+
+	wantMachineValue := "local-only: This inspection uses local facts only. | " +
+		"no-remote-checks: Remote release state is not inspected. | " +
+		"token-free: Tokens are not read or reported."
+	if got := responseValueForProperty(t, response.Data["items"], "Limitations"); got != wantMachineValue {
+		t.Fatalf("machine-readable limitations = %q, want %q", got, wantMachineValue)
+	}
+	if !slices.Equal(result.Limitations, limitations) {
+		t.Fatalf("typed limitations changed during mapping: %#v", result.Limitations)
+	}
+}
+
 func TestMapResumeCommandOutcomePreservesAssessmentRowsAndTimestamp(t *testing.T) {
 	timestamp := time.Date(2026, time.July, 14, 14, 0, 0, 0, time.UTC)
 	outcome := &ResumeAssessment{
