@@ -30,8 +30,9 @@ const (
 
 // RenderOptions configures how a plugin response should be rendered.
 type RenderOptions struct {
-	Format   OutputFormat // The output format to use
-	Describe bool         // When true, include logs and metadata in the output
+	WidthProvider OutputWidthProvider // Optional test/composition seam for output width
+	Format        OutputFormat        // The output format to use
+	Describe      bool                // When true, include logs and metadata in the output
 }
 
 // RenderWithOptions is the unified render function that respects both format and describe options.
@@ -43,13 +44,19 @@ type RenderOptions struct {
 //
 // Returns an error if rendering fails.
 func RenderWithOptions(resp *plugin.Response, opts RenderOptions) error {
+	return RenderWithOptionsTo(resp, opts, os.Stdout)
+}
+
+// RenderWithOptionsTo renders a plugin response to the supplied writer while
+// preserving the width of that writer as the responsive-layout input.
+func RenderWithOptionsTo(resp *plugin.Response, opts RenderOptions, w io.Writer) error {
 	if opts.Describe {
-		return RenderDescribe(resp, opts.Format)
+		return renderDescribeWithOptionsTo(resp, opts, w)
 	}
 	if resp.RendererHint == "raw-json" {
-		return renderRawJSON(resp, os.Stdout)
+		return renderRawJSON(resp, w)
 	}
-	return Render(resp, opts.Format)
+	return renderToWithOptions(resp, opts, w)
 }
 
 // Render is the main entry point to render a plugin response to STDOUT.
@@ -74,15 +81,19 @@ func Render(resp *plugin.Response, format OutputFormat) error {
 //
 // Returns an error if rendering fails.
 func RenderTo(resp *plugin.Response, format OutputFormat, w io.Writer) error {
-	switch format {
+	return renderToWithOptions(resp, RenderOptions{Format: format}, w)
+}
+
+func renderToWithOptions(resp *plugin.Response, opts RenderOptions, w io.Writer) error {
+	switch opts.Format {
 	case FormatJSON:
 		return renderJSON(resp, w)
 	case FormatWide:
-		return renderTable(resp, w, true)
+		return renderTableWithWidth(resp, w, true, outputWidthProvider(opts.WidthProvider))
 	case FormatTable:
-		return renderTable(resp, w, false)
+		return renderTableWithWidth(resp, w, false, outputWidthProvider(opts.WidthProvider))
 	default:
-		return renderTable(resp, w, false)
+		return renderTableWithWidth(resp, w, false, outputWidthProvider(opts.WidthProvider))
 	}
 }
 
@@ -109,7 +120,11 @@ func RenderDescribe(resp *plugin.Response, format OutputFormat) error {
 //
 // Returns an error if rendering fails.
 func RenderDescribeTo(resp *plugin.Response, format OutputFormat, w io.Writer) error {
-	if format == FormatJSON {
+	return renderDescribeWithOptionsTo(resp, RenderOptions{Format: format}, w)
+}
+
+func renderDescribeWithOptionsTo(resp *plugin.Response, opts RenderOptions, w io.Writer) error {
+	if opts.Format == FormatJSON {
 		// JSON format includes everything
 		return renderJSON(resp, w)
 	}
@@ -123,9 +138,7 @@ func RenderDescribeTo(resp *plugin.Response, format OutputFormat, w io.Writer) e
 	}
 
 	// Render output data
-	renderOutputSection(resp, format, w)
-
-	return nil
+	return renderOutputSection(resp, opts, w)
 }
 
 // renderMetadataSection outputs the command metadata section with plugin info,
@@ -169,11 +182,11 @@ func renderLogsSection(logs []plugin.LogEntry, w io.Writer) {
 }
 
 // renderOutputSection outputs the data section of the response.
-func renderOutputSection(resp *plugin.Response, format OutputFormat, w io.Writer) {
+func renderOutputSection(resp *plugin.Response, opts RenderOptions, w io.Writer) error {
 	log.PrintSectionHeaderTo(w, "Output", log.ColorGreen)
 
-	wide := format == FormatWide
-	_ = renderTable(resp, w, wide)
+	wide := opts.Format == FormatWide
+	return renderTableWithWidth(resp, w, wide, outputWidthProvider(opts.WidthProvider))
 }
 
 // colorizeStatus adds color and icons to status strings.
@@ -219,9 +232,24 @@ func getLogLevelIcon(level string) string {
 
 // renderJSON outputs the entire response as formatted JSON.
 func renderJSON(resp *plugin.Response, w io.Writer) error {
+	publicResponse := struct {
+		Status       string                  `json:"status"`
+		Metadata     plugin.ResponseMetadata `json:"metadata"`
+		Data         map[string]any          `json:"data,omitempty"`
+		Error        *plugin.ResponseError   `json:"error,omitempty"`
+		RendererHint string                  `json:"renderer_hint,omitempty"`
+		Logs         []plugin.LogEntry       `json:"logs,omitempty"`
+	}{
+		Status:       resp.Status,
+		Metadata:     resp.Metadata,
+		Data:         resp.Data,
+		Error:        resp.Error,
+		RendererHint: resp.RendererHint,
+		Logs:         resp.Logs,
+	}
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
-	return encoder.Encode(resp)
+	return encoder.Encode(publicResponse)
 }
 
 func renderRawJSON(resp *plugin.Response, w io.Writer) error {
@@ -248,11 +276,13 @@ func renderRawJSON(resp *plugin.Response, w io.Writer) error {
 //   - wide: Whether to use wide format (currently unused, reserved for future features)
 //
 // Returns an error if rendering fails.
-func renderTable(resp *plugin.Response, w io.Writer, wide bool) error {
-	_ = wide // TODO: implement wide output format with additional columns
+func renderTableWithWidth(resp *plugin.Response, w io.Writer, wide bool, widthProvider OutputWidthProvider) error {
 
 	if resp.Status == "error" {
 		return renderError(resp, w)
+	}
+	if rendered, err := renderResponsiveTable(resp, w, wide, widthProvider); rendered || err != nil {
+		return err
 	}
 
 	// Find any list in the data (items, releases, pods, etc.)

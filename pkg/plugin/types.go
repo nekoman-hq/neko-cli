@@ -29,6 +29,8 @@ type Context struct {
 // Response represents the output returned by a plugin after executing a command.
 // It includes status information, metadata, optional data payload, error details,
 // and rendering hints for display.
+//
+//nolint:govet // Field order preserves the stable response protocol order.
 type Response struct {
 	Status       string           `json:"status"`                  // Execution status (e.g., "success", "error")
 	Metadata     ResponseMetadata `json:"metadata"`                // Metadata about the response
@@ -36,6 +38,21 @@ type Response struct {
 	Error        *ResponseError   `json:"error,omitempty"`         // Error details if the execution failed
 	RendererHint string           `json:"renderer_hint,omitempty"` // Hint for how to render the response (e.g., "table", "json", "text")
 	Logs         []LogEntry       `json:"logs,omitempty"`          // Log entries generated during execution
+	HumanTable   *HumanTable      `json:"human_table,omitempty"`   // Optional transport-only declaration for responsive human output
+}
+
+// HumanTable declares ordered columns for an opt-in responsive human table.
+// It is transport metadata and does not change the response Data contract.
+type HumanTable struct {
+	Columns []HumanColumn `json:"columns"`
+}
+
+// HumanColumn declares one human-facing column. Slice order defines display
+// order and optional-column priority.
+type HumanColumn struct {
+	Key       string `json:"key"`
+	Label     string `json:"label"`
+	Essential bool   `json:"essential,omitempty"`
 }
 
 // LogEntry represents a single log message generated during plugin execution.
