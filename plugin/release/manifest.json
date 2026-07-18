@@ -362,6 +362,35 @@
       ]
     },
     {
+      "name": "github-workflow-init",
+      "description": "Create or preview the configured canonical GitHub Actions release workflow without overwriting different content",
+      "outputs": [
+        "table",
+        "json"
+      ],
+      "flags": [
+        {
+          "name": "unit",
+          "type": "string",
+          "required": false,
+          "description": "Select a Release V2 unit and its configured workflow path"
+        },
+        {
+          "name": "path",
+          "type": "string",
+          "required": false,
+          "description": "Select an exact repository-root-relative workflow path already configured by a Release V2 unit"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "required": false,
+          "default": false,
+          "description": "Preview exact generated workflow content without writing files"
+        }
+      ]
+    },
+    {
       "name": "resume",
       "description": "Resumes a previously journaled V2 GitHub Actions release. It never calculates a new version and does not automatically retry uncertain push or dispatch outcomes.",
       "outputs": [

@@ -118,6 +118,29 @@ func TestGitHubActionsGoldenPathWorkflowContract(t *testing.T) {
 	assertWorkflowValue(t, checkout.With, "fetch-tags", "true")
 	assertWorkflowValue(t, checkout.With, "persist-credentials", "false")
 
+	installCLI := findDocumentedStep(t, releaseJob.Steps, "Install pinned Neko CLI")
+	for _, fragment := range []string{
+		`: "${NEKO_VERSION:?Set repository variable NEKO_VERSION`,
+		"https://raw.githubusercontent.com/nekoman-hq/neko-cli/main/install.sh",
+		`bash "$RUNNER_TEMP/install-neko.sh"`,
+		`echo "$NEKO_INSTALL_DIR" >> "$GITHUB_PATH"`,
+	} {
+		if !strings.Contains(installCLI.Run, fragment) {
+			t.Errorf("Neko CLI installation is missing %q", fragment)
+		}
+	}
+	if installCLI.Env["NEKO_VERSION"] != "${{ vars.NEKO_VERSION }}" {
+		t.Errorf("Neko CLI version pin = %q", installCLI.Env["NEKO_VERSION"])
+	}
+
+	installPlugin := findDocumentedStep(t, releaseJob.Steps, "Install pinned Neko Release Plugin")
+	if !strings.Contains(installPlugin.Run, `neko plugin install release --version "$NEKO_RELEASE_PLUGIN_VERSION"`) {
+		t.Error("Release Plugin installation must use the explicit version pin")
+	}
+	if installPlugin.Env["NEKO_RELEASE_PLUGIN_VERSION"] != "${{ vars.NEKO_RELEASE_PLUGIN_VERSION }}" {
+		t.Errorf("Release Plugin version pin = %q", installPlugin.Env["NEKO_RELEASE_PLUGIN_VERSION"])
+	}
+
 	validation := findDocumentedStep(t, releaseJob.Steps, "Validate Neko release context")
 	if validation.Shell != "bash" {
 		t.Errorf("context validation shell = %q, want bash", validation.Shell)
@@ -157,7 +180,7 @@ func TestGitHubActionsGoldenPathWorkflowContract(t *testing.T) {
 		}
 	}
 
-	consumer := findDocumentedStep(t, releaseJob.Steps, "Build and publish selected unit")
+	consumer := findDocumentedStep(t, releaseJob.Steps, "Configure consumer build and publication")
 	if consumer.Shell != "bash" {
 		t.Errorf("consumer extension shell = %q, want bash", consumer.Shell)
 	}
@@ -172,11 +195,8 @@ func TestGitHubActionsGoldenPathWorkflowContract(t *testing.T) {
 		}
 	}
 	for _, fragment := range []string{
-		"./tooling/publish-release",
-		"--unit \"$RELEASE_UNIT\"",
-		"--version \"$RELEASE_VERSION\"",
-		"--tag \"$RELEASE_TAG\"",
-		"--release-sha \"$RELEASE_SHA\"",
+		"Replace this generated step with consumer-owned build and publication commands.",
+		"exit 1",
 	} {
 		if !strings.Contains(consumer.Run, fragment) {
 			t.Errorf("consumer extension point is missing %q", fragment)

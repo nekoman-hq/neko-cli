@@ -81,6 +81,11 @@ func TestManifestMatchesPublicReleaseContract(t *testing.T) {
 			"tag":         "string",
 			"release-sha": "string",
 		},
+		"github-workflow-init": {
+			"unit":    "string",
+			"path":    "string",
+			"dry-run": "bool",
+		},
 		"history": {
 			"unit": "string",
 		},

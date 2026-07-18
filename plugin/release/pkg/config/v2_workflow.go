@@ -21,6 +21,18 @@ func ValidateV2ReleaseConfigStructure(cfg *V2ReleaseConfig) error {
 	return validateV2ConfigAndState("", cfg, nil, false)
 }
 
+// ValidateV2ConfigStateStructure validates the complete V2 config/state
+// contract without requiring repository-owned files to exist yet.
+func ValidateV2ConfigStateStructure(cfg *V2ReleaseConfig, state *V2ReleaseState) error {
+	return validateV2ConfigAndState("", cfg, state, true)
+}
+
+// ValidateV2WorkflowPath validates one canonical repository-relative GitHub
+// Actions workflow path without requiring the target file to exist.
+func ValidateV2WorkflowPath(workflow string) error {
+	return validateV2WorkflowStructure("selected", DeliveryGitHubActions, workflow)
+}
+
 // ValidateV2ReleaseConfigAtRepositoryRoot validates V2 config semantics and
 // repository-root workflow files when a real repository is available.
 func ValidateV2ReleaseConfigAtRepositoryRoot(repositoryRoot string, cfg *V2ReleaseConfig, state *V2ReleaseState) error {

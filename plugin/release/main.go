@@ -84,6 +84,8 @@ func handleRequestAt(root workspace.RepositoryRoot, req plugin.Request, v1Execut
 		return release.HandlePlanAt(root, req)
 	case "ci-validate-context":
 		return release.HandleReleaseContextValidationAt(root, req)
+	case "github-workflow-init":
+		return release.HandleGitHubWorkflowInitAt(root, req)
 	case "resume":
 		return release.HandleResumeAt(root, req)
 	case "evidence":
