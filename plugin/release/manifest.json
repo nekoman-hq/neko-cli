@@ -423,6 +423,12 @@
           "type": "string",
           "required": false,
           "description": "Filter evidence records by release unit when the evidence family records a unit"
+        },
+        {
+          "name": "identity",
+          "type": "string",
+          "required": false,
+          "description": "Inspect one complete Evidence record by an unambiguous 8-64 character lowercase hexadecimal identity prefix after family and unit filters"
         }
       ]
     },

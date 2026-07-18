@@ -73,6 +73,9 @@ func (handler evidenceCommandHandler) Handle(req plugin.Request) (*plugin.Respon
 	if err != nil {
 		return nil, err
 	}
+	if request.IdentityPrefix != "" {
+		return mapEvidenceDetailResponse(result, handler.clock.Now()), nil
+	}
 	return mapEvidenceQueryResponse(result, handler.clock.Now()), nil
 }
 

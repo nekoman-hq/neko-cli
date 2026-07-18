@@ -75,9 +75,16 @@ func TestEvidenceQuerySummarizesValidJournalsAndCorruptDiagnosticsWithoutSecrets
 	if err != nil {
 		t.Fatalf("marshal result: %v", err)
 	}
+	detailOutput, err := json.Marshal(mapEvidenceDetailResponse(evidenceQueryResult{Records: result.Records[:1]}, evidenceTestTime))
+	if err != nil {
+		t.Fatalf("marshal detail response: %v", err)
+	}
 	for _, forbidden := range []string{"secret-token", "Authorization", "Bearer"} {
 		if strings.Contains(string(output), forbidden) {
 			t.Fatalf("evidence output leaked %q:\n%s", forbidden, output)
+		}
+		if strings.Contains(string(detailOutput), forbidden) {
+			t.Fatalf("Evidence detail leaked %q:\n%s", forbidden, detailOutput)
 		}
 	}
 	if result.Records[0].Family != FamilyDispatch || result.Records[1].Family != FamilyReleaseExecution {
@@ -110,6 +117,143 @@ func TestEvidenceQueryPreservesUnsupportedMigrationJournal(t *testing.T) {
 	}
 	if string(after) != string(before) {
 		t.Fatalf("inspection mutated unsupported migration journal:\nbefore=%s\nafter=%s", before, after)
+	}
+}
+
+func TestEvidenceIdentityPrefixAppliesFiltersBeforeUniqueMatchingWithoutMutation(t *testing.T) {
+	root := newEvidenceGitRepository(t)
+	executionDir, err := release.NewReleaseExecutionJournalStore(root).JournalDirectory()
+	if err != nil {
+		t.Fatalf("execution directory: %v", err)
+	}
+	dispatchDir, err := release.NewDispatchJournalStore(root).JournalDirectory()
+	if err != nil {
+		t.Fatalf("dispatch directory: %v", err)
+	}
+	apiIdentity := strings.Repeat("a", 64)
+	workerIdentity := "aaaaaaaa" + strings.Repeat("b", 56)
+	dispatchIdentity := "aaaaaaaa" + strings.Repeat("c", 56)
+	apiPath := filepath.Join(executionDir, apiIdentity+".json")
+	workerPath := filepath.Join(executionDir, workerIdentity+".json")
+	dispatchPath := filepath.Join(dispatchDir, dispatchIdentity+".json")
+	writeEvidenceJSON(t, apiPath, release.ReleaseExecutionJournal{
+		SchemaVersion: releaseExecutionSchemaVersionForTest,
+		Identity:      release.ReleaseExecutionIdentity{SHA256: apiIdentity},
+		UnitID:        "api",
+		NextVersion:   "1.2.4",
+		Tag:           "api/v1.2.4",
+		State:         release.ReleaseExecutionPrepared,
+		PendingAction: release.ReleaseExecutionPendingNone,
+		CreatedAt:     evidenceTestTime,
+		UpdatedAt:     evidenceTestTime,
+	})
+	writeEvidenceJSON(t, workerPath, release.ReleaseExecutionJournal{
+		SchemaVersion: releaseExecutionSchemaVersionForTest,
+		Identity:      release.ReleaseExecutionIdentity{SHA256: workerIdentity},
+		UnitID:        "worker",
+		NextVersion:   "2.0.1",
+		Tag:           "worker/v2.0.1",
+		State:         release.ReleaseExecutionPrepared,
+		PendingAction: release.ReleaseExecutionPendingNone,
+		CreatedAt:     evidenceTestTime,
+		UpdatedAt:     evidenceTestTime,
+	})
+	writeEvidenceJSON(t, dispatchPath, release.DispatchJournal{
+		SchemaVersion: dispatchSchemaVersionForTest,
+		Identity:      release.ReleaseDispatchIdentity{SHA256: dispatchIdentity},
+		UnitID:        "api",
+		Version:       "1.2.4",
+		Tag:           "api/v1.2.4",
+		State:         release.DispatchJournalAccepted,
+		CreatedAt:     evidenceTestTime,
+		UpdatedAt:     evidenceTestTime,
+	})
+	before := readEvidenceFiles(t, apiPath, workerPath, dispatchPath)
+
+	filtered, err := newEvidenceQueryUseCase().Query(context.Background(), evidenceQueryRequest{
+		RepositoryRoot: root,
+		Family:         FamilyReleaseExecution,
+		Unit:           "api",
+		IdentityPrefix: "aaaaaaaa",
+	})
+	if err != nil {
+		t.Fatalf("filtered prefix Query: %v", err)
+	}
+	if len(filtered.Records) != 1 || filtered.Records[0].Identity != apiIdentity {
+		t.Fatalf("filtered prefix result = %#v, want API execution record", filtered.Records)
+	}
+
+	_, err = newEvidenceQueryUseCase().Query(context.Background(), evidenceQueryRequest{
+		RepositoryRoot: root,
+		Family:         FamilyReleaseExecution,
+		IdentityPrefix: "aaaaaaaa",
+	})
+	if err == nil || !strings.Contains(err.Error(), "ambiguous") || !strings.Contains(err.Error(), "2 matches") {
+		t.Fatalf("ambiguous prefix error = %v", err)
+	}
+
+	_, err = newEvidenceQueryUseCase().Query(context.Background(), evidenceQueryRequest{
+		RepositoryRoot: root,
+		Family:         FamilyReleaseExecution,
+		Unit:           "missing",
+		IdentityPrefix: "aaaaaaaa",
+	})
+	if err == nil || !strings.Contains(err.Error(), "no evidence identity matches") {
+		t.Fatalf("zero-match prefix error = %v", err)
+	}
+
+	exact, err := newEvidenceQueryUseCase().Query(context.Background(), evidenceQueryRequest{
+		RepositoryRoot: root,
+		IdentityPrefix: apiIdentity,
+	})
+	if err != nil || len(exact.Records) != 1 || exact.Records[0].Identity != apiIdentity {
+		t.Fatalf("full identity Query = (%#v, %v)", exact.Records, err)
+	}
+
+	after := readEvidenceFiles(t, apiPath, workerPath, dispatchPath)
+	for path, contents := range before {
+		if string(after[path]) != string(contents) {
+			t.Fatalf("identity inspection mutated %s", path)
+		}
+	}
+}
+
+func TestEvidenceIdentityPrefixValidationIsCanonicalAndArchiveRemainsExact(t *testing.T) {
+	fullIdentity := strings.Repeat("a", 64)
+	for _, test := range []struct {
+		name     string
+		identity string
+		valid    bool
+	}{
+		{name: "minimum prefix", identity: "0123abcd", valid: true},
+		{name: "full identity", identity: fullIdentity, valid: true},
+		{name: "too short", identity: "0123abc"},
+		{name: "too long", identity: fullIdentity + "a"},
+		{name: "uppercase rejected", identity: "0123ABCD"},
+		{name: "non hexadecimal rejected", identity: "0123abcg"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request, err := parseEvidenceQueryRequest(map[string]any{"identity": test.identity}, "/repo")
+			if test.valid {
+				if err != nil || request.IdentityPrefix != test.identity {
+					t.Fatalf("parseEvidenceQueryRequest = (%#v, %v)", request, err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), "8 to 64 lowercase hexadecimal") {
+				t.Fatalf("invalid identity error = %v", err)
+			}
+		})
+	}
+
+	_, err := parseEvidenceArchiveRequest(map[string]any{
+		"family":          FamilyReleaseExecution,
+		"identity":        "0123abcd",
+		"digest-sha256":   strings.Repeat("b", 64),
+		"confirm-archive": true,
+	}, "/repo")
+	if err == nil || !strings.Contains(err.Error(), "sha256 evidence identity") {
+		t.Fatalf("archive accepted identity prefix: %v", err)
 	}
 }
 
@@ -262,6 +406,19 @@ func writeEvidenceJSON(t *testing.T, path string, value any) {
 	if err := os.WriteFile(path, append(data, '\n'), 0600); err != nil {
 		t.Fatalf("write evidence: %v", err)
 	}
+}
+
+func readEvidenceFiles(t *testing.T, paths ...string) map[string][]byte {
+	t.Helper()
+	files := make(map[string][]byte, len(paths))
+	for _, path := range paths {
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read evidence file %s: %v", path, err)
+		}
+		files[path] = contents
+	}
+	return files
 }
 
 func gitEvidenceCommand(t *testing.T, root string, args ...string) {

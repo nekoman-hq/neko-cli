@@ -4,9 +4,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 	"github.com/nekoman-hq/neko-cli/pkg/renderer"
 )
@@ -57,7 +61,7 @@ func TestEvidenceQueryResponsePreservesUnfilteredJSONContract(t *testing.T) {
 		t.Fatalf("items = %#v, want record followed by diagnostic", response.Data["items"])
 	}
 	for _, key := range []string{"safe_to_resume", "automatic_continuation", "manual_recovery"} {
-		if _, ok := items[0][key].(string); !ok {
+		if _, itemOK := items[0][key].(string); !itemOK {
 			t.Fatalf("items[0][%q] type = %T, want string", key, items[0][key])
 		}
 	}
@@ -178,6 +182,35 @@ func TestEvidenceHandlerReturnsMappedResponseWithoutGoError(t *testing.T) {
 	}
 }
 
+func TestEvidenceHandlerRoutesIdentityInspectionToCompleteDetail(t *testing.T) {
+	identity := strings.Repeat("a", 64)
+	runner := &recordingEvidenceQueryRunner{result: evidenceQueryResult{Records: []EvidenceRecord{{
+		Family:   FamilyDispatch,
+		Identity: identity,
+	}}}}
+	handler := evidenceCommandHandler{
+		query: runner,
+		clock: fixedEvidenceResponseClock{timestamp: time.Date(2026, time.July, 18, 13, 0, 0, 0, time.UTC)},
+	}
+
+	response, err := handler.Handle(plugin.Request{
+		Flags:   map[string]any{"identity": identity[:8], "family": FamilyDispatch, "unit": "api"},
+		Context: plugin.Context{WorkingDir: "/repo"},
+	})
+	if err != nil {
+		t.Fatalf("Handle detail: %v", err)
+	}
+	if runner.request.IdentityPrefix != identity[:8] || runner.request.Family != FamilyDispatch || runner.request.Unit != "api" {
+		t.Fatalf("detail query request changed: %#v", runner.request)
+	}
+	if response.HumanTable != nil {
+		t.Fatalf("detail response unexpectedly opted into summary table: %#v", response.HumanTable)
+	}
+	if items, ok := response.Data["items"].([]map[string]any); !ok || len(items) == 0 || items[1]["value"] != identity {
+		t.Fatalf("detail response omitted complete identity: %#v", response.Data["items"])
+	}
+}
+
 func TestEvidenceHandlerReturnsNilResponseWithQueryError(t *testing.T) {
 	wantErr := errors.New("evidence query failed")
 	handler := evidenceCommandHandler{
@@ -191,6 +224,141 @@ func TestEvidenceHandlerReturnsNilResponseWithQueryError(t *testing.T) {
 	}
 }
 
+func TestEvidenceSummaryDeclaresSemanticHumanColumnPriority(t *testing.T) {
+	response := mapEvidenceQueryResponse(evidenceQueryResult{Records: []EvidenceRecord{{Family: FamilyDispatch}}}, time.Now())
+	want := []plugin.HumanColumn{
+		{Key: "family", Label: "Family", Essential: true},
+		{Key: "state", Label: "State", Essential: true},
+		{Key: "classification", Label: "Classification", Essential: true},
+		{Key: "safe_to_resume", Label: "Resume", Essential: true},
+		{Key: "manual_recovery", Label: "Recovery", Essential: true},
+		{Key: "unit", Label: "Unit"},
+		{Key: "version", Label: "Version"},
+		{Key: "tag", Label: "Tag"},
+		{Key: "pending_action", Label: "Pending action"},
+		{Key: "automatic_continuation", Label: "Automatic"},
+		{Key: "lifecycle", Label: "Lifecycle"},
+	}
+	if response.HumanTable == nil || !reflect.DeepEqual(response.HumanTable.Columns, want) {
+		t.Fatalf("human table columns = %#v, want %#v", response.HumanTable, want)
+	}
+}
+
+func TestEvidenceDetailResponseShowsEverySafeFieldAndCompleteTypedRecord(t *testing.T) {
+	record := EvidenceRecord{
+		CreatedAt:             "2026-07-18T12:00:00Z",
+		UpdatedAt:             "2026-07-18T12:15:00Z",
+		Family:                FamilyReleaseExecution,
+		Identity:              strings.Repeat("a", 64),
+		Owner:                 "release execution",
+		Unit:                  "api",
+		Version:               "1.2.4",
+		Tag:                   "api/v1.2.4",
+		State:                 "handoff-ready",
+		PendingAction:         "none",
+		Classification:        ClassificationCompleted,
+		SafeToResume:          false,
+		AutomaticContinuation: false,
+		ManualRecovery:        false,
+		LifecycleAllowed:      true,
+		LifecycleOperation:    "archive-completed",
+		Guidance:              "The handoff is complete.",
+		Path:                  "/repo/.git/neko/release/executions/record.json",
+		DigestSHA256:          strings.Repeat("b", 64),
+	}
+	result := evidenceQueryResult{
+		Records: []EvidenceRecord{record},
+		Diagnostics: []EvidenceDiagnostic{{
+			Family:         FamilyReleaseExecution,
+			Classification: ClassificationCorrupt,
+			Code:           "example",
+		}},
+	}
+
+	response := mapEvidenceDetailResponse(result, time.Date(2026, time.July, 18, 12, 30, 0, 0, time.UTC))
+	if response.HumanTable != nil || response.RendererHint != "table" {
+		t.Fatalf("detail response should use existing property/value rendering: %#v", response)
+	}
+	items, ok := response.Data["items"].([]map[string]any)
+	if !ok {
+		t.Fatalf("detail items type = %T", response.Data["items"])
+	}
+	wantProperties := []string{
+		"Family", "Identity", "Owner", "Unit", "Version", "Tag", "State", "Pending Action", "Classification",
+		"Safe To Resume", "Automatic Continuation", "Manual Recovery", "Lifecycle Allowed", "Lifecycle Operation",
+		"Guidance", "Path", "Digest SHA-256", "Created At", "Updated At",
+	}
+	if len(items) != len(wantProperties) {
+		t.Fatalf("detail item count = %d, want %d", len(items), len(wantProperties))
+	}
+	for index, property := range wantProperties {
+		if items[index]["property"] != property {
+			t.Fatalf("detail property %d = %#v, want %q", index, items[index]["property"], property)
+		}
+	}
+	typedRecords, recordsOK := response.Data["evidence"].([]EvidenceRecord)
+	if !recordsOK || !reflect.DeepEqual(typedRecords, []EvidenceRecord{record}) {
+		t.Fatalf("detail typed record changed: %#v", response.Data["evidence"])
+	}
+	typedDiagnostics, diagnosticsOK := response.Data["diagnostics"].([]EvidenceDiagnostic)
+	if !diagnosticsOK || !reflect.DeepEqual(typedDiagnostics, result.Diagnostics) {
+		t.Fatalf("detail diagnostics changed: %#v", response.Data["diagnostics"])
+	}
+}
+
+func TestEvidenceSummaryRendersResponsiveHumanLayoutsWithoutForensicColumns(t *testing.T) {
+	response := mapEvidenceQueryResponse(evidenceQueryResult{Records: []EvidenceRecord{{
+		Family:                FamilyDispatch,
+		Identity:              strings.Repeat("a", 64),
+		Owner:                 "github-actions dispatch",
+		Unit:                  "api",
+		Version:               "1.2.4",
+		Tag:                   "api/v1.2.4",
+		State:                 "accepted",
+		PendingAction:         "none",
+		Classification:        ClassificationCompleted,
+		AutomaticContinuation: true,
+		Path:                  "/repo/private/evidence.json",
+		DigestSHA256:          strings.Repeat("b", 64),
+		Guidance:              "Complete guidance remains available in detail.",
+	}}}, time.Now())
+
+	wide := renderEvidenceAtWidth(t, response, renderer.FormatWide, 240)
+	wideHeader := strings.Split(ansi.Strip(wide), "\n")[0]
+	for _, label := range []string{"Family", "State", "Classification", "Resume", "Recovery", "Unit", "Version", "Tag", "Pending action", "Automatic", "Lifecycle"} {
+		if !strings.Contains(wideHeader, label) {
+			t.Fatalf("wide Evidence header missing %q: %q", label, wideHeader)
+		}
+	}
+	for _, forensic := range []string{"Identity", "Digest", "Owner", "Path", "Guidance", strings.Repeat("a", 16)} {
+		if strings.Contains(ansi.Strip(wide), forensic) {
+			t.Fatalf("Evidence summary leaked detail-only value %q:\n%s", forensic, ansi.Strip(wide))
+		}
+	}
+
+	narrow := ansi.Strip(renderEvidenceAtWidth(t, response, renderer.FormatTable, 24))
+	if !strings.Contains(narrow, "Family: dispatch") || !strings.Contains(narrow, "Recovery: false") || strings.Contains(narrow, "────") {
+		t.Fatalf("narrow Evidence output is not a vertical summary:\n%s", narrow)
+	}
+}
+
+func renderEvidenceAtWidth(t *testing.T, response *plugin.Response, format renderer.OutputFormat, width int) string {
+	t.Helper()
+	var output bytes.Buffer
+	options := renderer.RenderOptions{Format: format, WidthProvider: evidenceOutputWidth(width)}
+	if err := renderer.RenderWithOptionsTo(response, options, &output); err != nil {
+		t.Fatalf("RenderWithOptionsTo: %v", err)
+	}
+	return output.String()
+}
+
+type evidenceOutputWidth int
+
+func (width evidenceOutputWidth) Width(io.Writer) (int, bool) {
+	return int(width), true
+}
+
+//nolint:govet // Field order follows request/result/error test behavior.
 type recordingEvidenceQueryRunner struct {
 	request evidenceQueryRequest
 	result  evidenceQueryResult

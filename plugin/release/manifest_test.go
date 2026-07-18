@@ -90,8 +90,9 @@ func TestManifestMatchesPublicReleaseContract(t *testing.T) {
 			"dry-run": "bool",
 		},
 		"evidence": {
-			"family": "string",
-			"unit":   "string",
+			"family":   "string",
+			"unit":     "string",
+			"identity": "string",
 		},
 		"evidence-archive": {
 			"family":          "string",

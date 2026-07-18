@@ -33,6 +33,66 @@ func mapEvidenceQueryResponse(result evidenceQueryResult, timestamp time.Time) *
 			"diagnostics": result.Diagnostics,
 		},
 		RendererHint: "table",
+		HumanTable:   evidenceSummaryTable(),
+	}
+}
+
+func mapEvidenceDetailResponse(result evidenceQueryResult, timestamp time.Time) *plugin.Response {
+	record := result.Records[0]
+	return &plugin.Response{
+		Status: "success",
+		Metadata: plugin.ResponseMetadata{
+			Plugin:    metadata.PluginName,
+			Version:   metadata.Version,
+			Command:   CommandName,
+			Timestamp: timestamp,
+		},
+		Data: map[string]any{
+			"items":       evidenceDetailItems(record),
+			"evidence":    result.Records,
+			"diagnostics": result.Diagnostics,
+		},
+		RendererHint: "table",
+	}
+}
+
+func evidenceSummaryTable() *plugin.HumanTable {
+	return &plugin.HumanTable{Columns: []plugin.HumanColumn{
+		{Key: "family", Label: "Family", Essential: true},
+		{Key: "state", Label: "State", Essential: true},
+		{Key: "classification", Label: "Classification", Essential: true},
+		{Key: "safe_to_resume", Label: "Resume", Essential: true},
+		{Key: "manual_recovery", Label: "Recovery", Essential: true},
+		{Key: "unit", Label: "Unit"},
+		{Key: "version", Label: "Version"},
+		{Key: "tag", Label: "Tag"},
+		{Key: "pending_action", Label: "Pending action"},
+		{Key: "automatic_continuation", Label: "Automatic"},
+		{Key: "lifecycle", Label: "Lifecycle"},
+	}}
+}
+
+func evidenceDetailItems(record EvidenceRecord) []map[string]any {
+	return []map[string]any{
+		{"property": "Family", "value": record.Family},
+		{"property": "Identity", "value": record.Identity},
+		{"property": "Owner", "value": record.Owner},
+		{"property": "Unit", "value": emptyEvidenceValue(record.Unit)},
+		{"property": "Version", "value": emptyEvidenceValue(record.Version)},
+		{"property": "Tag", "value": emptyEvidenceValue(record.Tag)},
+		{"property": "State", "value": emptyEvidenceValue(record.State)},
+		{"property": "Pending Action", "value": emptyEvidenceValue(record.PendingAction)},
+		{"property": "Classification", "value": record.Classification},
+		{"property": "Safe To Resume", "value": fmt.Sprintf("%t", record.SafeToResume)},
+		{"property": "Automatic Continuation", "value": fmt.Sprintf("%t", record.AutomaticContinuation)},
+		{"property": "Manual Recovery", "value": fmt.Sprintf("%t", record.ManualRecovery)},
+		{"property": "Lifecycle Allowed", "value": fmt.Sprintf("%t", record.LifecycleAllowed)},
+		{"property": "Lifecycle Operation", "value": emptyEvidenceValue(record.LifecycleOperation)},
+		{"property": "Guidance", "value": record.Guidance},
+		{"property": "Path", "value": record.Path},
+		{"property": "Digest SHA-256", "value": record.DigestSHA256},
+		{"property": "Created At", "value": emptyEvidenceValue(record.CreatedAt)},
+		{"property": "Updated At", "value": emptyEvidenceValue(record.UpdatedAt)},
 	}
 }
 

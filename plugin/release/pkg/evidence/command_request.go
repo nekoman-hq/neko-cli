@@ -11,6 +11,7 @@ type evidenceQueryRequest struct {
 	RepositoryRoot string
 	Family         string
 	Unit           string
+	IdentityPrefix string
 }
 
 func parseEvidenceQueryRequest(flags map[string]any, workingDir string) (evidenceQueryRequest, error) {
@@ -22,11 +23,27 @@ func parseEvidenceQueryRequest(flags map[string]any, workingDir string) (evidenc
 		RepositoryRoot: root,
 		Family:         strings.TrimSpace(evidenceFlagString(flags, "family")),
 		Unit:           strings.TrimSpace(evidenceFlagString(flags, "unit")),
+		IdentityPrefix: strings.TrimSpace(evidenceFlagString(flags, "identity")),
 	}
 	if !evidenceFamilyAllowed(request.Family) {
 		return evidenceQueryRequest{}, fmt.Errorf("unsupported evidence family %q", request.Family)
 	}
+	if request.IdentityPrefix != "" && !validEvidenceIdentityPrefix(request.IdentityPrefix) {
+		return evidenceQueryRequest{}, fmt.Errorf("--identity must contain 8 to 64 lowercase hexadecimal characters")
+	}
 	return request, nil
+}
+
+func validEvidenceIdentityPrefix(identity string) bool {
+	if len(identity) < 8 || len(identity) > 64 {
+		return false
+	}
+	for _, character := range identity {
+		if (character < '0' || character > '9') && (character < 'a' || character > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func evidenceFamilyAllowed(family string) bool {

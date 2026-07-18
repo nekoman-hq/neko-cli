@@ -61,7 +61,28 @@ func (useCase evidenceQueryUseCase) Query(_ context.Context, request evidenceQue
 		result.Diagnostics = append(result.Diagnostics, diagnostics...)
 	}
 	sortEvidenceResult(&result)
+	if request.IdentityPrefix != "" {
+		return selectEvidenceByIdentityPrefix(result, request.IdentityPrefix)
+	}
 	return result, nil
+}
+
+func selectEvidenceByIdentityPrefix(result evidenceQueryResult, prefix string) (evidenceQueryResult, error) {
+	matches := make([]EvidenceRecord, 0, 1)
+	for _, record := range result.Records {
+		if strings.HasPrefix(record.Identity, prefix) {
+			matches = append(matches, record)
+		}
+	}
+	switch len(matches) {
+	case 0:
+		return evidenceQueryResult{}, fmt.Errorf("no evidence identity matches prefix %q after applying family and unit filters", prefix)
+	case 1:
+		result.Records = matches
+		return result, nil
+	default:
+		return evidenceQueryResult{}, fmt.Errorf("evidence identity prefix %q is ambiguous after applying family and unit filters (%d matches)", prefix, len(matches))
+	}
 }
 
 func includeEvidenceFamily(selected, family string) bool {
