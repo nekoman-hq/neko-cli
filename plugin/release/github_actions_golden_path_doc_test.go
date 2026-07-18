@@ -24,7 +24,9 @@ type documentedWorkflow struct {
 	} `yaml:"on"`
 	Permissions map[string]string `yaml:"permissions"`
 	Jobs        map[string]struct {
-		Steps []documentedWorkflowStep `yaml:"steps"`
+		RunsOn string                   `yaml:"runs-on"`
+		Env    map[string]string        `yaml:"env"`
+		Steps  []documentedWorkflowStep `yaml:"steps"`
 	} `yaml:"jobs"`
 	Concurrency struct {
 		Group            string `yaml:"group"`
@@ -39,12 +41,13 @@ type documentedWorkflowInput struct {
 }
 
 type documentedWorkflowStep struct {
-	Name string            `yaml:"name"`
-	ID   string            `yaml:"id"`
-	Uses string            `yaml:"uses"`
-	With map[string]any    `yaml:"with"`
-	Env  map[string]string `yaml:"env"`
-	Run  string            `yaml:"run"`
+	Name  string            `yaml:"name"`
+	ID    string            `yaml:"id"`
+	Uses  string            `yaml:"uses"`
+	Shell string            `yaml:"shell"`
+	With  map[string]any    `yaml:"with"`
+	Env   map[string]string `yaml:"env"`
+	Run   string            `yaml:"run"`
 }
 
 func TestGitHubActionsGoldenPathWorkflowContract(t *testing.T) {
@@ -89,6 +92,22 @@ func TestGitHubActionsGoldenPathWorkflowContract(t *testing.T) {
 	if !ok {
 		t.Fatal("documented workflow must define the release job")
 	}
+	if len(workflow.Jobs) != 1 {
+		t.Fatalf("documented workflow jobs = %d, want only release", len(workflow.Jobs))
+	}
+	if releaseJob.RunsOn != "ubuntu-latest" {
+		t.Errorf("release job runner = %q, want ubuntu-latest", releaseJob.RunsOn)
+	}
+	for name, value := range map[string]string{
+		"RELEASE_UNIT":    "${{ inputs.unit }}",
+		"RELEASE_VERSION": "${{ inputs.version }}",
+		"RELEASE_TAG":     "${{ inputs.tag }}",
+		"RELEASE_SHA":     "${{ inputs.release_sha }}",
+	} {
+		if releaseJob.Env[name] != value {
+			t.Errorf("release job env %s = %q, want %q", name, releaseJob.Env[name], value)
+		}
+	}
 	checkout := findDocumentedStep(t, releaseJob.Steps, "Checkout the exact release commit with tags")
 	if checkout.Uses != "actions/checkout@v4" {
 		t.Errorf("checkout action = %q, want actions/checkout@v4", checkout.Uses)
@@ -99,6 +118,9 @@ func TestGitHubActionsGoldenPathWorkflowContract(t *testing.T) {
 	assertWorkflowValue(t, checkout.With, "persist-credentials", "false")
 
 	validation := findDocumentedStep(t, releaseJob.Steps, "Validate Neko release context")
+	if validation.Shell != "bash" {
+		t.Errorf("context validation shell = %q, want bash", validation.Shell)
+	}
 	for _, fragment := range []string{
 		"neko release ci-validate-context",
 		"--unit \"$RELEASE_UNIT\"",
@@ -135,6 +157,9 @@ func TestGitHubActionsGoldenPathWorkflowContract(t *testing.T) {
 	}
 
 	consumer := findDocumentedStep(t, releaseJob.Steps, "Build and publish selected unit")
+	if consumer.Shell != "bash" {
+		t.Errorf("consumer extension shell = %q, want bash", consumer.Shell)
+	}
 	for name, value := range map[string]string{
 		"RELEASE_UNIT":    "${{ steps.release-context.outputs.unit }}",
 		"RELEASE_VERSION": "${{ steps.release-context.outputs.version }}",
@@ -173,6 +198,34 @@ func TestGitHubActionsGoldenPathWorkflowContract(t *testing.T) {
 			t.Errorf("documented workflow contains forbidden release-owner command %q", forbidden)
 		}
 	}
+	if strings.Contains(workflowYAML, "secrets.") {
+		t.Error("canonical build-system-neutral workflow must not assume consumer secrets")
+	}
+	for _, forbidden := range []string{"/Users/", "/home/", "C:\\\\"} {
+		if strings.Contains(workflowYAML, forbidden) {
+			t.Errorf("canonical workflow contains environment-specific absolute path %q", forbidden)
+		}
+	}
+}
+
+func TestGitHubActionsGoldenPathUsesOnlyWorkflowDispatch(t *testing.T) {
+	workflowYAML := extractGoldenPathWorkflow(t, readGoldenPathDocument(t))
+	var document yaml.Node
+	if err := yaml.Unmarshal([]byte(workflowYAML), &document); err != nil {
+		t.Fatalf("parse documented workflow YAML: %v", err)
+	}
+	root := document.Content[0]
+	for index := 0; index < len(root.Content); index += 2 {
+		if root.Content[index].Value != "on" {
+			continue
+		}
+		triggers := root.Content[index+1]
+		if triggers.Kind != yaml.MappingNode || len(triggers.Content) != 2 || triggers.Content[0].Value != "workflow_dispatch" {
+			t.Fatalf("workflow trigger must contain only workflow_dispatch: %#v", triggers.Content)
+		}
+		return
+	}
+	t.Fatal("documented workflow trigger is missing")
 }
 
 func TestGitHubActionsGoldenPathNavigation(t *testing.T) {
