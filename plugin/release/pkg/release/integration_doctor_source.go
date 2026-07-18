@@ -120,7 +120,7 @@ func classifyIntegrationDoctorSourceError(err error) (string, string) {
 	}
 	message := err.Error()
 	switch {
-	case strings.Contains(message, "tag prefix"):
+	case strings.Contains(message, "tag prefix"), strings.Contains(message, "tagPrefix"):
 		return "TAG_PREFIX_CONFLICT", "Release units do not have distinct canonical tag prefixes."
 	case strings.Contains(message, "delivery"):
 		return "DELIVERY_INVALID", "A Release V2 unit configures unsupported delivery instead of GitHub Actions."
