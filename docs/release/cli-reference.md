@@ -160,6 +160,15 @@ network clients, Git commands, journal stores, Evidence writers, or filesystem
 writers. Source validation only reads the local V2 pair-recovery readiness
 marker already owned by the strict config/state contract.
 
+Diagnostics use the closed severities `error`, `warning`, `recommendation`,
+and `not_verifiable`. Their stable fields are `severity`, `scope`, optional
+`unit`, optional `workflow`, `code`, `message`, and `remediation`. Ordering is
+deterministic by severity, scope, unit, workflow, code, and message. A generated
+canonical workflow is recognized byte-for-byte but remains `not_ready` while
+its deliberately failing consumer placeholder is present. A structurally
+equivalent manual workflow is supported; custom build/publication correctness
+remains explicitly not verifiable.
+
 Unsupported or read-only boundaries:
 
 - Existing V2 configs with `delivery: local` are rejected with a clear unsupported-delivery validation error.

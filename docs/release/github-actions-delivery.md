@@ -151,6 +151,38 @@ The dispatch `ref` is the existing unit tag. GitHub also requires the workflow f
 
 Workflow files are generated only by the explicit create-only scaffolding command; existing release commands never rewrite them. No public standalone dispatch or retry command exists. `neko release resume --unit <unit>` resumes only existing unresolved execution journals. Follow the [Release V2 GitHub Actions Golden Path](github-actions-golden-path.md) for a complete consumer setup. See also [Release V2 bootstrap product boundary](bootstrap-product-boundary.md), [GitHub Actions release flow](github-actions-release-flow.md), [Execution journal](execution-journal.md), [Recovery model](recovery-model.md), [GitHub Actions dispatch](github-actions-dispatch.md), [Dispatch contract](dispatch-contract.md), and [Dispatch journal](dispatch-journal.md).
 
+## Integration doctor
+
+`neko release doctor [--unit <unit-id>]` is the read-only local readiness
+check for this delivery contract. It loads the strict V2 config/state pair,
+deduplicates configured workflow paths, parses workflow YAML structurally, and
+reports ordered unit, workflow, and diagnostic facts. Selecting one unit keeps
+all units sharing its workflow in the workflow scope.
+
+The workflow checks cover `workflow_dispatch`, the exact four required string
+inputs, competing release-capable triggers, explicit and least-privilege
+permissions, non-cancelling unit/tag concurrency, exact release-SHA checkout,
+full history and tags, disabled persisted checkout credentials, pinned Neko
+CLI and Release plugin installation before validation, every canonical
+validator flag, GitHub output-file wiring, stable validator output identity,
+and replacement of the generated consumer placeholder. Optional additional
+dispatch inputs are allowed; additional required inputs are not, because Neko
+cannot supply them. Unrelated pull-request or branch verification triggers are
+not treated as publication conflicts merely by existing.
+
+Readiness is `not_ready` with exit code `1` when any error exists,
+`ready_with_warnings` with exit code `0` when only warnings remain, and `ready`
+with exit code `0` when findings are recommendations or locally not verifiable.
+JSON exposes stable `readiness`, `summary`, `units`, `workflows`, and
+`diagnostics` fields. Each diagnostic contains severity, scope, optional unit
+and workflow identity, stable code, message, and remediation.
+
+The doctor is token-free, network-free, Git-command-free, and mutation-free.
+It cannot prove the remote default-branch workflow, repository-variable values,
+remote install artifacts, publication credentials, workflow-dispatch
+authorization, custom consumer build correctness, or publication-target
+version acceptance.
+
 ## Nekocli Production Workflows
 
 Nekocli dogfoods three independent V2 GitHub Actions units:

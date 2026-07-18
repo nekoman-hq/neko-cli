@@ -114,14 +114,16 @@ Current path:
    use `neko release github-workflow-init`.
 5. Add the executor config and any product-specific build or publication files.
 6. Run `neko release validate --show`.
-7. Inspect with `neko release plan --change patch`.
-8. Run `neko release patch`, `minor`, or `major`.
-9. Let GitHub Actions run `ci-validate-context` before build and publish.
-10. Use `neko release resume --dry-run` only for unresolved local evidence.
+7. Run `neko release doctor` and review local and not-verifiable findings.
+8. Inspect with `neko release plan --change patch`.
+9. Run `neko release patch`, `minor`, or `major`.
+10. Let GitHub Actions run `ci-validate-context` before build and publish.
+11. Use `neko release resume --dry-run` only for unresolved local evidence.
 
 The scaffolder is create-only and separate from `init`: it creates a missing
 configured target, recognizes byte-identical output, and refuses different
-consumer content. A future integration doctor remains separate.
+consumer content. The integration doctor remains a separate read-only command;
+it never invokes the scaffolder's writer.
 
 ## Multi-unit golden path
 
@@ -142,17 +144,20 @@ Current path:
 5. Commit config/state, workflow files, executor config, and consumer build
    support files.
 6. Run `neko release validate --show`.
-7. Inspect one unit with `neko release plan --change patch --unit <unit>`.
-8. Release one unit with `neko release patch --unit <unit>`.
-9. Let the workflow pass `unit`, `version`, `tag`, and `release_sha` to
+7. Inspect integration for all units with `neko release doctor`, or one unit
+   and its complete shared-workflow scope with `--unit <unit>`.
+8. Inspect one unit with `neko release plan --change patch --unit <unit>`.
+9. Release one unit with `neko release patch --unit <unit>`.
+10. Let the workflow pass `unit`, `version`, `tag`, and `release_sha` to
    `ci-validate-context` and consume its validated outputs.
 
-Future product path:
+Evolving product path:
 
 1. Add or import units.
 2. Inspect a unit overview before release planning.
-3. Run an integration doctor for every release unit.
-4. Use pipeline inspection to explain local and CI readiness before execution.
+3. Use the current integration doctor for every release unit.
+4. Add pipeline inspection to explain additional local and CI readiness before
+   execution.
 
 ## Build-system-neutral consumers
 
@@ -250,6 +255,9 @@ Supported today:
 - Token-free, network-free, create-only `github-workflow-init` with exact
   target selection, deterministic YAML, dry-run, idempotent recognition, and
   fail-closed conflicts.
+- Token-free, network-free, Git-command-free, mutation-free `doctor` with
+  strict V2 source checks, structural workflow diagnostics, shared-workflow
+  scope, stable JSON, and explicit not-verifiable facts.
 - GitHub Actions-delivered `patch`, `minor`, and `major` releases.
 - Neko-owned state/materialization, release commit, unit tag, commit push, tag
   push, execution journal, dispatch journal, and workflow dispatch.
@@ -263,7 +271,6 @@ Not supported today:
 - workflow generation as an implicit side effect of `init` or `unit-add`;
 - managed workflow updates, arbitrary YAML merging, or force overwrite;
 - executor config scaffolding from `init` or `unit-add`;
-- a first-class integration doctor;
 - a release unit overview command;
 - release pipeline inspection;
 - build-system adapters in Neko CLI;
@@ -274,11 +281,10 @@ Not supported today:
 
 Future Release V2 bootstrap work should add capabilities in this order:
 
-1. Read-only integration doctor.
-2. Release unit overview.
-3. Release pipeline inspection.
-4. Build-system adapter contract and a Gradle adapter.
-5. GitHub Actions packaging decision after the generated workflow contract is
+1. Release unit overview.
+2. Release pipeline inspection.
+3. Build-system adapter contract and a Gradle adapter.
+4. GitHub Actions packaging decision after the generated workflow contract is
    proven in consumers.
 
 Build-system adapter work can start after the stable CI validation contract is

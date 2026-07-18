@@ -62,6 +62,8 @@ Implemented today:
 - the four-input dispatch contract documented below;
 - create-only, token-free GitHub Actions workflow scaffolding through
   `neko release github-workflow-init`;
+- local, read-only Release V2 integration diagnostics through
+  `neko release doctor`;
 - execution and dispatch Evidence, `evidence`, guarded completed-Evidence
   archival, `resume`, and `resume --dry-run`;
 - V1-to-V2 migration, plugin index generation, and isolated V1 compatibility.
@@ -69,7 +71,7 @@ Implemented today:
 Future capabilities, not available as commands or generated artifacts today:
 
 - a reusable Neko-provided workflow package or managed workflow updates;
-- an integration doctor, release-unit overview, or pipeline inspection;
+- a release-unit overview or pipeline inspection;
 - completed official build-system adapters, including a Gradle adapter;
 - V2 local execution and standalone dispatch or retry commands.
 
@@ -584,6 +586,43 @@ credentials, container registry tokens, and deployment credentials remain
 consumer-controlled because Neko neither understands their scope nor owns the
 external publication result.
 
+## Integration doctor
+
+Run the local integration doctor before the first real release and after
+changing V2 config/state or a configured workflow:
+
+```bash
+neko release doctor
+neko release doctor --unit service
+neko release doctor --output json
+```
+
+Without `--unit`, the command inspects every configured unit and every unique
+workflow path. A selected unit narrows unit facts but keeps all units sharing
+its workflow in scope, so shared-workflow conflicts remain visible.
+
+The doctor structurally parses workflow YAML and checks the strict V2 pair,
+canonical workflow path confinement, dispatch triggers and inputs,
+permissions, concurrency, exact-SHA checkout, pinned CLI/plugin installation,
+context validation, GitHub output integration, and the consumer extension
+point. The generated canonical workflow is recognized byte-for-byte, but it
+remains `not_ready` until its deliberately failing consumer placeholder is
+replaced.
+
+Diagnostics use `error`, `warning`, `recommendation`, and `not_verifiable`.
+Any error yields `not_ready` and exit code `1`; warnings without errors yield
+`ready_with_warnings` and exit code `0`; recommendations and not-verifiable
+facts alone yield `ready` and exit code `0`. Remote default-branch content,
+repository variables, install artifacts, credentials, dispatch authorization,
+custom build correctness, and publication-target acceptance remain explicitly
+not verifiable from local files.
+
+The doctor reads no token, contacts no network, runs no Git command, and
+receives no config/state writer, workflow writer, journal store, Evidence
+writer, dispatcher, release runner, or executor. It reads only local source
+facts, the existing V2 pair-recovery readiness marker, and configured workflow
+files.
+
 ## Release plan and dry-run
 
 Use the dedicated plan command for stable, read-only local planning facts:
@@ -897,6 +936,8 @@ workflow against this checklist:
   invalidates the complete V2 pair even when another unit is selected;
 - `.release.neko.json` and V1 executor behavior remain isolated from V2 and
   are not read by the release workflow.
+- `neko release doctor` reports no local integration errors; warnings and
+  not-verifiable facts have been reviewed against repository policy.
 
 For a root V1 repository, use the separate
 [V1-to-V2 migration guide](migration-v1-to-v2.md), create the referenced

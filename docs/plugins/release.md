@@ -207,6 +207,22 @@ existing local V2 pair-recovery readiness marker required by the source
 contract. JSON contains stable `readiness`, `summary`, `units`, `workflows`,
 and `diagnostics` fields.
 
+Each diagnostic has one closed severity (`error`, `warning`,
+`recommendation`, or `not_verifiable`), source/unit/workflow scope, optional
+unit and workflow identity, a stable code, message, and remediation. Errors
+produce `not_ready` and exit code `1`; warnings without errors produce
+`ready_with_warnings` and exit code `0`; recommendation and not-verifiable
+findings alone produce `ready` and exit code `0`.
+
+Checks cover strict V2 source presence, JSON/schema/alignment/recovery safety,
+canonical unit executor/delivery/version/tag/workflow facts, workflow path and
+YAML safety, dispatch triggers and inputs, permissions, concurrency, checkout,
+pinned installation order, context-validator flags and GitHub output wiring,
+and the consumer extension point. Remote workflow content, repository
+variables, install artifacts, credentials, dispatch authorization, custom
+consumer build correctness, and publication-target acceptance are reported as
+not verifiable instead of inferred.
+
 ---
 
 ### `neko release patch`
