@@ -327,6 +327,22 @@
       ]
     },
     {
+      "name": "doctor",
+      "description": "Diagnose local Release V2 GitHub Actions integration readiness without tokens, network, Git mutation, or file mutation",
+      "outputs": [
+        "table",
+        "json"
+      ],
+      "flags": [
+        {
+          "name": "unit",
+          "type": "string",
+          "required": false,
+          "description": "Inspect one Release V2 unit while retaining checks for every unit sharing its workflow"
+        }
+      ]
+    },
+    {
       "name": "ci-validate-context",
       "description": "Validate a dispatched Release V2 context against local config, state, HEAD, and tag history without mutation or network access",
       "outputs": [

@@ -75,6 +75,9 @@ func TestManifestMatchesPublicReleaseContract(t *testing.T) {
 			"change": "string",
 			"unit":   "string",
 		},
+		"doctor": {
+			"unit": "string",
+		},
 		"ci-validate-context": {
 			"unit":        "string",
 			"version":     "string",

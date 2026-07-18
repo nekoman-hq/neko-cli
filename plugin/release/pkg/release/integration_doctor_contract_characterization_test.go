@@ -40,15 +40,15 @@ func TestIntegrationDoctorCanInspectCanonicalWorkflowWithoutMutation(t *testing.
 	if err != nil {
 		t.Fatalf("render canonical workflow: %v", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
-		t.Fatalf("create workflow directory: %v", err)
+	if mkdirErr := os.MkdirAll(filepath.Dir(target), 0755); mkdirErr != nil {
+		t.Fatalf("create workflow directory: %v", mkdirErr)
 	}
-	if err := os.WriteFile(target, canonical, 0600); err != nil {
-		t.Fatalf("write canonical workflow: %v", err)
+	if writeErr := os.WriteFile(target, canonical, 0600); writeErr != nil {
+		t.Fatalf("write canonical workflow: %v", writeErr)
 	}
 	preservedTime := time.Unix(1_700_000_000, 0)
-	if err := os.Chtimes(target, preservedTime, preservedTime); err != nil {
-		t.Fatalf("set workflow modification time: %v", err)
+	if timeErr := os.Chtimes(target, preservedTime, preservedTime); timeErr != nil {
+		t.Fatalf("set workflow modification time: %v", timeErr)
 	}
 
 	_, inspected, exists, failure := inspectGitHubWorkflowOutputTarget(root.Path(), ".github/workflows/release.yml")

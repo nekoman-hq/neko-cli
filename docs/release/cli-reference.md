@@ -6,6 +6,7 @@ neko release init --executor goreleaser --delivery github-actions --workflow .gi
 neko release init --unit plugin-release --kind plugin --plugin-name release --plugin-manifest plugin/release/manifest.json --plugin-asset-prefix plugin-release --plugin-binary-name plugin-release --executor goreleaser --delivery github-actions --workflow .github/workflows/release-plugin-release.yml --tag-prefix plugin-release/v
 neko release unit-add --unit api --executor goreleaser --delivery github-actions --workflow .github/workflows/release-api.yml --tag-prefix api/v --paths "apps/api/**"
 neko release github-workflow-init --dry-run
+neko release doctor
 neko release init-options
 ```
 
@@ -54,6 +55,9 @@ neko release major --unit api --dry-run
 neko release plan --change patch --unit api
 neko release plan --change minor --unit api
 neko release plan --change major --unit api
+neko release doctor
+neko release doctor --unit api
+neko release doctor --output json
 neko release github-workflow-init --dry-run
 neko release github-workflow-init --unit api
 neko release github-workflow-init --path .github/workflows/release-api.yml
@@ -145,6 +149,16 @@ executorStart
 ```
 
 `neko release plan --change <patch|minor|major> [--unit <unit>]` is a dedicated local plan inspection command. It reports the selected release source and unit, current version, requested change, next version, tag, planned materialized files, known release files, local readiness, local blockers, and explicit limitations. Human-readable output gives every limitation its own semantic label instead of one pipe-delimited value. At a known width, property labels are bounded and long values wrap with aligned continuation lines; very narrow or width-unknown output uses vertical properties. The typed plan facts and established JSON `data.items` projection are unchanged. The command does not read tokens, inspect remotes, inspect execution or dispatch journals, write files, mutate Git, dispatch workflows, publish releases, or start executors. It is separate from `--dry-run`: dry-run keeps the existing release preview contract, while `plan` is for stable local planning facts.
+
+`neko release doctor [--unit <unit-id>]` is a strictly local Release V2
+integration inspection. By default it checks all configured units and unique
+workflow paths; selecting a unit still retains every unit sharing that
+workflow. It returns `ready`, `ready_with_warnings`, or `not_ready`, with exit
+code `1` for `not_ready`. JSON exposes `readiness`, severity counts, ordered
+unit/workflow facts, and ordered diagnostics. The doctor does not use tokens,
+network clients, Git commands, journal stores, Evidence writers, or filesystem
+writers. Source validation only reads the local V2 pair-recovery readiness
+marker already owned by the strict config/state contract.
 
 Unsupported or read-only boundaries:
 

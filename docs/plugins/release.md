@@ -189,6 +189,26 @@ provider, force, update, or arbitrary consumer-command flag.
 
 ---
 
+### `neko release doctor`
+
+Inspect all configured Release V2 units and their GitHub Actions workflows, or
+select one unit while retaining checks for every unit sharing its workflow:
+
+```bash
+neko release doctor [--unit <unit-id>]
+neko release doctor --output json
+```
+
+The command reads only local V2 config/state and configured workflow files. It
+reports `ready`, `ready_with_warnings`, or `not_ready`, uses exit code `1` only
+for `not_ready`, and never reads tokens, contacts the network, runs Git, reads
+journals, constructs Evidence stores, or mutates files. It only checks the
+existing local V2 pair-recovery readiness marker required by the source
+contract. JSON contains stable `readiness`, `summary`, `units`, `workflows`,
+and `diagnostics` fields.
+
+---
+
 ### `neko release patch`
 
 Create a patch release, incrementing the Z in X.Y.Z (e.g., 1.2.3 → 1.2.4).

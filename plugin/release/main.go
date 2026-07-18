@@ -39,7 +39,7 @@ func main() {
 	// Set verbose mode from request context
 	log.Verbose = req.Context.Verbose
 
-	root, err := workspace.ResolveRepositoryRoot(req.Context.WorkingDir)
+	root, err := resolveRequestRoot(req)
 	if err != nil {
 		pluginerrors.WriteError("WORKSPACE_ERROR", err.Error())
 	}
@@ -64,6 +64,13 @@ func main() {
 	}
 }
 
+func resolveRequestRoot(req plugin.Request) (workspace.RepositoryRoot, error) {
+	if req.Command == "doctor" {
+		return workspace.ResolveInspectionRepositoryRoot(req.Context.WorkingDir)
+	}
+	return workspace.ResolveRepositoryRoot(req.Context.WorkingDir)
+}
+
 func handleRequestAt(root workspace.RepositoryRoot, req plugin.Request, v1Executors []release.V1Executor) (*plugin.Response, error) {
 	switch req.Command {
 	case "init":
@@ -82,6 +89,8 @@ func handleRequestAt(root workspace.RepositoryRoot, req plugin.Request, v1Execut
 		return release.HandleReleaseWithV1ExecutorsAt(root, req, release.Major, v1Executors...)
 	case "plan":
 		return release.HandlePlanAt(root, req)
+	case "doctor":
+		return release.HandleDoctorAt(root, req)
 	case "ci-validate-context":
 		return release.HandleReleaseContextValidationAt(root, req)
 	case "github-workflow-init":

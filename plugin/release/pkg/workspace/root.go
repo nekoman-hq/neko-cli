@@ -42,6 +42,50 @@ func ResolveRepositoryRoot(startDir string) (RepositoryRoot, error) {
 	return RepositoryRoot{path: root}, nil
 }
 
+// ResolveInspectionRepositoryRoot resolves the local repository
+// boundary without requiring release source files to be mutually valid. It is
+// intended for read-only diagnostics that must report missing or conflicting
+// V2 config/state files rather than fail during root discovery.
+func ResolveInspectionRepositoryRoot(startDir string) (RepositoryRoot, error) {
+	absStartDir, err := inspectionStartDirectory(startDir)
+	if err != nil {
+		return RepositoryRoot{}, err
+	}
+	if gitRoot, found, findErr := findAncestorWithMarker(absStartDir, gitMarker); findErr != nil {
+		return RepositoryRoot{}, findErr
+	} else if found {
+		return RepositoryRoot{path: gitRoot}, nil
+	}
+	if root, found, findErr := findAncestorWithMarker(absStartDir, config.V1FileName); findErr != nil {
+		return RepositoryRoot{}, findErr
+	} else if found {
+		return RepositoryRoot{path: root}, nil
+	}
+	return RepositoryRoot{path: absStartDir}, nil
+}
+
+func inspectionStartDirectory(startDir string) (string, error) {
+	if startDir == "" {
+		var err error
+		startDir, err = os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("failed to determine working directory: %w", err)
+		}
+	}
+	absStartDir, err := filepath.Abs(startDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve absolute working directory: %w", err)
+	}
+	info, err := os.Stat(absStartDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to inspect working directory %s: %w", absStartDir, err)
+	}
+	if !info.IsDir() {
+		return filepath.Dir(absStartDir), nil
+	}
+	return absStartDir, nil
+}
+
 // ValidateRepositoryRoot validates that root is already the resolved repository
 // root according to the Release Plugin's existing discovery rules.
 func ValidateRepositoryRoot(root string) (RepositoryRoot, error) {
