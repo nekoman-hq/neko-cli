@@ -86,6 +86,8 @@ type transactionExecutor interface {
 
 // Deprecated: V2 local delivery is unsupported; public V2 releases use
 // GitHub Actions delivery.
+//
+//nolint:govet // Compatibility fields keep their public shape despite layout-only alignment suggestions.
 type ReleaseTransaction struct {
 	Context  *ReleaseExecutionContext
 	Plan     ReleasePlan
