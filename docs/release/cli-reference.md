@@ -121,7 +121,104 @@ The execution journal records V2 release phases and recovery evidence under the 
 
 `neko release plugin-index` generates the public plugin registry index from V2 plugin units, `.neko/release.state.json`, and plugin manifests. The generated `plugin-index.json` is not committed as source and is not published by this command. Plugin release workflows publish or replace it as the `plugin-index.json` asset on the mutable `plugin-registry` GitHub Release after successful plugin releases. Runtime `neko plugin available`, `install`, and `update` use that asset as the source of truth and do not use `/releases/latest` or release-prefix fallback discovery for plugin discovery.
 
-`neko release ci-validate-context` requires `--unit`, `--version`, `--tag`, and `--release-sha`. It validates those dispatched values against the local V2 config/state pair, the checked-out commit, and complete local tag history. It is read-only, token-free, and network-free. Human output is the default; `--output json` returns typed canonical data. GitHub Actions can use `--output github --github-output-file "$GITHUB_OUTPUT"`; the destination is always explicit and is never inferred from the environment.
+### CI release-context validation
+
+`neko release ci-validate-context` validates one dispatched Release V2 context
+before a consumer builds or publishes:
+
+```bash
+neko release ci-validate-context \
+  --unit api \
+  --version 2.4.0 \
+  --tag api/v2.4.0 \
+  --release-sha <full-lowercase-commit-object-id>
+```
+
+All four flags are required; there are no command-specific optional flags. The
+command requires a complete valid V2 config/state pair with no V1 conflict or
+unresolved pair-recovery evidence. It resolves the explicit unit, compares the
+exact authoritative state version and canonical tag, verifies that
+`release_sha` is a full local commit object ID for the repository's object
+format, and requires checked-out `HEAD` and the peeled local tag target to equal
+it. Lightweight and annotated tags are accepted. Detached HEAD is accepted when
+it matches. Missing or incomplete local tag history fails with guidance; the
+command never fetches.
+
+Default table output is an ordered property/value view. `--output json` returns
+the normal response envelope with deterministic `data` keys:
+
+```text
+valid
+unit
+display_name
+version
+tag_prefix
+tag
+release_sha
+working_directory
+executor
+delivery
+workflow
+git_object_format
+head_matches
+tag_target_matches
+```
+
+`valid`, `head_matches`, and `tag_target_matches` are JSON booleans. All other
+data values are canonical strings. Presentation and integration transport
+metadata are excluded from public JSON.
+
+GitHub Actions uses an explicit command-file destination:
+
+```bash
+neko release ci-validate-context \
+  --unit "$RELEASE_UNIT" \
+  --version "$RELEASE_VERSION" \
+  --tag "$RELEASE_TAG" \
+  --release-sha "$RELEASE_SHA" \
+  --output github \
+  --github-output-file "$GITHUB_OUTPUT"
+```
+
+The stable step outputs, in order, are `unit`, `display_name`, `version`,
+`tag_prefix`, `tag`, `release_sha`, `working_directory`, `executor`, `delivery`,
+and `workflow`. Empty values, Unicode, spaces, newlines, carriage returns, and
+delimiter-like lines are encoded without shell evaluation. The destination is
+never inferred from ambient environment, so outside GitHub Actions callers can
+use human/JSON output or explicitly supply a pre-created command file.
+
+Validation mismatches return a structured error response and nonzero CLI exit.
+Stable command codes are:
+
+```text
+INVALID_CONTEXT_INPUT
+INVALID_RELEASE_SHA
+UNSUPPORTED_RELEASE_SOURCE
+V2_CONTEXT_SOURCE_MISSING
+V2_CONTEXT_SOURCE_CONFLICT
+V2_CONTEXT_RECOVERY_BLOCKED
+V2_CONFIGURATION_INVALID
+V2_STATE_INVALID
+V2_CONFIG_STATE_MISMATCH
+V2_CONTEXT_SOURCE_INVALID
+RELEASE_UNIT_NOT_FOUND
+RELEASE_VERSION_MISMATCH
+RELEASE_TAG_MISMATCH
+GIT_REPOSITORY_UNAVAILABLE
+GIT_OBJECT_FORMAT_UNSUPPORTED
+RELEASE_SHA_NOT_COMMIT
+HEAD_UNAVAILABLE
+HEAD_MISMATCH
+TAG_HISTORY_UNAVAILABLE
+RELEASE_TAG_MISSING
+TAG_TARGET_INVALID
+TAG_TARGET_MISMATCH
+```
+
+Core output failures use `GITHUB_OUTPUT_DESTINATION_UNAVAILABLE` or
+`GITHUB_OUTPUT_ENCODING_FAILED`. Safe messages omit raw Git output, filesystem
+internals, and secrets. The command reads no token, contacts no network, writes
+no release files or journals, and mutates no Git worktree, index, or ref.
 
 ## Resume
 

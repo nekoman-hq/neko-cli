@@ -55,6 +55,7 @@ V2 configuration. V1 local executor compatibility through
 Implemented today:
 
 - V2 `init`, `unit-add`, `validate`, and token-free `plan`;
+- read-only `ci-validate-context` for dispatched V2 inputs and local Git facts;
 - `patch`, `minor`, and `major`, including token-free `--dry-run`;
 - GitHub Actions delivery with release commit, lightweight unit tag, commit
   push, tag push, and `workflow_dispatch`;
@@ -65,7 +66,6 @@ Implemented today:
 
 Future capabilities, not available as commands or generated artifacts today:
 
-- a stable CI release-context validation command;
 - a workflow generator or reusable Neko-provided workflow package;
 - an integration doctor, release-unit overview, or pipeline inspection;
 - completed official build-system adapters, including a Gradle adapter;
@@ -73,8 +73,8 @@ Future capabilities, not available as commands or generated artifacts today:
 - V2 local execution and standalone dispatch or retry commands.
 
 Do not put candidate syntax for those future capabilities into a production
-workflow. The manual CI validation block in this guide is temporary integration
-wiring until a stable Neko CI context command replaces it.
+workflow. Use the stable context command below rather than duplicating release
+policy with shell or JSON parsing.
 
 ## Prerequisites
 
@@ -340,7 +340,7 @@ four string inputs:
 | `unit` | Neko unit selection | Authoritative selected unit. It must exist exactly once in checked-out config. | No |
 | `version` | Neko version plan and committed state update | Authoritative release version. It must equal checked-out state for `unit`; the workflow must not bump or recalculate it. | No |
 | `tag` | Neko `tagPrefix + version` calculation | Authoritative release tag. It must equal the checked-out unit prefix plus `version` and resolve to `release_sha`. | No |
-| `release_sha` | Neko's verified release commit | Authoritative 40-character commit SHA. Checked-out `HEAD` and the tag target must both equal it. | No |
+| `release_sha` | Neko's verified release commit | Authoritative full lowercase commit object ID. Checked-out `HEAD` and the tag target must both equal it. | No |
 
 The workflow receives them through `github.event.inputs` and the typed
 `inputs` context. A mismatch means the dispatch and checked-out release facts
@@ -349,33 +349,25 @@ build or publication step. Executor, delivery, workflow path, repository
 paths, and credentials are deliberately not inputs and must be read from the
 checked-out repository or consumer secret store.
 
-## Current CI validation
+## CI release-context validation
 
-The stable Neko CI release-context command is not implemented. Today, the
-workflow must perform the following temporary manual checks after exact
-checkout:
+After exact checkout, run `neko release ci-validate-context` with all four
+dispatched values. The command requires a complete valid V2 config/state pair,
+resolves the selected unit, compares the authoritative state version and
+canonical tag, verifies that the full object ID names a local commit, and
+requires both checked-out `HEAD` and the peeled local tag target to equal that
+commit. Detached HEAD is valid when it resolves to the dispatched commit.
 
-1. config and state use schema version 2 and have the same unit IDs;
-2. the selected unit exists exactly once;
-3. selected state version equals `version`;
-4. configured tag prefix plus `version` equals `tag`;
-5. the unit uses `github-actions` and owns the running workflow path;
-6. `release_sha` has the full lowercase Git SHA shape;
-7. checked-out `HEAD` equals `release_sha`;
-8. the exact tag ref exists and resolves to `release_sha`.
-
-`neko release validate` remains the canonical pre-release validation for the
-complete V2 schema and pair. The CI block below checks the additional immutable
-dispatch-to-checkout relationship. If a pinned Neko CLI and Release Plugin are
-already provisioned in CI, running
-`neko release validate --unit "$RELEASE_UNIT"` before this block provides an
-additional full-schema check, but it does not replace the context checks.
+The checkout must contain complete local tag history; the command never fetches
+it. It reads no token, contacts no remote, writes no release files or journals,
+and mutates no Git state. A mismatch produces a structured error and a nonzero
+CLI exit. The GitHub output destination is explicit, so the same command remains
+usable outside Actions with default human output or `--output json`.
 
 ### Copy-ready minimal workflow
 
-Save this as `.github/workflows/release.yml`. Change only
-`EXPECTED_WORKFLOW` and the final consumer-owned command when adopting a
-different workflow filename or publication entry point.
+Save this as `.github/workflows/release.yml`. Change the final consumer-owned
+command when adopting a different publication entry point.
 
 <!-- golden-path-workflow:start -->
 ```yaml
@@ -416,7 +408,6 @@ jobs:
       RELEASE_VERSION: ${{ inputs.version }}
       RELEASE_TAG: ${{ inputs.tag }}
       RELEASE_SHA: ${{ inputs.release_sha }}
-      EXPECTED_WORKFLOW: .github/workflows/release.yml
     steps:
       - name: Checkout the exact release commit with tags
         uses: actions/checkout@v4
@@ -426,90 +417,34 @@ jobs:
           fetch-tags: true
           persist-credentials: false
 
-      # Temporary integration wiring. Replace this whole step with the stable
-      # Neko CI release-context command when that command becomes available.
       - name: Validate Neko release context
+        id: release-context
         shell: bash
+        env:
+          RELEASE_UNIT: ${{ inputs.unit }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
         run: |
           set -euo pipefail
-
-          fail() {
-            printf '::error::%s\n' "$1"
-            exit 1
-          }
-
-          [[ "$RELEASE_UNIT" =~ ^[a-z][a-z0-9-]*$ ]] ||
-            fail "unit is not a valid V2 unit id"
-          [[ "$RELEASE_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]] ||
-            fail "version is not valid SemVer"
-          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] ||
-            fail "release_sha must be a full lowercase 40-character Git SHA"
-
-          jq -e '
-            .schemaVersion == 2 and
-            (.units | type == "array") and
-            (.units | length > 0)
-          ' .neko/release.config.json >/dev/null ||
-            fail "release.config.json is not a V2 config"
-          jq -e '
-            .schemaVersion == 2 and
-            (.units | type == "object")
-          ' .neko/release.state.json >/dev/null ||
-            fail "release.state.json is not V2 state"
-
-          config_units="$(jq -c '[.units[].id] | sort' .neko/release.config.json)"
-          state_units="$(jq -c '.units | keys | sort' .neko/release.state.json)"
-          [[ "$config_units" == "$state_units" ]] ||
-            fail "config and state unit ids differ"
-
-          unit_matches="$(
-            jq -c --arg unit "$RELEASE_UNIT" \
-              '[.units[] | select(.id == $unit)]' \
-              .neko/release.config.json
-          )"
-          [[ "$(jq 'length' <<<"$unit_matches")" == "1" ]] ||
-            fail "selected unit is missing or duplicated in release config"
-          unit_json="$(jq -c '.[0]' <<<"$unit_matches")"
-
-          state_version="$(
-            jq -er --arg unit "$RELEASE_UNIT" \
-              '.units[$unit].version | strings | select(length > 0)' \
-              .neko/release.state.json
-          )" || fail "selected unit has no state version"
-          [[ "$state_version" == "$RELEASE_VERSION" ]] ||
-            fail "state version does not match dispatched version"
-
-          tag_prefix="$(
-            jq -er '.tagPrefix | strings | select(length > 0)' <<<"$unit_json"
-          )" || fail "selected unit has no tag prefix"
-          [[ "$RELEASE_TAG" == "${tag_prefix}${RELEASE_VERSION}" ]] ||
-            fail "tag does not equal configured tag prefix plus version"
-
-          delivery="$(jq -er '.executor.delivery' <<<"$unit_json")"
-          workflow="$(jq -er '.executor.workflow' <<<"$unit_json")"
-          [[ "$delivery" == "github-actions" ]] ||
-            fail "selected unit does not use github-actions delivery"
-          [[ "$workflow" == "$EXPECTED_WORKFLOW" ]] ||
-            fail "selected unit is routed to a different workflow"
-
-          head_sha="$(git rev-parse --verify HEAD)"
-          [[ "$head_sha" == "$RELEASE_SHA" ]] ||
-            fail "checked-out HEAD does not match release_sha"
-
-          tag_ref="refs/tags/${RELEASE_TAG}"
-          git show-ref --verify --quiet "$tag_ref" ||
-            fail "release tag is missing from the checkout"
-          tag_sha="$(
-            git rev-parse --verify --quiet --end-of-options "${tag_ref}^{commit}"
-          )" || fail "release tag does not resolve to a commit"
-          [[ "$tag_sha" == "$RELEASE_SHA" ]] ||
-            fail "release tag does not resolve to release_sha"
+          neko release ci-validate-context \
+            --unit "$RELEASE_UNIT" \
+            --version "$RELEASE_VERSION" \
+            --tag "$RELEASE_TAG" \
+            --release-sha "$RELEASE_SHA" \
+            --output github \
+            --github-output-file "$GITHUB_OUTPUT"
 
       # Consumer-owned extension point. Replace this command with a script that
       # builds and publishes only RELEASE_UNIT at RELEASE_VERSION. Pass secrets
       # in this step's env and add only its required job permissions.
       - name: Build and publish selected unit
         shell: bash
+        env:
+          RELEASE_UNIT: ${{ steps.release-context.outputs.unit }}
+          RELEASE_VERSION: ${{ steps.release-context.outputs.version }}
+          RELEASE_TAG: ${{ steps.release-context.outputs.tag }}
+          RELEASE_SHA: ${{ steps.release-context.outputs.release_sha }}
         run: |
           set -euo pipefail
           ./tooling/publish-release \
@@ -520,12 +455,12 @@ jobs:
 ```
 <!-- golden-path-workflow:end -->
 
-`EXPECTED_WORKFLOW` is the committed path configured for the selected unit; it
-is not a secret. `./tooling/publish-release` is the only consumer-specific
-placeholder. Replace it with a checked-in command that accepts the validated
-context and does not bump, commit, tag, push, or dispatch. The workflow assumes
-`git` and `jq`, both available on GitHub-hosted Ubuntu runners; self-hosted
-runners must provide them.
+`./tooling/publish-release` is the only consumer-specific placeholder. Replace
+it with a checked-in command that accepts the validated context and does not
+bump, commit, tag, push, or dispatch. Provision pinned compatible Neko CLI and
+Release Plugin versions before the validation step as described in the
+prerequisites. The validation step writes only the declared values to the
+explicit Actions command file; the consumer step reads the validated outputs.
 
 ## Permissions and secrets
 
@@ -858,9 +793,8 @@ workflow against this checklist:
 - `workflow_dispatch` declares exactly `unit`, `version`, `tag`, and
   `release_sha` as required string inputs;
 - checkout uses the exact release SHA, full history, and tags;
-- the temporary validation block checks unit existence, config/state unit
-  alignment, state version, configured tag prefix, full SHA, `HEAD`, exact tag
-  target, delivery, and workflow route;
+- `neko release ci-validate-context` receives all four inputs and writes its
+  validated outputs through an explicit `$GITHUB_OUTPUT` destination;
 - generic validation starts with `contents: read` and publication permissions
   are added only to the jobs that need them;
 - concurrency includes both unit and tag and does not cancel a release in

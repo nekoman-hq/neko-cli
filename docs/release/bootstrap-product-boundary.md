@@ -54,8 +54,8 @@ This is intentionally a combination model:
 
 There is no new generic release execution command in this boundary.
 `patch`, `minor`, and `major` remain the user-facing release execution commands.
-A future CI context validation capability is a validation/introspection
-contract, not another way to start a release.
+`ci-validate-context` is a validation/introspection contract, not another way
+to start a release.
 
 ## Ownership principles
 
@@ -86,7 +86,7 @@ contract, not another way to start a release.
 | Commit and tag push | Release Plugin | selected upstream remote | pushed release commit, then pushed tag | Git coordination contract | provider-specific today | yes | workflow pushing release refs | remote and branch setup |
 | Workflow dispatch | Release Plugin | validated GitHub.com remote and workflow | one journaled dispatch request | dispatch contract | no, GitHub.com only today | yes | standalone retry or workflow-created dispatch | Actions permissions |
 | Workflow input contract | Release Plugin | unit, version, tag, release SHA | four deterministic inputs | dispatch contract | no, GitHub Actions today | yes | executor, delivery, paths, or secrets as inputs | workflow descriptions and concurrency naming |
-| Dispatch-context validation | GitHub Actions integration through stable CLI contract | checked-out tag plus dispatch inputs | validated release context and machine outputs | future CI validation capability | GitHub Actions first | yes | ad hoc shell parsing once CLI contract exists | extra product policy checks |
+| Dispatch-context validation | GitHub Actions integration through stable CLI contract | checked-out commit, local tag history, and dispatch inputs | validated release context and machine outputs | `ci-validate-context` | GitHub Actions first | yes | ad hoc shell or JSON parsing | extra product policy checks |
 | Workflow YAML generation | GitHub Actions integration | V2 unit facts and chosen template mode | committed workflow or reusable snippet | future scaffold capability | no, GitHub Actions first | yes | release policy implementation | choosing generated vs manual workflow ownership |
 | Build-system version assignment | Build-system adapter | validated release context and V2 state | build-system version value | adapter contract | yes | no | SemVer bumping or state writes | project-specific version propagation |
 | Unit-scoped build selection | Build-system adapter | selected unit paths or adapter metadata | tasks and target matrix | adapter contract | yes | no | Release Plugin path ownership | module grouping and target metadata |
@@ -104,7 +104,7 @@ Single-unit repositories should be bootstrapped so the only release unit can be
 selected implicitly by local commands, while CI still validates the explicit
 unit identity supplied by the dispatch input.
 
-Current manual path:
+Current path:
 
 1. Install Neko CLI and the bundled Release Plugin.
 2. Create one V2 unit with `neko release init`.
@@ -114,7 +114,7 @@ Current manual path:
 6. Run `neko release validate --show`.
 7. Inspect with `neko release plan --change patch`.
 8. Run `neko release patch`, `minor`, or `major`.
-9. Let GitHub Actions validate the dispatched context before build and publish.
+9. Let GitHub Actions run `ci-validate-context` before build and publish.
 10. Use `neko release resume --dry-run` only for unresolved local evidence.
 
 Future product path:
@@ -132,7 +132,7 @@ operation. One central workflow may handle many units when it derives behavior
 from checked-out V2 config and adapter metadata; per-unit workflows remain valid
 when the repository wants isolated publication logic.
 
-Current manual path:
+Current path:
 
 1. Create the first V2 unit with `neko release init`.
 2. Append additional units with `neko release unit-add`.
@@ -143,8 +143,8 @@ Current manual path:
 5. Run `neko release validate --show`.
 6. Inspect one unit with `neko release plan --change patch --unit <unit>`.
 7. Release one unit with `neko release patch --unit <unit>`.
-8. Let the workflow validate that `unit`, `version`, `tag`, and `release_sha`
-   match the checked-out config, state, tag, and commit.
+8. Let the workflow pass `unit`, `version`, `tag`, and `release_sha` to
+   `ci-validate-context` and consume its validated outputs.
 
 Future product path:
 
@@ -227,10 +227,13 @@ Authoritative values:
 | Executor and delivery | V2 config | checked-out config | unsupported or unexpected for workflow |
 | Known release files | release plan/commit contract | checked-out commit and local validation | state/materialized files are inconsistent |
 
-Future CI context validation should be token-free, should not publish, and
-should produce machine-readable outputs for downstream build jobs. It should
-validate provider-neutral release facts first, then GitHub Actions-specific
-facts such as checkout ref and workflow identity.
+`ci-validate-context` is token-free and publication-free. It produces ordered
+human properties, deterministic JSON, and safely encoded GitHub step outputs.
+It validates the complete local V2 pair, selected unit, exact version and tag,
+full local commit object, checked-out HEAD, and peeled local tag target. Missing
+tag history fails rather than fetching. Workflow identity is returned from V2
+config for downstream integration policy; the command does not inspect ambient
+GitHub runtime state.
 
 ## Current supported capabilities
 
@@ -242,6 +245,8 @@ Supported today:
 - V2 validation with `validate --show`.
 - Unit-aware `history` and `contributors`.
 - Token-free `plan` inspection and dry-run release planning.
+- Token-free, network-free `ci-validate-context` with human, JSON, and explicit
+  GitHub command-file output.
 - GitHub Actions-delivered `patch`, `minor`, and `major` releases.
 - Neko-owned state/materialization, release commit, unit tag, commit push, tag
   push, execution journal, dispatch journal, and workflow dispatch.
@@ -255,7 +260,6 @@ Not supported today:
 - workflow generation from `init` or `unit-add`;
 - executor config scaffolding from `init` or `unit-add`;
 - a first-class integration doctor;
-- a stable CI release-context validation command;
 - a release unit overview command;
 - release pipeline inspection;
 - build-system adapters in Neko CLI;
@@ -267,13 +271,12 @@ Not supported today:
 Future Release V2 bootstrap work should add capabilities in this order:
 
 1. Golden-path documentation for single-unit and multi-unit consumers.
-2. Stable CI release-context validation.
-3. GitHub Actions workflow scaffolding or installation.
-4. Read-only integration doctor.
-5. Release unit overview.
-6. Release pipeline inspection.
-7. Build-system adapter contract and a Gradle adapter.
-8. GitHub Actions packaging decision after the generated workflow contract is
+2. GitHub Actions workflow scaffolding or installation.
+3. Read-only integration doctor.
+4. Release unit overview.
+5. Release pipeline inspection.
+6. Build-system adapter contract and a Gradle adapter.
+7. GitHub Actions packaging decision after the generated workflow contract is
    proven in consumers.
 
 Build-system adapter work can start after the stable CI validation contract is

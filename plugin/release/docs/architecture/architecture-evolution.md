@@ -56,9 +56,26 @@ The reporter is synchronous and infallible. It cannot choose release policy, ret
 
 The plugin executable resolves one `workspace.RepositoryRoot` at the command boundary and routes production commands through explicit-root handlers. Production command routing no longer mutates process cwd.
 
-Explicit-root entry points exist for init, unit-add, release, resume, validate, history, contributors, evidence, evidence archive, migration, and plugin-index. Existing cwd-based facades remain compatibility surfaces. Production migration keeps its legacy Git-root discovery facade to preserve nested-V1 behavior, while embedders can call the explicit-root migration handler.
+Explicit-root entry points exist for init, unit-add, release, resume, validate, CI release-context validation, history, contributors, evidence, evidence archive, migration, and plugin-index. Existing cwd-based facades remain compatibility surfaces. Production migration keeps its legacy Git-root discovery facade to preserve nested-V1 behavior, while embedders can call the explicit-root migration handler.
 
-Isolation tests prove two in-process repositories can be validated and indexed without changing process cwd or leaking root-specific data.
+Isolation tests prove two in-process repositories can be validated and indexed without changing process cwd or leaking root-specific data. CI context validation additionally resolves nested invocations to the explicit root and keeps both repositories' Git/config facts isolated.
+
+### Typed dispatched-context validation
+
+`neko release ci-validate-context` now owns the reusable local validation
+boundary between four dispatched strings and one `ValidatedReleaseContext`.
+The use case depends only on strict V2 source reads and five local Git facts:
+object format, object type, HEAD commit, tag presence, and peeled tag commit.
+Canonical unit resolution, state version, and `TagSpec` policy remain the
+authorities; no parallel CI policy model was introduced.
+
+The application boundary has no token, network, dispatch, runner, executor,
+persister, materializer, journal/evidence writer, recovery mutator, or response
+transport capability. Command mapping provides deterministic typed JSON and
+ordered human properties. Domain-neutral Core transport metadata declares ten
+ordered scalar GitHub outputs; Core alone owns explicit command-file selection,
+safe multiline encoding, and output errors. This boundary is reusable by a
+future workflow generator or integration doctor without implementing either.
 
 ### Generated-output path policy
 

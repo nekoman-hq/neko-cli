@@ -389,6 +389,35 @@ For V2 repositories, `--show` displays schema type, units, versions, working dir
 
 ---
 
+### `neko release ci-validate-context`
+
+Validate the four canonical dispatched Release V2 values against the checked-out
+repository before build or publication.
+
+**Usage:**
+```bash
+neko release ci-validate-context \
+  --unit <unit> \
+  --version <version> \
+  --tag <tag> \
+  --release-sha <full-lowercase-commit-object-id>
+```
+
+All four flags are required strings. Default output is an ordered human
+property/value view. `--output json` emits canonical typed data. GitHub Actions
+uses `--output github --github-output-file "$GITHUB_OUTPUT"`; the ten stable
+outputs are `unit`, `display_name`, `version`, `tag_prefix`, `tag`,
+`release_sha`, `working_directory`, `executor`, `delivery`, and `workflow`.
+
+The command requires an unambiguous valid V2 source and complete local tag
+history. It accepts matching detached HEAD and both annotated and lightweight
+tags. It performs no fetch, network request, token lookup, filesystem mutation,
+Git mutation, dispatch, build, publication, or journal operation. Validation or
+output failures return a nonzero CLI exit. The complete JSON key and error-code
+contract is documented in the [Release CLI reference](../release/cli-reference.md#ci-release-context-validation).
+
+---
+
 ### `neko release plugin-index`
 
 Generate the public `plugin-index.json` registry artifact from V2 plugin units, `.neko/release.state.json`, and each plugin manifest. The command itself does not publish the index and does not commit it as source. Plugin release workflows publish or replace the `plugin-index.json` asset on the mutable `plugin-registry` GitHub Release after successful plugin releases. Runtime plugin discovery, install, and update read that asset as the source of truth; release-prefix fallback discovery has been removed.

@@ -39,10 +39,12 @@ type documentedWorkflowInput struct {
 }
 
 type documentedWorkflowStep struct {
-	Name string         `yaml:"name"`
-	Uses string         `yaml:"uses"`
-	With map[string]any `yaml:"with"`
-	Run  string         `yaml:"run"`
+	Name string            `yaml:"name"`
+	ID   string            `yaml:"id"`
+	Uses string            `yaml:"uses"`
+	With map[string]any    `yaml:"with"`
+	Env  map[string]string `yaml:"env"`
+	Run  string            `yaml:"run"`
 }
 
 func TestGitHubActionsGoldenPathWorkflowContract(t *testing.T) {
@@ -98,15 +100,13 @@ func TestGitHubActionsGoldenPathWorkflowContract(t *testing.T) {
 
 	validation := findDocumentedStep(t, releaseJob.Steps, "Validate Neko release context")
 	for _, fragment := range []string{
-		".neko/release.config.json",
-		".neko/release.state.json",
-		"config and state unit ids differ",
-		"selected unit is missing or duplicated",
-		"state version does not match dispatched version",
-		"tag does not equal configured tag prefix plus version",
-		"selected unit does not use github-actions delivery",
-		"checked-out HEAD does not match release_sha",
-		"release tag does not resolve to release_sha",
+		"neko release ci-validate-context",
+		"--unit \"$RELEASE_UNIT\"",
+		"--version \"$RELEASE_VERSION\"",
+		"--tag \"$RELEASE_TAG\"",
+		"--release-sha \"$RELEASE_SHA\"",
+		"--output github",
+		"--github-output-file \"$GITHUB_OUTPUT\"",
 	} {
 		if !strings.Contains(validation.Run, fragment) {
 			t.Errorf("context validation is missing %q", fragment)
@@ -115,8 +115,36 @@ func TestGitHubActionsGoldenPathWorkflowContract(t *testing.T) {
 	if strings.Contains(validation.Run, "${{") {
 		t.Error("context validation must receive dispatch values through environment variables")
 	}
+	if validation.ID != "release-context" {
+		t.Errorf("context validation step id = %q, want release-context", validation.ID)
+	}
+	for name, value := range map[string]string{
+		"RELEASE_UNIT":    "${{ inputs.unit }}",
+		"RELEASE_VERSION": "${{ inputs.version }}",
+		"RELEASE_TAG":     "${{ inputs.tag }}",
+		"RELEASE_SHA":     "${{ inputs.release_sha }}",
+	} {
+		if validation.Env[name] != value {
+			t.Errorf("validation env %s = %q, want %q", name, validation.Env[name], value)
+		}
+	}
+	for _, forbidden := range []string{"jq ", "fail()", "git rev-parse", "git show-ref"} {
+		if strings.Contains(validation.Run, forbidden) {
+			t.Errorf("context validation retained manual implementation %q", forbidden)
+		}
+	}
 
 	consumer := findDocumentedStep(t, releaseJob.Steps, "Build and publish selected unit")
+	for name, value := range map[string]string{
+		"RELEASE_UNIT":    "${{ steps.release-context.outputs.unit }}",
+		"RELEASE_VERSION": "${{ steps.release-context.outputs.version }}",
+		"RELEASE_TAG":     "${{ steps.release-context.outputs.tag }}",
+		"RELEASE_SHA":     "${{ steps.release-context.outputs.release_sha }}",
+	} {
+		if consumer.Env[name] != value {
+			t.Errorf("consumer env %s = %q, want %q", name, consumer.Env[name], value)
+		}
+	}
 	for _, fragment := range []string{
 		"./tooling/publish-release",
 		"--unit \"$RELEASE_UNIT\"",
