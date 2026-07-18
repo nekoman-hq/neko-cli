@@ -23,7 +23,7 @@ Plugin installation and updates resolve the newest release plugin version from t
 
 The `plugin-release` V2 unit declares `kind: "plugin"` metadata in `.neko/release.config.json`: public name `release`, manifest `plugin/release/manifest.json`, asset prefix `plugin-release`, and binary name `plugin-release`. `neko release plugin-index` generates the public `plugin-index.json` from this metadata, `.neko/release.state.json`, and plugin manifests. Runtime plugin discovery, install, and update use that index as the registry source of truth. Plugin release workflows publish it as the `plugin-index.json` asset on the mutable `plugin-registry` GitHub Release after successful plugin releases; the index is not committed as source.
 
-Copy-ready Release V2 and plugin registry examples live in [Release V2 Examples](../release/examples.md). Bootstrap ownership across Neko CLI, GitHub Actions, adapters, and consumer workflows is defined in [Release V2 Bootstrap Product Boundary](../release/bootstrap-product-boundary.md).
+The complete consumer setup is the [Release V2 GitHub Actions Golden Path](../release/github-actions-golden-path.md). Additional Release V2 and plugin registry examples live in [Release V2 Examples](../release/examples.md). Bootstrap ownership across Neko CLI, GitHub Actions, adapters, and consumer workflows is defined in [Release V2 Bootstrap Product Boundary](../release/bootstrap-product-boundary.md).
 
 ---
 
@@ -914,6 +914,7 @@ release-it --version
 ## See Also
 
 - [Neko CLI README](../../README.md)
+- [Release V2 GitHub Actions Golden Path](../release/github-actions-golden-path.md)
 - [GoReleaser Documentation](https://goreleaser.com/intro/)
 - [JReleaser Documentation](https://jreleaser.org/guide/latest/)
 - [release-it Documentation](https://github.com/release-it/release-it)

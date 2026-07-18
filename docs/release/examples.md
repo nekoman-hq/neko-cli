@@ -7,6 +7,8 @@ new repository or adding units to an existing one.
 For the ownership boundary between Neko CLI, GitHub Actions workflows,
 build-system adapters, and consumer-owned publication logic, see
 [Release V2 Bootstrap Product Boundary](bootstrap-product-boundary.md).
+For the complete installation, workflow, release, and recovery sequence, use
+the [Release V2 GitHub Actions Golden Path](github-actions-golden-path.md).
 
 ## Mental Model
 
