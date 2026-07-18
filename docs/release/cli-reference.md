@@ -68,7 +68,7 @@ neko release plugin-index --output /tmp/plugin-index.json
 
 For `plugin-index --output`, relative paths are resolved from the repository root. Explicit absolute paths remain supported for CI or temporary artifacts. Repository-contained output is blocked from overwriting release config/state, recovery evidence, Git internals, or plugin manifest inputs.
 
-See [Release V2 Examples](examples.md) for copy-ready init, unit-add, release, plugin-index, and plugin install/update flows.
+Follow the [Release V2 GitHub Actions Golden Path](github-actions-golden-path.md) for the complete installation-through-publication workflow. See [Release V2 Examples](examples.md) for additional copy-ready init, unit-add, release, plugin-index, and plugin install/update flows.
 
 V2 non-dry-run release commands are active only for `delivery: github-actions`. `local` is not a supported executable V2 delivery mode; existing V2 configs using it are rejected during validation before planning or execution. Dry-run output includes:
 

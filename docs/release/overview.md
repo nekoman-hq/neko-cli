@@ -58,7 +58,7 @@ neko release contributors --unit <unit>
 neko release resume --unit <unit> --dry-run
 ```
 
-Multi-unit repositories require `--unit` for unit-scoped commands. See [Release V2 Examples](examples.md) for copy-ready CLI, service, plugin, release, registry, and install/update examples. The product boundary for turning a valid V2 config into a release-ready GitHub Actions integration is defined in [Release V2 Bootstrap Product Boundary](bootstrap-product-boundary.md).
+Multi-unit repositories require `--unit` for unit-scoped commands. Follow the [Release V2 GitHub Actions Golden Path](github-actions-golden-path.md) for the complete release-ready workflow, or see [Release V2 Examples](examples.md) for additional CLI, service, plugin, registry, and install/update examples. The ownership boundary behind that integration is defined in [Release V2 Bootstrap Product Boundary](bootstrap-product-boundary.md).
 
 ## Safety
 
