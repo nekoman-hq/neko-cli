@@ -163,6 +163,43 @@ func TestResolveRepositoryRootReturnsTypedResolvedRoot(t *testing.T) {
 	}
 }
 
+func TestResolveInspectionRepositoryRootAllowsDoctorToDiagnoseIncompleteV2Pair(t *testing.T) {
+	repoRoot := t.TempDir()
+	startDir := filepath.Join(repoRoot, "services", "api")
+	mustMkdirAll(t, filepath.Join(repoRoot, gitMarker))
+	mustMkdirAll(t, startDir)
+	mustWriteFile(t, config.V2ConfigPath(repoRoot), `{"schemaVersion":2,"units":[]}`)
+
+	root, err := ResolveInspectionRepositoryRoot(startDir)
+	if err != nil {
+		t.Fatalf("ResolveInspectionRepositoryRoot: %v", err)
+	}
+	if root.Path() != repoRoot {
+		t.Fatalf("inspection root = %q, want %q", root.Path(), repoRoot)
+	}
+	if _, err := ResolveRepositoryRoot(startDir); err == nil {
+		t.Fatal("normal root resolution unexpectedly accepted incomplete V2 pair")
+	}
+}
+
+func TestResolveInspectionRepositoryRootKeepsMixedSourcesAtGitRoot(t *testing.T) {
+	repoRoot := t.TempDir()
+	nested := filepath.Join(repoRoot, "apps", "web")
+	mustMkdirAll(t, filepath.Join(repoRoot, gitMarker))
+	mustMkdirAll(t, nested)
+	mustWriteFile(t, filepath.Join(repoRoot, config.V1FileName), "{}")
+	mustWriteFile(t, config.V2ConfigPath(repoRoot), `{"schemaVersion":2,"units":[]}`)
+	mustWriteFile(t, config.V2StatePath(repoRoot), `{"schemaVersion":2,"units":{}}`)
+
+	root, err := ResolveInspectionRepositoryRoot(nested)
+	if err != nil {
+		t.Fatalf("ResolveInspectionRepositoryRoot: %v", err)
+	}
+	if root.Path() != repoRoot {
+		t.Fatalf("inspection root = %q, want %q", root.Path(), repoRoot)
+	}
+}
+
 func TestValidateRepositoryRootRequiresResolvedRoot(t *testing.T) {
 	repoRoot := t.TempDir()
 	nestedDir := filepath.Join(repoRoot, "cmd", "release")

@@ -198,6 +198,24 @@ func TestGitHubWorkflowScaffoldManifestContract(t *testing.T) {
 	}
 }
 
+func TestIntegrationDoctorManifestContract(t *testing.T) {
+	command, present := loadManifestCommands(t)["doctor"]
+	if !present {
+		t.Fatal("doctor command is missing")
+	}
+	if !reflect.DeepEqual(command.Outputs, []string{"table", "json"}) {
+		t.Fatalf("outputs = %#v", command.Outputs)
+	}
+	if len(command.Flags) != 1 || command.Flags[0].Name != "unit" || command.Flags[0].Type != "string" || command.Flags[0].Required {
+		t.Fatalf("doctor flags = %#v", command.Flags)
+	}
+	for _, forbidden := range []string{"fix", "remote", "token", "write", "pipeline", "overview"} {
+		if _, present := flagDescriptions(command)[forbidden]; present {
+			t.Fatalf("doctor manifest exposes unsupported flag %q", forbidden)
+		}
+	}
+}
+
 func TestManifestClarifiesReleaseAndPluginUnitFlagDescriptions(t *testing.T) {
 	commands := loadManifestCommands(t)
 	initDescriptions := flagDescriptions(commands["init"])

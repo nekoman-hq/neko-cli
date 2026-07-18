@@ -31,6 +31,7 @@ func TestMainOwnsOneExplicitRootBoundary(t *testing.T) {
 		"initcmd.HandleInitAt(root, req)",
 		"initcmd.HandleUnitAddAt(root, req)",
 		"release.HandleReleaseWithV1ExecutorsAt(root, req, release.Patch, v1Executors...)",
+		"release.HandleDoctorAt(root, req)",
 		"release.HandleResumeAt(root, req)",
 		"evidence.HandleEvidenceAt(root, req)",
 		"history.HandleHistoryAt(root, req)",
@@ -40,6 +41,23 @@ func TestMainOwnsOneExplicitRootBoundary(t *testing.T) {
 	} {
 		if !strings.Contains(source, required) {
 			t.Fatalf("main.go does not route through explicit-root API %q", required)
+		}
+	}
+}
+
+func TestMainUsesInspectionRootOnlyForDoctor(t *testing.T) {
+	sourceBytes, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read main.go: %v", err)
+	}
+	source := string(sourceBytes)
+	for _, required := range []string{
+		`if req.Command == "doctor"`,
+		"workspace.ResolveInspectionRepositoryRoot(req.Context.WorkingDir)",
+		"workspace.ResolveRepositoryRoot(req.Context.WorkingDir)",
+	} {
+		if !strings.Contains(source, required) {
+			t.Fatalf("main.go inspection root boundary omits %q", required)
 		}
 	}
 }

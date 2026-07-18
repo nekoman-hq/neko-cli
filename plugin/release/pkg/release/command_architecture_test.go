@@ -225,6 +225,83 @@ func TestReleasePlanInspectionAvoidsGenericInspectionArchitecture(t *testing.T) 
 	}
 }
 
+func TestIntegrationDoctorApplicationHasNoMutationTokenNetworkGitOrStoreDependencies(t *testing.T) {
+	for _, path := range []string{
+		"integration_doctor_inspection.go",
+		"integration_doctor_source.go",
+		"integration_doctor_workflow_inspection.go",
+		"integration_doctor_workflow_reader.go",
+	} {
+		source := readCommandBoundarySource(t, path)
+		for _, forbidden := range []string{
+			"GITHUB_TOKEN",
+			"TokenResolver",
+			"GitHubActionsDispatcher",
+			"GitHubActionsDispatchClient",
+			"net/http",
+			"os/exec",
+			"exec.Command",
+			"NewGitReleaseCoordinator",
+			"os.WriteFile",
+			"os.Mkdir",
+			"ReleaseExecutionJournalStore",
+			"DispatchJournalStore",
+			"EvidenceWriter",
+			"atomicGitHubWorkflowOutputCreator",
+			"plugin.Response",
+		} {
+			if strings.Contains(source, forbidden) {
+				t.Fatalf("%s contains prohibited doctor dependency %q", path, forbidden)
+			}
+		}
+	}
+}
+
+func TestIntegrationDoctorKeepsTypedCommandAndResponseBoundaries(t *testing.T) {
+	command := readCommandBoundarySource(t, "integration_doctor_command.go")
+	for _, required := range []string{"parseIntegrationDoctorRequest", "handler.inspector.Inspect", "mapIntegrationDoctorResult"} {
+		if !strings.Contains(command, required) {
+			t.Fatalf("doctor command boundary omits %q", required)
+		}
+	}
+	for _, forbidden := range []string{"LoadV2Config", "yaml.Unmarshal", "inspectIntegrationDoctorWorkflow("} {
+		if strings.Contains(command, forbidden) {
+			t.Fatalf("doctor command boundary contains inspection responsibility %q", forbidden)
+		}
+	}
+	response := readCommandBoundarySource(t, "integration_doctor_response.go")
+	if !strings.Contains(response, "plugin.Response") {
+		t.Fatal("doctor response mapper does not own the plugin response boundary")
+	}
+}
+
+func TestIntegrationDoctorAvoidsGenericDiagnosticArchitecture(t *testing.T) {
+	for _, path := range []string{
+		"integration_doctor_inspection.go",
+		"integration_doctor_source.go",
+		"integration_doctor_workflow_inspection.go",
+	} {
+		source := readCommandBoundarySource(t, path)
+		for _, forbidden := range []string{
+			"DoctorManager",
+			"DiagnosticManager",
+			"InspectionManager",
+			"WorkflowPipeline",
+			"TransitionEngine",
+			"StateMachine",
+			"DependencyBag",
+			"ServiceLocator",
+			"CheckRegistry",
+			"UnitOverview",
+			"PipelineInspection",
+		} {
+			if strings.Contains(source, forbidden) {
+				t.Fatalf("%s contains prohibited generic doctor architecture %q", path, forbidden)
+			}
+		}
+	}
+}
+
 func TestReleaseProgressReporterIsInfallible(t *testing.T) {
 	source := readCommandBoundarySource(t, "release_progress.go")
 	if !strings.Contains(source, "ReportReleaseProgress(event ReleaseProgressEvent)") {
