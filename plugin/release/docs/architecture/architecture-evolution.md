@@ -56,7 +56,7 @@ The reporter is synchronous and infallible. It cannot choose release policy, ret
 
 The plugin executable resolves one `workspace.RepositoryRoot` at the command boundary and routes production commands through explicit-root handlers. Production command routing no longer mutates process cwd.
 
-Explicit-root entry points exist for init, unit-add, release, resume, validate, CI release-context validation, history, contributors, evidence, evidence archive, migration, and plugin-index. Existing cwd-based facades remain compatibility surfaces. Production migration keeps its legacy Git-root discovery facade to preserve nested-V1 behavior, while embedders can call the explicit-root migration handler.
+Explicit-root entry points exist for init, unit-add, release, resume, validate, CI release-context validation, GitHub workflow scaffolding, history, contributors, evidence, evidence archive, migration, and plugin-index. Existing cwd-based facades remain compatibility surfaces. Production migration keeps its legacy Git-root discovery facade to preserve nested-V1 behavior, while embedders can call the explicit-root migration handler.
 
 Isolation tests prove two in-process repositories can be validated and indexed without changing process cwd or leaking root-specific data. CI context validation additionally resolves nested invocations to the explicit root and keeps both repositories' Git/config facts isolated.
 
@@ -74,14 +74,53 @@ persister, materializer, journal/evidence writer, recovery mutator, or response
 transport capability. Command mapping provides deterministic typed JSON and
 ordered human properties. Domain-neutral Core transport metadata declares ten
 ordered scalar GitHub outputs; Core alone owns explicit command-file selection,
-safe multiline encoding, and output errors. This boundary is reusable by a
-future workflow generator or integration doctor without implementing either.
+safe multiline encoding, and output errors. This boundary is reused by the
+canonical generated workflow and remains usable by a future integration doctor.
+
+### GitHub Actions workflow scaffolding
+
+`neko release github-workflow-init` is a focused GitHub-Actions-only command,
+not a provider registry or generic workflow DSL. Untyped flags stop in the
+command parser. Target resolution consumes only an existing structurally valid
+V2 config/state pair and selects exactly one configured workflow through the
+unique default, `--unit`, or exact `--path` rules. Shared paths remain one
+workflow scope; distinct paths never trigger implicit multi-file generation.
+
+One typed canonical specification and focused template own workflow contract
+version `1`. The documentation contract test compares the Golden Path snippet
+byte-for-byte with the renderer. The plan is read-only and classifies create,
+unchanged, or conflict before the execution use case receives a narrow output
+creator. Missing output is published target-locally with atomic no-clobber
+semantics and mode `0644`; identical output is never rewritten; different or
+older content is preserved as a conflict. No managed update, force overwrite,
+partial YAML merge, or arbitrary consumer command exists.
+
+The generator has no Git mutator, network client, token resolver, dispatcher,
+journal/evidence writer, state persister, release runner, or provider
+credential capability. Preview uses the same plan and renderer, performs no
+write, and maps summary plus complete YAML through transport-only preformatted
+human output while public JSON retains stable typed data. Existing manual
+workflows are compatible because scaffolding is opt-in and create-only.
+
+The generated file owns only Actions integration: exact four-input dispatch,
+minimal read permission, safe concurrency, exact-SHA checkout with full tags,
+pinned CLI/plugin installation, canonical context validation, and a
+deliberately failing consumer extension point. Builds, publication,
+credentials, GitHub Release creation, release notes, and deployment remain
+consumer-owned.
 
 ### Generated-output path policy
 
 Generated-output path policy is explicit per output family rather than shared through a universal path manager.
 
 `plugin-index --output` owns the generated integration artifact path. Relative paths are clean repository-root-relative paths resolved from the explicit `workspace.RepositoryRoot`, independent of process cwd, CLI nesting, or embedder mode. Explicit absolute paths remain supported for CI and temporary artifact targets, including the plugin release workflows' runner-temp output. Repository-contained targets cannot overwrite release config/state, recovery or migration evidence, legacy release config/backup, Git internals, or the plugin manifest inputs present in the generated index. Existing target directories and target symlinks are rejected before writing. Existing repository-relative parent symlinks are allowed only when their physical target remains inside the resolved repository root. Missing parents are created only by the persister, with mode `0755`; new files use `0644`, existing file mode is preserved, and replacement remains target-local atomic.
+
+GitHub workflow scaffolding has a deliberately narrower create-only path
+policy: the output must be an exact V2-configured direct child of
+`.github/workflows/` with lowercase `.yml` or `.yaml`; absolute, traversal,
+nested, protected, unsupported, and symlink-escaping targets are rejected.
+Missing parents use `0755`, new files use `0644`, and target-local atomic
+publication cannot replace a target that appears after planning.
 
 User-declared materialized release files are owned by V2 release planning and materialization. Plugin manifest paths come only from validated plugin unit metadata, and JReleaser materialization owns only `jreleaser.yml` below the unit root. V2 `workingDirectory` must be lexically and physically inside the resolved repository root, materialized target symlinks are rejected, and `KnownReleaseFiles` keeps staging identity repository-relative to the same root. `MaterializationTransaction` continues to snapshot and restore exact bytes/modes before commit uncertainty.
 

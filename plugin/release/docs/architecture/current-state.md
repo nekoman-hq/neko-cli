@@ -43,6 +43,7 @@ The public command contract is duplicated between `manifest.json` and the switch
 | `pkg/git` | Legacy Git queries and the underlying compatibility operations used by focused V1 adapters | `IsClean`, `LatestTag`, `UnitTagsInHistory`, `Current`, `Contributors`, `ContributorsForPaths` | Direct process details remain below release-owned V1 ports; active V1 application code does not import retired raw retired-path cleanup helpers. |
 | `pkg/release` planning | Version bump, execution context, delivery/capability descriptions, materialization plan | `PlanUnitVersionBump`, `BuildReleaseExecutionContext`, `ResolveDelivery`, `ResolveExecutorCapabilities`, `ResolveVersionMaterializer` | `github-actions` is the supported V2 delivery mode; `local` is retained only for V1 compatibility and invalid V2 reporting. |
 | `pkg/release` plan inspection | Token-free read-only local release-plan inspection for one selected source and unit | `HandlePlanAt`, `releasePlanInspectionUseCase`, `ReleasePlanInspection`, `planV2ReleaseFacts` | Reuses canonical V1/V2 planning facts, maps responses only at the command boundary, and does not inspect journals, remotes, tokens, or recovery evidence. |
+| `pkg/release` GitHub workflow scaffolding | Typed V2 source/selection, canonical contract rendering, read-only create/unchanged/conflict planning, narrow atomic creation, and command-owned responses | `HandleGitHubWorkflowInitAt`, `RenderCanonicalGitHubActionsReleaseWorkflow`, `GitHubActionsReleaseWorkflowContractVersion` | GitHub-Actions-only create semantics; no provider registry, YAML editor, token/network/Git capability, implicit update, or publication policy. |
 | `pkg/release` V1 | Typed V1 intent/planning/preview/execution/failures, focused requirements/preflight/materialization/Git/rollback adapters, and explicit executor selection | `V1ReleaseIntent`, `PlanV1Release`, `v1ReleasePreviewUseCase`, `v1ReleaseExecutionUseCase`, `V1Executor` | Production uses a fixed executor catalog. `Service`, `Preflight`, `Tool`, `ToolBase`, and `Register/Get` are bounded compatibility facades. |
 | `pkg/release` V2 GitHub Actions | Typed command boundary, active release use case, named journaled operations, production facade, and typed progress reporting | `releaseCommandHandler`, `releaseStartOperation`, `githubActionsReleaseUseCase.Run`, `GitHubActionsReleaseRunner.Run`, `ReleaseProgress` | The facade composes one coordinator, one typed token boundary, one clock, and typed progress/diagnostic adapters; the use case owns the visible safety order and delegates each mutation to a focused operation. |
 | `pkg/release` V2 Git | Preflight, targeted staging, exact commit verification, tag creation, ordered pushes, dispatch verification, and recovery tag inspection | `GitReleaseCoordinator`, `githubActionsReleaseGitAdapter`, `gitReleaseDispatchVerifier`, `resumeGitAdapter` | Active release/resume share one coordinator instance through consumer-owned capabilities; the former one-call `Coordinate` convenience path was removed in retired-path cleanup. |
@@ -122,6 +123,49 @@ The public command contract is duplicated between `manifest.json` and the switch
 - Side effects: reads config/state, executor config, manifest/version files, and local file hashes needed by canonical planning. It does not read tokens, construct token resolvers, open remotes, read execution or dispatch journals, inspect recovery evidence, create directories, write files, mutate Git, dispatch workflows, publish, or run executors.
 - Output: `MapReleasePlanInspection` renders selected source/unit, current version, requested change, next version, tag, executor, delivery, workflow, working directory, unit root, planned materialized files, known release files, readiness, blockers, limitations, and local-only status where those fields are part of the stable response.
 - Tests: command parser/handler/response tests, V1/V2 inspection tests, local-blocker tests, explicit-root tests, no-mutation and secret absence tests, manifest/docs/route tests, and architecture guards protecting canonical planning reuse and the absence of mutation-capable dependencies.
+
+#### GitHub Actions workflow scaffolding
+
+- Entry: `main.main` -> `handleRequestAt` ->
+  `release.HandleGitHubWorkflowInitAt` ->
+  `githubWorkflowScaffoldCommandHandler`.
+- Parsing: only optional `--unit`, `--path`, and `--dry-run` values cross the
+  raw flag boundary. Dry-run selects a typed preview intent; execution selects
+  create intent. No provider, force, managed, or arbitrary command mode exists.
+- Source and selection: the narrow source reader accepts only a structurally
+  valid Release V2 config/state pair with no V1 conflict or unresolved pair
+  evidence. Target resolution selects one unique configured path by default,
+  one unit path through `--unit`, or one exact configured path through
+  `--path`. Shared paths remain one scope; multiple distinct paths are
+  ambiguous until exactly selected.
+- Contract: `githubActionsReleaseWorkflowSpec` and one focused template render
+  deterministic workflow contract version `1`. The Golden Path documentation
+  snippet is tested byte-for-byte against the public renderer.
+- Plan: `githubWorkflowGenerationPlanner` receives source and renderer reads,
+  no writer. It validates YAML and classifies missing content as create,
+  byte-identical content as unchanged, and any other content as conflict.
+- Mutation: only `githubWorkflowScaffoldCreateUseCase` receives the narrow
+  `githubWorkflowOutputCreator`. The filesystem creator revalidates physical
+  parent containment, writes a target-local candidate, syncs it, and publishes
+  it atomically without clobbering a target that appears after planning. New
+  directories use `0755`; the workflow uses `0644`.
+- Output: normal human responses use ordered properties; preview uses
+  transport-only preformatted text for summary plus exact YAML. Public JSON
+  retains typed facts and includes generated content only for preview.
+  Expected conflicts and request/source/path errors are nil-Go-error command
+  responses with exit code `1`.
+- Side effects: preview is read-only. Create writes only the selected missing
+  workflow. Neither path receives a Git mutator, token resolver, network or
+  dispatch client, journal/evidence writer, state persister, release runner, or
+  executor.
+- Ownership: existing manual workflows and customized generated workflows are
+  never updated. Builds, tests, artifacts, signing, publication, credentials,
+  GitHub Release creation, release notes, and deployment remain consumer-owned.
+- Tests: command/manifest/output contracts, exact Golden Path rendering,
+  selection ambiguity, V1/V2 source failures, deterministic YAML, all preview
+  classifications, idempotency, no second write, differing-file preservation,
+  symlink and path safety, explicit-root isolation, atomic race protection,
+  secret absence, and static capability guards.
 
 #### V2 GitHub Actions execution
 
@@ -563,7 +607,7 @@ Typed release progress reporting resolved the prior bounded presentation deviati
 - Completed stages: 9 / 9
 - Remaining stages: 0
 - Release Plugin refactor: completed
-- Completed capability records: V1 compensation interruption safety — Make V1 compensation interruption-safe; V2 pair and migration crash recovery — Make pair and migration crash recovery explicit; evidence inspection and archival — Add evidence-safe journal inspection and lifecycle support; V1 compatibility policy — Decide and deprecate V1 compatibility surfaces; retired-path cleanup — Retire superseded and inactive release paths; typed release progress reporting — Isolate release progress reporting; explicit-root composition — Make command roots explicit for embedders; generated-output path policy — Clarify generated-output path policy; release plan inspection — Add read-only release plan inspection; V2 local delivery evaluation — Evaluate V2 local delivery
+- Completed capability records: V1 compensation interruption safety — Make V1 compensation interruption-safe; V2 pair and migration crash recovery — Make pair and migration crash recovery explicit; evidence inspection and archival — Add evidence-safe journal inspection and lifecycle support; V1 compatibility policy — Decide and deprecate V1 compatibility surfaces; retired-path cleanup — Retire superseded and inactive release paths; typed release progress reporting — Isolate release progress reporting; explicit-root composition — Make command roots explicit for embedders; generated-output path policy — Clarify generated-output path policy; release plan inspection — Add read-only release plan inspection; V2 local delivery evaluation — Evaluate V2 local delivery; GitHub Actions workflow scaffolding — Generate an idempotent create-only release workflow
 - Next capability: not documented
 
-V1 compensation interruption safety, V2 pair and migration crash recovery, evidence inspection and archival, V1 compatibility policy, retired-path cleanup, typed release progress reporting, explicit-root composition, generated-output path policy, release plan inspection, and later architecture decisions are maintained in [architecture-evolution.md](architecture-evolution.md). Capability records are not refactor stages; the historical refactor ledger remains closed.
+V1 compensation interruption safety, V2 pair and migration crash recovery, evidence inspection and archival, V1 compatibility policy, retired-path cleanup, typed release progress reporting, explicit-root composition, generated-output path policy, release plan inspection, GitHub Actions workflow scaffolding, and later architecture decisions are maintained in [architecture-evolution.md](architecture-evolution.md). Capability records are not refactor stages; the historical refactor ledger remains closed.

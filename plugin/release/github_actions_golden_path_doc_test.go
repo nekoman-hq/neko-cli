@@ -300,6 +300,63 @@ func TestGitHubActionsGoldenPathNavigation(t *testing.T) {
 	}
 }
 
+func TestGitHubWorkflowScaffoldingDocumentationContract(t *testing.T) {
+	root := repositoryRoot(t)
+	documents := map[string][]string{
+		"docs/release/github-actions-golden-path.md": {
+			"neko release github-workflow-init",
+			"create-only",
+			"--dry-run",
+			"different existing content",
+			"Consumer-owned extension point",
+			"no GitHub Release",
+		},
+		"docs/release/github-actions-delivery.md": {
+			"neko release github-workflow-init",
+			"multiple distinct",
+			"byte-identical targets",
+			"requires no token or network access",
+		},
+		"docs/release/cli-reference.md": {
+			"github-workflow-init [--unit <unit-id>]",
+			"WORKFLOW_TARGET_CONFLICT",
+			"generated_content",
+			"There is no provider, force, managed-update",
+		},
+		"docs/plugins/release.md": {
+			"### `neko release github-workflow-init`",
+			"atomic no-clobber",
+			"Existing manually",
+		},
+		"docs/release/bootstrap-product-boundary.md": {
+			"`github-workflow-init`",
+			"managed workflow updates",
+			"consumer-owned",
+		},
+		"plugin/release/docs/architecture/current-state.md": {
+			"#### GitHub Actions workflow scaffolding",
+			"Plan: `githubWorkflowGenerationPlanner`",
+			"no writer",
+		},
+		"plugin/release/docs/architecture/architecture-evolution.md": {
+			"### GitHub Actions workflow scaffolding",
+			"no Git mutator",
+			"generic workflow DSL",
+		},
+	}
+	for path, fragments := range documents {
+		content, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(path)))
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		for _, fragment := range fragments {
+			if !strings.Contains(string(content), fragment) {
+				t.Errorf("%s is missing workflow scaffolding contract %q", path, fragment)
+			}
+		}
+	}
+}
+
 func readGoldenPathDocument(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(repositoryRoot(t), "docs", "release", "github-actions-golden-path.md")

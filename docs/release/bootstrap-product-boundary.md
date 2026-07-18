@@ -87,7 +87,7 @@ to start a release.
 | Workflow dispatch | Release Plugin | validated GitHub.com remote and workflow | one journaled dispatch request | dispatch contract | no, GitHub.com only today | yes | standalone retry or workflow-created dispatch | Actions permissions |
 | Workflow input contract | Release Plugin | unit, version, tag, release SHA | four deterministic inputs | dispatch contract | no, GitHub Actions today | yes | executor, delivery, paths, or secrets as inputs | workflow descriptions and concurrency naming |
 | Dispatch-context validation | GitHub Actions integration through stable CLI contract | checked-out commit, local tag history, and dispatch inputs | validated release context and machine outputs | `ci-validate-context` | GitHub Actions first | yes | ad hoc shell or JSON parsing | extra product policy checks |
-| Workflow YAML generation | GitHub Actions integration | V2 unit facts and chosen template mode | committed workflow or reusable snippet | future scaffold capability | no, GitHub Actions first | yes | release policy implementation | choosing generated vs manual workflow ownership |
+| Workflow YAML scaffolding | GitHub Actions integration | existing V2 config/state and exact workflow selection | deterministic create-only contract-version-1 workflow | `github-workflow-init` | no, GitHub Actions only | yes | release policy, build, or publication implementation | replacing the failing extension point or maintaining a manual workflow |
 | Build-system version assignment | Build-system adapter | validated release context and V2 state | build-system version value | adapter contract | yes | no | SemVer bumping or state writes | project-specific version propagation |
 | Unit-scoped build selection | Build-system adapter | selected unit paths or adapter metadata | tasks and target matrix | adapter contract | yes | no | Release Plugin path ownership | module grouping and target metadata |
 | Artifact construction | Consumer repository | validated release context and build outputs | archives, images, packages, checksums | consumer workflow contract | yes | no | Neko-owned release identity | artifact layout and names |
@@ -109,7 +109,9 @@ Current path:
 1. Install Neko CLI and the bundled Release Plugin.
 2. Create one V2 unit with `neko release init`.
 3. Commit `.neko/release.config.json` and `.neko/release.state.json`.
-4. Add the referenced workflow file below `.github/workflows/`.
+4. Add or retain the referenced workflow file below `.github/workflows/`; when
+   a structurally valid V2 pair exists and the configured target is missing,
+   use `neko release github-workflow-init`.
 5. Add the executor config and any product-specific build or publication files.
 6. Run `neko release validate --show`.
 7. Inspect with `neko release plan --change patch`.
@@ -117,13 +119,9 @@ Current path:
 9. Let GitHub Actions run `ci-validate-context` before build and publish.
 10. Use `neko release resume --dry-run` only for unresolved local evidence.
 
-Future product path:
-
-1. Initialize the unit.
-2. Generate or install the GitHub Actions integration.
-3. Run a read-only integration doctor.
-4. Inspect the release plan and CI context contract.
-5. Execute the release with `patch`, `minor`, or `major`.
+The scaffolder is create-only and separate from `init`: it creates a missing
+configured target, recognizes byte-identical output, and refuses different
+consumer content. A future integration doctor remains separate.
 
 ## Multi-unit golden path
 
@@ -138,21 +136,23 @@ Current path:
 2. Append additional units with `neko release unit-add`.
 3. Ensure each unit has a non-overlapping `tagPrefix`, path ownership, existing
    `workingDirectory`, supported executor, and canonical workflow path.
-4. Commit config/state, workflow files, executor config, and consumer build
+4. When a configured target is missing, scaffold one exact path with
+   `neko release github-workflow-init --unit <unit>` or `--path <path>`; units
+   sharing one path use one central workflow.
+5. Commit config/state, workflow files, executor config, and consumer build
    support files.
-5. Run `neko release validate --show`.
-6. Inspect one unit with `neko release plan --change patch --unit <unit>`.
-7. Release one unit with `neko release patch --unit <unit>`.
-8. Let the workflow pass `unit`, `version`, `tag`, and `release_sha` to
+6. Run `neko release validate --show`.
+7. Inspect one unit with `neko release plan --change patch --unit <unit>`.
+8. Release one unit with `neko release patch --unit <unit>`.
+9. Let the workflow pass `unit`, `version`, `tag`, and `release_sha` to
    `ci-validate-context` and consume its validated outputs.
 
 Future product path:
 
 1. Add or import units.
 2. Inspect a unit overview before release planning.
-3. Generate central or per-unit workflow integration.
-4. Run an integration doctor for every release unit.
-5. Use pipeline inspection to explain local and CI readiness before execution.
+3. Run an integration doctor for every release unit.
+4. Use pipeline inspection to explain local and CI readiness before execution.
 
 ## Build-system-neutral consumers
 
@@ -247,6 +247,9 @@ Supported today:
 - Token-free `plan` inspection and dry-run release planning.
 - Token-free, network-free `ci-validate-context` with human, JSON, and explicit
   GitHub command-file output.
+- Token-free, network-free, create-only `github-workflow-init` with exact
+  target selection, deterministic YAML, dry-run, idempotent recognition, and
+  fail-closed conflicts.
 - GitHub Actions-delivered `patch`, `minor`, and `major` releases.
 - Neko-owned state/materialization, release commit, unit tag, commit push, tag
   push, execution journal, dispatch journal, and workflow dispatch.
@@ -257,7 +260,8 @@ Supported today:
 
 Not supported today:
 
-- workflow generation from `init` or `unit-add`;
+- workflow generation as an implicit side effect of `init` or `unit-add`;
+- managed workflow updates, arbitrary YAML merging, or force overwrite;
 - executor config scaffolding from `init` or `unit-add`;
 - a first-class integration doctor;
 - a release unit overview command;
@@ -270,13 +274,11 @@ Not supported today:
 
 Future Release V2 bootstrap work should add capabilities in this order:
 
-1. Golden-path documentation for single-unit and multi-unit consumers.
-2. GitHub Actions workflow scaffolding or installation.
-3. Read-only integration doctor.
-4. Release unit overview.
-5. Release pipeline inspection.
-6. Build-system adapter contract and a Gradle adapter.
-7. GitHub Actions packaging decision after the generated workflow contract is
+1. Read-only integration doctor.
+2. Release unit overview.
+3. Release pipeline inspection.
+4. Build-system adapter contract and a Gradle adapter.
+5. GitHub Actions packaging decision after the generated workflow contract is
    proven in consumers.
 
 Build-system adapter work can start after the stable CI validation contract is

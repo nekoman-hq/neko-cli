@@ -5,10 +5,11 @@
 neko release init --executor goreleaser --delivery github-actions --workflow .github/workflows/release-cli.yml
 neko release init --unit plugin-release --kind plugin --plugin-name release --plugin-manifest plugin/release/manifest.json --plugin-asset-prefix plugin-release --plugin-binary-name plugin-release --executor goreleaser --delivery github-actions --workflow .github/workflows/release-plugin-release.yml --tag-prefix plugin-release/v
 neko release unit-add --unit api --executor goreleaser --delivery github-actions --workflow .github/workflows/release-api.yml --tag-prefix api/v --paths "apps/api/**"
+neko release github-workflow-init --dry-run
 neko release init-options
 ```
 
-`init` creates V2 `.neko/release.config.json` and `.neko/release.state.json` files for one release unit. Use `--kind release` or omit `--kind` for a normal service, app, CLI, SDK, library, or backend module; V2 JSON omits `kind` for normal units. Use `--kind plugin` plus `--plugin-name`, `--plugin-manifest`, `--plugin-asset-prefix`, and `--plugin-binary-name` only for a Neko CLI plugin unit. Plugin flags without `--kind plugin` are invalid. Plugin unit ids must start with `plugin-`, plugin tag prefixes must be `<unit-id>/v`, and plugin asset prefixes must match the unit id. `init` no longer creates `.release.neko.json` or initializes executor-specific tool files. Existing V1 repositories should use `neko release migrate`. `github-actions` delivery requires `--workflow .github/workflows/<file>.yml|yaml`; workflow template generation and executor scaffolding are not implemented yet.
+`init` creates V2 `.neko/release.config.json` and `.neko/release.state.json` files for one release unit. Use `--kind release` or omit `--kind` for a normal service, app, CLI, SDK, library, or backend module; V2 JSON omits `kind` for normal units. Use `--kind plugin` plus `--plugin-name`, `--plugin-manifest`, `--plugin-asset-prefix`, and `--plugin-binary-name` only for a Neko CLI plugin unit. Plugin flags without `--kind plugin` are invalid. Plugin unit ids must start with `plugin-`, plugin tag prefixes must be `<unit-id>/v`, and plugin asset prefixes must match the unit id. `init` no longer creates `.release.neko.json` or initializes executor-specific tool files. Existing V1 repositories should use `neko release migrate`. `github-actions` delivery requires `--workflow .github/workflows/<file>.yml|yaml`; `init` and `unit-add` do not generate workflows or executor configuration. Use the separate `github-workflow-init` command for opt-in workflow scaffolding from an existing V2 pair.
 
 `unit-add` appends one unit to existing V2 config/state. It uses the same unit flags as `init`; the plugin metadata flags are only for `--kind plugin` Neko CLI plugin units. Normal repositories can contain only normal release units and need no plugin metadata or plugin registry. It requires both `.neko/release.config.json` and `.neko/release.state.json`, preserves existing units, and never overwrites an existing unit. It does not generate workflow files, GoReleaser config files, plugin manifests, source directories, or any release artifacts. See [Normal release units vs Neko CLI plugin units](examples.md#normal-release-units-vs-neko-cli-plugin-units).
 
@@ -53,6 +54,9 @@ neko release major --unit api --dry-run
 neko release plan --change patch --unit api
 neko release plan --change minor --unit api
 neko release plan --change major --unit api
+neko release github-workflow-init --dry-run
+neko release github-workflow-init --unit api
+neko release github-workflow-init --path .github/workflows/release-api.yml
 neko release ci-validate-context --unit api --version 2.4.0 --tag api/v2.4.0 --release-sha <full-commit-object-id>
 neko release patch --unit api
 neko release minor --unit api
@@ -69,6 +73,45 @@ neko release plugin-index --output /tmp/plugin-index.json
 ```
 
 For `plugin-index --output`, relative paths are resolved from the repository root. Explicit absolute paths remain supported for CI or temporary artifacts. Repository-contained output is blocked from overwriting release config/state, recovery evidence, Git internals, or plugin manifest inputs.
+
+`neko release github-workflow-init [--unit <unit-id>] [--path
+<configured-path>] [--dry-run]` creates the canonical GitHub Actions Release V2
+workflow without overwriting consumer content. All flags are optional. With no
+selector, the V2 pair must contain one unique configured workflow path; shared
+paths produce one central workflow. Multiple distinct paths require an exact
+unit or path selection. `--path` must exactly match at least one configured
+unit, and when combined with `--unit` it must match that unit's path.
+
+The only accepted targets are configured, repository-root-relative
+`.github/workflows/*.yml` or `.yaml` files directly below that directory.
+Absolute paths, traversal, nested paths, protected release files, unsupported
+names/extensions, target symlinks, and parent symlink escapes are rejected.
+
+The command is create-only:
+
+- missing target: atomically create exact canonical bytes with mode `0644`;
+- byte-identical target: return success without rewriting;
+- different target: return `WORKFLOW_TARGET_CONFLICT` with exit code `1` and
+  preserve the file;
+- `--dry-run`: make no write and return classification plus the complete
+  generated YAML, including for a conflict.
+
+Human output uses ordered target/status/action/scope/version/write/guidance
+fields; preview uses readable preformatted YAML. JSON returns typed `target`,
+`classification`, `action`, `written`, `unchanged`, `dry_run`,
+`contract_version`, `selected_unit`, `units_using_workflow`, and `guidance`;
+`generated_content` appears only for preview. The command supports `table` and
+`json`, not GitHub output mode. It reads no token, contacts no network, runs no
+Git operation, and never commits, pushes, dispatches, publishes, or creates a
+GitHub Release.
+
+Generated contract version `1` installs pinned Neko CLI and Release Plugin
+versions from repository variables, validates the exact four dispatch inputs
+through `ci-validate-context`, and ends in a deliberately failing
+consumer-owned extension point. Consumers own build systems, secrets,
+permissions, publication, signing, deployment, release notes, and GitHub
+Release creation. There is no provider, force, managed-update, or arbitrary
+consumer-command flag.
 
 Follow the [Release V2 GitHub Actions Golden Path](github-actions-golden-path.md) for the complete installation-through-publication workflow. See [Release V2 Examples](examples.md) for additional copy-ready init, unit-add, release, plugin-index, and plugin install/update flows.
 
@@ -243,6 +286,7 @@ contributors
 validate
 resume
 evidence
+github-workflow-init
 ```
 
 It is required for unit-bound commands when a V2 repository defines multiple units.
