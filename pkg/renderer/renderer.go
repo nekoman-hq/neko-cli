@@ -292,6 +292,9 @@ func renderTableWithWidth(resp *plugin.Response, w io.Writer, wide bool, widthPr
 	if resp.Status == "error" {
 		return renderError(resp, w)
 	}
+	if rendered, err := renderHumanText(resp, w); rendered || err != nil {
+		return err
+	}
 	if rendered, err := renderHumanProperties(resp, w); rendered || err != nil {
 		return err
 	}

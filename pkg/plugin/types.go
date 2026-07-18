@@ -40,6 +40,7 @@ type Response struct {
 	Logs            []LogEntry       `json:"logs,omitempty"`             // Log entries generated during execution
 	HumanTable      *HumanTable      `json:"human_table,omitempty"`      // Optional transport-only declaration for responsive human output
 	HumanProperties *HumanProperties `json:"human_properties,omitempty"` // Optional ordered property declaration for one human-facing object
+	HumanText       *HumanText       `json:"human_text,omitempty"`       // Optional transport-only preformatted human output
 	GitHubOutput    *GitHubOutput    `json:"github_output,omitempty"`    // Optional ordered declaration for GitHub Actions output
 	ExitCode        int              `json:"exit_code,omitempty"`        // Optional non-zero Core CLI exit request
 }
@@ -69,6 +70,13 @@ type HumanProperties struct {
 type HumanProperty struct {
 	Key   string `json:"key"`
 	Label string `json:"label"`
+}
+
+// HumanText declares preformatted human output for content that must remain
+// readable outside a table, such as a generated configuration preview. It is
+// transport metadata and does not change the response Data contract.
+type HumanText struct {
+	Content string `json:"content"`
 }
 
 // GitHubOutput declares an ordered set of response Data fields to encode for
