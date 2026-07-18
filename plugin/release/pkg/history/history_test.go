@@ -61,7 +61,16 @@ func writeV2Config(t *testing.T) {
 	if err := os.MkdirAll(".neko", 0755); err != nil {
 		t.Fatalf("mkdir .neko: %v", err)
 	}
-	config := `{"schemaVersion":2,"units":[{"id":"api","paths":["api/**"],"workingDirectory":".","tagPrefix":"api/v","executor":{"type":"goreleaser"}},{"id":"web","paths":["web/**"],"workingDirectory":".","tagPrefix":"web/v","executor":{"type":"release-it"}}]}`
+	if err := os.MkdirAll(".github/workflows", 0755); err != nil {
+		t.Fatalf("mkdir workflows: %v", err)
+	}
+	if err := os.WriteFile(".github/workflows/release-api.yml", []byte("name: release api\n"), 0644); err != nil {
+		t.Fatalf("write api workflow: %v", err)
+	}
+	if err := os.WriteFile(".github/workflows/release-web.yml", []byte("name: release web\n"), 0644); err != nil {
+		t.Fatalf("write web workflow: %v", err)
+	}
+	config := `{"schemaVersion":2,"units":[{"id":"api","paths":["api/**"],"workingDirectory":".","tagPrefix":"api/v","executor":{"type":"goreleaser","delivery":"github-actions","workflow":".github/workflows/release-api.yml"}},{"id":"web","paths":["web/**"],"workingDirectory":".","tagPrefix":"web/v","executor":{"type":"release-it","delivery":"github-actions","workflow":".github/workflows/release-web.yml"}}]}`
 	state := `{"schemaVersion":2,"units":{"api":{"version":"0.2.0"},"web":{"version":"0.1.0"}}}`
 	if err := os.WriteFile(".neko/release.config.json", []byte(config), 0644); err != nil {
 		t.Fatalf("write config: %v", err)
