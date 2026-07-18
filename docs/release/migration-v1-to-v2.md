@@ -70,7 +70,8 @@ Output:
       "tagPrefix": "v",
       "executor": {
         "type": "jreleaser",
-        "delivery": "local"
+        "delivery": "github-actions",
+        "workflow": ".github/workflows/release-default.yml"
       }
     }
   ]
@@ -90,7 +91,7 @@ Output:
 }
 ```
 
-The migrated unit is always `default`. `paths` is always `["**"]`, `workingDirectory` is `.`, and `tagPrefix` is `v` so existing `vX.Y.Z` tags remain compatible. `project-owner` and `project-type` stay in the archived V1 backup and are not copied into V2 runtime state.
+The migrated unit is always `default`. `paths` is always `["**"]`, `workingDirectory` is `.`, `delivery` is `github-actions`, and `tagPrefix` is `v` so existing `vX.Y.Z` tags remain compatible. The migrated config references `.github/workflows/release-default.yml`; create or rename the production workflow before running a real V2 release. `project-owner` and `project-type` stay in the archived V1 backup and are not copied into V2 runtime state.
 
 ## Backup
 

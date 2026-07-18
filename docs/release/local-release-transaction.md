@@ -1,8 +1,8 @@
 # Local Release Transaction
 
-V2 local release internals run through one transaction boundary. The transaction owns the order of preflight, materialization, state persistence, handoff to Git coordination, and recovery.
+V2 local release execution is deliberately unsupported. The former exported local transaction wrapper remains only as a deprecated compatibility shape and rejects execution directly. It no longer owns private materialization, state persistence, Git coordination, rollback, or executor invocation logic.
 
-Public V2 local non-dry-run commands remain blocked. V2 GitHub Actions releases use the journaled flow described in [GitHub Actions release flow](github-actions-release-flow.md).
+V2 GitHub Actions releases use the journaled flow described in [GitHub Actions release flow](github-actions-release-flow.md).
 
 ## Phases
 
@@ -21,9 +21,9 @@ failed
 
 Before `commit-or-tag-started`, materialized version files and the canonical V2 state file may be restored from their snapshots. After commit, tag, push, or GitHub release work has begun, Neko CLI does not run destructive rollback for V2.
 
-## State Update
+## Retired State Update Path
 
-For a V2 local release, the transaction:
+The former local transaction preparation path used to model this order:
 
 1. loads and validates V2 config and state;
 2. resolves the selected unit and execution context;
@@ -38,22 +38,22 @@ For a V2 local release, the transaction:
 11. validates the written state through the real V2 loader;
 12. hands the known release files to `GitReleaseCoordinator` for targeted staging, commit, tag, and push.
 
-Only the selected unit version is changed. Other units remain unchanged in the state model.
+That path is not active production behavior. Public V2 releases use GitHub Actions delivery, where Neko CLI owns materialization, state, targeted staging, commit, tag, push, journals, and dispatch before the workflow owns build and publication.
 
 ## Recovery
 
-If a local error occurs after materialization or state write but before commit/tag work starts, the transaction restores `.neko/release.state.json` and materialized files from snapshots, then unstages only the files staged by this transaction.
+Because V2 local execution is rejected before mutation, there is no active local transaction crash window. No materialized files, V2 state writes, commits, tags, pushes, executor processes, or remote publications are started by the deprecated wrapper.
 
-If the release reaches commit/tag/remote phases, no `git reset --hard`, `git clean -fd`, remote tag deletion, or GitHub release deletion is attempted by the V2 transaction. The error reports the reached phase, unit, tag, and known changed files for manual inspection.
+If a future local delivery feature is designed, it must define fresh executor-specific evidence, crash windows, retry refusal, and compensation limits before any local executor process can run.
 
 ## Executor Status
 
 | Executor | V2 local public status | Internal preparation |
 |----------|-----------------|------------------------|
-| `goreleaser` | blocked until publish-only adapter exists | No version file materialization; state is prepared as a known release file |
-| `jreleaser` | blocked until publish-only adapter exists | Neko CLI materializes `jreleaser.yml` and prepares it with state as known release files |
-| `release-it` | blocked | release-it owns commit/tag/push/release in the legacy adapter and has no V2 publish-only boundary |
+| `goreleaser` | unsupported | No active V2 local preparation |
+| `jreleaser` | unsupported | No active V2 local preparation |
+| `release-it` | unsupported | release-it owns commit/tag/push/release in the legacy adapter and has no V2 publish-only boundary |
 
-GitHub Actions delivery is active through the journaled remote workflow dispatch path; local executors still do not publish V2 GitHub Actions releases.
+GitHub Actions delivery is active through the journaled remote workflow dispatch path; local executors do not publish V2 GitHub Actions releases.
 
 See [Git release coordination](git-coordination.md).

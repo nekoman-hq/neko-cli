@@ -196,7 +196,7 @@ make all
 echo '{"command":"init-options","args":[],"flags":{},"context":{}}' | ./plugin/release/plugin-release
 
 # Test via CLI
-./neko release init --executor=goreleaser --delivery=local
+./neko release init --executor=goreleaser --delivery=github-actions --workflow=.github/workflows/release-cli.yml
 ./neko release init-options
 ./neko release history --describe
 ```

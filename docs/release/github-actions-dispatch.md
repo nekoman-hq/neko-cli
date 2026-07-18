@@ -61,4 +61,4 @@ Timeouts, transport interruptions, context cancellation after request start, `5x
 
 ## Public Boundary
 
-Public V2 GitHub Actions releases dispatch after commit and tag push. V2 local delivery remains blocked, and no public standalone dispatch or retry command exists.
+Public V2 GitHub Actions releases dispatch after commit and tag push. V2 local delivery is unsupported, and no public standalone dispatch or retry command exists.

@@ -8,7 +8,7 @@ neko release minor --unit web
 neko release major --unit mobile
 ```
 
-V2 local delivery remains blocked. V1 release behavior is unchanged.
+V2 local delivery is unsupported for executable V2 releases. V1 release behavior is unchanged.
 
 ## Transaction Order
 

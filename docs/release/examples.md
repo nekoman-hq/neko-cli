@@ -27,7 +27,7 @@ Core terms:
 | `unit` | Independently releasable object such as `cli`, `api`, or `plugin-foo` |
 | `tagPrefix` | Namespace used to derive tags for a unit, such as `v` or `api/v` |
 | `executor` | Release tool: `goreleaser`, `jreleaser`, or `release-it` |
-| `delivery` | Release handoff mode: `local` or `github-actions` |
+| `delivery` | Release handoff mode; V2 supports `github-actions` |
 | `kind: plugin` | Marks a V2 unit as a public plugin registry entry |
 
 Multi-unit repositories require `--unit` for unit-scoped commands.

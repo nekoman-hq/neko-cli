@@ -284,30 +284,30 @@ No P0 issue was found. The active V2 GitHub Actions path preserves evidence arou
 - **Completed capability:** **explicit-root composition — Make command roots explicit for embedders**.
 - **Blocking new features:** No longer blocks ordinary in-process embedding that uses the explicit-root APIs. It still blocks claims of full concurrent safety for legacy compatibility facades.
 
-### D-08 — Inactive V2-local transaction remains; coordinator convenience was retired by retired-path cleanup
+### D-08 — Deprecated V2-local transaction wrapper remains; coordinator convenience was retired
 
-- **Affected files or symbols:** `pkg/release/release_transaction.go`; `ReleaseTransaction`; `prepareReleaseFilesForCoordinator`; `MutationTracker`. retired-path cleanup removed `GitReleaseCoordinator.Coordinate`.
-- **Current behavior:** `ReleaseTransaction.Execute` always blocks non-dry-run V2 execution. Its private preparation and rollback-before-uncertainty code is exercised only by tests. Active V2 release/resume use named operation adapters and focused coordinator methods; there is no longer a one-call coordinator convenience method.
-- **Why it remains:** `ReleaseTransaction` is exported/inactive V2-local scaffold, and V2 local delivery evaluation has not decided whether local delivery is a product goal. retired-path cleanup did have enough evidence to remove `GitReleaseCoordinator.Coordinate` because production did not call it and tests moved to focused coordinator methods.
-- **Risk:** Readers can still mistake `ReleaseTransaction` preparation for active orchestration, and future work may accidentally extend the wrong scaffold.
-- **User or developer impact:** No current command behavior is affected; maintenance and onboarding cost remain.
-- **Removal or improvement preconditions:** Search downstream consumers, decide whether V2 local execution is a real product goal, preserve any public compatibility contract, and prove all active production call sites keep using named operations.
-- **Recommended action:** **Defer** `ReleaseTransaction` until V2 local delivery evaluation. Keep retired-path cleanup's guard that prevents reintroducing `GitReleaseCoordinator.Coordinate`.
+- **Affected files or symbols:** `pkg/release/release_transaction.go`; `ReleaseTransaction`; `MutationTracker`. retired-path cleanup removed `GitReleaseCoordinator.Coordinate`.
+- **Current behavior:** `ReleaseTransaction.Execute` rejects V2 local execution directly. The private preparation, rollback-before-uncertainty, Git-staging, and executor-invocation scaffold has been removed. Active V2 release/resume use named operation adapters and focused coordinator methods; there is no one-call coordinator convenience method.
+- **Why it remains:** `ReleaseTransaction` is exported, so the public shape is retained as a deprecated compatibility wrapper while executable V2 local delivery is unsupported.
+- **Risk:** External callers can still construct the wrapper, but it cannot start local executor, file, Git, journal, push, or publish effects.
+- **User or developer impact:** No current command behavior is affected; the wrapper communicates the unsupported contract.
+- **Removal or improvement preconditions:** Downstream consumer audit and a separately authorized public API removal decision.
+- **Recommended action:** **Keep deprecated reject-only wrapper** until public API cleanup is authorized. Keep retired-path cleanup's guard that prevents reintroducing `GitReleaseCoordinator.Coordinate`.
 - **Priority:** **P2**.
-- **Proposed capability:** **V2 local delivery evaluation — Evaluate V2 local delivery** for `ReleaseTransaction`; retired-path cleanup completed the coordinator convenience removal.
-- **Blocking new features:** Blocks implementation of V2 local execution on the current scaffold. It does not block GitHub Actions features.
+- **Completed capability:** **V2 local delivery evaluation — Evaluate V2 local delivery** for the local-delivery decision; retired-path cleanup completed the coordinator convenience removal.
+- **Blocking new features:** Does not block GitHub Actions features. A future V2 local feature would require a fresh executor-specific design rather than extending the wrapper.
 
-### D-09 — V2 local execution remains blocked
+### D-09 — V2 local execution is unsupported
 
-- **Affected files or symbols:** `startV2Release`; `V2_LOCAL_DELIVERY_BLOCKED`; `ReleaseTransaction.Execute`; executor capability and delivery models.
-- **Current behavior:** V2 local non-dry-run returns an explicit block. GitHub Actions is the only active V2 publication owner.
-- **Why it remains:** Executor ownership, inclusion of V2 state in the release commit, unsafe-operation journaling, and recovery are unresolved. release-it in particular owns commit/tag/push internally.
-- **Risk:** Activating the current scaffold would bypass the proven V2 journal/recovery order or fail to guarantee committed state.
+- **Affected files or symbols:** `startV2Release`; `V2_LOCAL_DELIVERY_UNSUPPORTED`; `ReleaseTransaction.Execute`; executor capability and delivery models.
+- **Current behavior:** V2 config validation rejects `delivery: "local"` and missing delivery values. GitHub Actions is the only active V2 publication owner.
+- **Why it remains:** Launching an executor locally does not mean offline or no remote side effects, and no supported executor currently exposes a safe publish-only boundary for V2 ownership, journals, recovery, and compensation.
+- **Risk:** Reintroducing configurable local delivery without a new design would make Git ownership, external publication evidence, and recovery ambiguous.
 - **User or developer impact:** Users cannot execute V2 local releases; they must use GitHub Actions or remain on V1 compatibility.
-- **Removal or improvement preconditions:** A separate product decision and design must prove ownership, state-in-commit, exact Git order, journaling, interruption recovery, and executor-specific feasibility.
-- **Recommended action:** **Defer**. Keep the block until an explicit feature implementation is approved.
+- **Removal or improvement preconditions:** A separate product decision and design must prove executor-specific ownership, state-in-commit, exact Git order, journaling, interruption recovery, evidence retention, and compensation limits.
+- **Recommended action:** **Keep unsupported**. Do not reintroduce V2 local delivery as a config option without a fresh design.
 - **Priority:** **P2** as a product limitation, not an architecture regression.
-- **Proposed capability:** **V2 local delivery evaluation — Evaluate V2 local delivery**.
+- **Completed capability:** **V2 local delivery evaluation — Evaluate V2 local delivery**.
 - **Blocking new features:** Blocks only V2 local-delivery features.
 
 ### D-10 — Remote-state inference and automatic uncertain-operation retry are intentionally absent
@@ -439,7 +439,7 @@ The inventory distinguishes the plugin executable's active composition from publ
 | `config.V1Exists`, `V1LoadConfig`, `V1SaveConfig` | `pkg/config` | compatibility tests; canonical code uses explicit-root/path variants | Preserve cwd-based V1 config API | Direct delegates to `V1ConfigExistsAt`, `V1LoadConfigAt`, and `V1SaveConfigAt` | High because exported and deprecated | Deprecated by V1 compatibility policy with explicit-root/path replacements |
 | `release.VersionGuard`, `VersionGuardWithOptions`, `EnsureVersionIsValid` | `pkg/release` | compatibility tests; active V1 application uses its planning evidence adapter | Preserve legacy version-guard API and warnings | `VersionGuard` and `VersionGuardWithOptions` retain mutable evidence globals; `EnsureVersionIsValid` is pure | Medium to high | `VersionGuard` and `VersionGuardWithOptions` deprecated by V1 compatibility policy; pure `EnsureVersionIsValid` kept |
 | `release.V2ExecutionUnavailableResponse` | `pkg/release` | none; removed in retired-path cleanup | Former exported response helper from command extraction | Use `MapCommandFailure` with a command-specific `CommandFailure` | Medium unknown-consumer risk before removal | Removed by retired-path cleanup after repository audit found no consumer |
-| `release.ReleaseTransaction`, `NewReleaseTransaction`, `ReleaseTransaction.Execute` | `pkg/release` | tests only | Preserve inactive V2-local scaffold/public shape | Constructor builds preparation state; `Execute` always blocks | High because exported despite inactive behavior | Decide product direction in V2 local delivery evaluation first; deprecate/remove later only if local delivery is rejected |
+| `release.ReleaseTransaction`, `NewReleaseTransaction`, `ReleaseTransaction.Execute` | `pkg/release` | tests only | Preserve deprecated reject-only public shape | Constructor retains compatibility data; `Execute` rejects unsupported V2 local delivery | Medium because exported despite unsupported behavior | Keep until public API cleanup; do not add preparation scaffold |
 | `GitReleaseCoordinator.Coordinate` | `pkg/release` | none; removed in retired-path cleanup | Former one-call Git sequence | Active release/resume use focused coordinator methods through named operations | Medium before removal | Removed by retired-path cleanup to prevent a competing orchestration path |
 | `migrate.ResolvePlan`, `migrate.Run`, exported `migrate.Plan` | `pkg/migrate` | tests only; command uses `migrationUseCase` | Preserve programmatic migration preview/execution | Narrow facades over canonical root/plan/use-case paths | Medium | Keep unless a public API policy removes them; they do not violate direction |
 | `pluginindex.Generate`, `Write`, `WriteWithOptions` | `pkg/pluginindex` | tests and possible programmatic callers; command uses injected query/builder | Preserve programmatic index generation/serialization | Direct delegates to canonical query and builder | Low to medium | Keep; these are cohesive public APIs, not urgent debt |
@@ -454,15 +454,15 @@ No code is labeled dead solely from an IDE result. Classification uses productio
 | `release.startLegacyRelease`, `newV1ReleaseCommandApplication` | no remaining definitions or call sites | **Removed in retired-path cleanup** | Tests moved to canonical boundaries; retired-path cleanup guard prevents reintroduction |
 | `registeredV1ReleaseExecutorCatalog`, `registeredV1ReleaseExecutor`, `directV1ReleaseExecutorCatalog`, `directV1ReleaseExecutor` | reached only from `HandleRelease` / `Service`, not production `main` | **Internal compatibility** | Keep while those public facades remain; remove with them |
 | `pkg/release/tool` package initializer | reached only when deliberately imported; production does not import it | **Public compatibility** | Keep as explicit opt-in until registry deprecation completes |
-| `ReleaseTransaction.Execute` | production-callable but always blocked; tests cover the refusal | **Future feature scaffold** and **Unknown consumer risk** | Do not extend; decide V2 local delivery evaluation versus retired-path cleanup |
-| `ReleaseTransaction.prepareReleaseFilesForCoordinator`, callback hooks, `ensureGitClean`, and `unstageKnownFiles` | private and referenced only by transaction tests | **Test support**, **Future feature scaffold**, and **Safe removal candidate** | Remove in retired-path cleanup if V2 local delivery evaluation rejects the scaffold; otherwise redesign before activation |
+| `ReleaseTransaction.Execute` | production-callable but rejects unsupported V2 local delivery; tests cover the refusal | **Deprecated compatibility wrapper** and **Unknown consumer risk** | Do not extend; remove only after public API cleanup |
+| `ReleaseTransaction.prepareReleaseFilesForCoordinator`, callback hooks, `ensureGitClean`, and `unstageKnownFiles` | no remaining definitions or call sites | **Removed after local-delivery decision** | Reintroduce only through a fresh executor-specific local-delivery design |
 | `GitReleaseCoordinator.Coordinate` | no remaining definition or call site | **Removed in retired-path cleanup** | Active release/resume use focused coordinator methods through named operations; retired-path cleanup guard prevents reintroduction |
 | `V2ExecutionUnavailableResponse` | no remaining definition or call site | **Removed in retired-path cleanup** | Use `MapCommandFailure` with a command-specific `CommandFailure`; retired-path cleanup guard prevents reintroduction |
 | `buildV2InitConfigFromFlags` | no remaining definition or call site | **Removed in retired-path cleanup** | Tests cover typed parser/constructor behavior directly; retired-path cleanup guard prevents reintroduction |
 | `pkg/git` raw metrics helpers `LastCommit`, `TotalCommits`, `FilesCount`, `RepoSize` | no remaining definitions or call sites | **Removed in retired-path cleanup** | Use command-owned query readers or caller-owned Git code; retired-path cleanup guard prevents reintroduction |
 | `pkg/git` raw destructive helpers `Head`, `CleanUntracked`, `DeleteLocalTag`, `DeleteRemoteTag`, `RevertCommit`, `CreateCommit`, `HardResetTo`, `DeleteGithubRelease` | no remaining definitions or call sites; active rollback uses focused root-aware adapters | **Removed in retired-path cleanup** | Use root-aware release adapters or caller-owned Git code; retired-path cleanup guard prevents reintroduction |
 | `BuildReleaseExecutionContext` mixed builder | tests and potential external callers only; production selected V2 path uses the V2-only builder | **Public compatibility** | Keep through V1 compatibility policy; remove only after caller migration |
-| V2 executor capability and delivery facts describing local execution | read by planning and the blocked transaction but do not activate execution | **Future feature scaffold** | Keep only while V2 local delivery evaluation remains a plausible product decision |
+| V2 executor capability and delivery facts describing local execution | `local` is retained only for V1 compatibility and invalid V2 reporting | **Compatibility/error-reporting fact** | Do not treat as executable V2 capability |
 
 ## Clean-code audit classification
 
@@ -496,4 +496,4 @@ typed release progress reporting removed the last active presentation-boundary d
 
 This does not change the historical ledger: all nine planned refactor stages were completed. It means “completed” is a closed architecture record, not a claim that no future architecture maintenance exists.
 
-The architecture decision backlog, acceptance criteria, and commit-boundary guidance are defined in [architecture-evolution.md](architecture-evolution.md). V1 compensation interruption safety, V2 pair and migration crash recovery, evidence inspection and archival, V1 compatibility policy, retired-path cleanup, typed release progress reporting, explicit-root composition, generated-output path policy, and release plan inspection are completed. The recommended next architecture decision is **V2 local delivery evaluation**.
+The architecture decision backlog, acceptance criteria, and commit-boundary guidance are defined in [architecture-evolution.md](architecture-evolution.md). V1 compensation interruption safety, V2 pair and migration crash recovery, evidence inspection and archival, V1 compatibility policy, retired-path cleanup, typed release progress reporting, explicit-root composition, generated-output path policy, release plan inspection, and V2 local delivery evaluation are completed. The next architecture decision is not documented.

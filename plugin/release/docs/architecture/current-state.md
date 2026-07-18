@@ -41,7 +41,7 @@ The public command contract is duplicated between `manifest.json` and the switch
 | `pkg/contributors` | Typed contributor query, repository/unit selection, focused shortlog capabilities, and response mapping | `HandleContributors`, `contributorsQueryUseCase`, `contributorsGitReader` | V1 repository-wide and V2 path-filtered reads share one command-owned read port without mutation capabilities. |
 | `pkg/pluginindex` | Typed command modes, deterministic discovery/validation/order, pure JSON output building, and atomic requested-path persistence | `HandlePluginIndex`, `pluginIndexQueryUseCase`, `jsonPluginIndexOutputBuilder`, `atomicPluginIndexOutputPersister` | Check/render/persist retain their established outputs; all command failures remain Go errors that become top-level `EXECUTION_ERROR`. |
 | `pkg/git` | Legacy Git queries and the underlying compatibility operations used by focused V1 adapters | `IsClean`, `LatestTag`, `UnitTagsInHistory`, `Current`, `Contributors`, `ContributorsForPaths` | Direct process details remain below release-owned V1 ports; active V1 application code does not import retired raw retired-path cleanup helpers. |
-| `pkg/release` planning | Version bump, execution context, delivery/capability descriptions, materialization plan | `PlanUnitVersionBump`, `BuildReleaseExecutionContext`, `ResolveDelivery`, `ResolveExecutorCapabilities`, `ResolveVersionMaterializer` | Useful typed models exist, but some capability data describes inactive V2 local behavior. |
+| `pkg/release` planning | Version bump, execution context, delivery/capability descriptions, materialization plan | `PlanUnitVersionBump`, `BuildReleaseExecutionContext`, `ResolveDelivery`, `ResolveExecutorCapabilities`, `ResolveVersionMaterializer` | `github-actions` is the supported V2 delivery mode; `local` is retained only for V1 compatibility and invalid V2 reporting. |
 | `pkg/release` plan inspection | Token-free read-only local release-plan inspection for one selected source and unit | `HandlePlanAt`, `releasePlanInspectionUseCase`, `ReleasePlanInspection`, `planV2ReleaseFacts` | Reuses canonical V1/V2 planning facts, maps responses only at the command boundary, and does not inspect journals, remotes, tokens, or recovery evidence. |
 | `pkg/release` V1 | Typed V1 intent/planning/preview/execution/failures, focused requirements/preflight/materialization/Git/rollback adapters, and explicit executor selection | `V1ReleaseIntent`, `PlanV1Release`, `v1ReleasePreviewUseCase`, `v1ReleaseExecutionUseCase`, `V1Executor` | Production uses a fixed executor catalog. `Service`, `Preflight`, `Tool`, `ToolBase`, and `Register/Get` are bounded compatibility facades. |
 | `pkg/release` V2 GitHub Actions | Typed command boundary, active release use case, named journaled operations, production facade, and typed progress reporting | `releaseCommandHandler`, `releaseStartOperation`, `githubActionsReleaseUseCase.Run`, `GitHubActionsReleaseRunner.Run`, `ReleaseProgress` | The facade composes one coordinator, one typed token boundary, one clock, and typed progress/diagnostic adapters; the use case owns the visible safety order and delegates each mutation to a focused operation. |
@@ -120,7 +120,7 @@ The public command contract is duplicated between `manifest.json` and the switch
 - V2 planning: resolves one unit, builds `BuildV2ReleaseExecutionContext` with read-only planning semantics, and reuses `planV2ReleaseFacts` for requirements validation, `BuildReleasePlan`, materialization planning/validation, `KnownReleaseFiles`, and GitHub Actions dispatch-summary facts. The command response is mapped from `ReleasePlanInspection`, not from dry-run text.
 - V1 planning: resolves the virtual `default` unit and uses `PlanV1Release` for a local planning subset. The result explicitly limits V1 known-release-file and latest-tag-evidence semantics instead of running V1 release logic.
 - Side effects: reads config/state, executor config, manifest/version files, and local file hashes needed by canonical planning. It does not read tokens, construct token resolvers, open remotes, read execution or dispatch journals, inspect recovery evidence, create directories, write files, mutate Git, dispatch workflows, publish, or run executors.
-- Output: `MapReleasePlanInspection` renders selected source/unit, current version, requested change, next version, tag, executor, delivery, workflow, working directory, unit root, planned materialized files, known release files, local readiness, local blockers, limitations, and local-only status.
+- Output: `MapReleasePlanInspection` renders selected source/unit, current version, requested change, next version, tag, executor, delivery, workflow, working directory, unit root, planned materialized files, known release files, readiness, blockers, limitations, and local-only status where those fields are part of the stable response.
 - Tests: command parser/handler/response tests, V1/V2 inspection tests, local-blocker tests, explicit-root tests, no-mutation and secret absence tests, manifest/docs/route tests, and architecture guards protecting canonical planning reuse and the absence of mutation-capable dependencies.
 
 #### V2 GitHub Actions execution
@@ -143,10 +143,10 @@ The public command contract is duplicated between `manifest.json` and the switch
 
 #### V2 local execution
 
-- `releaseStartOperation` returns `V2_LOCAL_DELIVERY_BLOCKED` before executing a local transaction.
-- `ReleaseTransaction.Execute` independently returns `v2GitCoordinationUnavailableMessage` for every V2 non-dry-run call.
-- `prepareReleaseFilesForCoordinator` and executor capabilities are internal preparation code exercised only by tests; they are not the active public local release path.
-- This parallel inactive path is a compatibility constraint during refactoring: it must not be mistaken for production orchestration.
+- V2 local delivery is deliberately unsupported for executable V2 releases. Config validation rejects `delivery: "local"` and missing delivery values instead of normalizing them to local execution.
+- `releaseStartOperation` maps invalid V2 configs to `CONFIG_INVALID`; the active public V2 release path never reaches executor composition for local delivery.
+- `ReleaseTransaction.Execute` is a deprecated compatibility wrapper that rejects local execution directly.
+- The former private `ReleaseTransaction` preparation, rollback, and executor-invocation scaffold was removed after the local-delivery decision.
 
 #### V1 execution
 
@@ -281,7 +281,7 @@ Bounded limitations remain:
 - pending/uncertain remote deletion or push, a pending revert, release-it failure, and executor push/publication ambiguity intentionally require manual recovery rather than remote inference or blind retry;
 - the active release invocation is recorded as one pending executor effect, so interruption inside an executor is conservatively classified as manual instead of inferred from remote state;
 - the single `current.json` record is retained after completion and may be replaced by a later attempt; inspection, archival, and schema-lifecycle tooling remain deferred to evidence inspection and archival;
-- `ReleaseTransaction` retains inactive V2-local preparation tests because V2 local delivery evaluation has not decided whether local V2 delivery is a product goal. Production blocks V2 local execution, no concrete V1 executor implements or branches into that path, and the former JReleaser V2-local bypass was removed rather than activated;
+- V2 local delivery is rejected for executable V2 releases; the deprecated `ReleaseTransaction` wrapper remains only to fail directly and no longer retains private preparation scaffold;
 - process-global workspace selection and compatibility current-directory facades remain outside this stage.
 
 ## Important data models
@@ -452,7 +452,7 @@ The following are current behavior. They are not statements that every behavior 
 
 ### Parallel transaction paths
 
-`ReleaseTransaction` still overlaps with concepts used by the active release use case, but `ReleaseTransaction.Execute` is deliberately blocked while V2 local delivery evaluation remains undecided. Its private V2 preparation logic is tested only as retained scaffold. No concrete V1 executor plugs into it, and the former JReleaser V2 source-format bypass was removed. retired-path cleanup removed `GitReleaseCoordinator.Coordinate`; the active use case continues to call focused coordinator methods directly through named operations that interleave journal transitions. This is a bounded post-refactor limitation, not an active second orchestration path or a planned another numbered refactor stage.
+`ReleaseTransaction` is no longer a future V2 local production path. It remains as a deprecated compatibility wrapper that rejects local execution directly, without private preparation, rollback, or executor-invocation scaffold. No concrete V1 executor plugs into it, and the former JReleaser V2 source-format bypass was removed. retired-path cleanup removed `GitReleaseCoordinator.Coordinate`; the active use case continues to call focused coordinator methods directly through named operations that interleave journal transitions. This is not an active second orchestration path.
 
 ### Init and configuration persistence
 
@@ -508,7 +508,7 @@ Existing replaceable seams include:
 - `GitHubActionsDispatchTokenResolver`.
 - `ReleaseClock` across response mapping, active journal stores, runner, and dispatcher.
 - `VersionMaterializer`.
-- `transactionExecutor` in the inactive `ReleaseTransaction` preparation path.
+- `transactionExecutor` in the deprecated `ReleaseTransaction` compatibility wrapper.
 - V1 preview/execution plan builders, requirements, preflight repository, config store, fixed executor catalog, reporter, release Git writer, compensation evidence store/policy/named operations, bounded GitHub Release client, per-executor process/config/file/environment/token/clock ports, and shared binary/file/redaction adapters.
 - package variables `refreshVersionTags` and `latestVersionTag` for V1 version-guard tests.
 
@@ -523,7 +523,7 @@ Important missing seams include:
 
 1. Active V1 compensation is interruption-safe for supported local actions, but deliberately requires manual recovery for pending/uncertain remote actions, pending revert, corrupt evidence, and uncertain executor outcomes; direct legacy rollback callers remain best-effort.
 2. Pair and migration crash recovery is evidence-driven for supported config/state and archival windows, but it still refuses corrupt, externally edited, unsupported, or owner-ambiguous evidence and does not claim cross-file atomicity.
-3. `ReleaseTransaction` preparation remains inactive while V2 local delivery evaluation is undecided; production does not select it. The former `GitReleaseCoordinator.Coordinate` convenience path was removed in retired-path cleanup.
+3. V2 local delivery is unsupported for executable V2 releases; production rejects invalid configs before local executor composition. The former `GitReleaseCoordinator.Coordinate` convenience path was removed in retired-path cleanup.
 4. Process-global workspace selection and compatibility current-directory facades still limit parallel in-process command execution.
 5. Completed V2 release behavior after journal exclusion and subsequent planning remains less directly characterized than the primary release/recovery matrix.
 6. Explicit absolute plugin-index output remains a supported CI/temp-artifact exception; repository-contained outputs follow the protected-path and symlink policy above.
@@ -551,7 +551,7 @@ Typed release progress reporting resolved the prior bounded presentation deviati
 - Completed stages: 9 / 9
 - Remaining stages: 0
 - Release Plugin refactor: completed
-- Completed capability records: V1 compensation interruption safety — Make V1 compensation interruption-safe; V2 pair and migration crash recovery — Make pair and migration crash recovery explicit; evidence inspection and archival — Add evidence-safe journal inspection and lifecycle support; V1 compatibility policy — Decide and deprecate V1 compatibility surfaces; retired-path cleanup — Retire superseded and inactive release paths; typed release progress reporting — Isolate release progress reporting; explicit-root composition — Make command roots explicit for embedders; generated-output path policy — Clarify generated-output path policy; release plan inspection — Add read-only release plan inspection
-- Next capability: V2 local delivery evaluation — Evaluate V2 local delivery
+- Completed capability records: V1 compensation interruption safety — Make V1 compensation interruption-safe; V2 pair and migration crash recovery — Make pair and migration crash recovery explicit; evidence inspection and archival — Add evidence-safe journal inspection and lifecycle support; V1 compatibility policy — Decide and deprecate V1 compatibility surfaces; retired-path cleanup — Retire superseded and inactive release paths; typed release progress reporting — Isolate release progress reporting; explicit-root composition — Make command roots explicit for embedders; generated-output path policy — Clarify generated-output path policy; release plan inspection — Add read-only release plan inspection; V2 local delivery evaluation — Evaluate V2 local delivery
+- Next capability: not documented
 
 V1 compensation interruption safety, V2 pair and migration crash recovery, evidence inspection and archival, V1 compatibility policy, retired-path cleanup, typed release progress reporting, explicit-root composition, generated-output path policy, release plan inspection, and later architecture decisions are maintained in [architecture-evolution.md](architecture-evolution.md). Capability records are not refactor stages; the historical refactor ledger remains closed.

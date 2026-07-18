@@ -35,7 +35,7 @@ Initialize a new V2 release configuration for a normal release unit by default. 
 
 **Usage:**
 ```bash
-neko release init --executor=<executor> --delivery=<delivery> [flags]
+neko release init --executor=<executor> --delivery=github-actions --workflow=<workflow> [flags]
 ```
 
 **Required Flags:**
@@ -43,7 +43,7 @@ neko release init --executor=<executor> --delivery=<delivery> [flags]
 | Flag | Type | Description |
 |------|------|-------------|
 | `--executor` | string | Release executor: `goreleaser`, `jreleaser`, or `release-it` |
-| `--delivery` | string | Delivery mode: `local` or `github-actions` |
+| `--delivery` | string | Delivery mode: `github-actions` |
 
 **Optional Flags:**
 
@@ -52,7 +52,7 @@ neko release init --executor=<executor> --delivery=<delivery> [flags]
 | `--unit` | string | `cli` | Release unit id |
 | `--display-name` | string | unit id | Human-readable unit name |
 | `--version` | string | `0.1.0` | Initial semantic version |
-| `--workflow` | string | | Required for `github-actions`; must point to `.github/workflows/*.yml` or `.yaml` |
+| `--workflow` | string | | Required for V2 `github-actions`; must point to `.github/workflows/*.yml` or `.yaml` |
 | `--tag-prefix` | string | `v` | Release tag prefix |
 | `--working-directory` | string | `.` | Unit working directory |
 | `--paths` | string | `**` | Comma-separated unit path globs |
@@ -67,8 +67,8 @@ neko release init --executor=<executor> --delivery=<delivery> [flags]
 
 **Examples:**
 ```bash
-# Initialize a local GoReleaser-backed CLI unit
-neko release init --executor=goreleaser --delivery=local
+# Initialize a GitHub Actions-delivered GoReleaser CLI unit
+neko release init --executor=goreleaser --delivery=github-actions --workflow=.github/workflows/release-cli.yml
 
 # Initialize a GitHub Actions-delivered CLI unit
 neko release init \
@@ -79,10 +79,10 @@ neko release init \
   --workflow=.github/workflows/release.yml
 
 # Reinitialize existing V2 config/state
-neko release init --executor=goreleaser --delivery=local --force
+neko release init --executor=goreleaser --delivery=github-actions --workflow=.github/workflows/release-cli.yml --force
 
 # Start with a specific version
-neko release init --executor=goreleaser --delivery=local --version=1.0.0
+neko release init --executor=goreleaser --delivery=github-actions --workflow=.github/workflows/release-cli.yml --version=1.0.0
 
 # Initialize one GitHub Actions-delivered plugin unit
 neko release init \
@@ -165,7 +165,7 @@ neko release patch --dry-run
 
 With `--dry-run`, Neko only calculates and displays the next version. It does not write config, update executor files, run executors, fetch remotes, commit, tag, push, publish, or rollback.
 
-For V2 repositories, `patch`, `minor`, and `major` support dry-run planning with `--unit`. Non-dry-run V2 releases are active for `delivery: github-actions`; V2 local delivery remains blocked. The GitHub Actions path writes execution and dispatch journals, commits and tags the release, pushes commit and tag, and dispatches the configured workflow. Neko CLI owns commit/tag/push/dispatch; GitHub Actions owns build, GitHub Release creation, and asset publishing from the pushed tag.
+For V2 repositories, `patch`, `minor`, and `major` support dry-run planning with `--unit`. Non-dry-run V2 releases are active for `delivery: github-actions`; V2 local delivery is unsupported and rejected during validation. The GitHub Actions path writes execution and dispatch journals, commits and tags the release, pushes commit and tag, and dispatches the configured workflow. Neko CLI owns commit/tag/push/dispatch; GitHub Actions owns build, GitHub Release creation, and asset publishing from the pushed tag.
 
 Nekocli dogfoods three independent V2 units: `cli`, `plugin-release`, and `plugin-ui`. Their versions live in `.neko/release.state.json`; `.plugin.release.neko.json` has been removed. Plugin releases materialize only their own manifest before the release commit.
 
@@ -451,7 +451,7 @@ Release unit id                                                                 
 Release unit display name                                                                                   display-name          false             string
 Initial version                                                                                             version               false             semver, default 0.1.0
 Release executor                                                                                            executor              true              goreleaser, jreleaser, release-it
-Release delivery mode                                                                                       delivery              true              local, github-actions
+Release delivery mode                                                                                       delivery              true              github-actions
 GitHub Actions workflow path                                                                                workflow              conditional       .github/workflows/*.yml
 Release tag prefix                                                                                          tag-prefix            false             v
 Unit working directory                                                                                      working-directory     false             .
@@ -582,7 +582,7 @@ V2 uses repository-root files:
 
 `release.config.json` stores committed repository architecture: units, paths, working directories, tag prefixes, executor type, and delivery. `release.state.json` stores unit versions. Tags are derived from `tagPrefix + version` and are not stored in state.
 
-`neko release validate` can validate V2 now. `history`, `contributors`, dry-run planning, and root V1-to-V2 migration are unit-aware. GitHub Actions delivery is valid V2 configuration when `workflow` points to an existing `.github/workflows/<file>.yml|yaml` file. Dry-run planning builds the execution context, materialization plan, local delivery/executor capabilities, planned release commit, unit tag, known release files, push order, workflow reference, dispatch input contract, dispatch status, and V2 Git ownership. V2 GitHub Actions non-dry-run release commands are active and journaled; `neko release resume --unit <unit>` resumes only existing unresolved execution journals. V2 local `release-it` and standalone public dispatch/retry commands are not active.
+`neko release validate` can validate V2 now. `history`, `contributors`, dry-run planning, and root V1-to-V2 migration are unit-aware. GitHub Actions delivery is valid V2 configuration when `workflow` points to an existing `.github/workflows/<file>.yml|yaml` file. Dry-run planning builds the execution context, materialization plan, delivery/executor facts, planned release commit, unit tag, known release files, push order, workflow reference, dispatch input contract, dispatch status, and V2 Git ownership. V2 GitHub Actions non-dry-run release commands are active and journaled; `neko release resume --unit <unit>` resumes only existing unresolved execution journals. V2 local delivery and standalone public dispatch/retry commands are not active.
 
 In Nekocli itself, `plugin-release` and `plugin-ui` are V2 units. `.neko/release.state.json` is authoritative for both plugin versions; `plugin/release/manifest.json` and `plugin/ui/manifest.json` are materialized release files for their selected units. Both plugin units declare plugin metadata in `.neko/release.config.json`; `neko release plugin-index` uses that metadata so adding a releaseable plugin is a V2 unit-config change, not a registry Go-code edit. `neko release init --kind plugin` can create one new plugin unit with that metadata when no V2 config exists yet; `neko release unit-add --kind plugin` appends another plugin unit to existing V2 config/state. Runtime plugin discovery uses the published `plugin-index.json` as its source of truth and does not use `/releases/latest`; the generated index is not committed as source. Plugin workflows publish or replace the `plugin-index.json` asset on the mutable `plugin-registry` GitHub Release only after the plugin GitHub Release succeeds. Release-prefix fallback discovery has been removed. `make update-manifests` remains a manual compatibility helper and reads V2 state. V2 dry-run planning does not require or resolve `GITHUB_TOKEN`; real GitHub Actions release execution still requires it.
 

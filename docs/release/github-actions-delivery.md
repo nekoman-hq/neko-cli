@@ -34,7 +34,7 @@ Filename-only values such as `release-api.yml` are invalid. Nested workflow path
 Structural validation requires:
 
 - `workflow` is mandatory for `delivery: github-actions`.
-- `workflow` is absent or empty for `delivery: local`.
+- `delivery: local` is rejected for V2 releases before workflow validation can make it executable.
 - The path uses `/`, not `\`.
 - The path begins exactly with `.github/workflows/`.
 - The path points directly to one file below `.github/workflows/`.
@@ -64,7 +64,7 @@ Invalid examples:
 
 ## Dispatch Boundary
 
-V2 dry-run output shows the configured workflow, dispatch ref, canonical input names, and pending journal identity. V2 GitHub Actions non-dry-run writes journals, materializes versions, updates V2 state, commits, tags, pushes commit and tag, and dispatches the workflow. V2 local delivery remains blocked.
+V2 dry-run output shows the configured workflow, dispatch ref, canonical input names, and pending journal identity. V2 GitHub Actions non-dry-run writes journals, materializes versions, updates V2 state, commits, tags, pushes commit and tag, and dispatches the workflow. V2 local delivery is unsupported; configs using it are invalid.
 
 The configured workflow must support `workflow_dispatch` and accept only:
 

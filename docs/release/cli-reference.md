@@ -2,7 +2,7 @@
 ## General
 
 ```bash
-neko release init --executor goreleaser --delivery local
+neko release init --executor goreleaser --delivery github-actions --workflow .github/workflows/release-cli.yml
 neko release init --unit plugin-release --kind plugin --plugin-name release --plugin-manifest plugin/release/manifest.json --plugin-asset-prefix plugin-release --plugin-binary-name plugin-release --executor goreleaser --delivery github-actions --workflow .github/workflows/release-plugin-release.yml --tag-prefix plugin-release/v
 neko release unit-add --unit api --executor goreleaser --delivery github-actions --workflow .github/workflows/release-api.yml --tag-prefix api/v --paths "apps/api/**"
 neko release init-options
@@ -70,7 +70,7 @@ For `plugin-index --output`, relative paths are resolved from the repository roo
 
 See [Release V2 Examples](examples.md) for copy-ready init, unit-add, release, plugin-index, and plugin install/update flows.
 
-V2 non-dry-run release commands are active only for `delivery: github-actions`. V2 local delivery remains blocked. Dry-run output includes:
+V2 non-dry-run release commands are active only for `delivery: github-actions`. `local` is not a supported executable V2 delivery mode; existing V2 configs using it are rejected during validation before planning or execution. Dry-run output includes:
 
 ```text
 unit
@@ -101,11 +101,11 @@ executorStart
 
 `neko release plan --change <patch|minor|major> [--unit <unit>]` is a dedicated local plan inspection command. It reports the selected release source and unit, current version, requested change, next version, tag, planned materialized files, known release files, local readiness, local blockers, and explicit limitations. It does not read tokens, inspect remotes, inspect execution or dispatch journals, write files, mutate Git, dispatch workflows, publish releases, or start executors. It is separate from `--dry-run`: dry-run keeps the existing release preview contract, while `plan` is for stable local planning facts.
 
-Blocked:
+Unsupported or read-only boundaries:
 
-- V2 local non-dry-run release commands return `V2 local release execution is not available yet.`
+- Existing V2 configs with `delivery: local` are rejected with a clear unsupported-delivery validation error.
 - Execution journals and dispatch journals are not written by dry-run.
-- V2 local `release-it` remains blocked because no publish-only boundary exists.
+- Public V2 local executor execution is not configured because no supported executor exposes a safe publish-only boundary.
 
 For `delivery: github-actions`, V2 config must include `workflow: ".github/workflows/<file>.yml"` or `workflow: ".github/workflows/<file>.yaml"`. `neko release validate --show` displays the workflow only after repository-aware validation confirms that the file exists and stays inside `.github/workflows/`.
 

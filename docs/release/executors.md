@@ -6,11 +6,11 @@ Release executors are resolved through a schema-neutral execution context. The c
 
 | Executor | Legacy version files | Legacy commit | Legacy tag | Legacy push | Legacy GitHub release | V2 local execution | V2 GitHub Actions execution | Dry run |
 |----------|---------------|--------|-----|------|----------------|--------------------|-----------------------------|---------|
-| `goreleaser` | no-op materializer | legacy adapter | legacy adapter | legacy adapter | GoReleaser | blocked until publish-only adapter | active through workflow dispatch | yes |
-| `jreleaser` | Neko CLI materializes `jreleaser.yml` before state staging | legacy adapter | JReleaser | legacy adapter and JReleaser release flow | JReleaser | blocked until publish-only adapter | active through workflow dispatch | yes |
-| `release-it` | release-it updates configured files | release-it | release-it | release-it | release-it | blocked | active through workflow dispatch when configured | no local dry-run contract yet |
+| `goreleaser` | no-op materializer | legacy adapter | legacy adapter | legacy adapter | GoReleaser | unsupported | active through workflow dispatch | yes |
+| `jreleaser` | Neko CLI materializes `jreleaser.yml` before state staging | legacy adapter | JReleaser | legacy adapter and JReleaser release flow | JReleaser | unsupported | active through workflow dispatch | yes |
+| `release-it` | release-it updates configured files | release-it | release-it | release-it | release-it | unsupported | active through workflow dispatch when configured | no local dry-run contract yet |
 
-The capability model describes current tool or legacy-adapter behavior. V2 Git ownership is separate: Neko CLI owns the V2 release commit, unit tag, and push of commit then tag. Executors must become publish-only before public V2 local non-dry-run release execution is enabled. For V2 GitHub Actions delivery, local executors are not started; the workflow checks out the pushed unit tag and owns build and publish.
+The capability model describes current tool or legacy-adapter behavior. V2 Git ownership is separate: Neko CLI owns the V2 release commit, unit tag, and push of commit then tag. V2 local executor execution is not configurable because no supported executor currently exposes a safe publish-only boundary. For V2 GitHub Actions delivery, local executors are not started; the workflow checks out the pushed unit tag and owns build and publish.
 
 ## Requirement Files
 
@@ -39,6 +39,6 @@ push of commit and tag
 
 The `GitReleaseCoordinator` creates commits as `chore(release): <unit-id> <tag>`, creates lightweight unit tags from `TagSpec`, and pushes commit before tag. No executor owns V2 commit, tag, or push.
 
-release-it is blocked for V2 local release because release-it owns commit, tag, push, and GitHub release creation. When a unit root is nested, the repository-root `.neko/release.state.json` cannot currently be proven to land in release-it's commit.
+release-it remains unsuitable for V2 local release because release-it owns commit, tag, push, and GitHub release creation. When a unit root is nested, the repository-root `.neko/release.state.json` cannot currently be proven to land in release-it's commit.
 
 See [Version materialization](version-materialization.md) and [Git release coordination](git-coordination.md).

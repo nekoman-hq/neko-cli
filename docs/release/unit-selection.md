@@ -41,4 +41,4 @@ neko release patch --unit api --dry-run
 neko release resume --unit api --dry-run
 ```
 
-V2 non-dry-run release execution is active only for `delivery: github-actions`. V2 local non-dry-run release execution remains blocked.
+V2 non-dry-run release execution is active only for `delivery: github-actions`. Existing V2 configs with `delivery: local` are rejected during validation.

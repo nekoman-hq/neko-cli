@@ -42,13 +42,13 @@
           "name": "delivery",
           "type": "string",
           "required": true,
-          "description": "Release delivery mode (local|github-actions)"
+          "description": "Release delivery mode (github-actions)"
         },
         {
           "name": "workflow",
           "type": "string",
           "required": false,
-          "description": "GitHub Actions workflow path, required for github-actions delivery"
+          "description": "GitHub Actions workflow path, required for V2 github-actions delivery"
         },
         {
           "name": "tag-prefix",
@@ -149,13 +149,13 @@
           "name": "delivery",
           "type": "string",
           "required": true,
-          "description": "Release delivery mode (local|github-actions)"
+          "description": "Release delivery mode (github-actions)"
         },
         {
           "name": "workflow",
           "type": "string",
           "required": false,
-          "description": "GitHub Actions workflow path, required for github-actions delivery"
+          "description": "GitHub Actions workflow path, required for V2 github-actions delivery"
         },
         {
           "name": "tag-prefix",

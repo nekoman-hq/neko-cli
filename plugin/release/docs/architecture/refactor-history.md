@@ -72,7 +72,7 @@ Active production bypasses mutable registry lookup. Registry-backed release entr
 
 - V1 compensation is interruption-safe only for supported local actions and intentionally manual for uncertain remote or executor ambiguity.
 - Pair and migration recovery is evidence-driven but refuses corrupt, externally edited, unsupported, or owner-ambiguous evidence.
-- V2 local delivery remains blocked and inactive.
+- V2 local delivery was later evaluated and rejected for executable V2 releases.
 - Compatibility registries, version-evidence globals, cwd facades, and broad public wrappers remain only as documented compatibility surfaces.
 - Plugin-index output policy remains intentionally undecided until generated-output path semantics are designed.
 
