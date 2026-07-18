@@ -32,6 +32,14 @@ These guarantees are crash-recoverable, not cross-file atomic. Corrupt, external
 
 No repair command, remote reconciliation, unsafe completion inference, or schema migration exists without a separate evidence-specific design.
 
+### Responsive Evidence presentation
+
+Evidence summaries opt in to Core's small typed `HumanTable` transport declaration. The Release Plugin owns the ordered labels and essential/optional meaning; Core owns only actual-writer width detection, Unicode- and ANSI-aware visible-cell measurement, optional-column fitting, table-versus-vertical choice, wrapping, and truthful `wide` behavior. Width-unavailable output uses deterministic vertical records. Commands without the declaration retain legacy rendering.
+
+Presentation metadata does not alter `Data` and is excluded from public JSON and raw JSON. Existing unfiltered Evidence JSON retains the complete `items`, typed `evidence`, and `diagnostics` contract. Full forensic values are not summary columns and remain available through JSON and read-only detail inspection.
+
+Identity detail accepts only 8-64 lowercase hexadecimal characters, applies family and unit filters before matching, and requires exactly one result. It neither normalizes uppercase nor chooses a first match. Prefix matching is inspection-only: Evidence archival still requires the exact 64-character identity, current digest, supported completed lifecycle, and explicit confirmation. Classification, resume, automatic-continuation, manual-recovery, lifecycle, redaction, ordering, and secret policy remain Evidence-owned and unchanged.
+
 ### V1 compatibility policy and retired release paths
 
 The V1 compatibility policy documents which exported surfaces are kept, deprecated, deferred, removed, or still dependent on downstream evidence. Production composition uses explicit V1 executor values and bypasses mutable registry lookup.

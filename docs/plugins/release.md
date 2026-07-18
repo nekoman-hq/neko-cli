@@ -520,8 +520,20 @@ neko release evidence [flags]
 |------|------|---------|-------------|
 | `--family` | string | | Filter by `release-execution`, `dispatch`, `migration`, `v1-compensation`, or `v2-pair-recovery` |
 | `--unit` | string | | Filter records by release unit when the evidence records one |
+| `--identity` | string | | Inspect one record using an unambiguous 8-64 character lowercase hexadecimal identity prefix after family and unit filters |
 
-The command reports redacted summaries plus diagnostics for corrupt, unsupported, conflicting, unresolved, terminal, and completed evidence. It does not print tokens, request headers, raw response bodies, process output, environment values, or full evidence files.
+The command reports redacted summaries plus diagnostics for corrupt, unsupported, conflicting, unresolved, terminal, and completed evidence. Human summaries prioritize `Family`, `State`, `Classification`, `Resume`, and `Recovery`; `Unit`, `Version`, `Tag`, `Pending action`, `Automatic`, and `Lifecycle` are optional in that order. Table output uses the actual terminal width, omits optional columns that do not fit, and switches to vertical records when the essential columns do not fit or width is unavailable. `--output wide` permits all of those summary fields but never adds full identity, digest, owner, path, guidance, or timestamps.
+
+Use JSON to obtain the complete identity, then inspect all safe fields for one record:
+
+```bash
+neko release evidence --family release-execution --unit api --output json
+neko release evidence --family release-execution --unit api --identity 0123abcd
+```
+
+Identity inspection is read-only. The prefix is trimmed, must contain 8 through 64 lowercase hexadecimal characters, and is not case-normalized. Family and unit filters are applied first; zero matches and multiple matches are errors, and a full 64-character identity is accepted. Human detail uses the existing property/value format. Detail JSON retains `items`, `evidence`, and `diagnostics`, with the complete typed Evidence record under `evidence`.
+
+Existing summary JSON is unchanged: it still contains complete `data.items`, typed `data.evidence`, and `data.diagnostics`; human presentation metadata is excluded. The command does not print tokens, request headers, raw response bodies, process output, environment values, or full evidence files.
 
 ### `neko release evidence-archive`
 
@@ -537,7 +549,7 @@ neko release evidence-archive --family <family> --identity <sha256> --digest-sha
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--family` | string | | Required evidence family |
-| `--identity` | string | | Evidence identity from `neko release evidence --output json` |
+| `--identity` | string | | Exact 64-character Evidence identity from `neko release evidence --output json`; prefixes are not accepted for archival |
 | `--digest-sha256` | string | | Current evidence digest from inspection output |
 | `--confirm-archive` | bool | `false` | Required explicit confirmation |
 

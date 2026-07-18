@@ -96,6 +96,15 @@ Data: map[string]any{
 }
 ```
 
+Responsive tables are explicitly opt-in through `plugin.Response.HumanTable`.
+Its ordered `HumanColumn` declarations carry only a data key, human label, and
+essential marker. Core owns terminal-width detection, ANSI/Unicode display
+width, optional-column fitting, vertical fallback, wrapping, and bounded
+human-only truncation. A plugin owns the semantic priority and must retain the
+complete typed result in `Data`. Presentation metadata is transported between
+the plugin and Core but is excluded from public JSON and raw JSON. Do not add
+domain fields, callbacks, layout modes, or policy to Core.
+
 ### 4. Config File Naming
 
 Plugin config files usually follow the pattern: `.{plugin-name}.neko.json`
@@ -205,7 +214,7 @@ echo '{"command":"init-options","args":[],"flags":{},"context":{}}' | ./plugin/r
 
 - `--output table` (default) - kubectl-style table
 - `--output json` - Raw JSON
-- `--output wide` - Extended table
+- `--output wide` - All declared summary columns for opted-in responsive tables; legacy behavior otherwise
 - `--describe` - Include logs and metadata
 - `-v, --verbose` - Verbose logging
 

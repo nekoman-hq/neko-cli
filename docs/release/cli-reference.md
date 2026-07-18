@@ -60,6 +60,7 @@ neko release resume --unit api
 neko release resume --unit api --dry-run
 neko release evidence
 neko release evidence --family release-execution
+neko release evidence --family release-execution --unit api --identity 0123abcd
 neko release evidence-archive --family release-execution --identity <sha256> --digest-sha256 <sha256> --confirm-archive
 neko release plugin-index
 neko release plugin-index --check
@@ -111,7 +112,11 @@ For `delivery: github-actions`, V2 config must include `workflow: ".github/workf
 
 The execution journal records V2 release phases and recovery evidence under the Git common directory. The dispatch contract targets GitHub.com remotes only, uses `GITHUB_TOKEN` with repository Actions write permission, sends the existing unit tag as `ref`, and sends exactly four inputs: `unit`, `version`, `tag`, and `release_sha`. No public standalone dispatch or retry command exists.
 
-`neko release evidence` is read-only. It inspects release-execution journals, dispatch journals, migration journals, V1 compensation evidence, and V2 pair-recovery evidence with redacted summaries and diagnostics for corrupt, unsupported, conflicting, terminal, unresolved, and completed evidence. `neko release evidence-archive` supports only `archive-completed` for completed `release-execution`, `v1-compensation`, and completed `v2-pair-recovery` evidence. It requires `--family`, `--identity`, the current `--digest-sha256` from inspection output, and `--confirm-archive`; it writes an exact private archive before removing the completed source evidence. It does not repair, retry, infer remote state, or archive dispatch/migration evidence.
+`neko release evidence` is read-only. It inspects release-execution journals, dispatch journals, migration journals, V1 compensation evidence, and V2 pair-recovery evidence with redacted summaries and diagnostics for corrupt, unsupported, conflicting, terminal, unresolved, and completed evidence. Human table output prioritizes family, state, classification, resume eligibility, and manual recovery; optional unit/version/tag/pending/automatic/lifecycle columns are admitted by available terminal width. Narrow, piped, redirected, or otherwise width-unknown human output uses vertical records. `--output wide` permits every declared summary column but excludes forensic detail fields.
+
+`neko release evidence --identity <prefix>` selects one complete redacted record after `--family` and `--unit` filters. Prefixes must be 8-64 lowercase hexadecimal characters; uppercase input is rejected rather than normalized, full identities are accepted, and zero or ambiguous matches fail. Human output uses property/value detail. JSON retains `data.items`, `data.evidence`, and `data.diagnostics`, including the complete typed record, while existing summary JSON remains byte-for-byte schema compatible and excludes presentation metadata.
+
+`neko release evidence-archive` supports only `archive-completed` for completed `release-execution`, `v1-compensation`, and completed `v2-pair-recovery` evidence. It still requires `--family`, the exact 64-character `--identity`, the current `--digest-sha256` from inspection output, and `--confirm-archive`; identity prefixes are inspection-only. It writes an exact private archive before removing the completed source evidence. Neither Evidence command repairs, retries, infers remote state, or archives dispatch/migration evidence.
 
 `neko release plugin-index` generates the public plugin registry index from V2 plugin units, `.neko/release.state.json`, and plugin manifests. The generated `plugin-index.json` is not committed as source and is not published by this command. Plugin release workflows publish or replace it as the `plugin-index.json` asset on the mutable `plugin-registry` GitHub Release after successful plugin releases. Runtime `neko plugin available`, `install`, and `update` use that asset as the source of truth and do not use `/releases/latest` or release-prefix fallback discovery for plugin discovery.
 

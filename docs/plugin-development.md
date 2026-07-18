@@ -361,6 +361,17 @@ type Response struct {
     Error        *ResponseError   `json:"error,omitempty"`
     RendererHint string           `json:"renderer_hint,omitempty"` // "table", "json", "text"
     Logs         []LogEntry       `json:"logs,omitempty"`          // Populated by dispatcher
+    HumanTable   *HumanTable      `json:"human_table,omitempty"`   // Optional human presentation metadata
+}
+
+type HumanTable struct {
+    Columns []HumanColumn `json:"columns"`
+}
+
+type HumanColumn struct {
+    Key       string `json:"key"`
+    Label     string `json:"label"`
+    Essential bool   `json:"essential,omitempty"`
 }
 
 type ResponseMetadata struct {
@@ -399,6 +410,23 @@ Data: map[string]any{
     },
 }
 ```
+
+Commands may opt in to responsive human output by attaching `HumanTable` to
+the response. Column order is declaration order; non-essential columns use the
+same order as their admission priority. Core measures the actual output
+writer, ANSI-free Unicode display cells, and the declared values. It renders a
+table when all essential columns fit, adds optional columns while they fit,
+and otherwise uses vertical records. An unavailable width, including a pipe or
+redirected file, deterministically uses vertical records. `--output wide`
+permits every declared summary column for opted-in responses, falling back to
+vertical records when the complete declaration does not fit.
+
+This capability is presentation-only. Keep complete command data in `Data`.
+The `human_table` declaration crosses the plugin transport so Core can render
+it, but Core excludes it from public `--output json` and raw JSON. Commands
+without `HumanTable` retain the legacy inferred table and existing `wide`
+behavior. Plugins own field meaning, labels, order, and essential/optional
+classification; Core owns only layout mechanics.
 
 ---
 
