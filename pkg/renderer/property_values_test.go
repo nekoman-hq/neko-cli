@@ -43,6 +43,10 @@ func TestPropertyValuesUseBoundedTwoColumnLayoutAndWrapValues(t *testing.T) {
 	if !continuationFound {
 		t.Fatalf("wrapped value continuation was not aligned under VALUE:\n%s", plain)
 	}
+	if !strings.Contains(plain, "Release plan inspected locally;") ||
+		!strings.Contains(plain, "\n"+continuationIndent+"no release execution was") {
+		t.Fatalf("property values were not wrapped at readable word boundaries:\n%s", plain)
+	}
 	assertRenderedLinesFit(t, output, outputWidth)
 }
 

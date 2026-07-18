@@ -24,5 +24,5 @@ func wrapVisibleLines(value string, width int) []string {
 	if width <= 0 {
 		return strings.Split(value, "\n")
 	}
-	return strings.Split(ansi.Hardwrap(value, width, false), "\n")
+	return strings.Split(ansi.Wrap(value, width, ""), "\n")
 }
