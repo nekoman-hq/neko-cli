@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/release"
 	"gopkg.in/yaml.v3"
 )
 
@@ -226,6 +227,17 @@ func TestGitHubActionsGoldenPathUsesOnlyWorkflowDispatch(t *testing.T) {
 		return
 	}
 	t.Fatal("documented workflow trigger is missing")
+}
+
+func TestGitHubActionsGoldenPathMatchesCanonicalWorkflowRenderer(t *testing.T) {
+	documented := extractGoldenPathWorkflow(t, readGoldenPathDocument(t)) + "\n"
+	generated, err := release.RenderCanonicalGitHubActionsReleaseWorkflow()
+	if err != nil {
+		t.Fatalf("render canonical GitHub Actions release workflow: %v", err)
+	}
+	if documented != string(generated) {
+		t.Fatal("documented Golden Path workflow drifted from the canonical renderer")
+	}
 }
 
 func TestGitHubActionsGoldenPathNavigation(t *testing.T) {
