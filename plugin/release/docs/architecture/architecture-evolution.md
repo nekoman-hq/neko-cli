@@ -136,6 +136,15 @@ The command has its own typed request, read-only use case, typed result, command
 
 The inspection use case receives no token resolver, remote client, journal writer, evidence writer, Git mutator, executor runner, state persister, materialization transaction, dispatcher, or recovery capability. It does not inspect execution journals, dispatch journals, recovery evidence, remote tags, remote releases, workflow runs, token availability, provider authorization, or publication readiness.
 
+The command-boundary mapper keeps the established machine-readable
+`data.items` projection and complete typed limitation records. Its
+transport-only property declaration gives every limitation a Release-owned
+human-readable title and direct presentation value. Core remains
+Release-neutral: it owns actual-width resolution, bounded label/value layout,
+ANSI/Unicode visible-cell measurement, wrapping, continuation indentation,
+separator bounds, and deterministic vertical fallback. Public JSON, raw JSON,
+GitHub output, planning facts, and read-only behavior are unchanged.
+
 Existing `patch`, `minor`, and `major --dry-run` behavior remains a separate compatibility surface. Dry-run keeps its established response order and progress output while sharing V2 planning facts below the presentation boundary.
 
 V1 inspection is supported as a local planning subset: it reports the legacy source, virtual `default` unit, current and next version, tag, executor, planned `.release.neko.json` materialization, and limitations. It does not use the old cwd-based latest-tag evidence facade.

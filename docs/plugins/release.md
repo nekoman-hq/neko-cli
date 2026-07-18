@@ -318,7 +318,11 @@ neko release plan --change patch --unit api
 neko release plan --change patch --unit plugin-release --output json
 ```
 
-`plan` reports the selected release source and unit, current version, requested change, next version, tag, planned materialized files, known release files, local readiness, local blockers, and explicit limitations. It is strictly read-only and token-free: it does not read `GITHUB_TOKEN`, inspect remotes, inspect execution or dispatch journals, write config/state/manifests, mutate Git, dispatch workflows, publish releases, or run executors.
+`plan` reports the selected release source and unit, current version, requested change, next version, tag, planned materialized files, known release files, local readiness, local blockers, and explicit limitations. Human-readable output presents each limitation with its own semantic label, including local-only inspection, omitted Evidence inspection, omitted remote checks, and token-free operation; it no longer combines them into one pipe-delimited terminal value. The underlying typed limitations and the established JSON `data.items` projection are unchanged.
+
+Property/value output uses the actual terminal width. Normal and wide output bound the label column and wrap long paths, status text, blockers, and limitation descriptions with continuation lines aligned below the value column. Very narrow, piped, redirected, or otherwise width-unknown output uses deterministic vertical properties. `--output json` remains the machine-readable response and excludes presentation metadata.
+
+The command is strictly read-only and token-free: it does not read `GITHUB_TOKEN`, inspect remotes, inspect execution or dispatch journals, write config/state/manifests, mutate Git, dispatch workflows, publish releases, or run executors.
 
 Use `plan` when tooling or a human needs stable local planning facts. Use `patch`, `minor`, or `major --dry-run` when you want the existing release preview contract. Use `resume --dry-run` or `evidence` for already-started release execution and recovery state.
 

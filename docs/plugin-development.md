@@ -355,13 +355,15 @@ The plugin returns a `Response` via stdout:
 
 ```sh
 type Response struct {
-    Status       string           `json:"status"`        // "success" or "error"
-    Metadata     ResponseMetadata `json:"metadata"`
-    Data         map[string]any   `json:"data,omitempty"`
-    Error        *ResponseError   `json:"error,omitempty"`
-    RendererHint string           `json:"renderer_hint,omitempty"` // "table", "json", "text"
-    Logs         []LogEntry       `json:"logs,omitempty"`          // Populated by dispatcher
-    HumanTable   *HumanTable      `json:"human_table,omitempty"`   // Optional human presentation metadata
+    Status          string           `json:"status"`        // "success" or "error"
+    Metadata        ResponseMetadata `json:"metadata"`
+    Data            map[string]any   `json:"data,omitempty"`
+    Error           *ResponseError   `json:"error,omitempty"`
+    RendererHint    string           `json:"renderer_hint,omitempty"`    // "table", "json", "text"
+    Logs            []LogEntry       `json:"logs,omitempty"`             // Populated by dispatcher
+    HumanTable      *HumanTable      `json:"human_table,omitempty"`      // Optional table presentation metadata
+    HumanProperties *HumanProperties `json:"human_properties,omitempty"` // Optional property presentation metadata
+    HumanText       *HumanText       `json:"human_text,omitempty"`       // Optional preformatted human output
 }
 
 type HumanTable struct {
@@ -372,6 +374,20 @@ type HumanColumn struct {
     Key       string `json:"key"`
     Label     string `json:"label"`
     Essential bool   `json:"essential,omitempty"`
+}
+
+type HumanProperties struct {
+    Properties []HumanProperty `json:"properties"`
+}
+
+type HumanProperty struct {
+    Key   string `json:"key,omitempty"`
+    Label string `json:"label"`
+    Value any    `json:"value,omitempty"`
+}
+
+type HumanText struct {
+    Content string `json:"content"`
 }
 
 type ResponseMetadata struct {
@@ -427,6 +443,30 @@ it, but Core excludes it from public `--output json` and raw JSON. Commands
 without `HumanTable` retain the legacy inferred table and existing `wide`
 behavior. Plugins own field meaning, labels, order, and essential/optional
 classification; Core owns only layout mechanics.
+
+#### Property/value presentation
+
+Core recognizes ordered `items` containing exactly `property` and `value`, and
+plugins can explicitly declare property order with `HumanProperties`. A
+`HumanProperty` either references one stable `Data` key through `Key` or carries
+one presentation-only `Value`; the two sources are mutually exclusive. Direct
+values support human-readable grouping that differs from the stable machine
+projection, while complete typed command data remains in `Data`.
+
+When the actual output width is known, Core bounds the property-label column,
+reserves readable value space, measures ANSI-free Unicode display cells, and
+wraps labels and values at grapheme-safe word boundaries. Continuation lines
+start under the value column, and the separator never exceeds the writer width.
+Very narrow output uses a vertical property layout. Pipes, redirects, and other
+width-unknown writers use the same deterministic vertical layout without
+assuming a synthetic terminal width. `table`, `wide`, and describe output share
+these property mechanics; unrelated list and responsive-table renderers keep
+their own layouts.
+
+`human_properties` and its direct values are plugin-to-Core presentation
+metadata. Core excludes them from public `--output json` and raw JSON, just as
+it excludes `human_table` and `human_text`. GitHub output is still selected only
+by explicit GitHub output declarations and destination options.
 
 ---
 

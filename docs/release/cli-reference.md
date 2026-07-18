@@ -144,7 +144,7 @@ stateCommitGuarantee
 executorStart
 ```
 
-`neko release plan --change <patch|minor|major> [--unit <unit>]` is a dedicated local plan inspection command. It reports the selected release source and unit, current version, requested change, next version, tag, planned materialized files, known release files, local readiness, local blockers, and explicit limitations. It does not read tokens, inspect remotes, inspect execution or dispatch journals, write files, mutate Git, dispatch workflows, publish releases, or start executors. It is separate from `--dry-run`: dry-run keeps the existing release preview contract, while `plan` is for stable local planning facts.
+`neko release plan --change <patch|minor|major> [--unit <unit>]` is a dedicated local plan inspection command. It reports the selected release source and unit, current version, requested change, next version, tag, planned materialized files, known release files, local readiness, local blockers, and explicit limitations. Human-readable output gives every limitation its own semantic label instead of one pipe-delimited value. At a known width, property labels are bounded and long values wrap with aligned continuation lines; very narrow or width-unknown output uses vertical properties. The typed plan facts and established JSON `data.items` projection are unchanged. The command does not read tokens, inspect remotes, inspect execution or dispatch journals, write files, mutate Git, dispatch workflows, publish releases, or start executors. It is separate from `--dry-run`: dry-run keeps the existing release preview contract, while `plan` is for stable local planning facts.
 
 Unsupported or read-only boundaries:
 
@@ -187,8 +187,10 @@ it. Lightweight and annotated tags are accepted. Detached HEAD is accepted when
 it matches. Missing or incomplete local tag history fails with guidance; the
 command never fetches.
 
-Default table output is an ordered property/value view. `--output json` returns
-the normal response envelope with deterministic `data` keys:
+Default table output is an ordered responsive property/value view. Long values
+wrap within the actual output width, and narrow or width-unknown output uses
+vertical properties. `--output json` returns the normal response envelope with
+deterministic `data` keys:
 
 ```text
 valid

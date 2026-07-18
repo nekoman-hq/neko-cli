@@ -105,6 +105,17 @@ complete typed result in `Data`. Presentation metadata is transported between
 the plugin and Core but is excluded from public JSON and raw JSON. Do not add
 domain fields, callbacks, layout modes, or policy to Core.
 
+Ordered property/value responses are responsive as well. Core recognizes the
+established `items[property,value]` shape or an explicit
+`plugin.Response.HumanProperties` declaration. With a known writer width it
+bounds the label column, preserves value space, uses ANSI- and Unicode-aware
+visible-cell measurement, wraps at grapheme-safe word boundaries, aligns
+continuation lines below the value column, and bounds the separator. Narrow and
+width-unknown output uses deterministic vertical properties. A plugin owns
+labels, order, grouping, and any presentation-only `HumanProperty.Value`; Core
+must not interpret domain meaning. Presentation metadata remains absent from
+public JSON and raw JSON.
+
 ### 4. Config File Naming
 
 Plugin config files usually follow the pattern: `.{plugin-name}.neko.json`
