@@ -39,7 +39,13 @@ func main() {
 	// Set verbose mode from request context
 	log.Verbose = req.Context.Verbose
 
-	root, err := resolveRequestRoot(req)
+	var root workspace.RepositoryRoot
+	var err error
+	if req.Command == "doctor" {
+		root, err = workspace.ResolveInspectionRepositoryRoot(req.Context.WorkingDir)
+	} else {
+		root, err = workspace.ResolveRepositoryRoot(req.Context.WorkingDir)
+	}
 	if err != nil {
 		pluginerrors.WriteError("WORKSPACE_ERROR", err.Error())
 	}
@@ -62,13 +68,6 @@ func main() {
 	if err := json.NewEncoder(os.Stdout).Encode(resp); err != nil {
 		pluginerrors.WriteError("RESPONSE_ERROR", fmt.Sprintf("failed to encode response: %v", err))
 	}
-}
-
-func resolveRequestRoot(req plugin.Request) (workspace.RepositoryRoot, error) {
-	if req.Command == "doctor" {
-		return workspace.ResolveInspectionRepositoryRoot(req.Context.WorkingDir)
-	}
-	return workspace.ResolveRepositoryRoot(req.Context.WorkingDir)
 }
 
 func handleRequestAt(root workspace.RepositoryRoot, req plugin.Request, v1Executors []release.V1Executor) (*plugin.Response, error) {
