@@ -35,7 +35,7 @@ func (filesystemGitHubWorkflowScaffoldSourceReader) Read(root string) (*releasec
 	if v1Present {
 		return nil, failureFromMessage("V2_WORKFLOW_SOURCE_CONFLICT", "V1 and V2 release sources conflict at the repository root")
 	}
-	if err := releaseconfig.ValidateV2PairRecoveryReadiness(root); err != nil {
+	if recoveryErr := releaseconfig.ValidateV2PairRecoveryReadiness(root); recoveryErr != nil {
 		return nil, failureFromMessage("V2_WORKFLOW_RECOVERY_BLOCKED", "unresolved V2 pair recovery evidence blocks workflow scaffolding; inspect evidence before continuing")
 	}
 

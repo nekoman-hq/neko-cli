@@ -17,19 +17,16 @@ import (
 
 func TestGitHubWorkflowScaffoldRequestErrorsUseStableResponses(t *testing.T) {
 	root := newWorkflowScaffoldRepository(t, map[string]string{"api": ".github/workflows/release.yml"})
-	tests := []struct {
-		name  string
-		flags map[string]any
-	}{
-		{name: "unit type", flags: map[string]any{"unit": true}},
-		{name: "path whitespace", flags: map[string]any{"path": " .github/workflows/release.yml"}},
-		{name: "dry run type", flags: map[string]any{"dry-run": "true"}},
+	tests := map[string]map[string]any{
+		"unit type":       {"unit": true},
+		"path whitespace": {"path": " .github/workflows/release.yml"},
+		"dry run type":    {"dry-run": "true"},
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
+	for name, flags := range tests {
+		t.Run(name, func(t *testing.T) {
 			response, err := HandleGitHubWorkflowInitAt(root, plugin.Request{
 				Command: githubWorkflowInitCommandName,
-				Flags:   test.flags,
+				Flags:   flags,
 			})
 			if err != nil {
 				t.Fatalf("invalid request returned Go error: %v", err)
@@ -109,8 +106,8 @@ func TestGitHubWorkflowScaffoldPreviewClassifiesIdenticalTargetWithoutWriting(t 
 	if err != nil {
 		t.Fatalf("render workflow: %v", err)
 	}
-	if err := os.WriteFile(target, content, 0644); err != nil {
-		t.Fatalf("write identical target: %v", err)
+	if writeErr := os.WriteFile(target, content, 0644); writeErr != nil {
+		t.Fatalf("write identical target: %v", writeErr)
 	}
 	before, err := os.Stat(target)
 	if err != nil {
@@ -148,15 +145,15 @@ func TestGitHubWorkflowScaffoldRejectsSymlinksAndUnsafeNames(t *testing.T) {
 
 	root = newWorkflowScaffoldRepository(t, map[string]string{"api": ".github/workflows/release.yml"})
 	directory := filepath.Join(root.Path(), ".github", "workflows")
-	if err := os.MkdirAll(directory, 0755); err != nil {
-		t.Fatalf("create workflow directory: %v", err)
+	if directoryErr := os.MkdirAll(directory, 0755); directoryErr != nil {
+		t.Fatalf("create workflow directory: %v", directoryErr)
 	}
 	outsideTarget := filepath.Join(t.TempDir(), "outside.yml")
-	if err := os.WriteFile(outsideTarget, []byte("name: outside\n"), 0644); err != nil {
-		t.Fatalf("write outside target: %v", err)
+	if outsideWriteErr := os.WriteFile(outsideTarget, []byte("name: outside\n"), 0644); outsideWriteErr != nil {
+		t.Fatalf("write outside target: %v", outsideWriteErr)
 	}
-	if err := os.Symlink(outsideTarget, filepath.Join(directory, "release.yml")); err != nil {
-		t.Fatalf("create target symlink: %v", err)
+	if symlinkErr := os.Symlink(outsideTarget, filepath.Join(directory, "release.yml")); symlinkErr != nil {
+		t.Fatalf("create target symlink: %v", symlinkErr)
 	}
 	response, err = HandleGitHubWorkflowInitAt(root, plugin.Request{Command: githubWorkflowInitCommandName})
 	if err != nil || response.Status != "error" || response.Error.Code != "WORKFLOW_TARGET_SYMLINK_ESCAPE" {
@@ -203,11 +200,11 @@ func TestGitHubWorkflowScaffoldUsesExplicitRootsAcrossNestedInvocations(t *testi
 	if err != nil || created.Status != "success" || created.Data["target"] != ".github/workflows/release-web.yml" {
 		t.Fatalf("second-root creation failed: response=%#v err=%v", created, err)
 	}
-	if _, err := os.Stat(filepath.Join(first.Path(), ".github", "workflows", "release.yml")); !os.IsNotExist(err) {
-		t.Fatalf("nested preview wrote into first repository: %v", err)
+	if _, firstStatErr := os.Stat(filepath.Join(first.Path(), ".github", "workflows", "release.yml")); !os.IsNotExist(firstStatErr) {
+		t.Fatalf("nested preview wrote into first repository: %v", firstStatErr)
 	}
-	if _, err := os.Stat(filepath.Join(second.Path(), ".github", "workflows", "release-web.yml")); err != nil {
-		t.Fatalf("second repository target missing: %v", err)
+	if _, secondStatErr := os.Stat(filepath.Join(second.Path(), ".github", "workflows", "release-web.yml")); secondStatErr != nil {
+		t.Fatalf("second repository target missing: %v", secondStatErr)
 	}
 	cwdAfter, err := os.Getwd()
 	if err != nil {

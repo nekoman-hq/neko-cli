@@ -48,8 +48,8 @@ func TestHandleGitHubWorkflowInitCreatesConfiguredWorkflowIdempotently(t *testin
 	}
 
 	preservedTime := time.Unix(1_700_000_000, 0)
-	if err := os.Chtimes(target, preservedTime, preservedTime); err != nil {
-		t.Fatalf("set workflow modification time: %v", err)
+	if chtimesErr := os.Chtimes(target, preservedTime, preservedTime); chtimesErr != nil {
+		t.Fatalf("set workflow modification time: %v", chtimesErr)
 	}
 	response, err = HandleGitHubWorkflowInitAt(root, plugin.Request{Command: githubWorkflowInitCommandName})
 	if err != nil || response.Status != "success" {
