@@ -153,10 +153,10 @@ func validateReleaseContextRequestSyntax(request ReleaseContextValidationRequest
 		name  string
 		value string
 	}{
-		{name: "unit", value: request.UnitID},
-		{name: "version", value: request.Version},
-		{name: "tag", value: request.Tag},
-		{name: "release_sha", value: request.ReleaseSHA},
+		{name: workflowDispatchInputUnit, value: request.UnitID},
+		{name: workflowDispatchInputVersion, value: request.Version},
+		{name: workflowDispatchInputTag, value: request.Tag},
+		{name: workflowDispatchInputReleaseSHA, value: request.ReleaseSHA},
 	}
 	for _, value := range values {
 		if !exactRequiredValue(value.value) {

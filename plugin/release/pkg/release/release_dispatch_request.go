@@ -79,12 +79,7 @@ func BuildReleaseDispatchRequest(ctx *ReleaseExecutionContext, result *GitReleas
 	if err != nil {
 		return nil, err
 	}
-	inputs := map[string]string{
-		"unit":        ctx.Unit.ID,
-		"version":     ctx.NextVersion,
-		"tag":         ctx.Tag,
-		"release_sha": result.CommitSHA,
-	}
+	inputs := canonicalWorkflowDispatchInputValues(ctx.Unit.ID, ctx.NextVersion, ctx.Tag, result.CommitSHA)
 	return &ReleaseDispatchRequest{
 		RepositoryRemoteName: remoteName,
 		UnitID:               ctx.Unit.ID,
@@ -118,12 +113,7 @@ func BuildReleaseDispatchDryRunSummary(ctx *ReleaseExecutionContext) (*ReleaseDi
 	if strings.TrimSpace(ctx.Workflow) == "" {
 		return nil, fmt.Errorf("github-actions workflow is missing")
 	}
-	inputs := map[string]string{
-		"unit":        ctx.Unit.ID,
-		"version":     ctx.NextVersion,
-		"tag":         ctx.Tag,
-		"release_sha": "pending release commit",
-	}
+	inputs := canonicalWorkflowDispatchInputValues(ctx.Unit.ID, ctx.NextVersion, ctx.Tag, "pending release commit")
 	return &ReleaseDispatchDryRunSummary{
 		Ref:             ctx.Tag,
 		Inputs:          inputs,

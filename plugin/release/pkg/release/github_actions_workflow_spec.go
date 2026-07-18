@@ -11,11 +11,6 @@ import (
 // schema versions.
 const GitHubActionsReleaseWorkflowContractVersion = 1
 
-type githubActionsReleaseWorkflowInput struct {
-	Name        string
-	Description string
-}
-
 type githubActionsReleaseWorkflowSpec struct {
 	Name                         string
 	CheckoutAction               string
@@ -23,7 +18,7 @@ type githubActionsReleaseWorkflowSpec struct {
 	InstallScriptURL             string
 	NekoVersionVariable          string
 	ReleasePluginVersionVariable string
-	Inputs                       []githubActionsReleaseWorkflowInput
+	Inputs                       []workflowDispatchInputDefinition
 	ContractVersion              int
 	CancelReleaseInFlight        bool
 }
@@ -36,12 +31,7 @@ func canonicalGitHubActionsReleaseWorkflowSpec() githubActionsReleaseWorkflowSpe
 		InstallScriptURL:             "https://raw.githubusercontent.com/nekoman-hq/neko-cli/main/install.sh",
 		NekoVersionVariable:          "NEKO_VERSION",
 		ReleasePluginVersionVariable: "NEKO_RELEASE_PLUGIN_VERSION",
-		Inputs: []githubActionsReleaseWorkflowInput{
-			{Name: "unit", Description: "Neko Release V2 unit id"},
-			{Name: "version", Description: "Neko-authoritative release version"},
-			{Name: "tag", Description: "Neko-created unit tag"},
-			{Name: "release_sha", Description: "Neko-created release commit SHA"},
-		},
+		Inputs:                canonicalWorkflowDispatchInputContract(),
 		ContractVersion:       GitHubActionsReleaseWorkflowContractVersion,
 		CancelReleaseInFlight: false,
 	}
@@ -76,13 +66,13 @@ func validateGitHubActionsReleaseWorkflowSpec(spec githubActionsReleaseWorkflowS
 		spec.NekoVersionVariable == "" || spec.ReleasePluginVersionVariable == "" {
 		return fmt.Errorf("canonical GitHub Actions release workflow specification is incomplete")
 	}
-	expectedInputs := []string{"unit", "version", "tag", "release_sha"}
+	expectedInputs := canonicalWorkflowDispatchInputContract()
 	if len(spec.Inputs) != len(expectedInputs) {
 		return fmt.Errorf("canonical GitHub Actions release workflow requires exactly four inputs")
 	}
 	for index, expected := range expectedInputs {
-		if spec.Inputs[index].Name != expected || spec.Inputs[index].Description == "" {
-			return fmt.Errorf("canonical GitHub Actions release workflow input %d must be %q with a description", index, expected)
+		if spec.Inputs[index] != expected || spec.Inputs[index].Description == "" {
+			return fmt.Errorf("canonical GitHub Actions release workflow input %d must be %q with a description", index, expected.Name)
 		}
 	}
 	return nil

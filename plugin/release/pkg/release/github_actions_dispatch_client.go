@@ -203,12 +203,12 @@ type workflowDispatchPayload struct {
 func canonicalWorkflowDispatchInputs(request *ReleaseDispatchRequest) map[string]string {
 	// Workflow inputs are intentionally minimal: the workflow must derive
 	// executor, delivery, paths and configuration from the checked-out tag.
-	return map[string]string{
-		"unit":        request.Inputs["unit"],
-		"version":     request.Inputs["version"],
-		"tag":         request.Inputs["tag"],
-		"release_sha": request.Inputs["release_sha"],
+	contract := canonicalWorkflowDispatchInputContract()
+	inputs := make(map[string]string, len(contract))
+	for _, definition := range contract {
+		inputs[definition.Name] = request.Inputs[definition.Name]
 	}
+	return inputs
 }
 
 func classifyGitHubActionsDispatchResponse(response *http.Response, token string) GitHubActionsDispatchResponse {
