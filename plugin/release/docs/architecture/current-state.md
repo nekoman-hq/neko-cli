@@ -39,6 +39,7 @@ The public command contract is duplicated between `manifest.json` and the switch
 | `pkg/validate` | Typed validation request/result boundary, focused V1/V2 validation query, and response mapping | `HandleValidate`, `validationQueryUseCase`, `mapValidationQueryResponse` | V1 validation retains its requirements adapter and `GITHUB_TOKEN` dependency; V2 config validation is token-independent and read-only. |
 | `pkg/history` | Typed history query, format-specific read-only Git capabilities, and response mapping | `HandleHistory`, `historyQueryUseCase`, `historyGitReader` | V1 deliberately retains non-erroring tag/count queries; V2 uses exact `TagSpec` matches and structured Git failures. |
 | `pkg/contributors` | Typed contributor query, repository/unit selection, focused shortlog capabilities, and response mapping | `HandleContributors`, `contributorsQueryUseCase`, `contributorsGitReader` | V1 repository-wide and V2 path-filtered reads share one command-owned read port without mutation capabilities. |
+| `pkg/evidence` | Read-only redacted inspection and guarded completed-evidence archival | `evidenceQueryUseCase`, `evidenceArchiveUseCase`, `ResolveReleaseEvidenceLocations` | Queries receive canonical Git-common-dir paths without receiving execution, dispatch, or V1 compensation stores; archival owns its separate narrow mutation boundary. |
 | `pkg/pluginindex` | Typed command modes, deterministic discovery/validation/order, pure JSON output building, and atomic requested-path persistence | `HandlePluginIndex`, `pluginIndexQueryUseCase`, `jsonPluginIndexOutputBuilder`, `atomicPluginIndexOutputPersister` | Check/render/persist retain their established outputs; all command failures remain Go errors that become top-level `EXECUTION_ERROR`. |
 | `pkg/git` | Legacy Git queries and the underlying compatibility operations used by focused V1 adapters | `IsClean`, `LatestTag`, `UnitTagsInHistory`, `Current`, `Contributors`, `ContributorsForPaths` | Direct process details remain below release-owned V1 ports; active V1 application code does not import retired raw retired-path cleanup helpers. |
 | `pkg/release` planning | Version bump, execution context, delivery/capability descriptions, materialization plan | `PlanUnitVersionBump`, `BuildReleaseExecutionContext`, `ResolveDelivery`, `ResolveExecutorCapabilities`, `ResolveVersionMaterializer` | `github-actions` is the supported V2 delivery mode; `local` is retained only for V1 compatibility and invalid V2 reporting. |
@@ -138,9 +139,12 @@ The public command contract is duplicated between `manifest.json` and the switch
   one unit path through `--unit`, or one exact configured path through
   `--path`. Shared paths remain one scope; multiple distinct paths are
   ambiguous until exactly selected.
-- Contract: `githubActionsReleaseWorkflowSpec` and one focused template render
-  deterministic workflow contract version `1`. The Golden Path documentation
-  snippet is tested byte-for-byte against the public renderer.
+- Contract: `workflowDispatchInputDefinition` owns the exact ordered input
+  names and descriptions used by request construction, dispatch filtering,
+  CI validation output, and `githubActionsReleaseWorkflowSpec`. One focused
+  template renders deterministic workflow contract version `1`. The Golden
+  Path documentation snippet is tested byte-for-byte against the public
+  renderer.
 - Plan: `githubWorkflowGenerationPlanner` receives source and renderer reads,
   no writer. It validates YAML and classifies missing content as create,
   byte-identical content as unchanged, and any other content as conflict.
@@ -381,7 +385,7 @@ V2 `workingDirectory` validation is lexical and physical: symlinked working dire
 - `ReleaseDispatchRequest`: immutable exact workflow inputs and identity.
 - `GitHubRepositoryTarget`: parsed GitHub.com owner/repository from the selected upstream remote.
 
-### Durable state machines
+### Durable lifecycle phases
 
 Execution journal confirmed phases are strictly monotonic:
 
@@ -449,9 +453,9 @@ The following are current behavior. They are not statements that every behavior 
 | INV-08 | The V2 unit tag is lightweight, encodes the selected next version, and targets the exact release commit. Re-creating an already-correct local tag is idempotent; a different target fails. | `GitReleaseCoordinator.CreateTag` | tag creation/idempotency/conflict tests |
 | INV-09 | V2 pushes the release commit before the unit tag. A commit-push failure skips tag push; a tag-push failure does not roll back the pushed commit. | `Push`, `PushCommit`, `PushTag`; active runner order | coordinator push-order tests and active-runner commit-push/tag-push failure tests |
 | INV-10 | The execution journal is stored as mode `0600` below `<git-common-dir>/neko/release/executions`, outside the worktree. Identity is a SHA-256 of immutable release intent including remote and base SHA. | `ReleaseExecutionIdentity`, `ReleaseExecutionJournalStore`, `releaseJournalFiles` | exact-byte/mode, identity, store, and linked-worktree tests |
-| INV-11 | The execution journal records a pending action before each active mutation and confirms the matching phase after success. Phases cannot skip or move backward; once-only identifiers cannot change. | `storeAndRun`, explicit runner pending blocks, `BeginPending`, `ConfirmPhase` | execution journal state-machine/store tests plus active-runner commit, tag, and push failure recovery assertions |
+| INV-11 | The execution journal records a pending action before each active mutation and confirms the matching phase after success. Phases cannot skip or move backward; once-only identifiers cannot change. | `storeAndRun`, explicit runner pending blocks, `BeginPending`, `ConfirmPhase` | execution journal phase-transition/store tests plus active-runner commit, tag, and push failure recovery assertions |
 | INV-12 | A dispatch journal is prepared after local commit/tag creation and before either push. Its immutable identity includes the final release commit SHA. | active runner order, `BuildReleaseDispatchRequest`, `DispatchJournalStore.Prepare` | dispatch request/journal tests; happy-path runner tests |
-| INV-13 | Workflow dispatch inputs are exactly `unit`, `version`, `tag`, and `release_sha`; the ref is the unit tag and the release SHA is the verified commit. | `canonicalWorkflowDispatchInputs`, `BuildReleaseDispatchRequest` | dispatch request/client tests and workflow contract tests |
+| INV-13 | Workflow dispatch inputs are exactly `unit`, `version`, `tag`, and `release_sha`; the ref is the unit tag and the release SHA is the verified commit. | `canonicalWorkflowDispatchInputContract`, `canonicalWorkflowDispatchInputValues`, `canonicalWorkflowDispatchInputs` | dispatch contract/request/client tests and workflow contract tests |
 | INV-14 | Dispatch persists `request-started` before HTTP. A 2xx response is accepted; 400/401/403/404/422/429 are rejected; transport errors, redirects, 5xx, and unexpected outcomes are unknown. | `GitHubActionsDispatcher.Dispatch`, `classifyGitHubActionsDispatchResponse` | dispatcher/client response, timeout, redirect, and outbound-call journal-observation tests |
 | INV-15 | A terminal dispatch journal (`request-started`, `accepted`, `rejected`, or `unknown`) prevents automatic redispatch. Unknown results are never treated as safe retries. | `DispatchJournalStore.Prepare`, `GitHubActionsDispatcher.Dispatch` | terminal-journal/state-transition tests, active-runner rejected/unknown tests, and resume no-retry tests |
 | INV-16 | An ambiguous pending commit/tag push blocks resume. Resume also refuses to infer completion from `dispatch-journal-prepared` or `commit-pushed`. | `resolveResumeRecovery`, `resumeReleaseUseCase` | pure state/pending policy table, direct pending commit/tag push tests, no-inference tests, and successful `commit-created`/`tag-created`/`tag-pushed` continuation tests |

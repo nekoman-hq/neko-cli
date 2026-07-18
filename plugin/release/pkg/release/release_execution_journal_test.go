@@ -275,7 +275,7 @@ func TestReleaseExecutionJournalStorePersistsPendingAndConfirmedPhase(t *testing
 	}
 }
 
-func TestReleaseExecutionJournalStateMachineAndPendingActions(t *testing.T) {
+func TestReleaseExecutionJournalPhaseTransitionsAndPendingActions(t *testing.T) {
 	journal := newPreparedExecutionJournal(t, newExecutionJournalContext(t, newGitHubActionsDispatchRepository(t)))
 	now := time.Date(2026, 7, 7, 12, 0, 0, 0, time.UTC)
 	if err := journal.ConfirmPhase(ReleaseExecutionMaterializationApplied, ReleaseExecutionJournalUpdate{}, now); err == nil {

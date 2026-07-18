@@ -26,7 +26,7 @@ These guarantees are crash-recoverable, not cross-file atomic. Corrupt, external
 
 ### Evidence inspection and archival
 
-`neko release evidence` is read-only and token-free. It reports redacted typed summaries and diagnostics for release execution journals, dispatch journals, migration journals, V1 compensation evidence, and V2 pair-recovery evidence.
+`neko release evidence` is read-only and token-free. It reports redacted typed summaries and diagnostics for release execution journals, dispatch journals, migration journals, V1 compensation evidence, and V2 pair-recovery evidence. Its query receives canonical Git-common-dir locations through `ResolveReleaseEvidenceLocations`; it never receives the mutation-capable execution, dispatch, or V1 compensation stores.
 
 `neko release evidence-archive` supports only completed release-execution, completed V1 compensation, and completed V2 pair-recovery evidence. It requires family, identity, current digest, and explicit confirmation; then it re-observes the evidence, writes and verifies an exact private archive, and removes the completed source. Dispatch and migration evidence remain inspect-only.
 
