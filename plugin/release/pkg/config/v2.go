@@ -13,8 +13,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-
-	"github.com/Masterminds/semver/v3"
 )
 
 const (
@@ -282,7 +280,7 @@ func validateV2ConfigAndState(repositoryRoot string, cfg *V2ReleaseConfig, state
 			if !ok {
 				return &v2ConfigStateAlignmentError{message: fmt.Sprintf("v2 state is missing unit %q", id)}
 			}
-			if _, err := semver.NewVersion(unitState.Version); err != nil {
+			if _, err := CanonicalReleaseVersion(unitState.Version); err != nil {
 				return fmt.Errorf("v2 state unit %q version %q is not valid SemVer", id, unitState.Version)
 			}
 		}

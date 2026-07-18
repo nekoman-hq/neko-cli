@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-
-	"github.com/Masterminds/semver/v3"
 )
 
 var strictTagVersionPattern = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*))?(?:\+[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?$`)
@@ -37,11 +35,11 @@ func (spec TagSpec) Parse(tag string) (string, bool) {
 	if versionPart == "" || strings.Contains(versionPart, "/") || !strictTagVersionPattern.MatchString(versionPart) {
 		return "", false
 	}
-	version, err := semver.NewVersion(versionPart)
+	version, err := CanonicalReleaseVersion(versionPart)
 	if err != nil {
 		return "", false
 	}
-	return version.String(), true
+	return version, true
 }
 
 // Matches reports whether tag belongs to this spec.

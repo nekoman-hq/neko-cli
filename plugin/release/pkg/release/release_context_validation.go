@@ -6,7 +6,6 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/Masterminds/semver/v3"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
@@ -167,7 +166,8 @@ func validateReleaseContextRequestSyntax(request ReleaseContextValidationRequest
 	if err := releaseconfig.ValidateReleaseUnitID(request.UnitID); err != nil {
 		return failureFromMessage("INVALID_CONTEXT_INPUT", "unit is not a valid V2 release unit id")
 	}
-	if _, err := semver.StrictNewVersion(request.Version); err != nil {
+	canonicalVersion, err := releaseconfig.CanonicalReleaseVersion(request.Version)
+	if err != nil || canonicalVersion != request.Version {
 		return failureFromMessage("INVALID_CONTEXT_INPUT", "version must be canonical semantic version syntax")
 	}
 	if !fullReleaseObjectIDPattern.MatchString(request.ReleaseSHA) {
@@ -177,7 +177,11 @@ func validateReleaseContextRequestSyntax(request ReleaseContextValidationRequest
 }
 
 func validateReleaseContextVersion(unit releaseconfig.ReleaseUnit, dispatchedVersion string) *CommandFailure {
-	if unit.Version != dispatchedVersion {
+	canonicalVersion, err := releaseconfig.CanonicalReleaseVersion(unit.Version)
+	if err != nil {
+		return failureFromMessage("V2_CONTEXT_SOURCE_INVALID", "the authoritative V2 state version is invalid")
+	}
+	if canonicalVersion != dispatchedVersion {
 		return failureFromMessage("RELEASE_VERSION_MISMATCH", "the dispatched version does not match the authoritative current V2 state version")
 	}
 	return nil

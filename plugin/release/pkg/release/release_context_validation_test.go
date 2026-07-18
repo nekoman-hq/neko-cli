@@ -150,6 +150,8 @@ func TestReleaseContextValidationUseCaseRejectsUnsafeInputBeforeDependencies(t *
 		{name: "option unit", mutate: func(request *ReleaseContextValidationRequest) { request.UnitID = "--api" }, code: "INVALID_CONTEXT_INPUT"},
 		{name: "long unknown unit", mutate: func(request *ReleaseContextValidationRequest) { request.UnitID = longUnit }, code: "RELEASE_UNIT_NOT_FOUND"},
 		{name: "malformed version", mutate: func(request *ReleaseContextValidationRequest) { request.Version = "1.2" }, code: "INVALID_CONTEXT_INPUT"},
+		{name: "prefixed version", mutate: func(request *ReleaseContextValidationRequest) { request.Version = "v1.2.3" }, code: "INVALID_CONTEXT_INPUT"},
+		{name: "noncanonical version", mutate: func(request *ReleaseContextValidationRequest) { request.Version = "01.2.3" }, code: "INVALID_CONTEXT_INPUT"},
 		{name: "abbreviated sha", mutate: func(request *ReleaseContextValidationRequest) { request.ReleaseSHA = "abcdef0" }, code: "INVALID_RELEASE_SHA"},
 		{name: "uppercase sha", mutate: func(request *ReleaseContextValidationRequest) { request.ReleaseSHA = strings.Repeat("A", 40) }, code: "INVALID_RELEASE_SHA"},
 		{name: "option sha", mutate: func(request *ReleaseContextValidationRequest) { request.ReleaseSHA = "--help" }, code: "INVALID_RELEASE_SHA"},
@@ -205,6 +207,28 @@ func TestReleaseContextValidationUseCaseSupportsRepositoryObjectIDFormats(t *tes
 				t.Fatalf("result=%#v failure=%#v", result, failure)
 			}
 		})
+	}
+}
+
+func TestReleaseContextValidationComparesCanonicalAuthoritativeVersion(t *testing.T) {
+	repository := contextValidationRepository()
+	repository.Units[0].Version = "v1.2.3"
+	sha := strings.Repeat("a", 40)
+	git := &recordingReleaseContextGit{
+		objectFormat: GitObjectFormatSHA1,
+		objectType:   "commit",
+		head:         sha,
+		tagExists:    true,
+		tagCommit:    sha,
+	}
+	useCase := releaseContextValidationUseCase{
+		sources: &recordingReleaseContextSource{repository: repository},
+		git:     git,
+	}
+
+	result, failure := useCase.Validate(context.Background(), validReleaseContextRequest())
+	if failure != nil || result == nil || result.Version != "1.2.3" {
+		t.Fatalf("result=%#v failure=%#v", result, failure)
 	}
 }
 
