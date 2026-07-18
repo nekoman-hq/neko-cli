@@ -132,14 +132,14 @@ func GetAvailableOptions() (*plugin.Response, error) {
 		},
 		{
 			"option":      "delivery",
-			"values":      "local, github-actions",
+			"values":      "github-actions",
 			"required":    true,
-			"description": "Release delivery mode",
+			"description": "V2 release delivery mode",
 		},
 		{
 			"option":      "workflow",
 			"values":      ".github/workflows/*.yml",
-			"required":    "conditional",
+			"required":    true,
 			"description": "GitHub Actions workflow path",
 		},
 		{

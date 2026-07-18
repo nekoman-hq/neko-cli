@@ -13,7 +13,8 @@ func testV2ReleasePair(unitID, version string) v2ReleasePair {
 				TagPrefix:        unitID + "/v",
 				Executor: config.V2Executor{
 					Type:     config.ExecutorGoReleaser,
-					Delivery: config.DeliveryLocal,
+					Delivery: config.DeliveryGitHubActions,
+					Workflow: ".github/workflows/release-cli.yml",
 				},
 			}},
 		},

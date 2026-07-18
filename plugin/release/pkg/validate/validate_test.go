@@ -15,11 +15,12 @@ import (
 
 func TestHandleValidateV2Show(t *testing.T) {
 	withWorkingDirectory(t)
+	mustWrite(t, ".github/workflows/release-default.yml", "name: release default\n")
 	writeV2(t, `{"schemaVersion":2,"units":[{
   "id":"default",
   "paths":["**"],
   "tagPrefix":"v",
-  "executor":{"type":"goreleaser"}
+  "executor":{"type":"goreleaser","delivery":"github-actions","workflow":".github/workflows/release-default.yml"}
 }]}`, `{"schemaVersion":2,"units":{"default":{"version":"2.2.4"}}}`)
 
 	resp, err := HandleValidate(plugin.Request{Flags: map[string]any{"show": true}})
@@ -29,11 +30,11 @@ func TestHandleValidateV2Show(t *testing.T) {
 	if resp.Status != "success" {
 		t.Fatalf("expected success, got %#v", resp.Error)
 	}
-	if !itemsContain(resp.Data["items"], "delivery=local") {
-		t.Fatalf("expected normalized delivery in show output, got %#v", resp.Data["items"])
+	if !itemsContain(resp.Data["items"], "delivery=github-actions") {
+		t.Fatalf("expected github-actions delivery in show output, got %#v", resp.Data["items"])
 	}
-	if !itemsContain(resp.Data["items"], "workflow=not applicable") {
-		t.Fatalf("expected local workflow to be not applicable, got %#v", resp.Data["items"])
+	if !itemsContain(resp.Data["items"], "workflow=.github/workflows/release-default.yml") {
+		t.Fatalf("expected workflow in show output, got %#v", resp.Data["items"])
 	}
 }
 
@@ -104,9 +105,11 @@ func TestHandleValidateV2ShowDisplaysPluginMetadata(t *testing.T) {
 
 func TestHandleValidateV2ShowFocusesRequestedUnit(t *testing.T) {
 	withWorkingDirectory(t)
+	mustWrite(t, ".github/workflows/release-api.yml", "name: release api\n")
+	mustWrite(t, ".github/workflows/release-web.yml", "name: release web\n")
 	writeV2(t, `{"schemaVersion":2,"units":[
-  {"id":"api","paths":["api/**"],"workingDirectory":".","tagPrefix":"api/v","executor":{"type":"goreleaser"}},
-  {"id":"web","paths":["web/**"],"workingDirectory":".","tagPrefix":"web/v","executor":{"type":"release-it"}}
+  {"id":"api","paths":["api/**"],"workingDirectory":".","tagPrefix":"api/v","executor":{"type":"goreleaser","delivery":"github-actions","workflow":".github/workflows/release-api.yml"}},
+  {"id":"web","paths":["web/**"],"workingDirectory":".","tagPrefix":"web/v","executor":{"type":"release-it","delivery":"github-actions","workflow":".github/workflows/release-web.yml"}}
 ]}`, `{"schemaVersion":2,"units":{"api":{"version":"1.0.0"},"web":{"version":"2.0.0"}}}`)
 
 	resp, err := HandleValidate(plugin.Request{Flags: map[string]any{"show": true, "unit": "api"}})

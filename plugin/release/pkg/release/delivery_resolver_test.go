@@ -12,8 +12,8 @@ func TestResolveDelivery(t *testing.T) {
 		{
 			name:                   "local",
 			delivery:               "local",
-			supportsLocalExecution: true,
-			implemented:            true,
+			supportsLocalExecution: false,
+			implemented:            false,
 		},
 		{
 			name:                   "github actions",

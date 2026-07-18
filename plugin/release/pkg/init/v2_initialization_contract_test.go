@@ -54,6 +54,7 @@ func TestUnitAddErrorMetadataRetainsInitCompatibilityCommand(t *testing.T) {
 
 func TestInitPersistsCanonicalBytesAndModes(t *testing.T) {
 	withWorkingDirectory(t)
+	writeValidInitWorkflow(t)
 
 	resp, err := HandleInit(plugin.Request{Flags: validInitFlags()})
 	if err != nil {
@@ -76,7 +77,8 @@ func TestInitPersistsCanonicalBytesAndModes(t *testing.T) {
       "tagPrefix": "v",
       "executor": {
         "type": "goreleaser",
-        "delivery": "local"
+        "delivery": "github-actions",
+        "workflow": ".github/workflows/release-cli.yml"
       }
     }
   ]

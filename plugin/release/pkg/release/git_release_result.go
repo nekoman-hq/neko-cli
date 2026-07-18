@@ -11,8 +11,6 @@ import (
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
-const v2GitCoordinationUnavailableMessage = "V2 Git release coordination is prepared, but V2 publication adapters are not available yet. No release state, commit, tag, push, or publish operation was performed."
-
 type V2GitOwnership struct {
 	VersionAuthority       string
 	VersionMaterialization string
@@ -31,7 +29,7 @@ func NewV2GitOwnership() V2GitOwnership {
 		Commit:                 "neko-cli",
 		Tag:                    "neko-cli",
 		Push:                   "neko-cli",
-		Publish:                "future publish-only adapter",
+		Publish:                "github-actions workflow",
 	}
 }
 

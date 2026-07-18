@@ -167,9 +167,6 @@ func NormalizeV2Repository(repositoryRoot string, cfg *V2ReleaseConfig, state *V
 			workingDirectory = "."
 		}
 		delivery := unit.Executor.Delivery
-		if delivery == "" {
-			delivery = DeliveryLocal
-		}
 		units = append(units, ReleaseUnit{
 			ID:               unit.ID,
 			DisplayName:      unit.DisplayName,
@@ -280,9 +277,6 @@ func CanonicalV2Config(cfg V2ReleaseConfig) ([]byte, error) {
 	for i := range cfg.Units {
 		if cfg.Units[i].WorkingDirectory == "" {
 			cfg.Units[i].WorkingDirectory = "."
-		}
-		if cfg.Units[i].Executor.Delivery == "" {
-			cfg.Units[i].Executor.Delivery = DeliveryLocal
 		}
 	}
 	return marshalCanonicalJSON(cfg)
@@ -539,7 +533,10 @@ func (e ExecutorType) IsValid() bool {
 	}
 }
 
-// IsValid reports whether the delivery type is supported by V2.
+// IsValid reports whether the delivery type is a recognized release delivery
+// value. V2 executable configs currently support github-actions only; local is
+// retained as a known value so legacy V1 data and invalid V2 configs can be
+// reported clearly.
 func (d DeliveryType) IsValid() bool {
 	switch d {
 	case DeliveryLocal, DeliveryGitHubActions:

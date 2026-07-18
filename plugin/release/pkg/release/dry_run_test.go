@@ -130,8 +130,14 @@ func TestHandleReleaseV2DryRunPlansWithoutFetchOrStateWrite(t *testing.T) {
 	if err := os.WriteFile(".goreleaser.yml", []byte("{}"), 0644); err != nil {
 		t.Fatalf("write goreleaser config: %v", err)
 	}
+	if err := os.MkdirAll(".github/workflows", 0755); err != nil {
+		t.Fatalf("mkdir workflows: %v", err)
+	}
+	if err := os.WriteFile(".github/workflows/release-api.yml", []byte("name: release api\n"), 0644); err != nil {
+		t.Fatalf("write workflow: %v", err)
+	}
 	t.Setenv("GITHUB_TOKEN", "test-token")
-	configContent := `{"schemaVersion":2,"units":[{"id":"api","paths":["api/**"],"workingDirectory":".","tagPrefix":"api/v","executor":{"type":"goreleaser","delivery":"local"}}]}`
+	configContent := `{"schemaVersion":2,"units":[{"id":"api","paths":["api/**"],"workingDirectory":".","tagPrefix":"api/v","executor":{"type":"goreleaser","delivery":"github-actions","workflow":".github/workflows/release-api.yml"}}]}`
 	stateContent := `{"schemaVersion":2,"units":{"api":{"version":"0.1.0"}}}`
 	if err := os.WriteFile(".neko/release.config.json", []byte(configContent), 0644); err != nil {
 		t.Fatalf("write v2 config: %v", err)

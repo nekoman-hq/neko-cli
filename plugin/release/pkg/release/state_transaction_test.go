@@ -126,11 +126,13 @@ func newV2StateTestRepository(t *testing.T) string {
 	if err := os.WriteFile(filepath.Join(root, ".goreleaser.yml"), []byte("{}"), 0644); err != nil {
 		t.Fatalf("write goreleaser config: %v", err)
 	}
+	mustWriteReleaseTestFile(t, root, ".github/workflows/release-api.yml", "name: release api\n")
+	mustWriteReleaseTestFile(t, root, ".github/workflows/release-web.yml", "name: release web\n")
 	cfg := `{
   "schemaVersion": 2,
   "units": [
-    {"id":"api","paths":["api/**"],"workingDirectory":".","tagPrefix":"api/v","executor":{"type":"goreleaser","delivery":"local"}},
-    {"id":"web","paths":["web/**"],"workingDirectory":".","tagPrefix":"web/v","executor":{"type":"jreleaser","delivery":"local"}}
+    {"id":"api","paths":["api/**"],"workingDirectory":".","tagPrefix":"api/v","executor":{"type":"goreleaser","delivery":"github-actions","workflow":".github/workflows/release-api.yml"}},
+    {"id":"web","paths":["web/**"],"workingDirectory":".","tagPrefix":"web/v","executor":{"type":"jreleaser","delivery":"github-actions","workflow":".github/workflows/release-web.yml"}}
   ]
 }`
 	state := `{

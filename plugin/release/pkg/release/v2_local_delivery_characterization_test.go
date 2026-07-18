@@ -10,7 +10,7 @@ import (
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
-func TestV2LocalDeliveryCurrentPlanDryRunAndExecutionContract(t *testing.T) {
+func TestV2LocalDeliveryCommandsRejectConfigurationBeforePlanning(t *testing.T) {
 	root := newCurrentLocalDeliveryRepository(t, "goreleaser")
 	withWorkingDirectoryRoot(t, root)
 
@@ -21,12 +21,7 @@ func TestV2LocalDeliveryCurrentPlanDryRunAndExecutionContract(t *testing.T) {
 			"unit":   "api",
 		},
 	})
-	if planErr != nil || planResp.Status != "success" {
-		t.Fatalf("plan currently fails for local delivery: response=%#v err=%v", planResp, planErr)
-	}
-	if got := responseValueForProperty(t, planResp.Data["items"], "Delivery"); got != "local" {
-		t.Fatalf("plan delivery = %q, want local", got)
-	}
+	assertPlanCommandError(t, planResp, planErr, "CONFIG_INVALID", "local delivery is not supported")
 
 	dryRunResp, dryRunErr := HandleRelease(plugin.Request{
 		Command: "patch",
@@ -35,21 +30,16 @@ func TestV2LocalDeliveryCurrentPlanDryRunAndExecutionContract(t *testing.T) {
 			"unit":    "api",
 		},
 	}, Patch)
-	if dryRunErr != nil || dryRunResp.Status != "success" {
-		t.Fatalf("dry-run currently fails for local delivery: response=%#v err=%v", dryRunResp, dryRunErr)
-	}
-	if got := responseValueForProperty(t, dryRunResp.Data["items"], "Delivery"); got != "local" {
-		t.Fatalf("dry-run delivery = %q, want local", got)
-	}
+	assertReleaseCommandError(t, dryRunResp, dryRunErr, "CONFIG_INVALID", "local delivery is not supported")
 
 	releaseResp, releaseErr := HandleRelease(plugin.Request{
 		Command: "patch",
 		Flags:   map[string]any{"unit": "api"},
 	}, Patch)
-	assertReleaseCommandError(t, releaseResp, releaseErr, "V2_LOCAL_DELIVERY_BLOCKED", "not available yet")
+	assertReleaseCommandError(t, releaseResp, releaseErr, "CONFIG_INVALID", "local delivery is not supported")
 }
 
-func TestV2LocalDeliveryCurrentJReleaserFactsRemainPlanningOnly(t *testing.T) {
+func TestV2LocalDeliveryJReleaserPlanInspectionRejectsConfigurationWithoutMutation(t *testing.T) {
 	root := newCurrentLocalDeliveryRepository(t, "jreleaser")
 	beforeState := mustReadString(t, releaseconfig.V2StatePath(root))
 	beforeJReleaser := mustReadString(t, filepath.Join(root, "jreleaser.yml"))
@@ -60,14 +50,8 @@ func TestV2LocalDeliveryCurrentJReleaserFactsRemainPlanningOnly(t *testing.T) {
 		UnitID:      "api",
 	})
 
-	if failure != nil {
-		t.Fatalf("Inspect failure: %#v", failure)
-	}
-	if inspection.Delivery != "local" || inspection.Executor != "jreleaser" || inspection.Readiness != LocalPlanReady {
-		t.Fatalf("unexpected current jreleaser local planning facts: %#v", inspection)
-	}
-	if got := materializedOutputPaths(inspection.MaterializedOutputs); strings.Join(got, ", ") != "jreleaser.yml" {
-		t.Fatalf("expected jreleaser materialization plan, got %#v", got)
+	if failure == nil || failure.Code != "CONFIG_INVALID" || !strings.Contains(failure.responseMessage(), "local delivery is not supported") {
+		t.Fatalf("expected local delivery inspection rejection, inspection=%#v failure=%#v", inspection, failure)
 	}
 	if got := mustReadString(t, releaseconfig.V2StatePath(root)); got != beforeState {
 		t.Fatalf("plan inspection rewrote state:\n%s", got)
@@ -102,4 +86,20 @@ func newCurrentLocalDeliveryRepository(t *testing.T, executor string) string {
 		t.Fatalf("write state: %v", err)
 	}
 	return root
+}
+
+func assertPlanCommandError(t *testing.T, resp *plugin.Response, err error, code, messagePart string) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("plan command returned a Go error: %v", err)
+	}
+	if resp == nil || resp.Status != "error" || resp.Error == nil {
+		t.Fatalf("expected plugin error response, got %#v", resp)
+	}
+	if resp.Error.Code != code || !strings.Contains(resp.Error.Message, messagePart) {
+		t.Fatalf("unexpected plan error contract: code=%q message=%q", resp.Error.Code, resp.Error.Message)
+	}
+	if resp.Metadata.Command != "plan" || resp.Metadata.Plugin == "" || resp.Metadata.Version == "" || resp.Metadata.Timestamp.IsZero() {
+		t.Fatalf("plan error metadata is incomplete: %#v", resp.Metadata)
+	}
 }

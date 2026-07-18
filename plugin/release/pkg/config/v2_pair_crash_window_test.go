@@ -8,6 +8,7 @@ import (
 
 func TestV2ReleasePairCrashWindowWithoutEvidenceLeavesMixedPairInvalid(t *testing.T) {
 	root := t.TempDir()
+	writeDefaultWorkflow(t, root)
 	if err := os.MkdirAll(root+"/"+V2Directory, 0755); err != nil {
 		t.Fatalf("mkdir .neko: %v", err)
 	}
@@ -50,6 +51,7 @@ func TestV2ReleasePairCrashWindowWithoutEvidenceLeavesMixedPairInvalid(t *testin
 
 func TestV2ReleasePairCrashWindowWithoutEvidenceLeavesIncompleteNewPairInvalid(t *testing.T) {
 	root := t.TempDir()
+	writeDefaultWorkflow(t, root)
 	if err := os.MkdirAll(root+"/"+V2Directory, 0755); err != nil {
 		t.Fatalf("mkdir .neko: %v", err)
 	}

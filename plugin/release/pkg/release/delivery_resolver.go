@@ -21,8 +21,8 @@ func ResolveDelivery(delivery string) (DeliveryContract, error) {
 	case releaseconfig.DeliveryLocal:
 		return DeliveryContract{
 			Type:                   string(releaseconfig.DeliveryLocal),
-			SupportsLocalExecution: true,
-			Implemented:            true,
+			SupportsLocalExecution: false,
+			Implemented:            false,
 		}, nil
 	case releaseconfig.DeliveryGitHubActions:
 		return DeliveryContract{

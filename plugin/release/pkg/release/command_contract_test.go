@@ -112,7 +112,7 @@ func TestHandleReleaseV2RejectsUnknownUnit(t *testing.T) {
 	assertReleaseCommandError(t, resp, err, "UNIT_RESOLUTION_FAILED", `unknown release unit "worker"`)
 }
 
-func TestHandleReleaseV2InvalidRepositoryReturnsConfigNotFound(t *testing.T) {
+func TestHandleReleaseV2InvalidRepositoryReturnsConfigInvalid(t *testing.T) {
 	tests := []struct {
 		name        string
 		config      string
@@ -152,8 +152,8 @@ func TestHandleReleaseV2InvalidRepositoryReturnsConfigNotFound(t *testing.T) {
 
 			resp, err := HandleRelease(plugin.Request{Command: "patch", Flags: map[string]any{"dry-run": true}}, Patch)
 
-			assertReleaseCommandError(t, resp, err, "CONFIG_NOT_FOUND", tt.messagePart)
-			if got := valueAsString(resp.Error.Details["hint"]); !strings.Contains(got, "neko release init") || !strings.Contains(got, "neko release migrate") {
+			assertReleaseCommandError(t, resp, err, "CONFIG_INVALID", tt.messagePart)
+			if got := valueAsString(resp.Error.Details["hint"]); !strings.Contains(got, ".neko/release.config.json") || !strings.Contains(got, ".neko/release.state.json") {
 				t.Fatalf("config error omitted recovery hint: %#v", resp.Error.Details)
 			}
 		})
@@ -170,7 +170,7 @@ func TestHandleReleaseV2BlocksLocalDeliveryExecution(t *testing.T) {
 
 	resp, err := HandleRelease(plugin.Request{Command: "patch", Flags: map[string]any{"unit": "api"}}, Patch)
 
-	assertReleaseCommandError(t, resp, err, "V2_LOCAL_DELIVERY_BLOCKED", "not available yet")
+	assertReleaseCommandError(t, resp, err, "CONFIG_INVALID", "local delivery is not supported")
 }
 
 func TestHandleReleaseV2RejectsDirtyWorktreeWithoutLeakingToken(t *testing.T) {

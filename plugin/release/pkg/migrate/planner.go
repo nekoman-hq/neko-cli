@@ -9,6 +9,8 @@ import (
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
+const defaultMigratedWorkflow = ".github/workflows/release-default.yml"
+
 func constructMigrationPlan(
 	root string,
 	paths migrationPathSet,
@@ -46,7 +48,8 @@ func constructMigrationPlan(
 					TagPrefix:        "v",
 					Executor: releaseconfig.V2Executor{
 						Type:     releaseconfig.ExecutorType(v1.ReleaseSystem),
-						Delivery: releaseconfig.DeliveryLocal,
+						Delivery: releaseconfig.DeliveryGitHubActions,
+						Workflow: defaultMigratedWorkflow,
 					},
 				},
 			},
@@ -87,7 +90,7 @@ func constructMigrationPlan(
 		version:         v1.Version,
 		tagPrefix:       "v",
 		executor:        string(v1.ReleaseSystem),
-		delivery:        string(releaseconfig.DeliveryLocal),
+		delivery:        string(releaseconfig.DeliveryGitHubActions),
 		actions: []string{
 			"create .neko directory",
 			"write migration journal",

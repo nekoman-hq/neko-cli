@@ -19,7 +19,6 @@ func TestV2WorkflowStructuralValidation(t *testing.T) {
 		{name: "github actions valid portable filename", delivery: DeliveryGitHubActions, workflow: ".github/workflows/api-v2-release.yml"},
 		{name: "github actions missing workflow", delivery: DeliveryGitHubActions, wantError: "requires workflow"},
 		{name: "github actions empty workflow", delivery: DeliveryGitHubActions, workflow: " \t", wantError: "must not be empty"},
-		{name: "local delivery with workflow", delivery: DeliveryLocal, workflow: ".github/workflows/release-api.yml", wantError: "only valid for github-actions"},
 		{name: "filename only", delivery: DeliveryGitHubActions, workflow: "release-api.yml", wantError: "must begin"},
 		{name: "absolute path", delivery: DeliveryGitHubActions, workflow: "/.github/workflows/release.yml", wantError: "repository-root-relative"},
 		{name: "traversal", delivery: DeliveryGitHubActions, workflow: ".github/workflows/../release.yml", wantError: "traversal"},
@@ -60,6 +59,19 @@ func TestV2WorkflowUnknownDeliveryStillFails(t *testing.T) {
 
 	if err := ValidateV2ReleaseConfigStructure(cfg); err == nil || !strings.Contains(err.Error(), "unknown delivery") {
 		t.Fatalf("expected unknown delivery error, got %v", err)
+	}
+}
+
+func TestV2WorkflowLocalDeliveryFailsBeforeWorkflowValidation(t *testing.T) {
+	cfg := &V2ReleaseConfig{SchemaVersion: 2, Units: []V2Unit{{
+		ID:        "api",
+		Paths:     []string{"**"},
+		TagPrefix: "v",
+		Executor:  V2Executor{Type: ExecutorGoReleaser, Delivery: DeliveryLocal, Workflow: ".github/workflows/release-api.yml"},
+	}}}
+
+	if err := ValidateV2ReleaseConfigStructure(cfg); err == nil || !strings.Contains(err.Error(), "local delivery is not supported") {
+		t.Fatalf("expected local delivery error, got %v", err)
 	}
 }
 
@@ -119,7 +131,7 @@ func TestV2WorkflowRepositoryValidation(t *testing.T) {
 		}
 	})
 
-	t.Run("local delivery without workflows directory", func(t *testing.T) {
+	t.Run("local delivery without workflows directory is rejected", func(t *testing.T) {
 		root := t.TempDir()
 		mustMkdir(t, filepath.Join(root, "api"))
 		writeV2Files(t, root, validV2Config(`{
@@ -129,8 +141,8 @@ func TestV2WorkflowRepositoryValidation(t *testing.T) {
   "tagPrefix": "api/v",
   "executor": {"type": "goreleaser", "delivery": "local"}
 }`), validV2State(`"api": {"version": "1.0.0"}`))
-		if _, err := LoadV2Repository(root); err != nil {
-			t.Fatalf("local delivery should not require workflows directory: %v", err)
+		if _, err := LoadV2Repository(root); err == nil || !strings.Contains(err.Error(), "local delivery is not supported") {
+			t.Fatalf("expected local delivery rejection, got %v", err)
 		}
 	})
 }

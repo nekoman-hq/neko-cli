@@ -43,7 +43,8 @@ func TestValidateCommandHandlerInvokesOneQueryAndMapsResult(t *testing.T) {
 			WorkingDirectory: ".",
 			TagPrefix:        "api/v",
 			ExecutorType:     "goreleaser",
-			Delivery:         "local",
+			Delivery:         "github-actions",
+			Workflow:         ".github/workflows/release-api.yml",
 			Paths:            []string{"api/**"},
 		}},
 	}}
@@ -61,7 +62,7 @@ func TestValidateCommandHandlerInvokesOneQueryAndMapsResult(t *testing.T) {
 	}
 	want := []map[string]any{
 		{"property": "Schema", "value": "v2"},
-		{"property": "Unit api", "value": "version=1.2.3 workingDirectory=. tagPrefix=api/v executor=goreleaser delivery=local workflow=not applicable paths=[api/**]"},
+		{"property": "Unit api", "value": "version=1.2.3 workingDirectory=. tagPrefix=api/v executor=goreleaser delivery=github-actions workflow=.github/workflows/release-api.yml paths=[api/**]"},
 	}
 	if got := resp.Data["items"]; !reflect.DeepEqual(got, want) {
 		t.Fatalf("items = %#v, want %#v", got, want)

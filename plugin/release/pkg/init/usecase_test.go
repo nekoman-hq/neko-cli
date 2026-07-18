@@ -40,7 +40,8 @@ func TestConstructV2UnitHasSeparateReleaseAndPluginResults(t *testing.T) {
 			"unit":         42,
 			"display-name": false,
 			"executor":     "goreleaser",
-			"delivery":     "local",
+			"delivery":     "github-actions",
+			"workflow":     ".github/workflows/release-cli.yml",
 			"force":        "true",
 		}
 		request := parseInitCommandRequest(flags)
@@ -55,12 +56,11 @@ func TestConstructV2UnitHasSeparateReleaseAndPluginResults(t *testing.T) {
 
 	t.Run("release", func(t *testing.T) {
 		flags := validInitFlags()
-		flags["workflow"] = ".github/workflows/ignored.yml"
 		constructed, err := constructV2Unit(parseV2UnitRequest(flags))
 		if err != nil {
 			t.Fatalf("constructV2Unit: %v", err)
 		}
-		if constructed.Unit.Kind != "" || constructed.Unit.Plugin != nil || constructed.Unit.Executor.Workflow != "" {
+		if constructed.Unit.Kind != "" || constructed.Unit.Plugin != nil || constructed.Unit.Executor.Workflow != ".github/workflows/release-cli.yml" {
 			t.Fatalf("unexpected release unit: %#v", constructed.Unit)
 		}
 		if constructed.Config.Kind != defaultKind || constructed.State.Version != "0.1.0" {
@@ -295,7 +295,8 @@ func createdUnitForAppend() constructedV2Unit {
 			TagPrefix:        "api/v",
 			Executor: config.V2Executor{
 				Type:     config.ExecutorGoReleaser,
-				Delivery: config.DeliveryLocal,
+				Delivery: config.DeliveryGitHubActions,
+				Workflow: ".github/workflows/release-api.yml",
 			},
 		},
 		State: config.V2UnitState{Version: "1.2.3"},

@@ -112,8 +112,6 @@ func buildV2NextSteps(initConfig v2InitConfig) []string {
 	}
 	if initConfig.Delivery == config.DeliveryGitHubActions {
 		steps = append(steps, fmt.Sprintf("Ensure %s builds and publishes from the dispatched tag", initConfig.Workflow))
-	} else {
-		steps = append(steps, "Add or verify the executor-specific local release configuration before running a real release")
 	}
 	return steps
 }

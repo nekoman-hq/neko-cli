@@ -11,6 +11,7 @@ import (
 func TestLoadV2RepositoryValidSingleUnit(t *testing.T) {
 	root := t.TempDir()
 	mustMkdir(t, filepath.Join(root, "app"))
+	writeDefaultWorkflow(t, root)
 	writeV2Files(t, root, validV2Config(`{
   "id": "default",
   "displayName": "My Project",
@@ -19,7 +20,8 @@ func TestLoadV2RepositoryValidSingleUnit(t *testing.T) {
   "tagPrefix": "v",
   "executor": {
     "type": "goreleaser",
-    "delivery": "local"
+    "delivery": "github-actions",
+    "workflow": ".github/workflows/release.yml"
   }
 }`), validV2State(`"default": {"version": "2.2.4"}`))
 
@@ -31,7 +33,7 @@ func TestLoadV2RepositoryValidSingleUnit(t *testing.T) {
 		t.Fatalf("unexpected repository: %#v", repo)
 	}
 	unit := repo.Units[0]
-	if unit.ID != "default" || unit.Version != "2.2.4" || unit.WorkingDirectory != "app" || unit.Delivery != "local" {
+	if unit.ID != "default" || unit.Version != "2.2.4" || unit.WorkingDirectory != "app" || unit.Delivery != "github-actions" {
 		t.Fatalf("unexpected normalized unit: %#v", unit)
 	}
 	if unit.IsPlugin || unit.Kind != "" || unit.PluginName != "" {
@@ -43,12 +45,14 @@ func TestLoadV2RepositoryValidMultiUnitWithDefaults(t *testing.T) {
 	root := t.TempDir()
 	mustMkdir(t, filepath.Join(root, "api"))
 	mustMkdir(t, filepath.Join(root, "web"))
+	mustWrite(t, filepath.Join(root, ".github", "workflows", "release-api.yml"), "name: release api\n")
+	mustWrite(t, filepath.Join(root, ".github", "workflows", "release-web.yml"), "name: release web\n")
 	writeV2Files(t, root, validV2Config(`{
   "id": "api",
   "paths": ["api/**"],
   "workingDirectory": "api",
   "tagPrefix": "api/v",
-  "executor": {"type": "goreleaser"}
+  "executor": {"type": "goreleaser", "delivery": "github-actions", "workflow": ".github/workflows/release-api.yml"}
 }, {
   "id": "web",
   "paths": ["web/**"],
@@ -56,7 +60,6 @@ func TestLoadV2RepositoryValidMultiUnitWithDefaults(t *testing.T) {
   "tagPrefix": "web/v",
   "executor": {"type": "release-it", "delivery": "github-actions", "workflow": ".github/workflows/release-web.yml"}
 }`), validV2State(`"api": {"version": "1.0.0"}, "web": {"version": "2.0.0"}`))
-	mustWrite(t, filepath.Join(root, ".github", "workflows", "release-web.yml"), "name: release web\n")
 
 	repo, err := LoadV2Repository(root)
 	if err != nil {
@@ -65,8 +68,8 @@ func TestLoadV2RepositoryValidMultiUnitWithDefaults(t *testing.T) {
 	if len(repo.Units) != 2 {
 		t.Fatalf("expected 2 units, got %#v", repo.Units)
 	}
-	if repo.Units[0].Delivery != "local" {
-		t.Fatalf("expected default local delivery, got %s", repo.Units[0].Delivery)
+	if repo.Units[0].Delivery != "github-actions" {
+		t.Fatalf("expected github-actions delivery, got %s", repo.Units[0].Delivery)
 	}
 	if repo.Units[1].Delivery != "github-actions" {
 		t.Fatalf("expected github-actions delivery, got %s", repo.Units[1].Delivery)
@@ -79,6 +82,7 @@ func TestLoadV2RepositoryValidMultiUnitWithDefaults(t *testing.T) {
 func TestLoadV2RepositoryValidPluginUnitMetadata(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, filepath.Join(root, "plugin", "release", "manifest.json"), `{"name":"release","version":"4.0.2"}`)
+	writeDefaultWorkflow(t, root)
 	writeV2Files(t, root, validV2Config(`{
   "id": "plugin-release",
   "displayName": "neko-cli release plugin",
@@ -92,7 +96,7 @@ func TestLoadV2RepositoryValidPluginUnitMetadata(t *testing.T) {
     "assetPrefix": "plugin-release",
     "binaryName": "plugin-release"
   },
-  "executor": {"type": "goreleaser"}
+  "executor": {"type": "goreleaser", "delivery": "github-actions", "workflow": ".github/workflows/release.yml"}
 }`), validV2State(`"plugin-release": {"version": "4.0.2"}`))
 
 	repo, err := LoadV2Repository(root)
@@ -126,7 +130,11 @@ func TestValidateV2ReleaseConfigStructureAllowsPluginManifestWithoutRepositoryFi
 					AssetPrefix: "plugin-release",
 					BinaryName:  "plugin-release",
 				},
-				Executor: V2Executor{Type: ExecutorGoReleaser},
+				Executor: V2Executor{
+					Type:     ExecutorGoReleaser,
+					Delivery: DeliveryGitHubActions,
+					Workflow: ".github/workflows/release.yml",
+				},
 			},
 		},
 	}
@@ -164,7 +172,7 @@ func TestLoadReleaseRepositoryRejectsRootV1V2Conflict(t *testing.T) {
   "id": "default",
   "paths": ["**"],
   "tagPrefix": "v",
-  "executor": {"type": "goreleaser"}
+  "executor": {"type": "goreleaser", "delivery": "github-actions", "workflow": ".github/workflows/release.yml"}
 }`), validV2State(`"default": {"version": "1.0.0"}`))
 
 	_, err := LoadReleaseRepository(root)
@@ -200,7 +208,7 @@ func TestLoadV2RepositoryValidationErrors(t *testing.T) {
     "binaryName": "plugin-release",
     "extra": true
   },
-  "executor": {"type": "goreleaser"}
+  "executor": {"type": "goreleaser", "delivery": "github-actions", "workflow": ".github/workflows/release.yml"}
 }`),
 			state:     validV2State(`"plugin-release": {"version": "4.0.2"}`),
 			wantError: "unknown field",
@@ -217,12 +225,12 @@ func TestLoadV2RepositoryValidationErrors(t *testing.T) {
   "id": "api",
   "paths": ["api/**"],
   "tagPrefix": "api/v",
-  "executor": {"type": "goreleaser"}
+  "executor": {"type": "goreleaser", "delivery": "github-actions", "workflow": ".github/workflows/release.yml"}
 }, {
   "id": "api",
   "paths": ["web/**"],
   "tagPrefix": "web/v",
-  "executor": {"type": "release-it"}
+  "executor": {"type": "release-it", "delivery": "github-actions", "workflow": ".github/workflows/release.yml"}
 }`),
 			state:     validV2State(`"api": {"version": "1.0.0"}`),
 			wantError: "more than once",
@@ -233,7 +241,7 @@ func TestLoadV2RepositoryValidationErrors(t *testing.T) {
   "id": "Bad/ID",
   "paths": ["**"],
   "tagPrefix": "v",
-  "executor": {"type": "goreleaser"}
+  "executor": {"type": "goreleaser", "delivery": "github-actions", "workflow": ".github/workflows/release.yml"}
 }`),
 			state:     validV2State(`"Bad/ID": {"version": "1.0.0"}`),
 			wantError: "invalid",
@@ -244,12 +252,12 @@ func TestLoadV2RepositoryValidationErrors(t *testing.T) {
   "id": "api",
   "paths": ["api/**"],
   "tagPrefix": "api/v",
-  "executor": {"type": "goreleaser"}
+  "executor": {"type": "goreleaser", "delivery": "github-actions", "workflow": ".github/workflows/release.yml"}
 }, {
   "id": "web",
   "paths": ["web/**"],
   "tagPrefix": "api/v1",
-  "executor": {"type": "release-it"}
+  "executor": {"type": "release-it", "delivery": "github-actions", "workflow": ".github/workflows/release.yml"}
 }`),
 			state:     validV2State(`"api": {"version": "1.0.0"}, "web": {"version": "1.0.0"}`),
 			wantError: "overlaps",
@@ -261,7 +269,7 @@ func TestLoadV2RepositoryValidationErrors(t *testing.T) {
   "paths": ["**"],
   "workingDirectory": "../api",
   "tagPrefix": "v",
-  "executor": {"type": "goreleaser"}
+  "executor": {"type": "goreleaser", "delivery": "github-actions", "workflow": ".github/workflows/release.yml"}
 }`),
 			state:     validV2State(`"api": {"version": "1.0.0"}`),
 			wantError: "leaves the repository",
@@ -272,7 +280,7 @@ func TestLoadV2RepositoryValidationErrors(t *testing.T) {
   "id": "api",
   "paths": ["../**"],
   "tagPrefix": "v",
-  "executor": {"type": "goreleaser"}
+  "executor": {"type": "goreleaser", "delivery": "github-actions", "workflow": ".github/workflows/release.yml"}
 }`),
 			state:     validV2State(`"api": {"version": "1.0.0"}`),
 			wantError: "path pattern",
@@ -305,7 +313,7 @@ func TestLoadV2RepositoryValidationErrors(t *testing.T) {
   "id": "api",
   "paths": ["**"],
   "tagPrefix": "v",
-  "executor": {"type": "goreleaser"}
+  "executor": {"type": "goreleaser", "delivery": "github-actions", "workflow": ".github/workflows/release.yml"}
 }`),
 			state:     validV2State(``),
 			wantError: "missing unit",
@@ -316,7 +324,7 @@ func TestLoadV2RepositoryValidationErrors(t *testing.T) {
   "id": "api",
   "paths": ["**"],
   "tagPrefix": "v",
-  "executor": {"type": "goreleaser"}
+  "executor": {"type": "goreleaser", "delivery": "github-actions", "workflow": ".github/workflows/release.yml"}
 }`),
 			state:     validV2State(`"api": {"version": "1.0.0"}, "web": {"version": "1.0.0"}`),
 			wantError: "unknown unit",
@@ -327,7 +335,7 @@ func TestLoadV2RepositoryValidationErrors(t *testing.T) {
   "id": "api",
   "paths": ["**"],
   "tagPrefix": "v",
-  "executor": {"type": "goreleaser"}
+  "executor": {"type": "goreleaser", "delivery": "github-actions", "workflow": ".github/workflows/release.yml"}
 }`),
 			state:     validV2State(`"api": {"version": "not-semver"}`),
 			wantError: "SemVer",
@@ -337,6 +345,7 @@ func TestLoadV2RepositoryValidationErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			root := t.TempDir()
+			writeDefaultWorkflow(t, root)
 			writeV2Files(t, root, tt.config, tt.state)
 
 			_, err := LoadV2Repository(root)
@@ -471,6 +480,7 @@ func TestLoadV2RepositoryRejectsDuplicatePluginNames(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, filepath.Join(root, "plugin", "release", "manifest.json"), `{"name":"release","version":"4.0.2"}`)
 	mustWrite(t, filepath.Join(root, "plugin", "other", "manifest.json"), `{"name":"release","version":"1.0.0"}`)
+	writeDefaultWorkflow(t, root)
 	writeV2Files(t, root, validV2Config(
 		pluginUnitJSON("plugin-release", "plugin-release/v", "plugin", validPluginMetadata("release", "plugin/release/manifest.json", "plugin-release", "plugin-release"))+","+
 			pluginUnitJSON("plugin-other", "plugin-other/v", "plugin", validPluginMetadata("release", "plugin/other/manifest.json", "plugin-other", "plugin-other")),
@@ -538,6 +548,11 @@ func writeV2Files(t *testing.T, root, cfg, state string) {
 	mustWrite(t, V2StatePath(root), state)
 }
 
+func writeDefaultWorkflow(t *testing.T, root string) {
+	t.Helper()
+	mustWrite(t, filepath.Join(root, ".github", "workflows", "release.yml"), "name: release\n")
+}
+
 func pluginUnitJSON(unitID, tagPrefix, kind, pluginMetadata string) string {
 	kindField := ""
 	if kind != "" {
@@ -551,7 +566,7 @@ func pluginUnitJSON(unitID, tagPrefix, kind, pluginMetadata string) string {
   "id": %q,
   "paths": ["plugin/release/**"],
   "tagPrefix": %q%s%s,
-  "executor": {"type": "goreleaser"}
+  "executor": {"type": "goreleaser", "delivery": "github-actions", "workflow": ".github/workflows/release.yml"}
 }`, unitID, tagPrefix, kindField, pluginField)
 }
 

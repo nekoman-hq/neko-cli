@@ -101,10 +101,6 @@ func TestHandleResumeIgnoresJournalForDifferentUnit(t *testing.T) {
 
 func TestHandleResumeRejectsUnsupportedJournalDelivery(t *testing.T) {
 	root := newGitHubActionsDispatchRepository(t)
-	config := `{"schemaVersion":2,"units":[{"id":"api","paths":["api/**"],"workingDirectory":".","tagPrefix":"api/v","executor":{"type":"goreleaser","delivery":"local"}}]}`
-	if err := os.WriteFile(releaseconfig.V2ConfigPath(root), []byte(config), 0644); err != nil {
-		t.Fatalf("write local-delivery config: %v", err)
-	}
 	repository, err := releaseconfig.LoadV2Repository(root)
 	if err != nil {
 		t.Fatalf("LoadV2Repository: %v", err)
@@ -113,6 +109,8 @@ func TestHandleResumeRejectsUnsupportedJournalDelivery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildReleaseExecutionContext: %v", err)
 	}
+	ctx.Delivery = "local"
+	ctx.Workflow = ""
 	if _, prepareErr := NewReleaseExecutionJournalStore(root).Prepare(newPreparedExecutionJournal(t, ctx)); prepareErr != nil {
 		t.Fatalf("Prepare local-delivery journal: %v", prepareErr)
 	}

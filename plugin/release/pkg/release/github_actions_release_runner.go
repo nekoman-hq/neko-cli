@@ -111,7 +111,7 @@ func validateGitHubActionsReleaseRequest(execCtx *ReleaseExecutionContext) error
 		return fmt.Errorf("github-actions release runner supports V2 repositories only")
 	}
 	if execCtx.Delivery != string(releaseconfig.DeliveryGitHubActions) {
-		return fmt.Errorf("V2 local release execution is not available yet")
+		return fmt.Errorf("V2 local delivery is not supported; use github-actions delivery with a workflow")
 	}
 	if strings.TrimSpace(execCtx.Workflow) == "" {
 		return fmt.Errorf("github-actions release requires a validated workflow")

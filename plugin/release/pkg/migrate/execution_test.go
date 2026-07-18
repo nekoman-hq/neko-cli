@@ -160,6 +160,7 @@ func TestMigrationPlanExecutionInvokesOnlySelectedRecoveryOperations(t *testing.
 
 func TestMigrationTargetVerificationFailureRetainsActiveSource(t *testing.T) {
 	root := t.TempDir()
+	writeDefaultMigratedWorkflowForTest(t, root)
 	paths := migrationPaths(root)
 	if err := os.WriteFile(paths.source, []byte(v1Fixture), 0600); err != nil {
 		t.Fatalf("write source: %v", err)
@@ -186,6 +187,7 @@ func TestMigrationTargetVerificationFailureRetainsActiveSource(t *testing.T) {
 
 func TestMigrationTargetPersistenceFailureRetainsActiveSource(t *testing.T) {
 	root := t.TempDir()
+	writeDefaultMigratedWorkflowForTest(t, root)
 	paths := migrationPaths(root)
 	if err := os.WriteFile(paths.source, []byte(v1Fixture), 0600); err != nil {
 		t.Fatalf("write source: %v", err)
@@ -216,6 +218,7 @@ func TestMigrationTargetPersistenceFailureRetainsActiveSource(t *testing.T) {
 
 func TestMigrationSourceCleanupFailurePreservesValidSourceAndTarget(t *testing.T) {
 	root := t.TempDir()
+	writeDefaultMigratedWorkflowForTest(t, root)
 	paths := migrationPaths(root)
 	if err := os.WriteFile(paths.source, []byte(v1Fixture), 0600); err != nil {
 		t.Fatalf("write source: %v", err)
@@ -250,6 +253,7 @@ func TestMigrationSourceCleanupFailurePreservesValidSourceAndTarget(t *testing.T
 
 func TestMigrationJournalRemovalFailurePreservesCompletedEvidence(t *testing.T) {
 	root := t.TempDir()
+	writeDefaultMigratedWorkflowForTest(t, root)
 	paths := migrationPaths(root)
 	if err := os.WriteFile(paths.source, []byte(v1Fixture), 0600); err != nil {
 		t.Fatalf("write source: %v", err)

@@ -32,16 +32,13 @@ func validateV2Executor(repositoryRoot, unitID string, executor V2Executor) erro
 		return fmt.Errorf("v2 config unit %q has unknown executor %q", unitID, executor.Type)
 	}
 	delivery := executor.Delivery
-	if delivery == "" {
-		delivery = DeliveryLocal
-	}
-	if !delivery.IsValid() {
-		return fmt.Errorf("v2 config unit %q has unknown delivery %q", unitID, executor.Delivery)
+	if err := validateV2SupportedDelivery(unitID, delivery); err != nil {
+		return err
 	}
 	if err := validateV2WorkflowStructure(unitID, delivery, executor.Workflow); err != nil {
 		return err
 	}
-	if repositoryRoot != "" && delivery == DeliveryGitHubActions {
+	if repositoryRoot != "" {
 		if err := validateV2WorkflowAtRepositoryRoot(repositoryRoot, unitID, executor.Workflow); err != nil {
 			return err
 		}
@@ -49,14 +46,24 @@ func validateV2Executor(repositoryRoot, unitID string, executor V2Executor) erro
 	return nil
 }
 
+func validateV2SupportedDelivery(unitID string, delivery DeliveryType) error {
+	if delivery == "" {
+		return fmt.Errorf("v2 config unit %q executor.delivery is required and must be github-actions", unitID)
+	}
+	if !delivery.IsValid() {
+		return fmt.Errorf("v2 config unit %q has unknown delivery %q", unitID, delivery)
+	}
+	if delivery == DeliveryLocal {
+		return fmt.Errorf("v2 config unit %q local delivery is not supported for V2 releases; use github-actions delivery with a workflow", unitID)
+	}
+	if delivery != DeliveryGitHubActions {
+		return fmt.Errorf("v2 config unit %q delivery %q is not supported for V2 releases; use github-actions", unitID, delivery)
+	}
+	return nil
+}
+
 func validateV2WorkflowStructure(unitID string, delivery DeliveryType, workflow string) error {
 	trimmed := strings.TrimSpace(workflow)
-	if delivery == DeliveryLocal {
-		if trimmed != "" {
-			return fmt.Errorf("v2 config unit %q workflow is only valid for github-actions delivery", unitID)
-		}
-		return nil
-	}
 	if delivery != DeliveryGitHubActions {
 		return nil
 	}

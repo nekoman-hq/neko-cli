@@ -87,6 +87,15 @@ func newReleasePlanInspectionUseCase(repositoryRoot string) releasePlanInspectio
 func (useCase releasePlanInspectionUseCase) Inspect(_ context.Context, request ReleasePlanInspectionRequest) (*ReleasePlanInspection, *CommandFailure) {
 	repository, err := useCase.repositories.Load(useCase.repositoryRoot)
 	if err != nil {
+		if releaseconfig.V2ConfigExists(useCase.repositoryRoot) || releaseconfig.V2StateExists(useCase.repositoryRoot) {
+			return nil, &CommandFailure{
+				Code:  "CONFIG_INVALID",
+				Cause: err,
+				Details: map[string]any{
+					"hint": "Fix .neko/release.config.json and .neko/release.state.json before inspecting release plans",
+				},
+			}
+		}
 		return nil, &CommandFailure{
 			Code:  "CONFIG_NOT_FOUND",
 			Cause: err,

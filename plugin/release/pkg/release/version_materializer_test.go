@@ -63,7 +63,7 @@ func TestGoReleaserMaterializerIsNoop(t *testing.T) {
 
 func TestGoReleaserMaterializerSkipsCLIUnit(t *testing.T) {
 	root := newV2MaterializationRepository(t, "goreleaser")
-	cfg := `{"schemaVersion":2,"units":[{"id":"cli","paths":["**"],"workingDirectory":".","tagPrefix":"v","executor":{"type":"goreleaser","delivery":"local"}}]}`
+	cfg := `{"schemaVersion":2,"units":[{"id":"cli","paths":["**"],"workingDirectory":".","tagPrefix":"v","executor":{"type":"goreleaser","delivery":"github-actions","workflow":".github/workflows/release-api.yml"}}]}`
 	state := `{"schemaVersion":2,"units":{"cli":{"version":"2.2.4"}}}`
 	if err := os.WriteFile(releaseconfig.V2ConfigPath(root), []byte(cfg), 0644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -335,7 +335,8 @@ func newV2MaterializationRepository(t *testing.T, executor string) string {
 	if err := os.WriteFile(filepath.Join(root, "jreleaser.yml"), []byte("project:\n  name: api\n  version: 0.2.0\nrelease:\n  github:\n    owner: nekoman-hq\n"), 0644); err != nil {
 		t.Fatalf("write jreleaser config: %v", err)
 	}
-	cfg := `{"schemaVersion":2,"units":[{"id":"api","paths":["api/**"],"workingDirectory":".","tagPrefix":"api/v","executor":{"type":"` + executor + `","delivery":"local"}}]}`
+	mustWriteReleaseTestFile(t, root, ".github/workflows/release-api.yml", "name: release api\n")
+	cfg := `{"schemaVersion":2,"units":[{"id":"api","paths":["api/**"],"workingDirectory":".","tagPrefix":"api/v","executor":{"type":"` + executor + `","delivery":"github-actions","workflow":".github/workflows/release-api.yml"}}]}`
 	state := `{"schemaVersion":2,"units":{"api":{"version":"0.2.0"}}}`
 	if err := os.WriteFile(releaseconfig.V2ConfigPath(root), []byte(cfg), 0644); err != nil {
 		t.Fatalf("write config: %v", err)

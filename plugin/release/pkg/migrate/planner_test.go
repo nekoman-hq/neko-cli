@@ -24,7 +24,7 @@ func TestConstructMigrationPlanProducesCompleteDeterministicTarget(t *testing.T)
 	if !reflect.DeepEqual(first, second) {
 		t.Fatalf("planner output is not deterministic:\nfirst  %#v\nsecond %#v", first, second)
 	}
-	if first.sourceFormat != migrationSourceV1 || first.unitID != "default" || first.version != "1.2.3" || first.executor != "jreleaser" || first.delivery != "local" {
+	if first.sourceFormat != migrationSourceV1 || first.unitID != "default" || first.version != "1.2.3" || first.executor != "jreleaser" || first.delivery != "github-actions" {
 		t.Fatalf("planned migration facts changed: %#v", first)
 	}
 	if string(first.target.configJSON) != validConfigJSON() || string(first.target.stateJSON) != validStateJSON() {

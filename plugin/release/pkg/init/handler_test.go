@@ -89,7 +89,8 @@ func TestV2UnitConstructionRejectsLegacyFlags(t *testing.T) {
 	for _, legacy := range []string{"project-type", "release-system", "metadata"} {
 		_, err := constructV2Unit(parseV2UnitRequest(map[string]any{
 			"executor": "goreleaser",
-			"delivery": "local",
+			"delivery": "github-actions",
+			"workflow": ".github/workflows/release.yml",
 			legacy:     "legacy",
 		}))
 		if err == nil || !strings.Contains(err.Error(), "V2-only") {
@@ -98,7 +99,7 @@ func TestV2UnitConstructionRejectsLegacyFlags(t *testing.T) {
 	}
 }
 
-func TestHandleInitCreatesV2LocalConfigAndState(t *testing.T) {
+func TestHandleInitRejectsV2LocalDelivery(t *testing.T) {
 	withWorkingDirectory(t)
 
 	resp, err := HandleInit(plugin.Request{Flags: map[string]any{
@@ -115,39 +116,11 @@ func TestHandleInitCreatesV2LocalConfigAndState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HandleInit: %v", err)
 	}
-	if resp.Status != "success" {
-		t.Fatalf("expected success, got %#v", resp.Error)
+	if resp.Status != "error" || resp.Error == nil || !strings.Contains(resp.Error.Message, "unsupported delivery: local") {
+		t.Fatalf("expected local delivery rejection, got %#v", resp)
 	}
-	assertNoFile(t, legacyV1ConfigFileName)
-
-	cfg, state := loadGeneratedV2(t)
-	if cfg.SchemaVersion != 2 || state.SchemaVersion != 2 {
-		t.Fatalf("expected v2 schema, got config=%d state=%d", cfg.SchemaVersion, state.SchemaVersion)
-	}
-	if len(cfg.Units) != 1 {
-		t.Fatalf("expected one unit, got %#v", cfg.Units)
-	}
-	unit := cfg.Units[0]
-	if unit.ID != "api" ||
-		unit.DisplayName != "API" ||
-		unit.TagPrefix != "api/v" ||
-		unit.WorkingDirectory != "." ||
-		unit.Executor.Type != releaseconfig.ExecutorGoReleaser ||
-		unit.Executor.Delivery != releaseconfig.DeliveryLocal {
-		t.Fatalf("unexpected generated unit: %#v", unit)
-	}
-	if unit.Executor.Workflow != "" {
-		t.Fatalf("local delivery must omit workflow, got %#v", unit.Executor)
-	}
-	if got := strings.Join(unit.Paths, ","); got != "apps/api/**,platform/**,docs/**" {
-		t.Fatalf("paths were not normalized: %#v", unit.Paths)
-	}
-	if state.Units["api"].Version != "1.2.3" {
-		t.Fatalf("unexpected state: %#v", state.Units)
-	}
-	if _, err := releaseconfig.LoadV2Repository("."); err != nil {
-		t.Fatalf("generated V2 repository must validate: %v", err)
-	}
+	assertNoFile(t, releaseconfig.V2ConfigPath("."))
+	assertNoFile(t, releaseconfig.V2StatePath("."))
 }
 
 func TestHandleInitAtUsesExplicitRootWithoutProcessWorkingDirectory(t *testing.T) {
@@ -157,6 +130,7 @@ func TestHandleInitAtUsesExplicitRootWithoutProcessWorkingDirectory(t *testing.T
 	if err != nil {
 		t.Fatalf("ValidateRepositoryRoot: %v", err)
 	}
+	mustWrite(t, filepath.Join(repositoryRoot, ".github", "workflows", "release-api.yml"), "name: release api\n")
 	withWorkingDirectoryRoot(t, otherRoot)
 
 	resp, err := HandleInitAt(root, plugin.Request{Flags: map[string]any{
@@ -164,7 +138,8 @@ func TestHandleInitAtUsesExplicitRootWithoutProcessWorkingDirectory(t *testing.T
 		"display-name": "API",
 		"version":      "1.2.3",
 		"executor":     "goreleaser",
-		"delivery":     "local",
+		"delivery":     "github-actions",
+		"workflow":     ".github/workflows/release-api.yml",
 		"tag-prefix":   "api/v",
 		"paths":        "apps/api/**",
 	}})
@@ -501,7 +476,7 @@ func TestHandleUnitAddInvalidInputs(t *testing.T) {
 			mutate: func(flags map[string]any) {
 				delete(flags, "workflow")
 			},
-			wantError: "requires workflow",
+			wantError: "requires --workflow",
 		},
 		{
 			name: "github actions missing workflow file",
@@ -741,6 +716,7 @@ func TestHandleInitExistingConfigHandling(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			withWorkingDirectory(t)
 			tt.setup(t)
+			writeValidInitWorkflow(t)
 
 			flags := validInitFlags()
 			flags["version"] = "2.0.0"
@@ -882,7 +858,7 @@ func TestHandleInitInvalidInputs(t *testing.T) {
 				flags["delivery"] = "github-actions"
 				delete(flags, "workflow")
 			},
-			wantError: "requires workflow",
+			wantError: "requires --workflow",
 		},
 		{
 			name: "github actions workflow outside workflows",
@@ -1152,7 +1128,8 @@ func validInitFlags() map[string]any {
 		"display-name":      "CLI",
 		"version":           "0.1.0",
 		"executor":          "goreleaser",
-		"delivery":          "local",
+		"delivery":          "github-actions",
+		"workflow":          ".github/workflows/release-cli.yml",
 		"tag-prefix":        "v",
 		"working-directory": ".",
 		"paths":             "**",
@@ -1226,6 +1203,7 @@ func writeV1(t *testing.T, version string) {
 
 func writeV2(t *testing.T, unitID, version string) {
 	t.Helper()
+	writeValidInitWorkflow(t)
 	mustWrite(t, releaseconfig.V2ConfigPath("."), `{
   "schemaVersion": 2,
   "units": [
@@ -1234,10 +1212,11 @@ func writeV2(t *testing.T, unitID, version string) {
       "paths": ["**"],
       "workingDirectory": ".",
       "tagPrefix": "v",
-      "executor": {
-        "type": "goreleaser",
-        "delivery": "local"
-      }
+	      "executor": {
+	        "type": "goreleaser",
+	        "delivery": "github-actions",
+	        "workflow": ".github/workflows/release-cli.yml"
+	      }
     }
   ]
 }`)
@@ -1253,6 +1232,7 @@ func writeV2(t *testing.T, unitID, version string) {
 
 func writeV2WithExtraState(t *testing.T) {
 	t.Helper()
+	writeValidInitWorkflow(t)
 	mustWrite(t, releaseconfig.V2ConfigPath("."), `{
   "schemaVersion": 2,
   "units": [
@@ -1261,10 +1241,11 @@ func writeV2WithExtraState(t *testing.T) {
       "paths": ["**"],
       "workingDirectory": ".",
       "tagPrefix": "v",
-      "executor": {
-        "type": "goreleaser",
-        "delivery": "local"
-      }
+	      "executor": {
+	        "type": "goreleaser",
+	        "delivery": "github-actions",
+	        "workflow": ".github/workflows/release-cli.yml"
+	      }
     }
   ]
 }`)
@@ -1359,6 +1340,11 @@ func mustWrite(t *testing.T, path, content string) {
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		t.Fatalf("write %s: %v", path, err)
 	}
+}
+
+func writeValidInitWorkflow(t *testing.T) {
+	t.Helper()
+	mustWrite(t, ".github/workflows/release-cli.yml", "name: release cli\n")
 }
 
 func writeMinimalPluginManifest(t *testing.T, path, name, version string) {

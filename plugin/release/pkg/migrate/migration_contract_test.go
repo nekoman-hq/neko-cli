@@ -65,7 +65,7 @@ func TestHandleMigrateDryRunCommandContract(t *testing.T) {
 		{"property": "Version", "value": "1.2.3"},
 		{"property": "Tag Prefix", "value": "v"},
 		{"property": "Executor", "value": "jreleaser"},
-		{"property": "Delivery", "value": "local"},
+		{"property": "Delivery", "value": "github-actions"},
 	}
 	if !reflect.DeepEqual(items, wantItems) {
 		t.Fatalf("ordered response items changed:\ngot  %#v\nwant %#v", items, wantItems)

@@ -408,7 +408,13 @@ func assertV2Config(t *testing.T, path string) {
 		t.Fatalf("unexpected config: %s", string(data))
 	}
 	unit := cfg.Units[0]
-	if unit.ID != "default" || unit.DisplayName != "example" || unit.WorkingDirectory != "." || unit.TagPrefix != "v" || unit.Executor.Type != "jreleaser" || unit.Executor.Delivery != "local" {
+	if unit.ID != "default" ||
+		unit.DisplayName != "example" ||
+		unit.WorkingDirectory != "." ||
+		unit.TagPrefix != "v" ||
+		unit.Executor.Type != "jreleaser" ||
+		unit.Executor.Delivery != "github-actions" ||
+		unit.Executor.Workflow != ".github/workflows/release-default.yml" {
 		t.Fatalf("unexpected unit: %#v", unit)
 	}
 }
@@ -449,7 +455,8 @@ func validConfigJSON() string {
       "tagPrefix": "v",
       "executor": {
         "type": "jreleaser",
-        "delivery": "local"
+        "delivery": "github-actions",
+        "workflow": ".github/workflows/release-default.yml"
       }
     }
   ]
@@ -555,8 +562,14 @@ func sha256ForMigrationTest(data []byte) string {
 func withGitRepo(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
+	writeDefaultMigratedWorkflowForTest(t, root)
 	gitCmd(t, root, "init")
 	return root
+}
+
+func writeDefaultMigratedWorkflowForTest(t *testing.T, root string) {
+	t.Helper()
+	writeFile(t, filepath.Join(root, filepath.FromSlash(defaultMigratedWorkflow)), "name: release default\n")
 }
 
 func withChdir(t *testing.T, dir string) {

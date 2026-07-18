@@ -162,7 +162,7 @@ func mapPresencePolicyFailure(policyFailure *v2PresencePolicyFailure) *commandFa
 
 func initInvalidFlagDetails() map[string]any {
 	return map[string]any{
-		"required_flags": []string{"executor", "delivery"},
+		"required_flags": []string{"executor", "delivery", "workflow"},
 		"optional_flags": []string{
 			"unit",
 			"display-name",
@@ -183,7 +183,7 @@ func initInvalidFlagDetails() map[string]any {
 
 func unitAddInvalidFlagDetails() map[string]any {
 	return map[string]any{
-		"required_flags": []string{"unit", "executor", "delivery"},
+		"required_flags": []string{"unit", "executor", "delivery", "workflow"},
 		"optional_flags": []string{
 			"display-name",
 			"version",

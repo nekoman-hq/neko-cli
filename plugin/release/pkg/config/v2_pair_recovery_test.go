@@ -116,6 +116,7 @@ func TestSelectV2PairRecoveryOperation(t *testing.T) {
 
 func TestV2PairRecoveryRestoresOriginalPairInNextProcess(t *testing.T) {
 	root := t.TempDir()
+	writeDefaultWorkflow(t, root)
 	writeV2PairForRecoveryTest(t, root, testV2ReleasePair("api", "1.2.3"), 0600, 0640)
 	oldConfig := mustReadV2PairFile(t, V2ConfigPath(root))
 	oldState := mustReadV2PairFile(t, V2StatePath(root))
@@ -157,6 +158,7 @@ func TestV2PairRecoveryRestoresOriginalPairInNextProcess(t *testing.T) {
 
 func TestV2PairRecoveryClosesCompletedIntendedPairInNextProcess(t *testing.T) {
 	root := t.TempDir()
+	writeDefaultWorkflow(t, root)
 	nextPair := testV2ReleasePair("api", "1.2.3")
 	nextConfig, nextState := canonicalPairBytesForRecoveryTest(t, nextPair)
 	evidence := newV2PairRecoveryEvidence(root, v2FileSnapshot{}, v2FileSnapshot{}, nextConfig, nextState)

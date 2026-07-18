@@ -108,7 +108,9 @@ func TestHandleRequestAtIsolatesPluginIndexOutputAcrossRepositories(t *testing.T
 
 func writeExplicitRootReleaseRepository(t *testing.T, root, unitID, version string) {
 	t.Helper()
-	configJSON := fmt.Sprintf(`{"schemaVersion":2,"units":[{"id":"%s","paths":["**"],"workingDirectory":".","tagPrefix":"%s/v","executor":{"type":"goreleaser","delivery":"local"}}]}`, unitID, unitID)
+	workflowPath := fmt.Sprintf(".github/workflows/release-%s.yml", unitID)
+	writeExplicitRootFile(t, filepath.Join(root, workflowPath), fmt.Sprintf("name: release %s\n", unitID))
+	configJSON := fmt.Sprintf(`{"schemaVersion":2,"units":[{"id":"%s","paths":["**"],"workingDirectory":".","tagPrefix":"%s/v","executor":{"type":"goreleaser","delivery":"github-actions","workflow":"%s"}}]}`, unitID, unitID, workflowPath)
 	stateJSON := fmt.Sprintf(`{"schemaVersion":2,"units":{"%s":{"version":"%s"}}}`, unitID, version)
 	writeExplicitRootFile(t, releaseconfig.V2ConfigPath(root), configJSON)
 	writeExplicitRootFile(t, releaseconfig.V2StatePath(root), stateJSON)
@@ -118,7 +120,9 @@ func writeExplicitRootPluginRepository(t *testing.T, root, unitID, pluginName, v
 	t.Helper()
 	manifestPath := filepath.Join("plugins", pluginName, "manifest.json")
 	writeExplicitRootFile(t, filepath.Join(root, manifestPath), fmt.Sprintf(`{"name":"%s","version":"%s","description":"%s plugin"}`, pluginName, version, pluginName))
-	configJSON := fmt.Sprintf(`{"schemaVersion":2,"units":[{"id":"%s","paths":["plugins/%s/**"],"workingDirectory":".","tagPrefix":"%s/v","kind":"plugin","plugin":{"name":"%s","manifest":"%s","assetPrefix":"%s","binaryName":"%s"},"executor":{"type":"goreleaser","delivery":"local"}}]}`, unitID, pluginName, unitID, pluginName, manifestPath, unitID, unitID)
+	workflowPath := fmt.Sprintf(".github/workflows/release-%s.yml", unitID)
+	writeExplicitRootFile(t, filepath.Join(root, workflowPath), fmt.Sprintf("name: release %s\n", unitID))
+	configJSON := fmt.Sprintf(`{"schemaVersion":2,"units":[{"id":"%s","paths":["plugins/%s/**"],"workingDirectory":".","tagPrefix":"%s/v","kind":"plugin","plugin":{"name":"%s","manifest":"%s","assetPrefix":"%s","binaryName":"%s"},"executor":{"type":"goreleaser","delivery":"github-actions","workflow":"%s"}}]}`, unitID, pluginName, unitID, pluginName, manifestPath, unitID, unitID, workflowPath)
 	stateJSON := fmt.Sprintf(`{"schemaVersion":2,"units":{"%s":{"version":"%s"}}}`, unitID, version)
 	writeExplicitRootFile(t, releaseconfig.V2ConfigPath(root), configJSON)
 	writeExplicitRootFile(t, releaseconfig.V2StatePath(root), stateJSON)

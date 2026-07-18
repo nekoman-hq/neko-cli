@@ -96,15 +96,20 @@ func normalizeV2UnitRequest(request v2UnitRequest) (v2InitConfig, error) {
 		return v2InitConfig{}, fmt.Errorf("invalid executor: %s (must be: goreleaser, jreleaser, or release-it)", request.Executor)
 	}
 	if request.Delivery == "" {
-		return v2InitConfig{}, fmt.Errorf("missing required flag: --delivery (local|github-actions)")
+		return v2InitConfig{}, fmt.Errorf("missing required flag: --delivery (github-actions)")
 	}
 	if !request.Delivery.IsValid() {
-		return v2InitConfig{}, fmt.Errorf("invalid delivery: %s (must be: local or github-actions)", request.Delivery)
+		return v2InitConfig{}, fmt.Errorf("invalid delivery: %s (must be: github-actions)", request.Delivery)
 	}
-
-	workflow := request.Workflow
 	if request.Delivery == config.DeliveryLocal {
-		workflow = ""
+		return v2InitConfig{}, fmt.Errorf("unsupported delivery: local (V2 releases support github-actions only)")
+	}
+	if request.Delivery != config.DeliveryGitHubActions {
+		return v2InitConfig{}, fmt.Errorf("unsupported delivery: %s (V2 releases support github-actions only)", request.Delivery)
+	}
+	workflow := request.Workflow
+	if strings.TrimSpace(workflow) == "" {
+		return v2InitConfig{}, fmt.Errorf("github-actions delivery requires --workflow")
 	}
 	return v2InitConfig{
 		UnitID:           unitID,

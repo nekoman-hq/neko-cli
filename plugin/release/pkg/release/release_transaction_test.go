@@ -49,95 +49,19 @@ func TestReleaseTransactionBlocksV2NonDryRunBeforeAnyMutation(t *testing.T) {
 
 	_, err := tx.Execute()
 	if err == nil {
-		t.Fatal("expected V2 publication adapter block")
+		t.Fatal("expected V2 local delivery block")
 	}
-	if !strings.Contains(err.Error(), "V2 Git release coordination is prepared") {
-		t.Fatalf("expected M5A block message, got %v", err)
+	if !strings.Contains(err.Error(), "V2 local delivery is not supported") {
+		t.Fatalf("expected local delivery rejection, got %v", err)
 	}
 	if got := mustReadString(t, statePath); got != before {
-		t.Fatalf("state changed despite M5A block:\n%s", got)
+		t.Fatalf("state changed despite local delivery rejection:\n%s", got)
 	}
 	if executor.executed {
-		t.Fatal("executor started despite M5A block")
+		t.Fatal("executor started despite local delivery rejection")
 	}
 	if status := strings.TrimSpace(gitOutput(t, root, "status", "--porcelain")); status != "" {
 		t.Fatalf("expected clean repository after block, got %q", status)
-	}
-}
-
-func TestReleaseTransactionInternalPreparationMaterializesBeforeState(t *testing.T) {
-	root := newCleanV2MaterializationGitRepository(t, "jreleaser")
-	ctx := mustBuildTransactionContext(t, root, Minor)
-	statePath := releaseconfig.V2StatePath(root)
-	jreleaserPath := filepath.Join(root, "jreleaser.yml")
-	beforeState := mustReadString(t, statePath)
-	beforeJReleaser := mustReadString(t, jreleaserPath)
-	executor := &fakeTransactionExecutor{name: "jreleaser"}
-	tx := mustNewReleaseTransaction(t, ctx, executor)
-	seenMaterializedBeforeState := false
-	tx.AfterMaterialization = func(tx *ReleaseTransaction) error {
-		if tx.Tracker.Phase != ExecutionPhaseMaterializationApplied {
-			t.Fatalf("expected materialization phase, got %s", tx.Tracker.Phase)
-		}
-		if mustReadString(t, statePath) != beforeState {
-			t.Fatal("state changed before materialization hook")
-		}
-		if !strings.Contains(mustReadString(t, jreleaserPath), "version: 0.3.0") {
-			t.Fatal("jreleaser.yml was not materialized before state write")
-		}
-		seenMaterializedBeforeState = true
-		return nil
-	}
-
-	knownFiles, err := tx.prepareReleaseFilesForCoordinator()
-	if err != nil {
-		t.Fatalf("prepareReleaseFilesForCoordinator: %v", err)
-	}
-	if !seenMaterializedBeforeState {
-		t.Fatal("materialization hook was not called")
-	}
-	if executor.executed {
-		t.Fatal("executor must not run while preparing release files for coordinator")
-	}
-	if beforeJReleaser == mustReadString(t, jreleaserPath) {
-		t.Fatal("expected jreleaser.yml to remain materialized after successful transaction")
-	}
-	if !sameStringSet(knownFiles.RelativePaths(), []string{".neko/release.state.json", "jreleaser.yml"}) {
-		t.Fatalf("unexpected known release files: %#v", knownFiles.RelativePaths())
-	}
-}
-
-func TestReleaseTransactionInternalPreparationRestoresBeforeCoordinator(t *testing.T) {
-	root := newCleanV2MaterializationGitRepository(t, "jreleaser")
-	ctx := mustBuildTransactionContext(t, root, Minor)
-	statePath := releaseconfig.V2StatePath(root)
-	jreleaserPath := filepath.Join(root, "jreleaser.yml")
-	beforeState := mustReadString(t, statePath)
-	beforeJReleaser := mustReadString(t, jreleaserPath)
-	executor := &fakeTransactionExecutor{name: "jreleaser"}
-	tx := mustNewReleaseTransaction(t, ctx, executor)
-	tx.AfterStateWrite = func(_ *ReleaseTransaction) error {
-		return fmt.Errorf("stop before coordinator")
-	}
-
-	_, err := tx.prepareReleaseFilesForCoordinator()
-	if err == nil {
-		t.Fatal("expected pre-coordinator failure")
-	}
-	if !strings.Contains(err.Error(), "restored V2 state and materialized files") {
-		t.Fatalf("expected restore message, got %v", err)
-	}
-	if got := mustReadString(t, statePath); got != beforeState {
-		t.Fatalf("state not restored:\n%s", got)
-	}
-	if got := mustReadString(t, jreleaserPath); got != beforeJReleaser {
-		t.Fatalf("jreleaser.yml not restored:\n%s", got)
-	}
-	if staged := strings.TrimSpace(gitOutput(t, root, "diff", "--cached", "--name-only")); staged != "" {
-		t.Fatalf("expected no staged files, got %q", staged)
-	}
-	if executor.executed {
-		t.Fatal("executor should not start before coordinator")
 	}
 }
 
@@ -152,7 +76,7 @@ func TestReleaseTransactionBlocksReleaseItV2Local(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected V2 block")
 	}
-	if !strings.Contains(err.Error(), "V2 Git release coordination is prepared") {
+	if !strings.Contains(err.Error(), "V2 local delivery is not supported") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got := mustReadString(t, releaseconfig.V2StatePath(root)); got != before {
@@ -182,7 +106,7 @@ func TestReleaseTransactionBlocksGitHubActionsBeforeExecutor(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected V2 block")
 	}
-	if !strings.Contains(err.Error(), "V2 Git release coordination is prepared") {
+	if !strings.Contains(err.Error(), "V2 local delivery is not supported") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if executor.executed {
@@ -195,12 +119,26 @@ func TestReleaseTransactionSourceContainsNoDestructiveRollback(t *testing.T) {
 	if strings.Contains(source, "reset --hard") || strings.Contains(source, "clean -fd") {
 		t.Fatal("V2 transaction source must not contain destructive rollback commands")
 	}
+	for _, removedScaffold := range []string{
+		"prepareReleaseFilesForCoordinator",
+		"AfterMaterialization",
+		"AfterStateWrite",
+		"ensureGitClean",
+		"unstageKnownFiles",
+		"restore --staged",
+	} {
+		if strings.Contains(source, removedScaffold) {
+			t.Fatalf("release transaction retained inactive local scaffold %q", removedScaffold)
+		}
+	}
 }
 
 func newCleanV2GitRepository(t *testing.T, executor string) string {
 	t.Helper()
 	root := newV2StateTestRepository(t)
-	cfg := fmt.Sprintf(`{"schemaVersion":2,"units":[{"id":"api","paths":["api/**"],"workingDirectory":".","tagPrefix":"api/v","executor":{"type":"%s","delivery":"local"}},{"id":"web","paths":["web/**"],"workingDirectory":".","tagPrefix":"web/v","executor":{"type":"jreleaser","delivery":"local"}}]}`, executor)
+	mustWriteReleaseTestFile(t, root, ".github/workflows/release-api.yml", "name: release api\n")
+	mustWriteReleaseTestFile(t, root, ".github/workflows/release-web.yml", "name: release web\n")
+	cfg := fmt.Sprintf(`{"schemaVersion":2,"units":[{"id":"api","paths":["api/**"],"workingDirectory":".","tagPrefix":"api/v","executor":{"type":"%s","delivery":"github-actions","workflow":".github/workflows/release-api.yml"}},{"id":"web","paths":["web/**"],"workingDirectory":".","tagPrefix":"web/v","executor":{"type":"jreleaser","delivery":"github-actions","workflow":".github/workflows/release-web.yml"}}]}`, executor)
 	if err := os.WriteFile(releaseconfig.V2ConfigPath(root), []byte(cfg), 0644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -262,4 +200,15 @@ func gitOutput(t *testing.T, root string, args ...string) string {
 		t.Fatalf("git %v: %s: %v", args, string(output), err)
 	}
 	return string(output)
+}
+
+func mustWriteReleaseTestFile(t *testing.T, root, relativePath, content string) {
+	t.Helper()
+	path := filepath.Join(root, filepath.FromSlash(relativePath))
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatalf("mkdir parent for %s: %v", path, err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
 }

@@ -72,21 +72,14 @@ func TestInspectReleasePlanV2ReturnsCanonicalPlanningFacts(t *testing.T) {
 	assertSecretAbsentFromInspection(t, inspection)
 }
 
-func TestInspectReleasePlanV2ReportsLocalMaterializationBlocker(t *testing.T) {
+func TestInspectReleasePlanV2RejectsLocalDeliveryConfig(t *testing.T) {
 	root := newReleaseItPlanInspectionRepository(t)
 	useCase := newReleasePlanInspectionUseCase(root)
 
 	inspection, failure := useCase.Inspect(t.Context(), ReleasePlanInspectionRequest{ReleaseType: Patch, UnitID: "web"})
 
-	if failure != nil {
-		t.Fatalf("Inspect failure: %#v", failure)
-	}
-	if inspection.Readiness != LocalPlanBlocked || len(inspection.Blockers) != 1 {
-		t.Fatalf("expected blocked local plan, got %#v", inspection)
-	}
-	if blocker := inspection.Blockers[0]; blocker.Category != "materialization-blocked" ||
-		!strings.Contains(blocker.Message, "V2 local release-it is blocked") {
-		t.Fatalf("unexpected blocker: %#v", blocker)
+	if failure == nil || failure.Code != "CONFIG_INVALID" || !strings.Contains(failure.responseMessage(), "local delivery is not supported") {
+		t.Fatalf("expected invalid local delivery config, inspection=%#v failure=%#v", inspection, failure)
 	}
 }
 

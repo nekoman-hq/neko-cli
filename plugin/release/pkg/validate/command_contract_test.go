@@ -37,11 +37,12 @@ func TestHandleValidateCharacterizesStableResponseBoundaries(t *testing.T) {
 		{
 			name: "v2 default rows and wrong flag types",
 			arrange: func(t *testing.T) {
+				mustWrite(t, ".github/workflows/release-default.yml", "name: release default\n")
 				writeV2(t, `{"schemaVersion":2,"units":[{
   "id":"default",
   "paths":["**"],
   "tagPrefix":"v",
-  "executor":{"type":"goreleaser"}
+  "executor":{"type":"goreleaser","delivery":"github-actions","workflow":".github/workflows/release-default.yml"}
 }]}`, `{"schemaVersion":2,"units":{"default":{"version":"2.2.4"}}}`)
 			},
 			request:      plugin.Request{Flags: map[string]any{"show": "true", "unit": true}},
@@ -106,11 +107,12 @@ func TestHandleValidateCharacterizesStableResponseBoundaries(t *testing.T) {
 func TestHandleValidateV2IsReadOnlyAndTokenIndependent(t *testing.T) {
 	withWorkingDirectory(t)
 	t.Setenv("GITHUB_TOKEN", "")
+	mustWrite(t, ".github/workflows/release-default.yml", "name: release default\n")
 	writeV2(t, `{"schemaVersion":2,"units":[{
   "id":"default",
   "paths":["**"],
   "tagPrefix":"v",
-  "executor":{"type":"goreleaser"}
+  "executor":{"type":"goreleaser","delivery":"github-actions","workflow":".github/workflows/release-default.yml"}
 }]}`, `{"schemaVersion":2,"units":{"default":{"version":"2.2.4"}}}`)
 
 	configBefore := readValidateFile(t, config.V2ConfigPath("."))

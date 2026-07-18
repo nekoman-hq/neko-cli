@@ -264,7 +264,8 @@ func testV2ReleasePair(unitID, version string) V2ReleasePair {
 				TagPrefix:        unitID + "/v",
 				Executor: V2Executor{
 					Type:     ExecutorGoReleaser,
-					Delivery: DeliveryLocal,
+					Delivery: DeliveryGitHubActions,
+					Workflow: ".github/workflows/release.yml",
 				},
 			}},
 		},

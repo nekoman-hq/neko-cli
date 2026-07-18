@@ -9,6 +9,7 @@ package release
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
@@ -77,6 +78,15 @@ func (operation releaseStartOperation) Start(ctx context.Context, request Releas
 
 	repository, err := operation.repositories.Load(operation.repositoryRoot)
 	if err != nil {
+		if config.V2ConfigExists(operation.repositoryRoot) || config.V2StateExists(operation.repositoryRoot) {
+			return nil, &CommandFailure{
+				Code:  "CONFIG_INVALID",
+				Cause: err,
+				Details: map[string]any{
+					"hint": "Fix .neko/release.config.json and .neko/release.state.json before running release commands",
+				},
+			}
+		}
 		return nil, &CommandFailure{
 			Code:  "CONFIG_NOT_FOUND",
 			Cause: err,
@@ -136,9 +146,9 @@ func startV2Release(ctx context.Context, execCtx *ReleaseExecutionContext, progr
 		return result, nil
 	}
 	if execCtx.Delivery == string(config.DeliveryLocal) {
-		return nil, failureFromMessage("V2_LOCAL_DELIVERY_BLOCKED", "V2 local release execution is not available yet.")
+		return nil, failureFromMessage("V2_LOCAL_DELIVERY_UNSUPPORTED", "V2 local delivery is not supported; use github-actions delivery with a workflow.")
 	}
-	return nil, failureFromMessage("V2_PUBLICATION_ADAPTERS_UNAVAILABLE", v2GitCoordinationUnavailableMessage)
+	return nil, failureFromMessage("V2_DELIVERY_UNSUPPORTED", fmt.Sprintf("V2 delivery %q is not supported; use github-actions delivery with a workflow.", execCtx.Delivery))
 }
 
 func planV2Release(execCtx *ReleaseExecutionContext, progress ReleaseProgress) (ReleaseCommandOutcome, *CommandFailure) {
