@@ -23,16 +23,18 @@ import (
 type OutputFormat string
 
 const (
-	FormatTable OutputFormat = "table" // kubectl-style table with colors (default)
-	FormatJSON  OutputFormat = "json"  // Raw JSON output
-	FormatWide  OutputFormat = "wide"  // Extended table with more columns if available
+	FormatTable  OutputFormat = "table"  // kubectl-style table with colors (default)
+	FormatJSON   OutputFormat = "json"   // Raw JSON output
+	FormatWide   OutputFormat = "wide"   // Extended table with more columns if available
+	FormatGitHub OutputFormat = "github" // GitHub Actions command-file output
 )
 
 // RenderOptions configures how a plugin response should be rendered.
 type RenderOptions struct {
-	WidthProvider OutputWidthProvider // Optional test/composition seam for output width
-	Format        OutputFormat        // The output format to use
-	Describe      bool                // When true, include logs and metadata in the output
+	WidthProvider    OutputWidthProvider // Optional test/composition seam for output width
+	GitHubOutputFile string              // Explicit command-file destination for GitHub output
+	Format           OutputFormat        // The output format to use
+	Describe         bool                // When true, include logs and metadata in the output
 }
 
 // RenderWithOptions is the unified render function that respects both format and describe options.
@@ -50,6 +52,15 @@ func RenderWithOptions(resp *plugin.Response, opts RenderOptions) error {
 // RenderWithOptionsTo renders a plugin response to the supplied writer while
 // preserving the width of that writer as the responsive-layout input.
 func RenderWithOptionsTo(resp *plugin.Response, opts RenderOptions, w io.Writer) error {
+	if opts.Format == FormatGitHub {
+		if resp.Status == "error" {
+			return renderError(resp, w)
+		}
+		if opts.Describe {
+			return newGitHubOutputError(GitHubOutputEncodingFailed, "GitHub output cannot be combined with describe output")
+		}
+		return renderGitHubOutput(resp, opts.GitHubOutputFile)
+	}
 	if opts.Describe {
 		return renderDescribeWithOptionsTo(resp, opts, w)
 	}
@@ -280,6 +291,9 @@ func renderTableWithWidth(resp *plugin.Response, w io.Writer, wide bool, widthPr
 
 	if resp.Status == "error" {
 		return renderError(resp, w)
+	}
+	if rendered, err := renderHumanProperties(resp, w); rendered || err != nil {
+		return err
 	}
 	if rendered, err := renderResponsiveTable(resp, w, wide, widthProvider); rendered || err != nil {
 		return err

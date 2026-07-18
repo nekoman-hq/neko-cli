@@ -16,10 +16,11 @@ import (
 )
 
 var (
-	verbose      bool
-	outputFormat string
-	PluginDir    string
-	describe     bool
+	verbose          bool
+	outputFormat     string
+	githubOutputFile string
+	PluginDir        string
+	describe         bool
 )
 
 var rootCmd = &cobra.Command{

@@ -32,13 +32,16 @@ type Context struct {
 //
 //nolint:govet // Field order preserves the stable response protocol order.
 type Response struct {
-	Status       string           `json:"status"`                  // Execution status (e.g., "success", "error")
-	Metadata     ResponseMetadata `json:"metadata"`                // Metadata about the response
-	Data         map[string]any   `json:"data,omitempty"`          // Optional structured data returned by the plugin
-	Error        *ResponseError   `json:"error,omitempty"`         // Error details if the execution failed
-	RendererHint string           `json:"renderer_hint,omitempty"` // Hint for how to render the response (e.g., "table", "json", "text")
-	Logs         []LogEntry       `json:"logs,omitempty"`          // Log entries generated during execution
-	HumanTable   *HumanTable      `json:"human_table,omitempty"`   // Optional transport-only declaration for responsive human output
+	Status          string           `json:"status"`                     // Execution status (e.g., "success", "error")
+	Metadata        ResponseMetadata `json:"metadata"`                   // Metadata about the response
+	Data            map[string]any   `json:"data,omitempty"`             // Optional structured data returned by the plugin
+	Error           *ResponseError   `json:"error,omitempty"`            // Error details if the execution failed
+	RendererHint    string           `json:"renderer_hint,omitempty"`    // Hint for how to render the response (e.g., "table", "json", "text")
+	Logs            []LogEntry       `json:"logs,omitempty"`             // Log entries generated during execution
+	HumanTable      *HumanTable      `json:"human_table,omitempty"`      // Optional transport-only declaration for responsive human output
+	HumanProperties *HumanProperties `json:"human_properties,omitempty"` // Optional ordered property declaration for one human-facing object
+	GitHubOutput    *GitHubOutput    `json:"github_output,omitempty"`    // Optional ordered declaration for GitHub Actions output
+	ExitCode        int              `json:"exit_code,omitempty"`        // Optional non-zero Core CLI exit request
 }
 
 // HumanTable declares ordered columns for an opt-in responsive human table.
@@ -53,6 +56,32 @@ type HumanColumn struct {
 	Key       string `json:"key"`
 	Label     string `json:"label"`
 	Essential bool   `json:"essential,omitempty"`
+}
+
+// HumanProperties declares an ordered property/value view for one result.
+// It is transport metadata and does not change the response Data contract.
+type HumanProperties struct {
+	Properties []HumanProperty `json:"properties"`
+}
+
+// HumanProperty maps one response Data key to a human-facing label. Slice
+// order defines display order.
+type HumanProperty struct {
+	Key   string `json:"key"`
+	Label string `json:"label"`
+}
+
+// GitHubOutput declares an ordered set of response Data fields to encode for
+// a GitHub Actions command file. It does not select the destination.
+type GitHubOutput struct {
+	Fields []GitHubOutputField `json:"fields"`
+}
+
+// GitHubOutputField maps one stable GitHub Actions output name to a response
+// Data key. Slice order defines command-file order.
+type GitHubOutputField struct {
+	Name    string `json:"name"`
+	DataKey string `json:"data_key"`
 }
 
 // LogEntry represents a single log message generated during plugin execution.

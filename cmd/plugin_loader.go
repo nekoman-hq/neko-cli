@@ -23,7 +23,8 @@ import (
 )
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&outputFormat, "output", "table", "Output format (table, json, wide) -- only for plugin responses")
+	rootCmd.PersistentFlags().StringVar(&outputFormat, "output", "table", "Output format (table, json, wide, github) -- only for plugin responses")
+	rootCmd.PersistentFlags().StringVar(&githubOutputFile, "github-output-file", "", "Explicit GitHub Actions command-file destination -- only for --output github")
 	rootCmd.PersistentFlags().BoolVar(&describe, "describe", false, "Include execution logs and metadata in output -- only for plugin responses")
 
 	// Detect plugin directory
@@ -370,10 +371,24 @@ func executePlugin(pluginName string, cmd *cobra.Command, args []string) error {
 	}
 
 	opts := renderer.RenderOptions{
-		Format:   renderer.OutputFormat(outputFormat),
-		Describe: describe,
+		GitHubOutputFile: githubOutputFile,
+		Format:           renderer.OutputFormat(outputFormat),
+		Describe:         describe,
 	}
-	return renderer.RenderWithOptions(resp, opts)
+	if err := renderer.RenderWithOptions(resp, opts); err != nil {
+		return err
+	}
+	return pluginResponseExitError(resp)
+}
+
+func pluginResponseExitError(response *plugin.Response) error {
+	if response.ExitCode == 0 {
+		return nil
+	}
+	if response.Error == nil {
+		return fmt.Errorf("plugin command requested exit code %d", response.ExitCode)
+	}
+	return fmt.Errorf("%s: %s", response.Error.Code, response.Error.Message)
 }
 
 // validateRequiredFlagsFromManifest checks that all required flags from the manifest
