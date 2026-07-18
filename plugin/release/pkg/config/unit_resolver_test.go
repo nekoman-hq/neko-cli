@@ -61,3 +61,16 @@ func TestResolveReleaseUnitV2SingleAndMulti(t *testing.T) {
 		t.Fatalf("expected unknown unit error with ids, got %v", err)
 	}
 }
+
+func TestValidateReleaseUnitIDUsesV2Policy(t *testing.T) {
+	for _, valid := range []string{"api", "plugin-release", "a1"} {
+		if err := ValidateReleaseUnitID(valid); err != nil {
+			t.Fatalf("ValidateReleaseUnitID(%q): %v", valid, err)
+		}
+	}
+	for _, invalid := range []string{"", "API", "-api", "api_unit", "api/other", "api\nother"} {
+		if err := ValidateReleaseUnitID(invalid); err == nil {
+			t.Fatalf("ValidateReleaseUnitID(%q) succeeded", invalid)
+		}
+	}
+}

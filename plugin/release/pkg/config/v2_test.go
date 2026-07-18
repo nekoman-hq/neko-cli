@@ -181,6 +181,26 @@ func TestLoadReleaseRepositoryRejectsRootV1V2Conflict(t *testing.T) {
 	}
 }
 
+func TestV2ConfigStateAlignmentFailureIsClassified(t *testing.T) {
+	cfg := &V2ReleaseConfig{
+		SchemaVersion: 2,
+		Units: []V2Unit{{
+			ID:        "api",
+			Paths:     []string{"**"},
+			TagPrefix: "api/v",
+			Executor:  V2Executor{Type: ExecutorGoReleaser, Delivery: DeliveryGitHubActions, Workflow: ".github/workflows/release.yml"},
+		}},
+	}
+	state := &V2ReleaseState{SchemaVersion: 2, Units: map[string]V2UnitState{"web": {Version: "1.0.0"}}}
+	err := ValidateV2("", cfg, state)
+	if err == nil || !IsV2ConfigStateAlignmentError(err) {
+		t.Fatalf("error = %v, want classified config/state alignment failure", err)
+	}
+	if IsV2ConfigStateAlignmentError(nil) {
+		t.Fatal("nil must not be classified as an alignment failure")
+	}
+}
+
 func TestLoadV2RepositoryValidationErrors(t *testing.T) {
 	tests := []struct {
 		name      string

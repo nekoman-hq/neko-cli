@@ -215,6 +215,20 @@ func (store *v2PairRecoveryStore) LoadUnresolved() (*v2PairRecoveryEvidence, err
 	return &evidence, nil
 }
 
+// ValidateV2PairRecoveryReadiness performs a read-only check for unresolved
+// pair-recovery evidence. It never closes, restores, or rewrites evidence.
+func ValidateV2PairRecoveryReadiness(root string) error {
+	store := newV2PairRecoveryStore(root)
+	evidence, err := store.LoadUnresolved()
+	if err != nil {
+		return err
+	}
+	if evidence != nil {
+		return fmt.Errorf("unresolved V2 pair recovery evidence is present")
+	}
+	return nil
+}
+
 func (store *v2PairRecoveryStore) CreatePairRecoveryEvidence(evidence v2PairRecoveryEvidence) error {
 	if store == nil {
 		return nil

@@ -5,6 +5,7 @@ package config
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -101,6 +102,29 @@ var (
 	pluginPublicNamePattern   = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 	pluginArtifactNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 )
+
+type v2ConfigStateAlignmentError struct {
+	message string
+}
+
+func (alignmentError *v2ConfigStateAlignmentError) Error() string {
+	return alignmentError.message
+}
+
+// IsV2ConfigStateAlignmentError reports whether validation failed because
+// config and state do not describe the same release-unit identities.
+func IsV2ConfigStateAlignmentError(err error) bool {
+	var alignmentError *v2ConfigStateAlignmentError
+	return errors.As(err, &alignmentError)
+}
+
+// ValidateReleaseUnitID applies the canonical V2 unit identifier policy.
+func ValidateReleaseUnitID(unitID string) error {
+	if !unitIDPattern.MatchString(unitID) {
+		return fmt.Errorf("release unit id %q is invalid; use [a-z][a-z0-9-]*", unitID)
+	}
+	return nil
+}
 
 // V2ConfigPath returns the canonical V2 config path for repositoryRoot.
 func V2ConfigPath(repositoryRoot string) string {
@@ -256,7 +280,7 @@ func validateV2ConfigAndState(repositoryRoot string, cfg *V2ReleaseConfig, state
 		for id := range ids {
 			unitState, ok := state.Units[id]
 			if !ok {
-				return fmt.Errorf("v2 state is missing unit %q", id)
+				return &v2ConfigStateAlignmentError{message: fmt.Sprintf("v2 state is missing unit %q", id)}
 			}
 			if _, err := semver.NewVersion(unitState.Version); err != nil {
 				return fmt.Errorf("v2 state unit %q version %q is not valid SemVer", id, unitState.Version)
@@ -264,7 +288,7 @@ func validateV2ConfigAndState(repositoryRoot string, cfg *V2ReleaseConfig, state
 		}
 		for id := range state.Units {
 			if _, ok := ids[id]; !ok {
-				return fmt.Errorf("v2 state contains unknown unit %q", id)
+				return &v2ConfigStateAlignmentError{message: fmt.Sprintf("v2 state contains unknown unit %q", id)}
 			}
 		}
 	}
@@ -288,7 +312,7 @@ func CanonicalV2State(state V2ReleaseState) ([]byte, error) {
 }
 
 func validateV2Unit(repositoryRoot string, unit V2Unit) error {
-	if !unitIDPattern.MatchString(unit.ID) {
+	if err := ValidateReleaseUnitID(unit.ID); err != nil {
 		return fmt.Errorf("v2 config unit id %q is invalid; use [a-z][a-z0-9-]*", unit.ID)
 	}
 	if len(unit.Paths) == 0 {

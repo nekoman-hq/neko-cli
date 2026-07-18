@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -111,6 +112,36 @@ func TestSelectV2PairRecoveryOperation(t *testing.T) {
 				t.Fatalf("decision = %#v, want %d", decision, test.want)
 			}
 		})
+	}
+}
+
+func TestValidateV2PairRecoveryReadinessIsReadOnly(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, V2Directory), 0o755); err != nil {
+		t.Fatalf("mkdir .neko: %v", err)
+	}
+	if err := ValidateV2PairRecoveryReadiness(root); err != nil {
+		t.Fatalf("readiness without evidence: %v", err)
+	}
+
+	evidence := testV2PairRecoveryEvidence(t, root)
+	store := newV2PairRecoveryStore(root)
+	if err := store.CreatePairRecoveryEvidence(evidence); err != nil {
+		t.Fatalf("create evidence: %v", err)
+	}
+	before, err := os.ReadFile(V2PairRecoveryPath(root))
+	if err != nil {
+		t.Fatalf("read evidence before: %v", err)
+	}
+	if readinessErr := ValidateV2PairRecoveryReadiness(root); readinessErr == nil {
+		t.Fatal("readiness must fail while unresolved evidence exists")
+	}
+	after, err := os.ReadFile(V2PairRecoveryPath(root))
+	if err != nil {
+		t.Fatalf("read evidence after: %v", err)
+	}
+	if !bytes.Equal(after, before) {
+		t.Fatal("readiness check changed pair recovery evidence")
 	}
 }
 
