@@ -234,6 +234,35 @@ func TestMalformedInstalledPluginManifestFailsClearly(t *testing.T) {
 	assertContains(t, err.Error(), "unexpected end of JSON input")
 }
 
+func TestRequiredReleaseContextFlagsFailBeforeDispatchWhenMissing(t *testing.T) {
+	command := &cobra.Command{Use: "ci-validate-context"}
+	definitions := []plugin.Flag{
+		{Name: "unit", Type: "string", Required: true},
+		{Name: "version", Type: "string", Required: true},
+		{Name: "tag", Type: "string", Required: true},
+		{Name: "release-sha", Type: "string", Required: true},
+	}
+	for _, definition := range definitions {
+		command.Flags().String(definition.Name, "", definition.Description)
+	}
+
+	err := validateRequiredFlagsFromManifest(command, definitions)
+	if err == nil {
+		t.Fatal("missing release context flags unexpectedly passed")
+	}
+	for _, name := range []string{"unit", "version", "tag", "release-sha"} {
+		if !strings.Contains(err.Error(), name) {
+			t.Fatalf("missing flag error omitted %s: %v", name, err)
+		}
+		if setErr := command.Flags().Set(name, "value"); setErr != nil {
+			t.Fatalf("set %s: %v", name, setErr)
+		}
+	}
+	if err := validateRequiredFlagsFromManifest(command, definitions); err != nil {
+		t.Fatalf("complete release context flags failed: %v", err)
+	}
+}
+
 func executeTestCommand(cmd *cobra.Command, args ...string) (string, error) {
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)

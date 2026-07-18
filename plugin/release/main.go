@@ -82,6 +82,8 @@ func handleRequestAt(root workspace.RepositoryRoot, req plugin.Request, v1Execut
 		return release.HandleReleaseWithV1ExecutorsAt(root, req, release.Major, v1Executors...)
 	case "plan":
 		return release.HandlePlanAt(root, req)
+	case "ci-validate-context":
+		return release.HandleReleaseContextValidationAt(root, req)
 	case "resume":
 		return release.HandleResumeAt(root, req)
 	case "evidence":

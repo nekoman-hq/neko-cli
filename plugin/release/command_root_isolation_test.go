@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -104,6 +105,89 @@ func TestHandleRequestAtIsolatesPluginIndexOutputAcrossRepositories(t *testing.T
 	assertRootIsolationOutputItem(t, firstResp, "dist/plugin-index.json")
 	assertRootIsolationOutputItem(t, secondResp, "dist/plugin-index.json")
 	assertProcessWorkingDirectory(t, cwd)
+}
+
+func TestReleaseContextValidationCommandUsesNestedExplicitRootsWithoutMutation(t *testing.T) {
+	firstRoot, firstRequest := writeExplicitRootReleaseContextGitRepository(t, "api", "1.2.3")
+	secondRoot, secondRequest := writeExplicitRootReleaseContextGitRepository(t, "web", "2.0.0")
+	otherRoot := t.TempDir()
+	withProcessWorkingDirectory(t, otherRoot)
+
+	firstNested := filepath.Join(firstRoot, "services", "api")
+	secondNested := filepath.Join(secondRoot, "services", "web")
+	if err := os.MkdirAll(firstNested, 0o755); err != nil {
+		t.Fatalf("mkdir first nested path: %v", err)
+	}
+	if err := os.MkdirAll(secondNested, 0o755); err != nil {
+		t.Fatalf("mkdir second nested path: %v", err)
+	}
+	firstResolved, err := workspace.ResolveRepositoryRoot(firstNested)
+	if err != nil {
+		t.Fatalf("resolve first nested root: %v", err)
+	}
+	secondResolved, err := workspace.ResolveRepositoryRoot(secondNested)
+	if err != nil {
+		t.Fatalf("resolve second nested root: %v", err)
+	}
+
+	firstStatus := explicitRootGitOutput(t, firstRoot, "status", "--porcelain", "--untracked-files=all")
+	secondStatus := explicitRootGitOutput(t, secondRoot, "status", "--porcelain", "--untracked-files=all")
+	firstResponse, err := handleRequestAt(firstResolved, firstRequest, nil)
+	if err != nil {
+		t.Fatalf("validate first context: %v", err)
+	}
+	secondResponse, err := handleRequestAt(secondResolved, secondRequest, nil)
+	if err != nil {
+		t.Fatalf("validate second context: %v", err)
+	}
+	if firstResponse.Data["unit"] != "api" || firstResponse.Data["version"] != "1.2.3" || secondResponse.Data["unit"] != "web" || secondResponse.Data["version"] != "2.0.0" {
+		t.Fatalf("isolated responses: first=%#v second=%#v", firstResponse.Data, secondResponse.Data)
+	}
+	if got := explicitRootGitOutput(t, firstRoot, "status", "--porcelain", "--untracked-files=all"); got != firstStatus {
+		t.Fatalf("first repository changed: before=%q after=%q", firstStatus, got)
+	}
+	if got := explicitRootGitOutput(t, secondRoot, "status", "--porcelain", "--untracked-files=all"); got != secondStatus {
+		t.Fatalf("second repository changed: before=%q after=%q", secondStatus, got)
+	}
+	assertProcessWorkingDirectory(t, otherRoot)
+}
+
+func writeExplicitRootReleaseContextGitRepository(t *testing.T, unitID, version string) (string, plugin.Request) {
+	t.Helper()
+	root := t.TempDir()
+	writeExplicitRootReleaseRepository(t, root, unitID, version)
+	explicitRootGitCommand(t, root, "init")
+	explicitRootGitCommand(t, root, "config", "user.email", "context@example.invalid")
+	explicitRootGitCommand(t, root, "config", "user.name", "Context Validation")
+	explicitRootGitCommand(t, root, "add", ".neko", ".github")
+	explicitRootGitCommand(t, root, "commit", "-m", "release context")
+	sha := strings.TrimSpace(explicitRootGitOutput(t, root, "rev-parse", "HEAD"))
+	tag := unitID + "/v" + version
+	explicitRootGitCommand(t, root, "tag", tag, sha)
+	return root, plugin.Request{
+		Command: "ci-validate-context",
+		Flags: map[string]any{
+			"unit": unitID, "version": version, "tag": tag, "release-sha": sha,
+		},
+	}
+}
+
+func explicitRootGitCommand(t *testing.T, root string, arguments ...string) {
+	t.Helper()
+	command := exec.Command("git", append([]string{"-C", root}, arguments...)...)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %s: %v", arguments, output, err)
+	}
+}
+
+func explicitRootGitOutput(t *testing.T, root string, arguments ...string) string {
+	t.Helper()
+	command := exec.Command("git", append([]string{"-C", root}, arguments...)...)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %s: %v", arguments, output, err)
+	}
+	return string(output)
 }
 
 func writeExplicitRootReleaseRepository(t *testing.T, root, unitID, version string) {

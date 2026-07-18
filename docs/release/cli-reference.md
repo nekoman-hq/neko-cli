@@ -53,6 +53,7 @@ neko release major --unit api --dry-run
 neko release plan --change patch --unit api
 neko release plan --change minor --unit api
 neko release plan --change major --unit api
+neko release ci-validate-context --unit api --version 2.4.0 --tag api/v2.4.0 --release-sha <full-commit-object-id>
 neko release patch --unit api
 neko release minor --unit api
 neko release major --unit api
@@ -119,6 +120,8 @@ The execution journal records V2 release phases and recovery evidence under the 
 `neko release evidence-archive` supports only `archive-completed` for completed `release-execution`, `v1-compensation`, and completed `v2-pair-recovery` evidence. It still requires `--family`, the exact 64-character `--identity`, the current `--digest-sha256` from inspection output, and `--confirm-archive`; identity prefixes are inspection-only. It writes an exact private archive before removing the completed source evidence. Neither Evidence command repairs, retries, infers remote state, or archives dispatch/migration evidence.
 
 `neko release plugin-index` generates the public plugin registry index from V2 plugin units, `.neko/release.state.json`, and plugin manifests. The generated `plugin-index.json` is not committed as source and is not published by this command. Plugin release workflows publish or replace it as the `plugin-index.json` asset on the mutable `plugin-registry` GitHub Release after successful plugin releases. Runtime `neko plugin available`, `install`, and `update` use that asset as the source of truth and do not use `/releases/latest` or release-prefix fallback discovery for plugin discovery.
+
+`neko release ci-validate-context` requires `--unit`, `--version`, `--tag`, and `--release-sha`. It validates those dispatched values against the local V2 config/state pair, the checked-out commit, and complete local tag history. It is read-only, token-free, and network-free. Human output is the default; `--output json` returns typed canonical data. GitHub Actions can use `--output github --github-output-file "$GITHUB_OUTPUT"`; the destination is always explicit and is never inferred from the environment.
 
 ## Resume
 

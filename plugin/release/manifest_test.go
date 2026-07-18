@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -10,12 +11,14 @@ import (
 )
 
 type manifestCommand struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Outputs     []string `json:"outputs"`
 	Flags       []struct {
 		Name        string `json:"name"`
 		Type        string `json:"type"`
 		Description string `json:"description"`
+		Required    bool   `json:"required"`
 	} `json:"flags"`
 }
 
@@ -71,6 +74,12 @@ func TestManifestMatchesPublicReleaseContract(t *testing.T) {
 		"plan": {
 			"change": "string",
 			"unit":   "string",
+		},
+		"ci-validate-context": {
+			"unit":        "string",
+			"version":     "string",
+			"tag":         "string",
+			"release-sha": "string",
 		},
 		"history": {
 			"unit": "string",
@@ -131,6 +140,27 @@ func TestManifestMatchesPublicReleaseContract(t *testing.T) {
 		if _, ok := commands[forbidden]; ok {
 			t.Fatalf("manifest must not expose unsupported command %q", forbidden)
 		}
+	}
+}
+
+func TestReleaseContextValidationManifestContract(t *testing.T) {
+	command, present := loadManifestCommands(t)["ci-validate-context"]
+	if !present {
+		t.Fatal("ci-validate-context command is missing")
+	}
+	if !reflect.DeepEqual(command.Outputs, []string{"table", "json", "github"}) {
+		t.Fatalf("outputs = %#v", command.Outputs)
+	}
+	wantOrder := []string{"unit", "version", "tag", "release-sha"}
+	gotOrder := make([]string, 0, len(command.Flags))
+	for _, flag := range command.Flags {
+		gotOrder = append(gotOrder, flag.Name)
+		if !flag.Required || flag.Type != "string" {
+			t.Fatalf("flag %s = %#v, want required string", flag.Name, flag)
+		}
+	}
+	if !reflect.DeepEqual(gotOrder, wantOrder) {
+		t.Fatalf("flag order = %#v, want %#v", gotOrder, wantOrder)
 	}
 }
 

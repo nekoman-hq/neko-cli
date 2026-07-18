@@ -327,6 +327,41 @@
       ]
     },
     {
+      "name": "ci-validate-context",
+      "description": "Validate a dispatched Release V2 context against local config, state, HEAD, and tag history without mutation or network access",
+      "outputs": [
+        "table",
+        "json",
+        "github"
+      ],
+      "flags": [
+        {
+          "name": "unit",
+          "type": "string",
+          "required": true,
+          "description": "Dispatched release unit id"
+        },
+        {
+          "name": "version",
+          "type": "string",
+          "required": true,
+          "description": "Dispatched canonical semantic version"
+        },
+        {
+          "name": "tag",
+          "type": "string",
+          "required": true,
+          "description": "Dispatched canonical release tag"
+        },
+        {
+          "name": "release-sha",
+          "type": "string",
+          "required": true,
+          "description": "Dispatched full lowercase release commit object id"
+        }
+      ]
+    },
+    {
       "name": "resume",
       "description": "Resumes a previously journaled V2 GitHub Actions release. It never calculates a new version and does not automatically retry uncertain push or dispatch outcomes.",
       "outputs": [
@@ -508,6 +543,7 @@
   "renderer_types": [
     "table",
     "json",
+    "github",
     "text"
   ]
 }
