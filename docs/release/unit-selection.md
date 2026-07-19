@@ -30,8 +30,8 @@ V2 with multiple units:
 - Without `--unit`, it validates the complete repository config and state.
 - With `--unit`, it still validates everything and names the selection in the
   human summary; `--show` focuses the unit table and details on that selection.
-- Without `--show`, human output is a concise validation summary and contains
-  no unit table.
+- Without `--show`, human output is a concise responsive validation summary
+  table and contains no unit-detail table.
 
 Examples:
 

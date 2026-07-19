@@ -551,11 +551,14 @@ neko release validate
 neko release validate --show
 ```
 
-Without `--show`, human output stays concise and does not include a unit table:
+Without `--show`, human output stays concise as a real responsive summary table
+and does not include a unit-detail table:
 
 ```
 Release Configuration Validation
 
+PROPERTY          VALUE
+────────────────────────────────────────────
 Status            ✓ Valid
 Source            V2 config and state
 Schema            v2
@@ -571,6 +574,12 @@ Complete details follow the table in this order: version, kind, working
 directory, tag prefix, executor, delivery, workflow, and paths. Paths are one
 entry per line. Plugin name, manifest, asset prefix, and binary follow only for
 units with `kind: plugin`.
+
+Interactive semantic color uses the existing Core roles: valid status is
+success-colored, unit IDs are emphasized, and versions, plugin kinds, and unit
+detail headings use the information role. Workflows, materialized paths, and
+ordinary metadata remain neutral. Redirected and machine-readable output remain
+ANSI-free.
 
 V1 `--show` uses one virtual `default` unit with essential `Unit`, `Version`,
 and `Project type` columns plus optional `Release system`. Its details contain

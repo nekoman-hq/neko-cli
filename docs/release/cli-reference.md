@@ -88,10 +88,10 @@ means strict decoding and repository-wide validation of both
 `.neko/release.config.json` and `.neko/release.state.json`, even when `--unit`
 is supplied. `--unit` only focuses displayed V2 details.
 
-Default human output is a concise `Release Configuration Validation` summary
-with status, source, schema, config path, V2 state path, an explicit selected
-unit when supplied, and the complete configured-unit count for V2. It does not
-include a unit table.
+Default human output is a concise `Release Configuration Validation` responsive
+`PROPERTY` / `VALUE` table with status, source, schema, config path, V2 state
+path, an explicit selected unit when supplied, and the complete configured-unit
+count for V2. It does not include a unit-detail table.
 
 `--show` adds a responsive V2 unit table. Its essential columns are `Unit`,
 `Version`, and `Kind`; optional columns are considered in `Executor`,
@@ -101,6 +101,12 @@ paths order. Paths render one per line, and plugin name, manifest, asset prefix,
 and binary are appended only for plugin units. V1 uses one virtual `default`
 row with essential `Unit`, `Version`, and `Project type`, optional `Release
 system`, and legacy-only details.
+
+The existing Core semantic roles color only focused facts in an interactive
+terminal: success status, emphasized unit IDs, informational versions and
+plugin kinds, and informational unit-detail headings. Workflow paths,
+materialized paths, and ordinary metadata stay neutral. Redirected output is
+ANSI-free.
 
 The flags are:
 

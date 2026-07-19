@@ -305,6 +305,11 @@ func renderTableWithWidth(
 	if rendered, err := renderResponsiveTableWithDetails(resp, w, wide, widthProvider, styler); rendered || err != nil {
 		return err
 	}
+	if resp.PresentationProperties == nil && resp.PresentationTable != nil {
+		if rendered, err := renderResponsiveTable(resp, w, wide, widthProvider, styler); rendered || err != nil {
+			return err
+		}
+	}
 	if rendered, err := renderPropertyValues(resp, w, widthProvider, styler); rendered || err != nil {
 		return err
 	}

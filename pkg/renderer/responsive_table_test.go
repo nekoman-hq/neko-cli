@@ -40,6 +40,33 @@ func TestResponsiveTablePrioritizesUnitRowsOverWorkflowSummaryLists(t *testing.T
 	}
 }
 
+func TestExplicitResponsiveTableTakesPriorityOverInferredPropertyRows(t *testing.T) {
+	response := &plugin.Response{
+		Status: "success",
+		Data: map[string]any{"items": []map[string]any{
+			{"property": "Configuration", "value": ".neko/release.config.json"},
+		}},
+		PresentationTable: &presentation.Table{
+			Title: "Release Configuration Validation",
+			Columns: []presentation.Column{
+				{Key: "property", Label: "PROPERTY", Essential: true},
+				{Key: "value", Label: "VALUE", Essential: true},
+			},
+			Rows: []map[string]any{
+				{"property": "Status", "value": "✓ Valid"},
+				{"property": "Configured units", "value": 3},
+			},
+		},
+	}
+
+	output := renderResponsiveForTest(t, response, FormatTable, fixedOutputWidth{width: 72, available: true})
+	if !strings.HasPrefix(output, "Release Configuration Validation\n") ||
+		!strings.Contains(output, "PROPERTY") || !strings.Contains(output, "Configured units") ||
+		strings.Contains(output, ".neko/release.config.json") {
+		t.Fatalf("explicit table did not take priority over inferred properties:\n%s", output)
+	}
+}
+
 func TestResponsiveTableFallsBackToVerticalRecordsWhenEssentialColumnsDoNotFit(t *testing.T) {
 	response := responsiveTestResponse()
 	output := renderResponsiveForTest(t, response, FormatTable, fixedOutputWidth{width: 19, available: true})

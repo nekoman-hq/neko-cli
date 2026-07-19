@@ -145,6 +145,62 @@ func TestHandleValidateV2UnitStillValidatesCompleteRepository(t *testing.T) {
 	}
 }
 
+func TestHandleValidateV2FocusedFailureContracts(t *testing.T) {
+	tests := []struct {
+		name    string
+		arrange func(t *testing.T)
+		unit    string
+		code    string
+	}{
+		{
+			name: "unknown unit",
+			arrange: func(t *testing.T) {
+				mustWrite(t, ".github/workflows/release-api.yml", "name: release api\n")
+				writeV2(t, `{"schemaVersion":2,"units":[{"id":"api","paths":["api/**"],"tagPrefix":"api/v","executor":{"type":"goreleaser","delivery":"github-actions","workflow":".github/workflows/release-api.yml"}}]}`, `{"schemaVersion":2,"units":{"api":{"version":"1.0.0"}}}`)
+			},
+			unit: "missing",
+			code: "UNIT_RESOLUTION_FAILED",
+		},
+		{
+			name: "mixed source",
+			arrange: func(t *testing.T) {
+				mustWrite(t, ".github/workflows/release-api.yml", "name: release api\n")
+				writeV2(t, `{"schemaVersion":2,"units":[{"id":"api","paths":["api/**"],"tagPrefix":"api/v","executor":{"type":"goreleaser","delivery":"github-actions","workflow":".github/workflows/release-api.yml"}}]}`, `{"schemaVersion":2,"units":{"api":{"version":"1.0.0"}}}`)
+				mustWrite(t, config.V1FileName, `{"project-name":"legacy","project-owner":"owner","project-type":"backend","release-system":"goreleaser","version":"1.0.0"}`)
+			},
+			unit: "api",
+			code: "CONFIG_INVALID",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			withWorkingDirectory(t)
+			test.arrange(t)
+
+			resp, err := HandleValidate(plugin.Request{Flags: map[string]any{"show": true, "unit": test.unit}})
+			if err != nil {
+				t.Fatalf("expected structured response, got Go error: %v", err)
+			}
+			if resp.Status != "error" || resp.Error == nil || resp.Error.Code != test.code || resp.ExitCode != 0 {
+				t.Fatalf("failure contract = %#v, want code %s and legacy exit 0", resp, test.code)
+			}
+		})
+	}
+}
+
+func TestHandleValidateV2PreservesRecoveryEvidenceBoundary(t *testing.T) {
+	withWorkingDirectory(t)
+	mustWrite(t, ".github/workflows/release-api.yml", "name: release api\n")
+	writeV2(t, `{"schemaVersion":2,"units":[{"id":"api","paths":["api/**"],"tagPrefix":"api/v","executor":{"type":"goreleaser","delivery":"github-actions","workflow":".github/workflows/release-api.yml"}}]}`, `{"schemaVersion":2,"units":{"api":{"version":"1.0.0"}}}`)
+	mustWrite(t, config.V2PairRecoveryPath("."), `{`)
+
+	resp, err := HandleValidate(plugin.Request{Flags: map[string]any{"show": true, "unit": "api"}})
+	if err != nil || resp.Status != "success" || resp.ExitCode != 0 {
+		t.Fatalf("validate unexpectedly expanded into recovery inspection: response=%#v error=%v", resp, err)
+	}
+}
+
 func TestHandleValidateV1StillUsesLegacyConfig(t *testing.T) {
 	withWorkingDirectory(t)
 	t.Setenv("GITHUB_TOKEN", "test-token")

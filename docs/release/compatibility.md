@@ -38,10 +38,11 @@ When `.neko/release.config.json` exists in the Git root, it is authoritative for
   `--show` presents the normalized `default` unit and legacy project details
   without a V2 state path.
 - V2: config and state are strictly decoded and validated together. Default
-  human output is a concise summary; `--show` adds a responsive unit table and
-  complete structured unit details with one path per line. Plugin-specific
-  fields appear only for plugin units. `--unit` focuses displayed details while
-  still validating the complete repository.
+  human output is a concise responsive `PROPERTY` / `VALUE` summary table;
+  `--show` adds a responsive unit table and complete structured unit details
+  with one path per line. Plugin-specific fields appear only for plugin units.
+  `--unit` focuses displayed details while still validating the complete
+  repository.
 
 Both formats use the `Release Configuration Validation` human title. The
 presentation declarations do not alter public `--output json`, its established
