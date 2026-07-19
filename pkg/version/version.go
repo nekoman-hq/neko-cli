@@ -1,4 +1,4 @@
-// Package metadata includes build and status information of neko cli and the current Repository
+// Package version exposes neko-cli build metadata and version reporting.
 package version
 
 /*
