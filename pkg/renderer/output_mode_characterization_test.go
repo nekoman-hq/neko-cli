@@ -8,7 +8,7 @@ import (
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 )
 
-func TestPluginOutputModesKeepHumanJSONWideAndRawJSONContracts(t *testing.T) {
+func TestPluginOutputModesKeepReadableJSONWideAndRawJSONContracts(t *testing.T) {
 	response := &plugin.Response{
 		Status:       "success",
 		Data:         map[string]any{"items": []map[string]any{{"property": "Unit", "value": "api"}}},

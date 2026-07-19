@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/pkg/presentation"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata"
 )
@@ -85,7 +86,7 @@ func MapReleasePlanInspection(result *ReleasePlanInspection, timestamp time.Time
 		return successTableResponse("plan", timestamp, nil)
 	}
 	response := successTableResponse("plan", timestamp, releasePlanMachineItems(result))
-	response.HumanProperties = &plugin.HumanProperties{Properties: releasePlanPresentationProperties(result)}
+	response.PresentationProperties = &presentation.Properties{Properties: releasePlanPresentationProperties(result)}
 	return response
 }
 
@@ -127,7 +128,7 @@ func releasePlanMachineItems(result *ReleasePlanInspection) []map[string]any {
 	return items
 }
 
-func releasePlanPresentationProperties(result *ReleasePlanInspection) []plugin.HumanProperty {
+func releasePlanPresentationProperties(result *ReleasePlanInspection) []presentation.Property {
 	properties := releasePlanSharedProperties(result)
 	for _, limitation := range result.Limitations {
 		properties = append(properties, releasePlanResponseProperty{
@@ -137,9 +138,9 @@ func releasePlanPresentationProperties(result *ReleasePlanInspection) []plugin.H
 	}
 	properties = append(properties, releasePlanStatusProperty())
 
-	declarations := make([]plugin.HumanProperty, 0, len(properties))
+	declarations := make([]presentation.Property, 0, len(properties))
 	for _, property := range properties {
-		declarations = append(declarations, plugin.HumanProperty{Label: property.label, Value: property.value})
+		declarations = append(declarations, presentation.Property{Label: property.label, Value: property.value})
 	}
 	return declarations
 }

@@ -100,7 +100,7 @@ func TestHandleGitHubWorkflowInitFailsClosedForDifferentExistingContent(t *testi
 	if preview.Data["classification"] != "conflict" || preview.Data["action"] != "blocked" || preview.Data["dry_run"] != true {
 		t.Fatalf("unexpected conflict preview: %#v", preview.Data)
 	}
-	if preview.Data["generated_content"] == "" || preview.HumanText == nil {
+	if preview.Data["generated_content"] == "" || preview.PresentationText == nil {
 		t.Fatalf("preview omitted generated workflow: %#v", preview)
 	}
 	if got, readErr := os.ReadFile(target); readErr != nil || string(got) != string(existing) {

@@ -139,3 +139,18 @@ func TestLegacyJSONRenderingRemainsStable(t *testing.T) {
 		t.Fatalf("legacy JSON output changed:\nwant %q\n got %q", want, output.String())
 	}
 }
+
+func TestDeprecatedResponsePresentationFieldsStillRender(t *testing.T) {
+	response := &plugin.Response{
+		Status:    "success",
+		HumanText: &plugin.HumanText{Content: "preview\n"},
+	}
+
+	var output bytes.Buffer
+	if err := RenderTo(response, FormatTable, &output); err != nil {
+		t.Fatalf("render deprecated text presentation field: %v", err)
+	}
+	if output.String() != "preview\n" {
+		t.Fatalf("deprecated text presentation output changed: %q", output.String())
+	}
+}

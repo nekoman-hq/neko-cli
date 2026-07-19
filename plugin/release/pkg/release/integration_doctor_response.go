@@ -6,13 +6,14 @@ import (
 	"time"
 
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/pkg/presentation"
 )
 
 const (
-	integrationDoctorHumanTitle       = "Release Integration Doctor"
-	integrationDoctorDiagnosticsTitle = "Diagnostics"
-	integrationDoctorSemanticRoleKey  = "semantic_role"
-	integrationDoctorDefaultRoleKey   = "default_role"
+	integrationDoctorPresentationTitle = "Release Integration Doctor"
+	integrationDoctorDiagnosticsTitle  = "Diagnostics"
+	integrationDoctorSemanticRoleKey   = "semantic_role"
+	integrationDoctorDefaultRoleKey    = "default_role"
 )
 
 func mapIntegrationDoctorResult(result *integrationDoctorResult, timestamp time.Time) *plugin.Response {
@@ -28,22 +29,22 @@ func mapIntegrationDoctorResult(result *integrationDoctorResult, timestamp time.
 		Metadata:     commandResponseMetadata(integrationDoctorCommandName, timestamp),
 		Data:         data,
 		RendererHint: "table",
-		HumanProperties: &plugin.HumanProperties{
-			Title:      integrationDoctorHumanTitle,
+		PresentationProperties: &presentation.Properties{
+			Title:      integrationDoctorPresentationTitle,
 			Properties: integrationDoctorSummaryProperties(result),
 		},
 	}
 	if len(result.Diagnostics) > 0 {
-		response.HumanTable = &plugin.HumanTable{
+		response.PresentationTable = &presentation.Table{
 			Title: integrationDoctorDiagnosticsTitle,
-			Columns: []plugin.HumanColumn{
+			Columns: []presentation.Column{
 				{Key: "severity", Label: "Severity", RoleKey: integrationDoctorSemanticRoleKey, Essential: true},
 				{Key: "code", Label: "Code", RoleKey: integrationDoctorSemanticRoleKey, Essential: true},
 				{Key: "target", Label: "Target", RoleKey: integrationDoctorDefaultRoleKey},
 				{Key: "scope", Label: "Scope", RoleKey: integrationDoctorDefaultRoleKey},
 			},
 			Rows: integrationDoctorDiagnosticRows(result.Diagnostics),
-			Details: &plugin.HumanProperties{
+			Details: &presentation.Properties{
 				Properties: integrationDoctorDiagnosticDetailProperties(result.Diagnostics),
 			},
 		}
@@ -54,42 +55,42 @@ func mapIntegrationDoctorResult(result *integrationDoctorResult, timestamp time.
 	return response
 }
 
-func integrationDoctorSummaryProperties(result *integrationDoctorResult) []plugin.HumanProperty {
-	return []plugin.HumanProperty{
+func integrationDoctorSummaryProperties(result *integrationDoctorResult) []presentation.Property {
+	return []presentation.Property{
 		{
 			Label:      "Readiness",
 			Value:      string(result.Readiness),
 			Role:       integrationDoctorReadinessRole(result.Readiness),
 			Emphasized: true,
 		},
-		integrationDoctorCountProperty("Errors", result.Summary.Errors, plugin.HumanStyleError),
-		integrationDoctorCountProperty("Warnings", result.Summary.Warnings, plugin.HumanStyleWarning),
-		integrationDoctorCountProperty("Recommendations", result.Summary.Recommendations, plugin.HumanStyleInfo),
-		integrationDoctorCountProperty("Not verifiable", result.Summary.NotVerifiable, plugin.HumanStyleMuted),
+		integrationDoctorCountProperty("Errors", result.Summary.Errors, presentation.StyleError),
+		integrationDoctorCountProperty("Warnings", result.Summary.Warnings, presentation.StyleWarning),
+		integrationDoctorCountProperty("Recommendations", result.Summary.Recommendations, presentation.StyleInfo),
+		integrationDoctorCountProperty("Not verifiable", result.Summary.NotVerifiable, presentation.StyleMuted),
 		{Label: "Inspected units", Value: len(result.Units)},
 		{Label: "Inspected workflows", Value: len(result.Workflows)},
 	}
 }
 
-func integrationDoctorReadinessRole(readiness integrationDoctorReadiness) plugin.HumanStyleRole {
+func integrationDoctorReadinessRole(readiness integrationDoctorReadiness) presentation.StyleRole {
 	switch readiness {
 	case integrationDoctorNotReady:
-		return plugin.HumanStyleError
+		return presentation.StyleError
 	case integrationDoctorReadyWithWarnings:
-		return plugin.HumanStyleWarning
+		return presentation.StyleWarning
 	case integrationDoctorReady:
-		return plugin.HumanStyleSuccess
+		return presentation.StyleSuccess
 	default:
-		return plugin.HumanStyleDefault
+		return presentation.StyleDefault
 	}
 }
 
 func integrationDoctorCountProperty(
 	label string,
 	value int,
-	positiveRole plugin.HumanStyleRole,
-) plugin.HumanProperty {
-	property := plugin.HumanProperty{Label: label, Value: value}
+	positiveRole presentation.StyleRole,
+) presentation.Property {
+	property := presentation.Property{Label: label, Value: value}
 	if value > 0 {
 		property.Role = positiveRole
 	}
@@ -107,7 +108,7 @@ func integrationDoctorDiagnosticRows(diagnostics []integrationDoctorDiagnostic) 
 			"target":                         integrationDoctorDiagnosticTarget(diagnostic, collidingBasenames),
 			"scope":                          diagnostic.Scope,
 			integrationDoctorSemanticRoleKey: string(role),
-			integrationDoctorDefaultRoleKey:  string(plugin.HumanStyleDefault),
+			integrationDoctorDefaultRoleKey:  string(presentation.StyleDefault),
 		})
 	}
 	return rows
@@ -152,47 +153,47 @@ func integrationDoctorDiagnosticTarget(
 	return diagnostic.Scope
 }
 
-func integrationDoctorDiagnosticDetailProperties(diagnostics []integrationDoctorDiagnostic) []plugin.HumanProperty {
-	properties := make([]plugin.HumanProperty, 0, len(diagnostics)*6)
+func integrationDoctorDiagnosticDetailProperties(diagnostics []integrationDoctorDiagnostic) []presentation.Property {
+	properties := make([]presentation.Property, 0, len(diagnostics)*6)
 	for _, diagnostic := range diagnostics {
-		properties = append(properties, plugin.HumanProperty{
+		properties = append(properties, presentation.Property{
 			Label:      strings.ToUpper(string(diagnostic.Severity)) + " · " + diagnostic.Code,
 			Role:       integrationDoctorSeverityRole(diagnostic.Severity),
 			Emphasized: true,
 			Heading:    true,
 		})
-		properties = append(properties, plugin.HumanProperty{
-			Label: "Scope", Value: diagnostic.Scope, Role: plugin.HumanStyleDefault,
+		properties = append(properties, presentation.Property{
+			Label: "Scope", Value: diagnostic.Scope, Role: presentation.StyleDefault,
 		})
 		if diagnostic.Unit != "" {
-			properties = append(properties, plugin.HumanProperty{
-				Label: "Unit", Value: diagnostic.Unit, Role: plugin.HumanStyleDefault,
+			properties = append(properties, presentation.Property{
+				Label: "Unit", Value: diagnostic.Unit, Role: presentation.StyleDefault,
 			})
 		}
 		if diagnostic.Workflow != "" {
-			properties = append(properties, plugin.HumanProperty{
-				Label: "Workflow", Value: diagnostic.Workflow, Role: plugin.HumanStyleDefault,
+			properties = append(properties, presentation.Property{
+				Label: "Workflow", Value: diagnostic.Workflow, Role: presentation.StyleDefault,
 			})
 		}
 		properties = append(properties,
-			plugin.HumanProperty{Label: "Message", Value: diagnostic.Message, Role: plugin.HumanStyleDefault},
-			plugin.HumanProperty{Label: "Remediation", Value: diagnostic.Remediation, Role: plugin.HumanStyleDefault},
+			presentation.Property{Label: "Message", Value: diagnostic.Message, Role: presentation.StyleDefault},
+			presentation.Property{Label: "Remediation", Value: diagnostic.Remediation, Role: presentation.StyleDefault},
 		)
 	}
 	return properties
 }
 
-func integrationDoctorSeverityRole(severity integrationDoctorSeverity) plugin.HumanStyleRole {
+func integrationDoctorSeverityRole(severity integrationDoctorSeverity) presentation.StyleRole {
 	switch severity {
 	case integrationDoctorError:
-		return plugin.HumanStyleError
+		return presentation.StyleError
 	case integrationDoctorWarning:
-		return plugin.HumanStyleWarning
+		return presentation.StyleWarning
 	case integrationDoctorRecommendation:
-		return plugin.HumanStyleInfo
+		return presentation.StyleInfo
 	case integrationDoctorNotVerifiable:
-		return plugin.HumanStyleMuted
+		return presentation.StyleMuted
 	default:
-		return plugin.HumanStyleDefault
+		return presentation.StyleDefault
 	}
 }

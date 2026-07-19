@@ -6,9 +6,10 @@ import (
 	"time"
 
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/pkg/presentation"
 )
 
-var githubWorkflowScaffoldHumanProperties = []plugin.HumanProperty{
+var githubWorkflowScaffoldPresentationProperties = []presentation.Property{
 	{Key: "target", Label: "Target"},
 	{Key: "classification", Label: "Status"},
 	{Key: "action", Label: "Action"},
@@ -44,14 +45,14 @@ func mapGitHubWorkflowScaffoldResult(result *githubWorkflowScaffoldResult, times
 		Metadata:     commandResponseMetadata(githubWorkflowInitCommandName, timestamp),
 		Data:         data,
 		RendererHint: "table",
-		HumanProperties: &plugin.HumanProperties{
-			Properties: append([]plugin.HumanProperty(nil), githubWorkflowScaffoldHumanProperties...),
+		PresentationProperties: &presentation.Properties{
+			Properties: append([]presentation.Property(nil), githubWorkflowScaffoldPresentationProperties...),
 		},
 	}
 	if result.Preview {
 		data["generated_content"] = string(result.Plan.GeneratedContent)
-		response.HumanProperties = nil
-		response.HumanText = &plugin.HumanText{Content: githubWorkflowScaffoldPreviewText(result)}
+		response.PresentationProperties = nil
+		response.PresentationText = &presentation.Text{Content: githubWorkflowScaffoldPreviewText(result)}
 	}
 	return response
 }

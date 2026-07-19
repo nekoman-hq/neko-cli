@@ -251,7 +251,7 @@ func TestIntegrationDoctorApplicationHasNoMutationTokenNetworkGitOrStoreDependen
 			"plugin.Response",
 			"internal/terminalstyle",
 			"golang.org/x/term",
-			"HumanStyleRole",
+			"StyleRole",
 			"\\x1b",
 			"\\033",
 		} {
@@ -315,7 +315,7 @@ func TestIntegrationDoctorPresentationKeepsCoreDomainNeutral(t *testing.T) {
 		"../../../../pkg/renderer/renderer.go",
 		"../../../../pkg/renderer/responsive_table.go",
 		"../../../../pkg/renderer/property_values.go",
-		"../../../../pkg/renderer/human_style.go",
+		"../../../../pkg/renderer/style.go",
 	} {
 		source := strings.ToLower(readCommandBoundarySource(t, path))
 		for _, forbidden := range []string{

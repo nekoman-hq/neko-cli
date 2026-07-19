@@ -12,9 +12,10 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/nekoman-hq/neko-cli/internal/terminalstyle"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/pkg/presentation"
 )
 
-func TestSemanticHumanStylesUseSharedPaletteOnlyWhenEnabled(t *testing.T) {
+func TestSemanticPresentationStylesUseSharedPaletteOnlyWhenEnabled(t *testing.T) {
 	t.Parallel()
 
 	response := semanticPropertyResponse()
@@ -48,15 +49,15 @@ func TestSemanticTableRolesStyleOnlyDeclaredCells(t *testing.T) {
 	response := &plugin.Response{
 		Status: "success",
 		Data:   map[string]any{"items": []map[string]any{{"machine": "unchanged"}}},
-		HumanTable: &plugin.HumanTable{
+		PresentationTable: &presentation.Table{
 			Title: "Diagnostics",
-			Columns: []plugin.HumanColumn{
+			Columns: []presentation.Column{
 				{Key: "severity", Label: "Severity", RoleKey: "severity_role", Essential: true},
 				{Key: "code", Label: "Code", RoleKey: "severity_role", Essential: true},
 				{Key: "target", Label: "Target"},
 			},
 			Rows: []map[string]any{{
-				"severity": "ERROR", "code": "CONFIG_INVALID", "target": "api", "severity_role": string(plugin.HumanStyleError),
+				"severity": "ERROR", "code": "CONFIG_INVALID", "target": "api", "severity_role": string(presentation.StyleError),
 			}},
 		},
 	}
@@ -74,17 +75,17 @@ func TestSemanticTableRolesStyleOnlyDeclaredCells(t *testing.T) {
 	}
 }
 
-func TestHumanPropertyHeadingsCreateResponsiveStyledRecords(t *testing.T) {
+func TestPresentationPropertyHeadingsCreateResponsiveStyledRecords(t *testing.T) {
 	t.Parallel()
 
 	response := &plugin.Response{
 		Status: "success",
 		Data:   map[string]any{"machine": "unchanged"},
-		HumanProperties: &plugin.HumanProperties{Properties: []plugin.HumanProperty{
-			{Label: "ERROR · CONFIG_INVALID", Role: plugin.HumanStyleError, Emphasized: true, Heading: true},
+		PresentationProperties: &presentation.Properties{Properties: []presentation.Property{
+			{Label: "ERROR · CONFIG_INVALID", Role: presentation.StyleError, Emphasized: true, Heading: true},
 			{Label: "Scope", Value: "source"},
 			{Label: "Message", Value: "Configuration is invalid."},
-			{Label: "WARNING · CONCURRENCY_MISSING", Role: plugin.HumanStyleWarning, Emphasized: true, Heading: true},
+			{Label: "WARNING · CONCURRENCY_MISSING", Role: presentation.StyleWarning, Emphasized: true, Heading: true},
 			{Label: "Workflow", Value: ".github/workflows/release.yml"},
 		}},
 	}
@@ -101,11 +102,11 @@ func TestHumanPropertyHeadingsCreateResponsiveStyledRecords(t *testing.T) {
 	assertRenderedLinesFit(t, output, 80)
 }
 
-func TestDefaultHumanColorPolicyKeepsNonTTYDestinationsANSIFree(t *testing.T) {
+func TestDefaultPresentationColorPolicyKeepsNonTTYDestinationsANSIFree(t *testing.T) {
 	t.Parallel()
 
 	response := semanticPropertyResponse()
-	assertDefaultHumanOutputANSIFree(t, "buffer", &bytes.Buffer{}, response)
+	assertDefaultPresentationOutputANSIFree(t, "buffer", &bytes.Buffer{}, response)
 
 	filePath := filepath.Join(t.TempDir(), "redirected.txt")
 	file, err := os.Create(filePath)
@@ -156,14 +157,14 @@ func TestSemanticDeclarationsRejectUnknownRolesAndMissingRoleKeys(t *testing.T) 
 		{
 			Status: "success",
 			Data:   map[string]any{"value": "unsafe"},
-			HumanProperties: &plugin.HumanProperties{Properties: []plugin.HumanProperty{
+			PresentationProperties: &presentation.Properties{Properties: []presentation.Property{
 				{Key: "value", Label: "Value", Role: "red"},
 			}},
 		},
 		{
 			Status: "success",
 			Data:   map[string]any{"items": []map[string]any{{"severity": "ERROR"}}},
-			HumanTable: &plugin.HumanTable{Columns: []plugin.HumanColumn{
+			PresentationTable: &presentation.Table{Columns: []presentation.Column{
 				{Key: "severity", Label: "Severity", RoleKey: "missing", Essential: true},
 			}},
 		},
@@ -180,14 +181,14 @@ func TestSemanticPresentationMetadataCrossesTransportButStaysOutOfMachineJSON(t 
 	t.Parallel()
 
 	response := semanticPropertyResponse()
-	response.HumanTable = &plugin.HumanTable{
+	response.PresentationTable = &presentation.Table{
 		Title: "Diagnostics",
-		Columns: []plugin.HumanColumn{
+		Columns: []presentation.Column{
 			{Key: "severity", Label: "Severity", RoleKey: "role", Essential: true},
 		},
-		Rows: []map[string]any{{"severity": "ERROR", "role": string(plugin.HumanStyleError)}},
-		Details: &plugin.HumanProperties{Properties: []plugin.HumanProperty{
-			{Label: "ERROR · CONFIG_INVALID", Role: plugin.HumanStyleError, Emphasized: true, Heading: true},
+		Rows: []map[string]any{{"severity": "ERROR", "role": string(presentation.StyleError)}},
+		Details: &presentation.Properties{Properties: []presentation.Property{
+			{Label: "ERROR · CONFIG_INVALID", Role: presentation.StyleError, Emphasized: true, Heading: true},
 		}},
 	}
 	transport, err := json.Marshal(response)
@@ -218,15 +219,15 @@ func semanticPropertyResponse() *plugin.Response {
 	return &plugin.Response{
 		Status: "success",
 		Data:   map[string]any{"machine": "unchanged"},
-		HumanProperties: &plugin.HumanProperties{
+		PresentationProperties: &presentation.Properties{
 			Title: "Semantic output",
-			Properties: []plugin.HumanProperty{
-				{Label: "Emphasis", Value: "emphasis", Role: plugin.HumanStyleEmphasis, Emphasized: true},
-				{Label: "Success", Value: "success", Role: plugin.HumanStyleSuccess},
-				{Label: "Warning", Value: "warning", Role: plugin.HumanStyleWarning},
-				{Label: "Error", Value: "error", Role: plugin.HumanStyleError},
-				{Label: "Information", Value: "info", Role: plugin.HumanStyleInfo},
-				{Label: "Secondary", Value: "muted", Role: plugin.HumanStyleMuted},
+			Properties: []presentation.Property{
+				{Label: "Emphasis", Value: "emphasis", Role: presentation.StyleEmphasis, Emphasized: true},
+				{Label: "Success", Value: "success", Role: presentation.StyleSuccess},
+				{Label: "Warning", Value: "warning", Role: presentation.StyleWarning},
+				{Label: "Error", Value: "error", Role: presentation.StyleError},
+				{Label: "Information", Value: "info", Role: presentation.StyleInfo},
+				{Label: "Secondary", Value: "muted", Role: presentation.StyleMuted},
 			},
 		},
 	}
@@ -245,7 +246,7 @@ func renderStyledResponseForTest(t *testing.T, response *plugin.Response, colors
 	return output.String()
 }
 
-func assertDefaultHumanOutputANSIFree(t *testing.T, name string, writer *bytes.Buffer, response *plugin.Response) {
+func assertDefaultPresentationOutputANSIFree(t *testing.T, name string, writer *bytes.Buffer, response *plugin.Response) {
 	t.Helper()
 	if err := RenderWithOptionsTo(response, RenderOptions{Format: FormatTable}, writer); err != nil {
 		t.Fatalf("render %s: %v", name, err)

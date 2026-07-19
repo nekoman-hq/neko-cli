@@ -103,8 +103,8 @@ func TestValidatedReleaseContextResponseHasStableTypedMachineSchema(t *testing.T
 		t.Fatalf("machine response = %#v", response)
 	}
 
-	propertyKeys := make([]string, 0, len(response.HumanProperties.Properties))
-	for _, property := range response.HumanProperties.Properties {
+	propertyKeys := make([]string, 0, len(response.PresentationProperties.Properties))
+	for _, property := range response.PresentationProperties.Properties {
 		propertyKeys = append(propertyKeys, property.Key)
 	}
 	if !reflect.DeepEqual(propertyKeys, wantKeys) {
@@ -123,7 +123,7 @@ func TestValidatedReleaseContextResponseHasStableTypedMachineSchema(t *testing.T
 	}
 }
 
-func TestValidatedReleaseContextHumanJSONAndGitHubOutputs(t *testing.T) {
+func TestValidatedReleaseContextReadableJSONAndGitHubOutputs(t *testing.T) {
 	t.Setenv("GITHUB_TOKEN", "secret-value-that-must-not-appear")
 	response := MapValidatedReleaseContext(validatedReleaseContextFixture(), time.Time{})
 

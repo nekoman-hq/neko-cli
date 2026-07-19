@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/pkg/presentation"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata"
 )
 
@@ -32,8 +33,8 @@ func mapEvidenceQueryResponse(result evidenceQueryResult, timestamp time.Time) *
 			"evidence":    result.Records,
 			"diagnostics": result.Diagnostics,
 		},
-		RendererHint: "table",
-		HumanTable:   evidenceSummaryTable(),
+		RendererHint:      "table",
+		PresentationTable: evidenceSummaryTable(),
 	}
 }
 
@@ -56,8 +57,8 @@ func mapEvidenceDetailResponse(result evidenceQueryResult, timestamp time.Time) 
 	}
 }
 
-func evidenceSummaryTable() *plugin.HumanTable {
-	return &plugin.HumanTable{Columns: []plugin.HumanColumn{
+func evidenceSummaryTable() *presentation.Table {
+	return &presentation.Table{Columns: []presentation.Column{
 		{Key: "family", Label: "Family", Essential: true},
 		{Key: "state", Label: "State", Essential: true},
 		{Key: "classification", Label: "Classification", Essential: true},

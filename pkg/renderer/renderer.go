@@ -17,6 +17,7 @@ import (
 
 	"github.com/nekoman-hq/neko-cli/internal/terminalstyle"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/pkg/presentation"
 )
 
 // OutputFormat defines the supported output formats for rendering plugin responses.
@@ -32,7 +33,7 @@ const (
 // RenderOptions configures how a plugin response should be rendered.
 type RenderOptions struct {
 	WidthProvider    OutputWidthProvider // Optional test/composition seam for output width
-	ColorProvider    ColorProvider       // Optional test/composition seam for interactive human color
+	ColorProvider    ColorProvider       // Optional test/composition seam for interactive presentation color
 	GitHubOutputFile string              // Explicit command-file destination for GitHub output
 	Format           OutputFormat        // The output format to use
 	Describe         bool                // When true, include logs and metadata in the output
@@ -55,7 +56,7 @@ func RenderWithOptions(resp *plugin.Response, opts RenderOptions) error {
 func RenderWithOptionsTo(resp *plugin.Response, opts RenderOptions, w io.Writer) error {
 	if opts.Format == FormatGitHub {
 		if resp.Status == "error" {
-			return renderError(resp, w, plainHumanStyler())
+			return renderError(resp, w, plainPresentationStyler())
 		}
 		if opts.Describe {
 			return newGitHubOutputError(GitHubOutputEncodingFailed, "GitHub output cannot be combined with describe output")
@@ -101,11 +102,11 @@ func renderToWithOptions(resp *plugin.Response, opts RenderOptions, w io.Writer)
 	case FormatJSON:
 		return renderJSON(resp, w)
 	case FormatWide:
-		return renderTableWithWidth(resp, w, true, outputWidthProvider(opts.WidthProvider), newHumanStyler(opts.ColorProvider, w))
+		return renderTableWithWidth(resp, w, true, outputWidthProvider(opts.WidthProvider), newPresentationStyler(opts.ColorProvider, w))
 	case FormatTable:
-		return renderTableWithWidth(resp, w, false, outputWidthProvider(opts.WidthProvider), newHumanStyler(opts.ColorProvider, w))
+		return renderTableWithWidth(resp, w, false, outputWidthProvider(opts.WidthProvider), newPresentationStyler(opts.ColorProvider, w))
 	default:
-		return renderTableWithWidth(resp, w, false, outputWidthProvider(opts.WidthProvider), newHumanStyler(opts.ColorProvider, w))
+		return renderTableWithWidth(resp, w, false, outputWidthProvider(opts.WidthProvider), newPresentationStyler(opts.ColorProvider, w))
 	}
 }
 
@@ -140,7 +141,7 @@ func renderDescribeWithOptionsTo(resp *plugin.Response, opts RenderOptions, w io
 		// JSON format includes everything
 		return renderJSON(resp, w)
 	}
-	styler := newHumanStyler(opts.ColorProvider, w)
+	styler := newPresentationStyler(opts.ColorProvider, w)
 
 	// Render metadata section
 	renderMetadataSection(resp, w, styler)
@@ -156,21 +157,21 @@ func renderDescribeWithOptionsTo(resp *plugin.Response, opts RenderOptions, w io
 
 // renderMetadataSection outputs the command metadata section with plugin info,
 // version, timestamp, and status.
-func renderMetadataSection(resp *plugin.Response, w io.Writer, styler humanStyler) {
-	printSectionHeader(w, "Command Metadata", plugin.HumanStyleInfo, styler)
+func renderMetadataSection(resp *plugin.Response, w io.Writer, styler presentationStyler) {
+	printSectionHeader(w, "Command Metadata", presentation.StyleInfo, styler)
 
-	_, _ = fmt.Fprintf(w, "%s     %s\n", styler.semantic(plugin.HumanStyleMuted, false, "Plugin:"), resp.Metadata.Plugin)
-	_, _ = fmt.Fprintf(w, "%s    %s\n", styler.semantic(plugin.HumanStyleMuted, false, "Command:"), resp.Metadata.Command)
-	_, _ = fmt.Fprintf(w, "%s    %s\n", styler.semantic(plugin.HumanStyleMuted, false, "Version:"), resp.Metadata.Version)
-	_, _ = fmt.Fprintf(w, "%s  %s\n", styler.semantic(plugin.HumanStyleMuted, false, "Timestamp:"), resp.Metadata.Timestamp.Format("2006-01-02 15:04:05"))
-	_, _ = fmt.Fprintf(w, "%s     %s\n", styler.semantic(plugin.HumanStyleMuted, false, "Status:"), colorizeStatus(styler, resp.Status))
+	_, _ = fmt.Fprintf(w, "%s     %s\n", styler.semantic(presentation.StyleMuted, false, "Plugin:"), resp.Metadata.Plugin)
+	_, _ = fmt.Fprintf(w, "%s    %s\n", styler.semantic(presentation.StyleMuted, false, "Command:"), resp.Metadata.Command)
+	_, _ = fmt.Fprintf(w, "%s    %s\n", styler.semantic(presentation.StyleMuted, false, "Version:"), resp.Metadata.Version)
+	_, _ = fmt.Fprintf(w, "%s  %s\n", styler.semantic(presentation.StyleMuted, false, "Timestamp:"), resp.Metadata.Timestamp.Format("2006-01-02 15:04:05"))
+	_, _ = fmt.Fprintf(w, "%s     %s\n", styler.semantic(presentation.StyleMuted, false, "Status:"), colorizeStatus(styler, resp.Status))
 	_, _ = fmt.Fprintln(w)
 }
 
 // renderLogsSection outputs the execution logs section with timestamps,
 // log levels, categories, and messages.
-func renderLogsSection(logs []plugin.LogEntry, w io.Writer, styler humanStyler) {
-	printSectionHeader(w, fmt.Sprintf("Execution Logs (%d entries)", len(logs)), plugin.HumanStyleWarning, styler)
+func renderLogsSection(logs []plugin.LogEntry, w io.Writer, styler presentationStyler) {
+	printSectionHeader(w, fmt.Sprintf("Execution Logs (%d entries)", len(logs)), presentation.StyleWarning, styler)
 
 	for _, entry := range logs {
 		levelColor := getLogLevelColor(entry.Level)
@@ -183,14 +184,14 @@ func renderLogsSection(logs []plugin.LogEntry, w io.Writer, styler humanStyler) 
 
 		prefix := styler.ansi(levelColor, levelIcon+categoryStr)
 		_, _ = fmt.Fprintf(w, "%s %s%s\n",
-			styler.semantic(plugin.HumanStyleMuted, false, entry.Timestamp), prefix, entry.Message)
+			styler.semantic(presentation.StyleMuted, false, entry.Timestamp), prefix, entry.Message)
 	}
 	_, _ = fmt.Fprintln(w)
 }
 
 // renderOutputSection outputs the data section of the response.
-func renderOutputSection(resp *plugin.Response, opts RenderOptions, w io.Writer, styler humanStyler) error {
-	printSectionHeader(w, "Output", plugin.HumanStyleSuccess, styler)
+func renderOutputSection(resp *plugin.Response, opts RenderOptions, w io.Writer, styler presentationStyler) error {
+	printSectionHeader(w, "Output", presentation.StyleSuccess, styler)
 
 	wide := opts.Format == FormatWide
 	return renderTableWithWidth(resp, w, wide, outputWidthProvider(opts.WidthProvider), styler)
@@ -198,12 +199,12 @@ func renderOutputSection(resp *plugin.Response, opts RenderOptions, w io.Writer,
 
 // colorizeStatus adds color and icons to status strings.
 // "success" gets a green checkmark, "error" gets a red X.
-func colorizeStatus(styler humanStyler, status string) string {
+func colorizeStatus(styler presentationStyler, status string) string {
 	switch strings.ToLower(status) {
 	case "success":
-		return styler.semantic(plugin.HumanStyleSuccess, false, "✓ "+status)
+		return styler.semantic(presentation.StyleSuccess, false, "✓ "+status)
 	case "error":
-		return styler.semantic(plugin.HumanStyleError, false, "✗ "+status)
+		return styler.semantic(presentation.StyleError, false, "✗ "+status)
 	default:
 		return status
 	}
@@ -288,13 +289,17 @@ func renderTableWithWidth(
 	w io.Writer,
 	wide bool,
 	widthProvider OutputWidthProvider,
-	styler humanStyler,
+	styler presentationStyler,
 ) error {
-
 	if resp.Status == "error" {
 		return renderError(resp, w, styler)
 	}
-	if rendered, err := renderHumanText(resp, w); rendered || err != nil {
+	resolved, err := responseWithResolvedPresentation(resp)
+	if err != nil {
+		return err
+	}
+	resp = resolved
+	if rendered, err := renderTextPresentation(resp, w); rendered || err != nil {
 		return err
 	}
 	if rendered, err := renderResponsiveTableWithDetails(resp, w, wide, widthProvider, styler); rendered || err != nil {
@@ -317,14 +322,34 @@ func renderTableWithWidth(
 	return renderKeyValue(resp.Data, w, styler)
 }
 
+func responseWithResolvedPresentation(response *plugin.Response) (*plugin.Response, error) {
+	table, err := response.TablePresentation()
+	if err != nil {
+		return nil, err
+	}
+	properties, err := response.PropertiesPresentation()
+	if err != nil {
+		return nil, err
+	}
+	text, err := response.TextPresentation()
+	if err != nil {
+		return nil, err
+	}
+	resolved := *response
+	resolved.PresentationTable = table
+	resolved.PresentationProperties = properties
+	resolved.PresentationText = text
+	return &resolved, nil
+}
+
 func renderResponsiveTableWithDetails(
 	response *plugin.Response,
 	writer io.Writer,
 	wide bool,
 	widthProvider OutputWidthProvider,
-	styler humanStyler,
+	styler presentationStyler,
 ) (bool, error) {
-	if response.HumanProperties == nil || response.HumanTable == nil || response.HumanTable.Details == nil {
+	if response.PresentationProperties == nil || response.PresentationTable == nil || response.PresentationTable.Details == nil {
 		return false, nil
 	}
 	if rendered, err := renderPropertyValues(response, writer, widthProvider, styler); !rendered || err != nil {
@@ -335,18 +360,18 @@ func renderResponsiveTableWithDetails(
 		if err != nil {
 			return true, err
 		}
-		return true, fmt.Errorf("human table declaration could not be rendered")
+		return true, fmt.Errorf("table presentation declaration could not be rendered")
 	}
 
 	_, _ = fmt.Fprintln(writer)
 	detailResponse := *response
-	detailResponse.HumanProperties = response.HumanTable.Details
-	detailResponse.HumanTable = nil
+	detailResponse.PresentationProperties = response.PresentationTable.Details
+	detailResponse.PresentationTable = nil
 	if rendered, err := renderPropertyValues(&detailResponse, writer, widthProvider, styler); !rendered || err != nil {
 		if err != nil {
 			return true, err
 		}
-		return true, fmt.Errorf("human table detail declaration could not be rendered")
+		return true, fmt.Errorf("table presentation detail declaration could not be rendered")
 	}
 	return true, nil
 }
@@ -386,15 +411,15 @@ func findListInData(data map[string]any) any {
 }
 
 // renderError formats and outputs error information from the response.
-func renderError(resp *plugin.Response, w io.Writer, styler humanStyler) error {
-	_, _ = fmt.Fprintln(w, styler.semantic(plugin.HumanStyleError, true, "✗ ERROR"))
-	_, _ = fmt.Fprintf(w, "%s    %s\n", styler.semantic(plugin.HumanStyleMuted, false, "Code:"), resp.Error.Code)
-	_, _ = fmt.Fprintf(w, "%s %s\n", styler.semantic(plugin.HumanStyleMuted, false, "Message:"), resp.Error.Message)
+func renderError(resp *plugin.Response, w io.Writer, styler presentationStyler) error {
+	_, _ = fmt.Fprintln(w, styler.semantic(presentation.StyleError, true, "✗ ERROR"))
+	_, _ = fmt.Fprintf(w, "%s    %s\n", styler.semantic(presentation.StyleMuted, false, "Code:"), resp.Error.Code)
+	_, _ = fmt.Fprintf(w, "%s %s\n", styler.semantic(presentation.StyleMuted, false, "Message:"), resp.Error.Message)
 
 	if len(resp.Error.Details) > 0 {
-		_, _ = fmt.Fprintf(w, "\n%s\n", styler.semantic(plugin.HumanStyleMuted, false, "Details:"))
+		_, _ = fmt.Fprintf(w, "\n%s\n", styler.semantic(presentation.StyleMuted, false, "Details:"))
 		for k, v := range resp.Error.Details {
-			_, _ = fmt.Fprintf(w, "  %s %v\n", styler.semantic(plugin.HumanStyleInfo, false, k+":"), v)
+			_, _ = fmt.Fprintf(w, "  %s %v\n", styler.semantic(presentation.StyleInfo, false, k+":"), v)
 		}
 	}
 	return nil
@@ -409,14 +434,14 @@ func renderError(resp *plugin.Response, w io.Writer, styler humanStyler) error {
 //   - w: The writer to output to
 //
 // Returns an error if rendering fails.
-func renderList(items any, w io.Writer, styler humanStyler) error {
+func renderList(items any, w io.Writer, styler presentationStyler) error {
 	slice := reflect.ValueOf(items)
 	if slice.Kind() != reflect.Slice {
 		return renderKeyValue(map[string]any{"items": items}, w, styler)
 	}
 
 	if slice.Len() == 0 {
-		_, _ = fmt.Fprintln(w, styler.semantic(plugin.HumanStyleMuted, false, "No resources found."))
+		_, _ = fmt.Fprintln(w, styler.semantic(presentation.StyleMuted, false, "No resources found."))
 		return nil
 	}
 
@@ -576,17 +601,17 @@ func totalWidth(colWidths map[string]int) int {
 }
 
 // printHeader outputs the table header row with formatting.
-func printHeader(w io.Writer, headers []string, widths map[string]int, styler humanStyler) {
+func printHeader(w io.Writer, headers []string, widths map[string]int, styler presentationStyler) {
 	var heading strings.Builder
 	for _, h := range headers {
 		_, _ = fmt.Fprintf(&heading, "%-*s", widths[h], strings.ToUpper(h))
 	}
-	_, _ = fmt.Fprintln(w, styler.semantic(plugin.HumanStyleInfo, true, heading.String()))
+	_, _ = fmt.Fprintln(w, styler.semantic(presentation.StyleInfo, true, heading.String()))
 }
 
 // printRow outputs a single table row with proper alignment and coloring.
 // It handles ANSI color codes correctly to ensure proper column alignment.
-func printRow(w io.Writer, headers []string, row map[string]string, widths map[string]int, styler humanStyler) {
+func printRow(w io.Writer, headers []string, row map[string]string, widths map[string]int, styler presentationStyler) {
 	for _, h := range headers {
 		value := row[h]
 		coloredValue := colorizeValue(styler, h, value)
@@ -609,7 +634,7 @@ func printRow(w io.Writer, headers []string, row map[string]string, widths map[s
 //   - value: The value to colorize
 //
 // Returns the value with ANSI color codes applied.
-func colorizeValue(styler humanStyler, key, value string) string {
+func colorizeValue(styler presentationStyler, key, value string) string {
 	keyLower := strings.ToLower(key)
 	valueLower := strings.ToLower(value)
 
@@ -617,11 +642,11 @@ func colorizeValue(styler humanStyler, key, value string) string {
 	if keyLower == "status" || keyLower == "state" {
 		switch valueLower {
 		case "success", "running", "active", "ready", "healthy", "ok":
-			return styler.semantic(plugin.HumanStyleSuccess, false, value)
+			return styler.semantic(presentation.StyleSuccess, false, value)
 		case "error", "failed", "terminated", "unhealthy":
-			return styler.semantic(plugin.HumanStyleError, false, value)
+			return styler.semantic(presentation.StyleError, false, value)
 		case "pending", "waiting", "unknown":
-			return styler.semantic(plugin.HumanStyleWarning, false, value)
+			return styler.semantic(presentation.StyleWarning, false, value)
 		}
 	}
 
@@ -632,10 +657,10 @@ func colorizeValue(styler humanStyler, key, value string) string {
 
 	// Boolean coloring
 	if valueLower == "true" || valueLower == "yes" {
-		return styler.semantic(plugin.HumanStyleSuccess, false, value)
+		return styler.semantic(presentation.StyleSuccess, false, value)
 	}
 	if valueLower == "false" || valueLower == "no" {
-		return styler.semantic(plugin.HumanStyleError, false, value)
+		return styler.semantic(presentation.StyleError, false, value)
 	}
 
 	// Name highlighting
@@ -706,9 +731,9 @@ func formatValue(v any) string {
 //   - w: The writer to output to
 //
 // Returns an error if rendering fails.
-func renderKeyValue(data map[string]any, w io.Writer, styler humanStyler) error {
+func renderKeyValue(data map[string]any, w io.Writer, styler presentationStyler) error {
 	if len(data) == 0 {
-		_, _ = fmt.Fprintln(w, styler.semantic(plugin.HumanStyleMuted, false, "No data."))
+		_, _ = fmt.Fprintln(w, styler.semantic(presentation.StyleMuted, false, "No data."))
 		return nil
 	}
 
@@ -735,7 +760,7 @@ func renderKeyValue(data map[string]any, w io.Writer, styler humanStyler) error 
 		coloredValue := colorizeValue(styler, k, formattedValue)
 
 		_, _ = fmt.Fprintf(w, "%s  %s\n",
-			styler.semantic(plugin.HumanStyleInfo, false, formattedKey+":"), coloredValue)
+			styler.semantic(presentation.StyleInfo, false, formattedKey+":"), coloredValue)
 	}
 
 	return nil

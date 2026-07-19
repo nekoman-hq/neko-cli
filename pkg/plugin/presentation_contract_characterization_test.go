@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"reflect"
 	"testing"
+
+	"github.com/nekoman-hq/neko-cli/pkg/presentation"
 )
 
 func TestPresentationTransportContractCharacterization(t *testing.T) {
@@ -11,17 +13,17 @@ func TestPresentationTransportContractCharacterization(t *testing.T) {
 
 	response := Response{
 		Status: "success",
-		HumanTable: &HumanTable{
-			Columns: []HumanColumn{{Key: "unit", Label: "Unit", RoleKey: "role", Essential: true}},
+		PresentationTable: &presentation.Table{
+			Columns: []presentation.Column{{Key: "unit", Label: "Unit", RoleKey: "role", Essential: true}},
 			Rows:    []map[string]any{{"unit": "api"}},
-			Details: &HumanProperties{Properties: []HumanProperty{{Label: "State", Value: "ready"}}},
+			Details: &presentation.Properties{Properties: []presentation.Property{{Label: "State", Value: "ready"}}},
 			Title:   "Units",
 		},
-		HumanProperties: &HumanProperties{
-			Properties: []HumanProperty{{Key: "unit", Label: "Unit", Role: HumanStyleInfo, Emphasized: true, Heading: true}},
+		PresentationProperties: &presentation.Properties{
+			Properties: []presentation.Property{{Key: "unit", Label: "Unit", Role: presentation.StyleInfo, Emphasized: true, Heading: true}},
 			Title:      "Summary",
 		},
-		HumanText: &HumanText{Content: "preview\n"},
+		PresentationText: &presentation.Text{Content: "preview\n"},
 	}
 
 	encoded, err := json.Marshal(response)
@@ -37,14 +39,9 @@ func TestPresentationTransportContractCharacterization(t *testing.T) {
 	if err := json.Unmarshal(encoded, &decoded); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
 	}
-	if !reflect.DeepEqual(decoded.HumanTable, response.HumanTable) ||
-		!reflect.DeepEqual(decoded.HumanProperties, response.HumanProperties) ||
-		!reflect.DeepEqual(decoded.HumanText, response.HumanText) {
-		t.Fatalf("deprecated presentation fields did not round trip\nwant: %#v\n got: %#v", response, decoded)
-	}
-	if !reflect.DeepEqual(decoded.PresentationTable, response.HumanTable) ||
-		!reflect.DeepEqual(decoded.PresentationProperties, response.HumanProperties) ||
-		!reflect.DeepEqual(decoded.PresentationText, response.HumanText) {
+	if !reflect.DeepEqual(decoded.PresentationTable, response.PresentationTable) ||
+		!reflect.DeepEqual(decoded.PresentationProperties, response.PresentationProperties) ||
+		!reflect.DeepEqual(decoded.PresentationText, response.PresentationText) {
 		t.Fatalf("canonical presentation fields were not populated\nwant: %#v\n got: %#v", response, decoded)
 	}
 }
@@ -52,23 +49,23 @@ func TestPresentationTransportContractCharacterization(t *testing.T) {
 func TestExportedPresentationTypeShapeCharacterization(t *testing.T) {
 	t.Parallel()
 
-	assertJSONFields(t, reflect.TypeOf(HumanTable{}), []fieldContract{
+	assertJSONFields(t, reflect.TypeOf(presentation.Table{}), []fieldContract{
 		{name: "Columns", jsonName: "columns", typeName: "[]presentation.Column"},
 		{name: "Rows", jsonName: "rows,omitempty", typeName: "[]map[string]interface {}"},
 		{name: "Details", jsonName: "details,omitempty", typeName: "*presentation.Properties"},
 		{name: "Title", jsonName: "title,omitempty", typeName: "string"},
 	})
-	assertJSONFields(t, reflect.TypeOf(HumanColumn{}), []fieldContract{
+	assertJSONFields(t, reflect.TypeOf(presentation.Column{}), []fieldContract{
 		{name: "Key", jsonName: "key", typeName: "string"},
 		{name: "Label", jsonName: "label", typeName: "string"},
 		{name: "RoleKey", jsonName: "role_key,omitempty", typeName: "string"},
 		{name: "Essential", jsonName: "essential,omitempty", typeName: "bool"},
 	})
-	assertJSONFields(t, reflect.TypeOf(HumanProperties{}), []fieldContract{
+	assertJSONFields(t, reflect.TypeOf(presentation.Properties{}), []fieldContract{
 		{name: "Properties", jsonName: "properties", typeName: "[]presentation.Property"},
 		{name: "Title", jsonName: "title,omitempty", typeName: "string"},
 	})
-	assertJSONFields(t, reflect.TypeOf(HumanProperty{}), []fieldContract{
+	assertJSONFields(t, reflect.TypeOf(presentation.Property{}), []fieldContract{
 		{name: "Key", jsonName: "key,omitempty", typeName: "string"},
 		{name: "Label", jsonName: "label", typeName: "string"},
 		{name: "Value", jsonName: "value,omitempty", typeName: "interface {}"},
@@ -76,18 +73,18 @@ func TestExportedPresentationTypeShapeCharacterization(t *testing.T) {
 		{name: "Emphasized", jsonName: "emphasized,omitempty", typeName: "bool"},
 		{name: "Heading", jsonName: "heading,omitempty", typeName: "bool"},
 	})
-	assertJSONFields(t, reflect.TypeOf(HumanText{}), []fieldContract{
+	assertJSONFields(t, reflect.TypeOf(presentation.Text{}), []fieldContract{
 		{name: "Content", jsonName: "content", typeName: "string"},
 	})
 
-	wantRoles := []HumanStyleRole{
-		HumanStyleDefault,
-		HumanStyleEmphasis,
-		HumanStyleSuccess,
-		HumanStyleWarning,
-		HumanStyleError,
-		HumanStyleInfo,
-		HumanStyleMuted,
+	wantRoles := []presentation.StyleRole{
+		presentation.StyleDefault,
+		presentation.StyleEmphasis,
+		presentation.StyleSuccess,
+		presentation.StyleWarning,
+		presentation.StyleError,
+		presentation.StyleInfo,
+		presentation.StyleMuted,
 	}
 	wantValues := []string{"default", "emphasis", "success", "warning", "error", "info", "muted"}
 	for index, role := range wantRoles {

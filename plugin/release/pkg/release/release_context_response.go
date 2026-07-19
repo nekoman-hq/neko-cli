@@ -4,9 +4,10 @@ import (
 	"time"
 
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/pkg/presentation"
 )
 
-var releaseContextHumanProperties = []plugin.HumanProperty{
+var releaseContextPresentationProperties = []presentation.Property{
 	{Key: "valid", Label: "Release context valid"},
 	{Key: workflowDispatchInputUnit, Label: "Unit"},
 	{Key: "display_name", Label: "Display name"},
@@ -68,8 +69,8 @@ func MapValidatedReleaseContext(result *ValidatedReleaseContext, timestamp time.
 			"tag_target_matches":            result.TagTargetMatches,
 		},
 		RendererHint: "table",
-		HumanProperties: &plugin.HumanProperties{
-			Properties: append([]plugin.HumanProperty(nil), releaseContextHumanProperties...),
+		PresentationProperties: &presentation.Properties{
+			Properties: append([]presentation.Property(nil), releaseContextPresentationProperties...),
 		},
 		GitHubOutput: &plugin.GitHubOutput{
 			Fields: append([]plugin.GitHubOutputField(nil), releaseContextGitHubOutputFields...),

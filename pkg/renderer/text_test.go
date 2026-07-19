@@ -7,24 +7,25 @@ import (
 	"testing"
 
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/pkg/presentation"
 )
 
-func TestHumanTextRendersPreformattedContentWithoutChangingJSONData(t *testing.T) {
+func TestTextPresentationRendersPreformattedContentWithoutChangingJSONData(t *testing.T) {
 	response := &plugin.Response{
 		Status: "success",
 		Data: map[string]any{
 			"target":            ".github/workflows/release.yml",
 			"generated_content": "name: Release\n",
 		},
-		HumanText: &plugin.HumanText{Content: "Target: .github/workflows/release.yml\n\nname: Release\n"},
+		PresentationText: &presentation.Text{Content: "Target: .github/workflows/release.yml\n\nname: Release\n"},
 	}
 
 	var human bytes.Buffer
 	if err := RenderTo(response, FormatTable, &human); err != nil {
 		t.Fatalf("RenderTo human text: %v", err)
 	}
-	if got := human.String(); got != response.HumanText.Content {
-		t.Fatalf("human text = %q, want %q", got, response.HumanText.Content)
+	if got := human.String(); got != response.PresentationText.Content {
+		t.Fatalf("human text = %q, want %q", got, response.PresentationText.Content)
 	}
 
 	var machine bytes.Buffer
@@ -43,9 +44,9 @@ func TestHumanTextRendersPreformattedContentWithoutChangingJSONData(t *testing.T
 	}
 }
 
-func TestHumanTextRejectsEmptyDeclaration(t *testing.T) {
-	response := &plugin.Response{Status: "success", HumanText: &plugin.HumanText{}}
+func TestTextPresentationRejectsEmptyDeclaration(t *testing.T) {
+	response := &plugin.Response{Status: "success", PresentationText: &presentation.Text{}}
 	if err := RenderTo(response, FormatTable, &bytes.Buffer{}); err == nil {
-		t.Fatal("empty human text declaration must fail")
+		t.Fatal("empty text presentation declaration must fail")
 	}
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/pkg/presentation"
 )
 
 func TestPropertyValuePresentationPreservesDeclaredAndItemOrder(t *testing.T) {
@@ -24,7 +25,7 @@ func TestPropertyValuePresentationPreservesDeclaredAndItemOrder(t *testing.T) {
 					"workflow": ".github/workflows/release-neko-cli.yml",
 					"status":   "Release plan inspected locally",
 				},
-				HumanProperties: &plugin.HumanProperties{Properties: []plugin.HumanProperty{
+				PresentationProperties: &presentation.Properties{Properties: []presentation.Property{
 					{Key: "unit", Label: "Unit"},
 					{Key: "workflow", Label: "Workflow"},
 					{Key: "status", Label: "Status"},
@@ -76,7 +77,7 @@ func TestPropertyPresentationMetadataDoesNotChangeMachineReadableData(t *testing
 		Data: map[string]any{"items": []map[string]any{
 			{"property": "Limitations", "value": "local-only: no execution | token-free: no token access"},
 		}},
-		HumanProperties: &plugin.HumanProperties{Properties: []plugin.HumanProperty{
+		PresentationProperties: &presentation.Properties{Properties: []presentation.Property{
 			{Key: "items", Label: "Ignored in JSON"},
 		}},
 	}

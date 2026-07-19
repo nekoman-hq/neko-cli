@@ -110,7 +110,7 @@ func TestIntegrationDoctorStylesHeadingsWithoutColoringOrdinaryFields(t *testing
 	finalizeIntegrationDoctorResult(&result)
 	output := renderIntegrationDoctorWithColorForTest(t, mapIntegrationDoctorResultForTest(result), 100, true)
 
-	for _, heading := range []string{integrationDoctorHumanTitle, integrationDoctorDiagnosticsTitle} {
+	for _, heading := range []string{integrationDoctorPresentationTitle, integrationDoctorDiagnosticsTitle} {
 		sequence := "\x1b[1m" + heading + "\x1b[0m"
 		if strings.Count(output, sequence) != 1 {
 			t.Fatalf("heading %q is not rendered once with neutral emphasis:\n%q", heading, output)

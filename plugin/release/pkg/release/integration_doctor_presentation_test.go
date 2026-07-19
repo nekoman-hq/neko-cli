@@ -8,36 +8,36 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
-	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/pkg/presentation"
 	"github.com/nekoman-hq/neko-cli/pkg/renderer"
 )
 
-func TestIntegrationDoctorHumanPresentationUsesSummaryIndexAndCompleteDetails(t *testing.T) {
+func TestIntegrationDoctorPresentationUsesSummaryIndexAndCompleteDetails(t *testing.T) {
 	result := integrationDoctorHighVolumePresentationFixture()
 	response := mapIntegrationDoctorResultForTest(result)
 
-	wantSummary := []plugin.HumanProperty{
-		{Label: "Readiness", Value: string(integrationDoctorNotReady), Role: plugin.HumanStyleError, Emphasized: true},
-		{Label: "Errors", Value: 3, Role: plugin.HumanStyleError},
-		{Label: "Warnings", Value: 2, Role: plugin.HumanStyleWarning},
+	wantSummary := []presentation.Property{
+		{Label: "Readiness", Value: string(integrationDoctorNotReady), Role: presentation.StyleError, Emphasized: true},
+		{Label: "Errors", Value: 3, Role: presentation.StyleError},
+		{Label: "Warnings", Value: 2, Role: presentation.StyleWarning},
 		{Label: "Recommendations", Value: 0},
-		{Label: "Not verifiable", Value: 4, Role: plugin.HumanStyleMuted},
+		{Label: "Not verifiable", Value: 4, Role: presentation.StyleMuted},
 		{Label: "Inspected units", Value: 2},
 		{Label: "Inspected workflows", Value: 2},
 	}
-	if response.HumanProperties == nil || response.HumanProperties.Title != integrationDoctorHumanTitle ||
-		!reflect.DeepEqual(response.HumanProperties.Properties, wantSummary) {
-		t.Fatalf("summary properties = %#v, want %#v", response.HumanProperties, wantSummary)
+	if response.PresentationProperties == nil || response.PresentationProperties.Title != integrationDoctorPresentationTitle ||
+		!reflect.DeepEqual(response.PresentationProperties.Properties, wantSummary) {
+		t.Fatalf("summary properties = %#v, want %#v", response.PresentationProperties, wantSummary)
 	}
-	wantColumns := []plugin.HumanColumn{
+	wantColumns := []presentation.Column{
 		{Key: "severity", Label: "Severity", RoleKey: integrationDoctorSemanticRoleKey, Essential: true},
 		{Key: "code", Label: "Code", RoleKey: integrationDoctorSemanticRoleKey, Essential: true},
 		{Key: "target", Label: "Target", RoleKey: integrationDoctorDefaultRoleKey},
 		{Key: "scope", Label: "Scope", RoleKey: integrationDoctorDefaultRoleKey},
 	}
-	if response.HumanTable == nil || response.HumanTable.Title != integrationDoctorDiagnosticsTitle ||
-		!reflect.DeepEqual(response.HumanTable.Columns, wantColumns) {
-		t.Fatalf("diagnostic columns = %#v, want %#v", response.HumanTable, wantColumns)
+	if response.PresentationTable == nil || response.PresentationTable.Title != integrationDoctorDiagnosticsTitle ||
+		!reflect.DeepEqual(response.PresentationTable.Columns, wantColumns) {
+		t.Fatalf("diagnostic columns = %#v, want %#v", response.PresentationTable, wantColumns)
 	}
 
 	output := ansi.Strip(renderReleasePlanForTest(
@@ -46,7 +46,7 @@ func TestIntegrationDoctorHumanPresentationUsesSummaryIndexAndCompleteDetails(t 
 		renderer.FormatTable,
 		releasePlanOutputWidth{width: 140, available: true},
 	))
-	titleAt := strings.Index(output, integrationDoctorHumanTitle)
+	titleAt := strings.Index(output, integrationDoctorPresentationTitle)
 	readinessAt := strings.Index(output, "Readiness")
 	diagnosticsAt := strings.Index(output, integrationDoctorDiagnosticsTitle)
 	indexAt := strings.Index(output, "Severity")
@@ -80,7 +80,7 @@ func TestIntegrationDoctorHumanPresentationUsesSummaryIndexAndCompleteDetails(t 
 	}
 }
 
-func TestIntegrationDoctorHumanPresentationFitsKnownWidthsAndUnknownWriter(t *testing.T) {
+func TestIntegrationDoctorPresentationFitsKnownWidthsAndUnknownWriter(t *testing.T) {
 	result := integrationDoctorHighVolumePresentationFixture()
 	response := mapIntegrationDoctorResultForTest(result)
 	for _, width := range []int{140, 120, 100, 80, 60, 40} {
@@ -121,35 +121,35 @@ func TestIntegrationDoctorHumanPresentationFitsKnownWidthsAndUnknownWriter(t *te
 func TestIntegrationDoctorDiagnosticDetailsPreserveExactFieldOrder(t *testing.T) {
 	result := integrationDoctorHighVolumePresentationFixture()
 	response := mapIntegrationDoctorResultForTest(result)
-	if response.HumanTable == nil || response.HumanTable.Details == nil {
+	if response.PresentationTable == nil || response.PresentationTable.Details == nil {
 		t.Fatal("Doctor response omitted diagnostic details")
 	}
 
-	properties := response.HumanTable.Details.Properties
+	properties := response.PresentationTable.Details.Properties
 	offset := 0
 	for _, diagnostic := range result.Diagnostics {
-		want := []plugin.HumanProperty{
+		want := []presentation.Property{
 			{
 				Label:      strings.ToUpper(string(diagnostic.Severity)) + " · " + diagnostic.Code,
 				Role:       integrationDoctorSeverityRole(diagnostic.Severity),
 				Emphasized: true,
 				Heading:    true,
 			},
-			{Label: "Scope", Value: diagnostic.Scope, Role: plugin.HumanStyleDefault},
+			{Label: "Scope", Value: diagnostic.Scope, Role: presentation.StyleDefault},
 		}
 		if diagnostic.Unit != "" {
-			want = append(want, plugin.HumanProperty{
-				Label: "Unit", Value: diagnostic.Unit, Role: plugin.HumanStyleDefault,
+			want = append(want, presentation.Property{
+				Label: "Unit", Value: diagnostic.Unit, Role: presentation.StyleDefault,
 			})
 		}
 		if diagnostic.Workflow != "" {
-			want = append(want, plugin.HumanProperty{
-				Label: "Workflow", Value: diagnostic.Workflow, Role: plugin.HumanStyleDefault,
+			want = append(want, presentation.Property{
+				Label: "Workflow", Value: diagnostic.Workflow, Role: presentation.StyleDefault,
 			})
 		}
 		want = append(want,
-			plugin.HumanProperty{Label: "Message", Value: diagnostic.Message, Role: plugin.HumanStyleDefault},
-			plugin.HumanProperty{Label: "Remediation", Value: diagnostic.Remediation, Role: plugin.HumanStyleDefault},
+			presentation.Property{Label: "Message", Value: diagnostic.Message, Role: presentation.StyleDefault},
+			presentation.Property{Label: "Remediation", Value: diagnostic.Remediation, Role: presentation.StyleDefault},
 		)
 		if offset+len(want) > len(properties) || !reflect.DeepEqual(properties[offset:offset+len(want)], want) {
 			t.Fatalf("detail for %s fields = %#v, want %#v", diagnostic.Code, properties[offset:], want)
@@ -175,11 +175,11 @@ func TestIntegrationDoctorCompactTargetsShortenOnlyUnambiguousWorkflowBasenames(
 		"docs · docs-release.yml",
 		"source",
 	}
-	wantRoles := []plugin.HumanStyleRole{
-		plugin.HumanStyleError,
-		plugin.HumanStyleWarning,
-		plugin.HumanStyleMuted,
-		plugin.HumanStyleError,
+	wantRoles := []presentation.StyleRole{
+		presentation.StyleError,
+		presentation.StyleWarning,
+		presentation.StyleMuted,
+		presentation.StyleError,
 	}
 	for index, want := range wantTargets {
 		if got := rows[index]["target"]; got != want {
@@ -188,8 +188,8 @@ func TestIntegrationDoctorCompactTargetsShortenOnlyUnambiguousWorkflowBasenames(
 		if got := rows[index][integrationDoctorSemanticRoleKey]; got != string(wantRoles[index]) {
 			t.Fatalf("semantic role %d = %#v, want %q", index, got, wantRoles[index])
 		}
-		if got := rows[index][integrationDoctorDefaultRoleKey]; got != string(plugin.HumanStyleDefault) {
-			t.Fatalf("default role %d = %#v, want %q", index, got, plugin.HumanStyleDefault)
+		if got := rows[index][integrationDoctorDefaultRoleKey]; got != string(presentation.StyleDefault) {
+			t.Fatalf("default role %d = %#v, want %q", index, got, presentation.StyleDefault)
 		}
 	}
 }
@@ -198,7 +198,7 @@ func TestIntegrationDoctorSummaryHandlesNoFindingsWithoutSyntheticTableRows(t *t
 	result := integrationDoctorResult{}
 	finalizeIntegrationDoctorResult(&result)
 	response := mapIntegrationDoctorResultForTest(result)
-	if result.Readiness != integrationDoctorReady || response.ExitCode != 0 || response.HumanTable != nil {
+	if result.Readiness != integrationDoctorReady || response.ExitCode != 0 || response.PresentationTable != nil {
 		t.Fatalf("no-finding response = %#v, result = %#v", response, result)
 	}
 	output := ansi.Strip(renderReleasePlanForTest(
@@ -212,7 +212,7 @@ func TestIntegrationDoctorSummaryHandlesNoFindingsWithoutSyntheticTableRows(t *t
 	}
 }
 
-func TestIntegrationDoctorJSONRendererExcludesHumanPresentation(t *testing.T) {
+func TestIntegrationDoctorJSONRendererExcludesPresentation(t *testing.T) {
 	root := newIntegrationDoctorRepository(t, map[string]string{"api": ".github/workflows/release.yml"})
 	writeIntegrationDoctorWorkflow(t, root, ".github/workflows/release.yml", customIntegrationDoctorWorkflow(t))
 	response := runIntegrationDoctor(t, root, nil)

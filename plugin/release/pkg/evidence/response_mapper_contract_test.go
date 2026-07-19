@@ -12,6 +12,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/pkg/presentation"
 	"github.com/nekoman-hq/neko-cli/pkg/renderer"
 )
 
@@ -203,8 +204,8 @@ func TestEvidenceHandlerRoutesIdentityInspectionToCompleteDetail(t *testing.T) {
 	if runner.request.IdentityPrefix != identity[:8] || runner.request.Family != FamilyDispatch || runner.request.Unit != "api" {
 		t.Fatalf("detail query request changed: %#v", runner.request)
 	}
-	if response.HumanTable != nil {
-		t.Fatalf("detail response unexpectedly opted into summary table: %#v", response.HumanTable)
+	if response.PresentationTable != nil {
+		t.Fatalf("detail response unexpectedly opted into summary table: %#v", response.PresentationTable)
 	}
 	if items, ok := response.Data["items"].([]map[string]any); !ok || len(items) == 0 || items[1]["value"] != identity {
 		t.Fatalf("detail response omitted complete identity: %#v", response.Data["items"])
@@ -224,9 +225,9 @@ func TestEvidenceHandlerReturnsNilResponseWithQueryError(t *testing.T) {
 	}
 }
 
-func TestEvidenceSummaryDeclaresSemanticHumanColumnPriority(t *testing.T) {
+func TestEvidenceSummaryDeclaresSemanticColumnPriority(t *testing.T) {
 	response := mapEvidenceQueryResponse(evidenceQueryResult{Records: []EvidenceRecord{{Family: FamilyDispatch}}}, time.Now())
-	want := []plugin.HumanColumn{
+	want := []presentation.Column{
 		{Key: "family", Label: "Family", Essential: true},
 		{Key: "state", Label: "State", Essential: true},
 		{Key: "classification", Label: "Classification", Essential: true},
@@ -239,8 +240,8 @@ func TestEvidenceSummaryDeclaresSemanticHumanColumnPriority(t *testing.T) {
 		{Key: "automatic_continuation", Label: "Automatic"},
 		{Key: "lifecycle", Label: "Lifecycle"},
 	}
-	if response.HumanTable == nil || !reflect.DeepEqual(response.HumanTable.Columns, want) {
-		t.Fatalf("human table columns = %#v, want %#v", response.HumanTable, want)
+	if response.PresentationTable == nil || !reflect.DeepEqual(response.PresentationTable.Columns, want) {
+		t.Fatalf("human table columns = %#v, want %#v", response.PresentationTable, want)
 	}
 }
 
@@ -276,7 +277,7 @@ func TestEvidenceDetailResponseShowsEverySafeFieldAndCompleteTypedRecord(t *test
 	}
 
 	response := mapEvidenceDetailResponse(result, time.Date(2026, time.July, 18, 12, 30, 0, 0, time.UTC))
-	if response.HumanTable != nil || response.RendererHint != "table" {
+	if response.PresentationTable != nil || response.RendererHint != "table" {
 		t.Fatalf("detail response should use existing property/value rendering: %#v", response)
 	}
 	items, ok := response.Data["items"].([]map[string]any)
@@ -306,7 +307,7 @@ func TestEvidenceDetailResponseShowsEverySafeFieldAndCompleteTypedRecord(t *test
 	}
 }
 
-func TestEvidenceSummaryRendersResponsiveHumanLayoutsWithoutForensicColumns(t *testing.T) {
+func TestEvidenceSummaryRendersResponsiveLayoutsWithoutForensicColumns(t *testing.T) {
 	response := mapEvidenceQueryResponse(evidenceQueryResult{Records: []EvidenceRecord{{
 		Family:                FamilyDispatch,
 		Identity:              strings.Repeat("a", 64),

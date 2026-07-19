@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/pkg/presentation"
 )
 
 const (
@@ -19,7 +20,7 @@ const (
 type propertyValue struct {
 	label      string
 	value      string
-	role       plugin.HumanStyleRole
+	role       presentation.StyleRole
 	emphasized bool
 	heading    bool
 }
@@ -35,7 +36,7 @@ func renderPropertyValues(
 	response *plugin.Response,
 	writer io.Writer,
 	widthProvider OutputWidthProvider,
-	styler humanStyler,
+	styler presentationStyler,
 ) (bool, error) {
 	properties, declared, err := responsePropertyValues(response)
 	if err != nil {
@@ -45,14 +46,14 @@ func renderPropertyValues(
 		return false, nil
 	}
 	if len(properties) == 0 {
-		_, _ = fmt.Fprintln(writer, styler.semantic(plugin.HumanStyleMuted, false, "No resources found."))
+		_, _ = fmt.Fprintln(writer, styler.semantic(presentation.StyleMuted, false, "No resources found."))
 		return true, nil
 	}
 
 	outputWidth, widthAvailable := widthProvider.Width(writer)
-	compact := response.HumanProperties != nil && response.HumanProperties.Title != ""
+	compact := response.PresentationProperties != nil && response.PresentationProperties.Title != ""
 	if compact {
-		printHumanTitle(writer, response.HumanProperties.Title, styler)
+		printPresentationTitle(writer, response.PresentationProperties.Title, styler)
 		_, _ = fmt.Fprintln(writer)
 	}
 	if containsPropertyHeadings(properties) {
@@ -66,7 +67,7 @@ func renderPropertyValues(
 }
 
 func responsePropertyValues(response *plugin.Response) ([]propertyValue, bool, error) {
-	if response.HumanProperties != nil {
+	if response.PresentationProperties != nil {
 		properties, err := declaredPropertyValues(response)
 		return properties, true, err
 	}
@@ -75,12 +76,12 @@ func responsePropertyValues(response *plugin.Response) ([]propertyValue, bool, e
 }
 
 func declaredPropertyValues(response *plugin.Response) ([]propertyValue, error) {
-	if strings.TrimSpace(response.HumanProperties.Title) != response.HumanProperties.Title {
-		return nil, fmt.Errorf("human property title must not have surrounding whitespace")
+	if strings.TrimSpace(response.PresentationProperties.Title) != response.PresentationProperties.Title {
+		return nil, fmt.Errorf("property presentation title must not have surrounding whitespace")
 	}
-	declarations := response.HumanProperties.Properties
+	declarations := response.PresentationProperties.Properties
 	if len(declarations) == 0 {
-		return nil, fmt.Errorf("human property declaration is empty")
+		return nil, fmt.Errorf("property presentation declaration is empty")
 	}
 	properties := make([]propertyValue, 0, len(declarations))
 	seenKeys := make(map[string]struct{}, len(declarations))
@@ -88,12 +89,12 @@ func declaredPropertyValues(response *plugin.Response) ([]propertyValue, error) 
 		key := strings.TrimSpace(declaration.Key)
 		label := strings.TrimSpace(declaration.Label)
 		hasValue := declaration.Value != nil
-		if !validHumanStyleRole(declaration.Role) {
-			return nil, fmt.Errorf("human property declaration contains invalid semantic role %q", declaration.Role)
+		if !validStyleRole(declaration.Role) {
+			return nil, fmt.Errorf("property presentation declaration contains invalid semantic role %q", declaration.Role)
 		}
 		if declaration.Heading {
 			if label == "" || label != declaration.Label || key != "" || hasValue {
-				return nil, fmt.Errorf("human property heading must contain only one label")
+				return nil, fmt.Errorf("property presentation heading must contain only one label")
 			}
 			properties = append(properties, propertyValue{
 				label: label, role: declaration.Role, emphasized: declaration.Emphasized, heading: true,
@@ -101,18 +102,18 @@ func declaredPropertyValues(response *plugin.Response) ([]propertyValue, error) 
 			continue
 		}
 		if label == "" || label != declaration.Label || key != declaration.Key || (key == "") == !hasValue {
-			return nil, fmt.Errorf("human property declaration must contain one label and exactly one data key or value")
+			return nil, fmt.Errorf("property presentation declaration must contain one label and exactly one data key or value")
 		}
 
 		value := declaration.Value
 		if key != "" {
 			if _, duplicate := seenKeys[key]; duplicate {
-				return nil, fmt.Errorf("human property declaration repeats data key %q", key)
+				return nil, fmt.Errorf("property presentation declaration repeats data key %q", key)
 			}
 			var present bool
 			value, present = response.Data[key]
 			if !present {
-				return nil, fmt.Errorf("human property data key %q is missing", key)
+				return nil, fmt.Errorf("property presentation data key %q is missing", key)
 			}
 			seenKeys[key] = struct{}{}
 		}
@@ -181,11 +182,11 @@ func renderTwoColumnProperties(
 	properties []propertyValue,
 	layout propertyLayout,
 	compact bool,
-	styler humanStyler,
+	styler presentationStyler,
 ) error {
 	if !compact {
 		heading := paddedVisibleText("PROPERTY", layout.labelWidth) + strings.Repeat(" ", propertyColumnGap) + "VALUE"
-		_, _ = fmt.Fprintln(writer, styler.semantic(plugin.HumanStyleInfo, true, heading))
+		_, _ = fmt.Fprintln(writer, styler.semantic(presentation.StyleInfo, true, heading))
 		printTableSeparator(writer, layout.outputWidth, styler)
 	}
 
@@ -207,7 +208,7 @@ func renderTwoColumnProperties(
 			}
 			styledLabel := labelLine
 			if property.emphasized {
-				styledLabel = styler.semantic(plugin.HumanStyleEmphasis, false, labelLine)
+				styledLabel = styler.semantic(presentation.StyleEmphasis, false, labelLine)
 			}
 			_, _ = fmt.Fprintf(writer, "%s%s%s\n",
 				paddedStyledText(styledLabel, labelLine, layout.labelWidth),
@@ -241,7 +242,7 @@ func renderVerticalProperties(
 	outputWidth int,
 	widthAvailable bool,
 	compact bool,
-	styler humanStyler,
+	styler presentationStyler,
 ) error {
 	for index, property := range properties {
 		if index > 0 && !compact {
@@ -252,10 +253,10 @@ func renderVerticalProperties(
 			labelWidth = outputWidth
 		}
 		for _, labelLine := range wrapVisibleLines(property.label, labelWidth) {
-			role := plugin.HumanStyleInfo
+			role := presentation.StyleInfo
 			emphasized := true
 			if compact {
-				role = plugin.HumanStyleDefault
+				role = presentation.StyleDefault
 				emphasized = property.emphasized
 			}
 			_, _ = fmt.Fprintln(writer, styler.semantic(role, emphasized, labelLine))
@@ -270,7 +271,7 @@ func renderVerticalPropertyValue(
 	property propertyValue,
 	outputWidth int,
 	widthAvailable bool,
-	styler humanStyler,
+	styler presentationStyler,
 ) {
 	indentWidth := verticalPropertyIndent
 	valueWidth := 0
@@ -300,7 +301,7 @@ func renderPropertyRecords(
 	properties []propertyValue,
 	outputWidth int,
 	widthAvailable bool,
-	styler humanStyler,
+	styler presentationStyler,
 ) error {
 	records := 0
 	for _, property := range properties {
@@ -323,11 +324,11 @@ func renderPropertyRecords(
 			continue
 		}
 		if records == 0 {
-			return fmt.Errorf("human property record field appears before its heading")
+			return fmt.Errorf("property presentation record field appears before its heading")
 		}
 		_, _ = fmt.Fprintln(writer)
 		for _, line := range wrapVisibleLines(property.label, knownOutputWidth(outputWidth, widthAvailable)) {
-			_, _ = fmt.Fprintln(writer, styler.semantic(plugin.HumanStyleDefault, true, line))
+			_, _ = fmt.Fprintln(writer, styler.semantic(presentation.StyleDefault, true, line))
 		}
 		renderVerticalPropertyValue(writer, property, outputWidth, widthAvailable, styler)
 	}
@@ -341,7 +342,7 @@ func knownOutputWidth(outputWidth int, available bool) int {
 	return outputWidth
 }
 
-func stylePropertyValue(styler humanStyler, property propertyValue, value string) string {
+func stylePropertyValue(styler presentationStyler, property propertyValue, value string) string {
 	if property.role == "" && !property.emphasized {
 		return colorizeValue(styler, "value", value)
 	}

@@ -38,7 +38,7 @@ func TestGitHubWorkflowScaffoldRequestErrorsUseStableResponses(t *testing.T) {
 	}
 }
 
-func TestGitHubWorkflowScaffoldPreviewHasReadableHumanAndStableJSON(t *testing.T) {
+func TestGitHubWorkflowScaffoldPreviewHasReadableOutputAndStableJSON(t *testing.T) {
 	root := newWorkflowScaffoldRepository(t, map[string]string{"api": ".github/workflows/release.yml"})
 	response, err := HandleGitHubWorkflowInitAt(root, plugin.Request{
 		Command: githubWorkflowInitCommandName,

@@ -4,9 +4,10 @@ import (
 	"time"
 
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/pkg/presentation"
 )
 
-var unitOverviewHumanColumns = []plugin.HumanColumn{
+var unitOverviewPresentationColumns = []presentation.Column{
 	{Key: "id", Label: "Unit", Essential: true},
 	{Key: "configured_version", Label: "Version", Essential: true},
 	{Key: "alignment", Label: "Status", Essential: true},
@@ -38,13 +39,13 @@ func mapUnitOverviewResult(result *unitOverviewResult, timestamp time.Time) *plu
 		Metadata:     commandResponseMetadata(unitOverviewCommandName, timestamp),
 		Data:         data,
 		RendererHint: "table",
-		HumanTable: &plugin.HumanTable{
-			Columns: append([]plugin.HumanColumn(nil), unitOverviewHumanColumns...),
+		PresentationTable: &presentation.Table{
+			Columns: append([]presentation.Column(nil), unitOverviewPresentationColumns...),
 		},
 	}
 	if len(result.Units) == 0 && result.SourceIssue != nil {
-		response.HumanTable = nil
-		response.HumanProperties = &plugin.HumanProperties{Properties: []plugin.HumanProperty{
+		response.PresentationTable = nil
+		response.PresentationProperties = &presentation.Properties{Properties: []presentation.Property{
 			{Label: "Status", Value: result.Status},
 			{Label: "Issue", Value: result.SourceIssue.Code},
 			{Label: "Message", Value: result.SourceIssue.Message},

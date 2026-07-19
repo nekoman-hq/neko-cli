@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/pkg/presentation"
 )
 
 func TestPropertyValuesUseBoundedTwoColumnLayoutAndWrapValues(t *testing.T) {
@@ -111,13 +112,13 @@ func TestPropertyValuesWrapLongLabelsANSICombiningAndWideGlyphsByVisibleWidth(t 
 	assertRenderedLinesFit(t, output, outputWidth)
 }
 
-func TestDirectHumanPropertyValuesRemainPresentationOnly(t *testing.T) {
+func TestDirectPresentationPropertyValuesRemainPresentationOnly(t *testing.T) {
 	response := &plugin.Response{
 		Status: "success",
 		Data: map[string]any{"items": []map[string]any{
 			{"property": "Limitations", "value": "stable machine value"},
 		}},
-		HumanProperties: &plugin.HumanProperties{Properties: []plugin.HumanProperty{
+		PresentationProperties: &presentation.Properties{Properties: []presentation.Property{
 			{Label: "Local Inspection Only", Value: "No release execution is started."},
 			{Label: "Token Free", Value: "Tokens are not read or reported."},
 		}},

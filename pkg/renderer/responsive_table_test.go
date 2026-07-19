@@ -11,6 +11,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/pkg/presentation"
 )
 
 func TestResponsiveTableUsesDeclaredOrderAndFitsOptionalColumnsByPriority(t *testing.T) {
@@ -101,8 +102,8 @@ func TestResponsiveOptionalColumnUsesBoundedANSIAndUnicodeSafeTruncation(t *test
 	response := &plugin.Response{
 		Status: "success",
 		Data:   map[string]any{"items": []map[string]any{{"family": "dispatch", "tag": longTag}}},
-		HumanTable: &plugin.HumanTable{
-			Columns: []plugin.HumanColumn{
+		PresentationTable: &presentation.Table{
+			Columns: []presentation.Column{
 				{Key: "family", Label: "Family", Essential: true},
 				{Key: "tag", Label: "Tag"},
 			},
@@ -143,9 +144,9 @@ func TestVisibleWidthAndTruncationHandleANSICombiningAndWideGlyphs(t *testing.T)
 
 func TestResponsiveVerticalWrappingUsesVisibleCells(t *testing.T) {
 	response := &plugin.Response{
-		Status:     "success",
-		Data:       map[string]any{"items": []map[string]any{{"family": "\x1b[31m猫猫猫猫猫猫猫猫\x1b[0m"}}},
-		HumanTable: &plugin.HumanTable{Columns: []plugin.HumanColumn{{Key: "family", Label: "Family", Essential: true}}},
+		Status:            "success",
+		Data:              map[string]any{"items": []map[string]any{{"family": "\x1b[31m猫猫猫猫猫猫猫猫\x1b[0m"}}},
+		PresentationTable: &presentation.Table{Columns: []presentation.Column{{Key: "family", Label: "Family", Essential: true}}},
 	}
 
 	output := renderResponsiveForTest(t, response, FormatTable, fixedOutputWidth{width: 10, available: true})
@@ -155,7 +156,7 @@ func TestResponsiveVerticalWrappingUsesVisibleCells(t *testing.T) {
 	assertRenderedLinesFit(t, output, 10)
 }
 
-func TestHumanTableMetadataCrossesTransportButDoesNotLeakIntoPublicJSON(t *testing.T) {
+func TestTablePresentationMetadataCrossesTransportButDoesNotLeakIntoPublicJSON(t *testing.T) {
 	response := responsiveTestResponse()
 
 	transport, err := json.Marshal(response)
@@ -163,7 +164,7 @@ func TestHumanTableMetadataCrossesTransportButDoesNotLeakIntoPublicJSON(t *testi
 		t.Fatalf("marshal transport response: %v", err)
 	}
 	if !bytes.Contains(transport, []byte(`"human_table"`)) {
-		t.Fatalf("transport response omitted human table declaration: %s", transport)
+		t.Fatalf("transport response omitted table presentation declaration: %s", transport)
 	}
 	if bytes.Contains(transport, []byte(`"rows"`)) || bytes.Contains(transport, []byte(`"details"`)) {
 		t.Fatalf("zero-value table extensions changed existing transport: %s", transport)
@@ -181,7 +182,7 @@ func TestHumanTableMetadataCrossesTransportButDoesNotLeakIntoPublicJSON(t *testi
 	}
 }
 
-func TestHumanTableMetadataDoesNotLeakIntoRawJSON(t *testing.T) {
+func TestTablePresentationMetadataDoesNotLeakIntoRawJSON(t *testing.T) {
 	response := responsiveTestResponse()
 	response.RendererHint = "raw-json"
 	response.Data = map[string]any{"raw": `{"value":"complete"}`}
@@ -201,16 +202,16 @@ func TestResponsiveTableComposesSummaryRowsAndPropertyDetails(t *testing.T) {
 		Data: map[string]any{
 			"items": []map[string]any{{"name": "machine item", "state": "stable"}},
 		},
-		HumanProperties: &plugin.HumanProperties{Properties: []plugin.HumanProperty{
+		PresentationProperties: &presentation.Properties{Properties: []presentation.Property{
 			{Label: "Readiness", Value: "review"},
 		}},
-		HumanTable: &plugin.HumanTable{
-			Columns: []plugin.HumanColumn{
+		PresentationTable: &presentation.Table{
+			Columns: []presentation.Column{
 				{Key: "severity", Label: "Severity", Essential: true},
 				{Key: "code", Label: "Code", Essential: true},
 			},
 			Rows: []map[string]any{{"severity": "warning", "code": "CONFIG_REVIEW"}},
-			Details: &plugin.HumanProperties{Properties: []plugin.HumanProperty{
+			Details: &presentation.Properties{Properties: []presentation.Property{
 				{Label: "Detail", Value: "Review the complete local configuration before continuing."},
 			}},
 		},
@@ -230,13 +231,13 @@ func TestResponsiveTableRowsAndDetailsCrossTransportButStayOutOfMachineOutput(t 
 	response := &plugin.Response{
 		Status: "success",
 		Data:   map[string]any{"items": []map[string]any{{"name": "machine item"}}},
-		HumanProperties: &plugin.HumanProperties{Properties: []plugin.HumanProperty{
+		PresentationProperties: &presentation.Properties{Properties: []presentation.Property{
 			{Label: "Summary", Value: "human summary"},
 		}},
-		HumanTable: &plugin.HumanTable{
-			Columns: []plugin.HumanColumn{{Key: "name", Label: "Name", Essential: true}},
+		PresentationTable: &presentation.Table{
+			Columns: []presentation.Column{{Key: "name", Label: "Name", Essential: true}},
 			Rows:    []map[string]any{{"name": "human row"}},
-			Details: &plugin.HumanProperties{Properties: []plugin.HumanProperty{
+			Details: &presentation.Properties{Properties: []presentation.Property{
 				{Label: "Detail", Value: "human detail"},
 			}},
 		},
@@ -297,7 +298,7 @@ func TestResponsiveWidthProviderReceivesActualOutputWriter(t *testing.T) {
 	}
 }
 
-func TestWideRenderingRemainsUnchangedWithoutHumanTableOptIn(t *testing.T) {
+func TestWideRenderingRemainsUnchangedWithoutTablePresentationOptIn(t *testing.T) {
 	response := &plugin.Response{
 		Status: "success",
 		Data:   map[string]any{"items": []map[string]any{{"name": "api", "status": "ready"}}},
@@ -326,8 +327,8 @@ func responsiveTestResponse() *plugin.Response {
 				"version": "1.2.4",
 			}},
 		},
-		HumanTable: &plugin.HumanTable{
-			Columns: []plugin.HumanColumn{
+		PresentationTable: &presentation.Table{
+			Columns: []presentation.Column{
 				{Key: "family", Label: "Family", Essential: true},
 				{Key: "state", Label: "State", Essential: true},
 				{Key: "unit", Label: "Unit"},

@@ -12,7 +12,7 @@ import (
 	"github.com/nekoman-hq/neko-cli/pkg/renderer"
 )
 
-func TestReleasePlanHumanOutputPresentsLimitationsSemantically(t *testing.T) {
+func TestReleasePlanReadableOutputPresentsLimitationsSemantically(t *testing.T) {
 	response := MapReleasePlanInspection(releasePlanPresentationFixture(), time.Date(2026, time.July, 18, 18, 30, 0, 0, time.UTC))
 	output := renderReleasePlanForTest(t, response, renderer.FormatTable, releasePlanOutputWidth{width: 72, available: true})
 	plain := ansi.Strip(output)
@@ -38,7 +38,7 @@ func TestReleasePlanHumanOutputPresentsLimitationsSemantically(t *testing.T) {
 	assertReleasePlanLinesFit(t, output, 72)
 }
 
-func TestReleasePlanHumanOutputUsesVerticalLayoutAtNarrowAndUnknownWidths(t *testing.T) {
+func TestReleasePlanReadableOutputUsesVerticalLayoutAtNarrowAndUnknownWidths(t *testing.T) {
 	response := MapReleasePlanInspection(releasePlanPresentationFixture(), time.Date(2026, time.July, 18, 18, 31, 0, 0, time.UTC))
 
 	narrow := renderReleasePlanForTest(t, response, renderer.FormatTable, releasePlanOutputWidth{width: 28, available: true})

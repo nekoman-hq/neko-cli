@@ -11,7 +11,7 @@ import (
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
-func TestUnitOverviewHumanOutputKeepsEssentialColumnsAndInvalidUnitsVisible(t *testing.T) {
+func TestUnitOverviewReadableOutputKeepsEssentialColumnsAndInvalidUnitsVisible(t *testing.T) {
 	root := newUnitOverviewRepository(t)
 	config := releaseconfig.V2ReleaseConfig{SchemaVersion: 2, Units: []releaseconfig.V2Unit{
 		unitOverviewConfigUnit("worker", "Worker with a deliberately long display name", "worker/v", ".github/workflows/release-shared-with-a-long-name.yml"),
@@ -41,7 +41,7 @@ func TestUnitOverviewHumanOutputKeepsEssentialColumnsAndInvalidUnitsVisible(t *t
 	assertReleasePlanLinesFit(t, narrow, 28)
 }
 
-func TestUnitOverviewHumanOutputIsDeterministicAtUnknownWidthAndWrapsWideDetails(t *testing.T) {
+func TestUnitOverviewReadableOutputIsDeterministicAtUnknownWidthAndWrapsWideDetails(t *testing.T) {
 	root := newUnitOverviewRepository(t)
 	unit := unitOverviewConfigUnit(
 		"api",

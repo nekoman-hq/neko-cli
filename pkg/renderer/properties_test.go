@@ -8,9 +8,10 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/pkg/presentation"
 )
 
-func TestHumanPropertiesRenderInDeclaredOrder(t *testing.T) {
+func TestPresentationPropertiesRenderInDeclaredOrder(t *testing.T) {
 	response := &plugin.Response{
 		Status: "success",
 		Data: map[string]any{
@@ -18,7 +19,7 @@ func TestHumanPropertiesRenderInDeclaredOrder(t *testing.T) {
 			"version":      "2.4.0",
 			"head_matches": true,
 		},
-		HumanProperties: &plugin.HumanProperties{Properties: []plugin.HumanProperty{
+		PresentationProperties: &presentation.Properties{Properties: []presentation.Property{
 			{Key: "version", Label: "Version"},
 			{Key: "unit", Label: "Unit"},
 			{Key: "head_matches", Label: "HEAD matches"},
@@ -38,10 +39,10 @@ func TestHumanPropertiesRenderInDeclaredOrder(t *testing.T) {
 	}
 }
 
-func TestHumanPropertyAndIntegrationMetadataStayOutOfPublicJSON(t *testing.T) {
+func TestPresentationPropertyAndIntegrationMetadataStayOutOfPublicJSON(t *testing.T) {
 	response := githubOutputTestResponse()
 	response.ExitCode = 1
-	response.HumanProperties = &plugin.HumanProperties{Properties: []plugin.HumanProperty{{Key: "unit", Label: "Unit"}}}
+	response.PresentationProperties = &presentation.Properties{Properties: []presentation.Property{{Key: "unit", Label: "Unit"}}}
 
 	transport, err := json.Marshal(response)
 	if err != nil {
@@ -67,17 +68,17 @@ func TestHumanPropertyAndIntegrationMetadataStayOutOfPublicJSON(t *testing.T) {
 	}
 }
 
-func TestInvalidHumanPropertiesFailWithoutNondeterministicFallback(t *testing.T) {
-	tests := []plugin.HumanProperties{
+func TestInvalidPresentationPropertiesFailWithoutNondeterministicFallback(t *testing.T) {
+	tests := []presentation.Properties{
 		{},
-		{Properties: []plugin.HumanProperty{{Key: "unit", Label: " Unit"}}},
-		{Properties: []plugin.HumanProperty{{Key: "unit", Label: "Unit"}, {Key: "unit", Label: "Again"}}},
-		{Properties: []plugin.HumanProperty{{Key: "missing", Label: "Missing"}}},
-		{Properties: []plugin.HumanProperty{{Key: "unit", Label: "Ambiguous", Value: "direct"}}},
-		{Properties: []plugin.HumanProperty{{Label: "Missing value"}}},
+		{Properties: []presentation.Property{{Key: "unit", Label: " Unit"}}},
+		{Properties: []presentation.Property{{Key: "unit", Label: "Unit"}, {Key: "unit", Label: "Again"}}},
+		{Properties: []presentation.Property{{Key: "missing", Label: "Missing"}}},
+		{Properties: []presentation.Property{{Key: "unit", Label: "Ambiguous", Value: "direct"}}},
+		{Properties: []presentation.Property{{Label: "Missing value"}}},
 	}
 	for index := range tests {
-		response := &plugin.Response{Status: "success", Data: map[string]any{"unit": "api"}, HumanProperties: &tests[index]}
+		response := &plugin.Response{Status: "success", Data: map[string]any{"unit": "api"}, PresentationProperties: &tests[index]}
 		var output bytes.Buffer
 		if err := RenderTo(response, FormatTable, &output); err == nil {
 			t.Fatalf("case %d unexpectedly rendered: %q", index, output.String())

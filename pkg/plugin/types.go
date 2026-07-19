@@ -47,13 +47,13 @@ type Response struct {
 	PresentationText       *presentation.Text       `json:"-"`                       // Optional preformatted text declaration
 
 	// Deprecated: use PresentationTable. The field remains for Go source
-	// compatibility and is serialized through the established human_table tag.
+	// compatibility and uses the established plugin protocol tag.
 	HumanTable *presentation.Table `json:"-"`
 	// Deprecated: use PresentationProperties. The field remains for Go source
-	// compatibility and is serialized through the established human_properties tag.
+	// compatibility and uses the established plugin protocol tag.
 	HumanProperties *presentation.Properties `json:"-"`
 	// Deprecated: use PresentationText. The field remains for Go source
-	// compatibility and is serialized through the established human_text tag.
+	// compatibility and uses the established plugin protocol tag.
 	HumanText    *presentation.Text `json:"-"`
 	GitHubOutput *GitHubOutput      `json:"github_output,omitempty"` // Optional ordered declaration for GitHub Actions output
 	ExitCode     int                `json:"exit_code,omitempty"`     // Optional non-zero Core CLI exit request

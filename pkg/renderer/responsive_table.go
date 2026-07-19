@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/pkg/presentation"
 )
 
 type responsiveColumn struct {
@@ -22,17 +23,17 @@ func renderResponsiveTable(
 	writer io.Writer,
 	wide bool,
 	widthProvider OutputWidthProvider,
-	styler humanStyler,
+	styler presentationStyler,
 ) (bool, error) {
-	if response.HumanTable == nil {
+	if response.PresentationTable == nil {
 		return false, nil
 	}
-	columns, ok := responsiveColumns(response.HumanTable)
+	columns, ok := responsiveColumns(response.PresentationTable)
 	if !ok {
-		return true, fmt.Errorf("human table declaration is invalid")
+		return true, fmt.Errorf("table presentation declaration is invalid")
 	}
-	items := any(response.HumanTable.Rows)
-	if response.HumanTable.Rows == nil {
+	items := any(response.PresentationTable.Rows)
+	if response.PresentationTable.Rows == nil {
 		items = findListInData(response.Data)
 	}
 	if items == nil {
@@ -40,16 +41,16 @@ func renderResponsiveTable(
 	}
 	rows, ok := responsiveRows(items, columns)
 	if !ok {
-		return true, fmt.Errorf("human table rows do not satisfy the declaration")
+		return true, fmt.Errorf("table presentation rows do not satisfy the declaration")
 	}
 	if len(rows) == 0 {
-		_, _ = fmt.Fprintln(writer, styler.semantic(plugin.HumanStyleMuted, false, "No resources found."))
+		_, _ = fmt.Fprintln(writer, styler.semantic(presentation.StyleMuted, false, "No resources found."))
 		return true, nil
 	}
 
 	outputWidth, available := widthProvider.Width(writer)
-	if response.HumanTable.Title != "" {
-		printHumanTitle(writer, response.HumanTable.Title, styler)
+	if response.PresentationTable.Title != "" {
+		printPresentationTitle(writer, response.PresentationTable.Title, styler)
 		_, _ = fmt.Fprintln(writer)
 	}
 	if !available || outputWidth <= 0 {
@@ -64,7 +65,7 @@ func renderResponsiveTable(
 	return true, renderResponsiveRows(writer, selected, rows, styler)
 }
 
-func responsiveColumns(table *plugin.HumanTable) ([]responsiveColumn, bool) {
+func responsiveColumns(table *presentation.Table) ([]responsiveColumn, bool) {
 	if table == nil || len(table.Columns) == 0 {
 		return nil, false
 	}
@@ -107,7 +108,7 @@ func responsiveRows(items any, columns []responsiveColumn) ([]map[string]string,
 			row[column.key] = formatValue(item[column.key])
 			if column.roleKey != "" {
 				role, present := item[column.roleKey].(string)
-				if !present || !validHumanStyleRole(plugin.HumanStyleRole(role)) {
+				if !present || !validStyleRole(presentation.StyleRole(role)) {
 					return nil, false
 				}
 				row[column.roleKey] = role
@@ -190,12 +191,12 @@ func selectResponsiveColumns(columns []responsiveColumn, outputWidth int, wide b
 	return selected, true
 }
 
-func renderResponsiveRows(writer io.Writer, columns []responsiveColumn, rows []map[string]string, styler humanStyler) error {
+func renderResponsiveRows(writer io.Writer, columns []responsiveColumn, rows []map[string]string, styler presentationStyler) error {
 	var heading strings.Builder
 	for _, column := range columns {
 		_, _ = fmt.Fprintf(&heading, "%s%s", column.label, strings.Repeat(" ", column.width-visibleWidth(column.label)))
 	}
-	_, _ = fmt.Fprintln(writer, styler.semantic(plugin.HumanStyleInfo, true, heading.String()))
+	_, _ = fmt.Fprintln(writer, styler.semantic(presentation.StyleInfo, true, heading.String()))
 
 	width := 0
 	for _, column := range columns {
@@ -225,7 +226,7 @@ func renderVerticalRecords(
 	rows []map[string]string,
 	outputWidth int,
 	widthAvailable bool,
-	styler humanStyler,
+	styler presentationStyler,
 ) error {
 	for rowIndex, row := range rows {
 		if rowIndex > 0 {
@@ -236,7 +237,7 @@ func renderVerticalRecords(
 			if widthAvailable && visibleWidth(heading) > outputWidth {
 				heading = truncateVisible(heading, outputWidth)
 			}
-			_, _ = fmt.Fprintln(writer, styler.semantic(plugin.HumanStyleEmphasis, false, heading))
+			_, _ = fmt.Fprintln(writer, styler.semantic(presentation.StyleEmphasis, false, heading))
 		}
 		for _, column := range columns {
 			renderVerticalField(writer, column, row, outputWidth, widthAvailable, styler)
@@ -251,13 +252,13 @@ func renderVerticalField(
 	row map[string]string,
 	outputWidth int,
 	widthAvailable bool,
-	styler humanStyler,
+	styler presentationStyler,
 ) {
 	value := row[column.key]
 	prefix := column.label + ": "
 	if !widthAvailable || visibleWidth(prefix)+visibleWidth(value) <= outputWidth {
 		_, _ = fmt.Fprintf(writer, "%s %s\n",
-			styler.semantic(plugin.HumanStyleInfo, false, column.label+":"),
+			styler.semantic(presentation.StyleInfo, false, column.label+":"),
 			styleResponsiveValue(styler, column, row, value),
 		)
 		return
@@ -266,7 +267,7 @@ func renderVerticalField(
 	prefixWidth := visibleWidth(prefix)
 	valueWidth := outputWidth - prefixWidth
 	if valueWidth < 4 {
-		_, _ = fmt.Fprintln(writer, styler.semantic(plugin.HumanStyleInfo, false, column.label+":"))
+		_, _ = fmt.Fprintln(writer, styler.semantic(presentation.StyleInfo, false, column.label+":"))
 		indentWidth := 2
 		if outputWidth <= indentWidth {
 			indentWidth = 0
@@ -284,7 +285,7 @@ func writeWrappedVerticalValue(
 	value string,
 	prefix string,
 	valueWidth int,
-	styler humanStyler,
+	styler presentationStyler,
 ) {
 	if valueWidth <= 0 {
 		return
@@ -299,7 +300,7 @@ func writeWrappedVerticalValue(
 		if strings.HasSuffix(prefix, ": ") && index == 0 {
 			label := strings.TrimSuffix(prefix, ": ")
 			_, _ = fmt.Fprintf(writer, "%s %s\n",
-				styler.semantic(plugin.HumanStyleInfo, false, label+":"),
+				styler.semantic(presentation.StyleInfo, false, label+":"),
 				styleResponsiveValue(styler, column, row, line),
 			)
 			continue
@@ -309,7 +310,7 @@ func writeWrappedVerticalValue(
 }
 
 func styleResponsiveValue(
-	styler humanStyler,
+	styler presentationStyler,
 	column responsiveColumn,
 	row map[string]string,
 	value string,
@@ -317,5 +318,5 @@ func styleResponsiveValue(
 	if column.roleKey == "" {
 		return colorizeValue(styler, column.key, value)
 	}
-	return styler.semantic(plugin.HumanStyleRole(row[column.roleKey]), false, value)
+	return styler.semantic(presentation.StyleRole(row[column.roleKey]), false, value)
 }

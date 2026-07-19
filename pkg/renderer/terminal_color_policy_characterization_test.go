@@ -12,7 +12,7 @@ import (
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 )
 
-func TestHumanRendererUsesEstablishedLoggerPaletteAndResets(t *testing.T) {
+func TestPresentationRendererUsesEstablishedLoggerPaletteAndResets(t *testing.T) {
 	t.Parallel()
 
 	response := &plugin.Response{
