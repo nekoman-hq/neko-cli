@@ -96,9 +96,10 @@ count for V2. It does not include a unit-detail table.
 `--show` adds a responsive V2 unit table. Its essential columns are `Unit`,
 `Version`, and `Kind`; optional columns are considered in `Executor`,
 `Delivery`, `Workflow` order. Complete per-unit details follow the table in
-version, kind, working directory, tag prefix, executor, delivery, workflow, and
-paths order. Paths render one per line, and plugin name, manifest, asset prefix,
-and binary are appended only for plugin units. V1 uses one virtual `default`
+optional display name, version, kind, working directory, tag prefix, executor,
+delivery, workflow, and paths order. Paths render one per line, and plugin name,
+manifest, asset prefix, and binary are appended only for plugin units. V1 uses
+one virtual `default`
 row with essential `Unit`, `Version`, and `Project type`, optional `Release
 system`, and legacy-only details.
 

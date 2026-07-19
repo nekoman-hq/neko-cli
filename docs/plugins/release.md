@@ -570,10 +570,10 @@ Configured units  3
 For V2 repositories, `--show` adds one responsive row per displayed unit.
 `Unit`, `Version`, and `Kind` are essential columns; `Executor`, `Delivery`,
 and `Workflow` are admitted in that priority order when terminal width permits.
-Complete details follow the table in this order: version, kind, working
-directory, tag prefix, executor, delivery, workflow, and paths. Paths are one
-entry per line. Plugin name, manifest, asset prefix, and binary follow only for
-units with `kind: plugin`.
+Complete details follow the table in this order: optional display name,
+version, kind, working directory, tag prefix, executor, delivery, workflow, and
+paths. Paths are one entry per line. Plugin name, manifest, asset prefix, and
+binary follow only for units with `kind: plugin`.
 
 Interactive semantic color uses the existing Core roles: valid status is
 success-colored, unit IDs are emphasized, and versions, plugin kinds, and unit

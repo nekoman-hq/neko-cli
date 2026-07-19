@@ -126,8 +126,13 @@ func v2ValidationUnitPresentation(units []config.ReleaseUnit) *presentation.Tabl
 func v2ValidationUnitDetails(units []config.ReleaseUnit) []presentation.Property {
 	properties := make([]presentation.Property, 0, len(units)*10)
 	for _, unit := range units {
+		properties = append(properties, presentation.Property{
+			Label: "Unit " + unit.ID, Role: presentation.StyleInfo, Heading: true, Emphasized: true,
+		})
+		if unit.DisplayName != "" {
+			properties = append(properties, presentation.Property{Label: "Display name", Value: unit.DisplayName})
+		}
 		properties = append(properties,
-			presentation.Property{Label: "Unit " + unit.ID, Role: presentation.StyleInfo, Heading: true, Emphasized: true},
 			presentation.Property{Label: "Version", Value: unit.Version, Role: presentation.StyleInfo},
 			presentation.Property{Label: "Kind", Value: validationUnitKind(unit), Role: validationUnitKindRole(unit)},
 			presentation.Property{Label: "Working directory", Value: unit.WorkingDirectory},

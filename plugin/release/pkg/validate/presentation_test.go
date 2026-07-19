@@ -66,6 +66,7 @@ func TestValidationV2ShowDeclaresResponsiveUnitSummaryAndCompleteDetails(t *test
 		Units: []config.ReleaseUnit{
 			{
 				ID:               "api",
+				DisplayName:      "Public API",
 				Version:          "1.2.3",
 				WorkingDirectory: "services/api",
 				TagPrefix:        "api/v",
@@ -115,6 +116,7 @@ func TestValidationV2ShowDeclaresResponsiveUnitSummaryAndCompleteDetails(t *test
 
 	wantDetails := []presentation.Property{
 		{Label: "Unit api", Role: presentation.StyleInfo, Heading: true, Emphasized: true},
+		{Label: "Display name", Value: "Public API"},
 		{Label: "Version", Value: "1.2.3", Role: presentation.StyleInfo},
 		{Label: "Kind", Value: "release", Role: presentation.StyleDefault},
 		{Label: "Working directory", Value: "services/api"},
