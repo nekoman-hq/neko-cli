@@ -17,24 +17,26 @@ func TestIntegrationDoctorHumanPresentationUsesSummaryIndexAndCompleteDetails(t 
 	response := mapIntegrationDoctorResultForTest(result)
 
 	wantSummary := []plugin.HumanProperty{
-		{Label: "Readiness", Value: string(integrationDoctorNotReady)},
-		{Label: "Errors", Value: 3},
-		{Label: "Warnings", Value: 2},
+		{Label: "Readiness", Value: string(integrationDoctorNotReady), Role: plugin.HumanStyleError, Emphasized: true},
+		{Label: "Errors", Value: 3, Role: plugin.HumanStyleError},
+		{Label: "Warnings", Value: 2, Role: plugin.HumanStyleWarning},
 		{Label: "Recommendations", Value: 0},
-		{Label: "Not verifiable", Value: 4},
+		{Label: "Not verifiable", Value: 4, Role: plugin.HumanStyleMuted},
 		{Label: "Inspected units", Value: 2},
 		{Label: "Inspected workflows", Value: 2},
 	}
-	if response.HumanProperties == nil || !reflect.DeepEqual(response.HumanProperties.Properties, wantSummary) {
+	if response.HumanProperties == nil || response.HumanProperties.Title != integrationDoctorHumanTitle ||
+		!reflect.DeepEqual(response.HumanProperties.Properties, wantSummary) {
 		t.Fatalf("summary properties = %#v, want %#v", response.HumanProperties, wantSummary)
 	}
 	wantColumns := []plugin.HumanColumn{
-		{Key: "severity", Label: "Severity", Essential: true},
-		{Key: "code", Label: "Code", Essential: true},
+		{Key: "severity", Label: "Severity", RoleKey: integrationDoctorSemanticRoleKey, Essential: true},
+		{Key: "code", Label: "Code", RoleKey: integrationDoctorSemanticRoleKey, Essential: true},
 		{Key: "target", Label: "Target"},
 		{Key: "scope", Label: "Scope"},
 	}
-	if response.HumanTable == nil || !reflect.DeepEqual(response.HumanTable.Columns, wantColumns) {
+	if response.HumanTable == nil || response.HumanTable.Title != integrationDoctorDiagnosticsTitle ||
+		!reflect.DeepEqual(response.HumanTable.Columns, wantColumns) {
 		t.Fatalf("diagnostic columns = %#v, want %#v", response.HumanTable, wantColumns)
 	}
 
@@ -44,23 +46,27 @@ func TestIntegrationDoctorHumanPresentationUsesSummaryIndexAndCompleteDetails(t 
 		renderer.FormatTable,
 		releasePlanOutputWidth{width: 140, available: true},
 	))
+	titleAt := strings.Index(output, integrationDoctorHumanTitle)
 	readinessAt := strings.Index(output, "Readiness")
+	diagnosticsAt := strings.Index(output, integrationDoctorDiagnosticsTitle)
 	indexAt := strings.Index(output, "Severity")
-	detailsAt := strings.Index(output, "Diagnostic")
-	if readinessAt < 0 || indexAt <= readinessAt || detailsAt <= indexAt {
+	firstHeading := strings.ToUpper(string(result.Diagnostics[0].Severity)) + " · " + result.Diagnostics[0].Code
+	detailsAt := strings.Index(output, firstHeading)
+	if titleAt < 0 || readinessAt <= titleAt || diagnosticsAt <= readinessAt || indexAt <= diagnosticsAt || detailsAt <= indexAt {
 		t.Fatalf("human sections are not summary -> index -> details:\n%s", output)
 	}
 	index := output[indexAt:detailsAt]
 	if strings.Contains(index, "Message") || strings.Contains(index, "Remediation") {
 		t.Fatalf("compact index contains long diagnostic fields:\n%s", index)
 	}
-	if got := strings.Count(output[detailsAt:], "Diagnostic"); got != len(result.Diagnostics) {
-		t.Fatalf("detail blocks = %d, want %d:\n%s", got, len(result.Diagnostics), output)
-	}
 
 	detailOutput := strings.Join(strings.Fields(output[detailsAt:]), " ")
 	previousCodeAt := -1
 	for _, diagnostic := range result.Diagnostics {
+		heading := strings.ToUpper(string(diagnostic.Severity)) + " · " + diagnostic.Code
+		if got := strings.Count(output[detailsAt:], heading); got != 1 {
+			t.Fatalf("detail heading %q count = %d, want 1:\n%s", heading, got, output)
+		}
 		codeAt := strings.Index(detailOutput, diagnostic.Code)
 		if codeAt <= previousCodeAt {
 			t.Fatalf("detail order changed at %s:\n%s", diagnostic.Code, detailOutput)
@@ -121,11 +127,14 @@ func TestIntegrationDoctorDiagnosticDetailsPreserveExactFieldOrder(t *testing.T)
 
 	properties := response.HumanTable.Details.Properties
 	offset := 0
-	for index, diagnostic := range result.Diagnostics {
+	for _, diagnostic := range result.Diagnostics {
 		want := []plugin.HumanProperty{
-			{Label: "Diagnostic", Value: fmt.Sprintf("%d of %d", index+1, len(result.Diagnostics))},
-			{Label: "Severity", Value: strings.ToUpper(string(diagnostic.Severity))},
-			{Label: "Code", Value: diagnostic.Code},
+			{
+				Label:      strings.ToUpper(string(diagnostic.Severity)) + " · " + diagnostic.Code,
+				Role:       integrationDoctorSeverityRole(diagnostic.Severity),
+				Emphasized: true,
+				Heading:    true,
+			},
 			{Label: "Scope", Value: diagnostic.Scope},
 		}
 		if diagnostic.Unit != "" {
@@ -139,7 +148,7 @@ func TestIntegrationDoctorDiagnosticDetailsPreserveExactFieldOrder(t *testing.T)
 			plugin.HumanProperty{Label: "Remediation", Value: diagnostic.Remediation},
 		)
 		if offset+len(want) > len(properties) || !reflect.DeepEqual(properties[offset:offset+len(want)], want) {
-			t.Fatalf("detail %d fields = %#v, want %#v", index+1, properties[offset:], want)
+			t.Fatalf("detail for %s fields = %#v, want %#v", diagnostic.Code, properties[offset:], want)
 		}
 		offset += len(want)
 	}
@@ -162,9 +171,18 @@ func TestIntegrationDoctorCompactTargetsShortenOnlyUnambiguousWorkflowBasenames(
 		"docs · docs-release.yml",
 		"source",
 	}
+	wantRoles := []plugin.HumanStyleRole{
+		plugin.HumanStyleError,
+		plugin.HumanStyleWarning,
+		plugin.HumanStyleMuted,
+		plugin.HumanStyleError,
+	}
 	for index, want := range wantTargets {
 		if got := rows[index]["target"]; got != want {
 			t.Fatalf("target %d = %#v, want %q", index, got, want)
+		}
+		if got := rows[index][integrationDoctorSemanticRoleKey]; got != string(wantRoles[index]) {
+			t.Fatalf("semantic role %d = %#v, want %q", index, got, wantRoles[index])
 		}
 	}
 }

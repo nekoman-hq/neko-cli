@@ -1,12 +1,17 @@
 package release
 
 import (
-	"fmt"
 	"path"
 	"strings"
 	"time"
 
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+)
+
+const (
+	integrationDoctorHumanTitle       = "Release Integration Doctor"
+	integrationDoctorDiagnosticsTitle = "Diagnostics"
+	integrationDoctorSemanticRoleKey  = "semantic_role"
 )
 
 func mapIntegrationDoctorResult(result *integrationDoctorResult, timestamp time.Time) *plugin.Response {
@@ -18,17 +23,21 @@ func mapIntegrationDoctorResult(result *integrationDoctorResult, timestamp time.
 		"diagnostics": append([]integrationDoctorDiagnostic(nil), result.Diagnostics...),
 	}
 	response := &plugin.Response{
-		Status:          "success",
-		Metadata:        commandResponseMetadata(integrationDoctorCommandName, timestamp),
-		Data:            data,
-		RendererHint:    "table",
-		HumanProperties: &plugin.HumanProperties{Properties: integrationDoctorSummaryProperties(result)},
+		Status:       "success",
+		Metadata:     commandResponseMetadata(integrationDoctorCommandName, timestamp),
+		Data:         data,
+		RendererHint: "table",
+		HumanProperties: &plugin.HumanProperties{
+			Title:      integrationDoctorHumanTitle,
+			Properties: integrationDoctorSummaryProperties(result),
+		},
 	}
 	if len(result.Diagnostics) > 0 {
 		response.HumanTable = &plugin.HumanTable{
+			Title: integrationDoctorDiagnosticsTitle,
 			Columns: []plugin.HumanColumn{
-				{Key: "severity", Label: "Severity", Essential: true},
-				{Key: "code", Label: "Code", Essential: true},
+				{Key: "severity", Label: "Severity", RoleKey: integrationDoctorSemanticRoleKey, Essential: true},
+				{Key: "code", Label: "Code", RoleKey: integrationDoctorSemanticRoleKey, Essential: true},
 				{Key: "target", Label: "Target"},
 				{Key: "scope", Label: "Scope"},
 			},
@@ -46,25 +55,57 @@ func mapIntegrationDoctorResult(result *integrationDoctorResult, timestamp time.
 
 func integrationDoctorSummaryProperties(result *integrationDoctorResult) []plugin.HumanProperty {
 	return []plugin.HumanProperty{
-		{Label: "Readiness", Value: string(result.Readiness)},
-		{Label: "Errors", Value: result.Summary.Errors},
-		{Label: "Warnings", Value: result.Summary.Warnings},
-		{Label: "Recommendations", Value: result.Summary.Recommendations},
-		{Label: "Not verifiable", Value: result.Summary.NotVerifiable},
+		{
+			Label:      "Readiness",
+			Value:      string(result.Readiness),
+			Role:       integrationDoctorReadinessRole(result.Readiness),
+			Emphasized: true,
+		},
+		integrationDoctorCountProperty("Errors", result.Summary.Errors, plugin.HumanStyleError),
+		integrationDoctorCountProperty("Warnings", result.Summary.Warnings, plugin.HumanStyleWarning),
+		integrationDoctorCountProperty("Recommendations", result.Summary.Recommendations, plugin.HumanStyleInfo),
+		integrationDoctorCountProperty("Not verifiable", result.Summary.NotVerifiable, plugin.HumanStyleMuted),
 		{Label: "Inspected units", Value: len(result.Units)},
 		{Label: "Inspected workflows", Value: len(result.Workflows)},
 	}
+}
+
+func integrationDoctorReadinessRole(readiness integrationDoctorReadiness) plugin.HumanStyleRole {
+	switch readiness {
+	case integrationDoctorNotReady:
+		return plugin.HumanStyleError
+	case integrationDoctorReadyWithWarnings:
+		return plugin.HumanStyleWarning
+	case integrationDoctorReady:
+		return plugin.HumanStyleSuccess
+	default:
+		return plugin.HumanStyleDefault
+	}
+}
+
+func integrationDoctorCountProperty(
+	label string,
+	value int,
+	positiveRole plugin.HumanStyleRole,
+) plugin.HumanProperty {
+	property := plugin.HumanProperty{Label: label, Value: value}
+	if value > 0 {
+		property.Role = positiveRole
+	}
+	return property
 }
 
 func integrationDoctorDiagnosticRows(diagnostics []integrationDoctorDiagnostic) []map[string]any {
 	collidingBasenames := integrationDoctorCollidingWorkflowBasenames(diagnostics)
 	rows := make([]map[string]any, 0, len(diagnostics))
 	for _, diagnostic := range diagnostics {
+		role := integrationDoctorSeverityRole(diagnostic.Severity)
 		rows = append(rows, map[string]any{
-			"severity": strings.ToUpper(string(diagnostic.Severity)),
-			"code":     diagnostic.Code,
-			"target":   integrationDoctorDiagnosticTarget(diagnostic, collidingBasenames),
-			"scope":    diagnostic.Scope,
+			"severity":                       strings.ToUpper(string(diagnostic.Severity)),
+			"code":                           diagnostic.Code,
+			"target":                         integrationDoctorDiagnosticTarget(diagnostic, collidingBasenames),
+			"scope":                          diagnostic.Scope,
+			integrationDoctorSemanticRoleKey: string(role),
 		})
 	}
 	return rows
@@ -110,14 +151,15 @@ func integrationDoctorDiagnosticTarget(
 }
 
 func integrationDoctorDiagnosticDetailProperties(diagnostics []integrationDoctorDiagnostic) []plugin.HumanProperty {
-	properties := make([]plugin.HumanProperty, 0, len(diagnostics)*8)
-	for index, diagnostic := range diagnostics {
-		properties = append(properties,
-			plugin.HumanProperty{Label: "Diagnostic", Value: fmt.Sprintf("%d of %d", index+1, len(diagnostics))},
-			plugin.HumanProperty{Label: "Severity", Value: strings.ToUpper(string(diagnostic.Severity))},
-			plugin.HumanProperty{Label: "Code", Value: diagnostic.Code},
-			plugin.HumanProperty{Label: "Scope", Value: diagnostic.Scope},
-		)
+	properties := make([]plugin.HumanProperty, 0, len(diagnostics)*6)
+	for _, diagnostic := range diagnostics {
+		properties = append(properties, plugin.HumanProperty{
+			Label:      strings.ToUpper(string(diagnostic.Severity)) + " · " + diagnostic.Code,
+			Role:       integrationDoctorSeverityRole(diagnostic.Severity),
+			Emphasized: true,
+			Heading:    true,
+		})
+		properties = append(properties, plugin.HumanProperty{Label: "Scope", Value: diagnostic.Scope})
 		if diagnostic.Unit != "" {
 			properties = append(properties, plugin.HumanProperty{Label: "Unit", Value: diagnostic.Unit})
 		}
@@ -130,4 +172,19 @@ func integrationDoctorDiagnosticDetailProperties(diagnostics []integrationDoctor
 		)
 	}
 	return properties
+}
+
+func integrationDoctorSeverityRole(severity integrationDoctorSeverity) plugin.HumanStyleRole {
+	switch severity {
+	case integrationDoctorError:
+		return plugin.HumanStyleError
+	case integrationDoctorWarning:
+		return plugin.HumanStyleWarning
+	case integrationDoctorRecommendation:
+		return plugin.HumanStyleInfo
+	case integrationDoctorNotVerifiable:
+		return plugin.HumanStyleMuted
+	default:
+		return plugin.HumanStyleDefault
+	}
 }

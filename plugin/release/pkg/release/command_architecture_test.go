@@ -249,6 +249,11 @@ func TestIntegrationDoctorApplicationHasNoMutationTokenNetworkGitOrStoreDependen
 			"EvidenceWriter",
 			"atomicGitHubWorkflowOutputCreator",
 			"plugin.Response",
+			"internal/terminalstyle",
+			"golang.org/x/term",
+			"HumanStyleRole",
+			"\\x1b",
+			"\\033",
 		} {
 			if strings.Contains(source, forbidden) {
 				t.Fatalf("%s contains prohibited doctor dependency %q", path, forbidden)
@@ -305,10 +310,12 @@ func TestIntegrationDoctorAvoidsGenericDiagnosticArchitecture(t *testing.T) {
 
 func TestIntegrationDoctorPresentationKeepsCoreDomainNeutral(t *testing.T) {
 	for _, path := range []string{
+		"../../../../internal/terminalstyle/style.go",
 		"../../../../pkg/plugin/types.go",
 		"../../../../pkg/renderer/renderer.go",
 		"../../../../pkg/renderer/responsive_table.go",
 		"../../../../pkg/renderer/property_values.go",
+		"../../../../pkg/renderer/human_style.go",
 	} {
 		source := strings.ToLower(readCommandBoundarySource(t, path))
 		for _, forbidden := range []string{
@@ -318,6 +325,9 @@ func TestIntegrationDoctorPresentationKeepsCoreDomainNeutral(t *testing.T) {
 			"layoutdsl",
 			"rendererregistry",
 			"statemachine",
+			"themeengine",
+			"documenttree",
+			"providerregistry",
 		} {
 			if strings.Contains(source, forbidden) {
 				t.Fatalf("%s contains prohibited domain or framework term %q", path, forbidden)

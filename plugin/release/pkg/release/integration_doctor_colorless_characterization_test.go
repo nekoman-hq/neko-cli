@@ -37,8 +37,8 @@ func TestIntegrationDoctorColorlessPresentationBaseline(t *testing.T) {
 		renderer.FormatTable,
 		releasePlanOutputWidth{width: 72, available: true},
 	))
-	want := `PROPERTY             VALUE
-────────────────────────────────────────────────────────────────────────
+	want := `Release Integration Doctor
+
 Readiness            not_ready
 Errors               1
 Warnings             1
@@ -47,27 +47,42 @@ Not verifiable       0
 Inspected units      0
 Inspected workflows  0
 
+Diagnostics
+
 Severity  Code                 Target                 Scope
 ────────────────────────────────────────────────────────────────
 ERROR     V2_CONFIG_INVALID    source                 source
 WARNING   CONCURRENCY_MISSING  api · release-api.yml  workflow
 
-PROPERTY     VALUE
-────────────────────────────────────────────────────────────────────────
-Diagnostic   1 of 2
-Severity     ERROR
-Code         V2_CONFIG_INVALID
-Scope        source
-Message      Release V2 configuration is invalid.
-Remediation  Correct the local Release V2 configuration.
-Diagnostic   2 of 2
-Severity     WARNING
-Code         CONCURRENCY_MISSING
-Scope        workflow
-Unit         api
-Workflow     .github/workflows/release-api.yml
-Message      The workflow has no explicit release concurrency policy.
-Remediation  Add a release concurrency group.`
+ERROR · V2_CONFIG_INVALID
+
+Scope
+  source
+
+Message
+  Release V2 configuration is invalid.
+
+Remediation
+  Correct the local Release V2 configuration.
+
+────────────────────────────────
+
+WARNING · CONCURRENCY_MISSING
+
+Scope
+  workflow
+
+Unit
+  api
+
+Workflow
+  .github/workflows/release-api.yml
+
+Message
+  The workflow has no explicit release concurrency policy.
+
+Remediation
+  Add a release concurrency group.`
 	if got := trimDoctorBaselineLinePadding(output); got != want {
 		t.Fatalf("colorless Doctor presentation changed:\nwant:\n%s\n\ngot:\n%s", want, got)
 	}
