@@ -74,12 +74,32 @@ func TestRepositoryDogfoodDoctorUnitScopesHaveNoErrors(t *testing.T) {
 	root := repositoryInspectionRoot(t)
 	for _, behavior := range repositoryWorkflowBehaviors() {
 		t.Run(behavior.unit, func(t *testing.T) {
-			result := integrationDoctorResultFromResponse(t, runIntegrationDoctor(t, root, map[string]any{"unit": behavior.unit}))
-			if result.Summary.Errors != 0 || result.Readiness == integrationDoctorNotReady {
+			response := runIntegrationDoctor(t, root, map[string]any{"unit": behavior.unit})
+			result := integrationDoctorResultFromResponse(t, response)
+			if result.Readiness != integrationDoctorReady || response.ExitCode != 0 ||
+				result.Summary.Errors != 0 || result.Summary.Warnings != 0 ||
+				result.Summary.Recommendations != 0 || result.Summary.NotVerifiable != 7 {
 				t.Fatalf("unit Doctor result = %#v", result)
 			}
 			if len(result.Units) != 1 || result.Units[0].ID != behavior.unit {
 				t.Fatalf("inspected units = %#v", result.Units)
+			}
+			assertIntegrationDoctorCodeAbsent(t, result.Diagnostics, "PERMISSIONS_BROAD")
+			assertIntegrationDoctorCodeAbsent(t, result.Diagnostics, "PERMISSIONS_IMPLICIT")
+		})
+	}
+}
+
+func TestRepositoryDogfoodPermissionDiagnosticsAcceptPublishingJobs(t *testing.T) {
+	for _, behavior := range repositoryWorkflowBehaviors() {
+		t.Run(behavior.unit, func(t *testing.T) {
+			_, root := readRepositoryWorkflow(t, behavior.path)
+			diagnostics := make([]string, 0)
+			inspectIntegrationDoctorPermissions(root, func(_ integrationDoctorSeverity, code, _, _ string) {
+				diagnostics = append(diagnostics, code)
+			})
+			if len(diagnostics) != 0 {
+				t.Fatalf("%s permission diagnostics = %v, want none", behavior.path, diagnostics)
 			}
 		})
 	}
