@@ -34,6 +34,35 @@ type integrationDoctorSummary struct {
 	Warnings        int `json:"warnings"`
 	Recommendations int `json:"recommendations"`
 	NotVerifiable   int `json:"not_verifiable"`
+	Verified        int `json:"verified"`
+}
+
+type integrationDoctorVerificationState string
+
+const (
+	integrationDoctorVerified     integrationDoctorVerificationState = "verified"
+	integrationDoctorMissing      integrationDoctorVerificationState = "missing"
+	integrationDoctorMismatch     integrationDoctorVerificationState = "mismatch"
+	integrationDoctorUnsupported  integrationDoctorVerificationState = "unsupported"
+	integrationDoctorUnverifiable integrationDoctorVerificationState = "not_verifiable"
+)
+
+type integrationDoctorLimitationClass string
+
+const (
+	integrationDoctorRuntimeLimitation integrationDoctorLimitationClass = "runtime"
+)
+
+//nolint:govet // Field order preserves the additive JSON contract.
+type integrationDoctorVerification struct {
+	Subject         string                             `json:"subject"`
+	Category        string                             `json:"category"`
+	State           integrationDoctorVerificationState `json:"state"`
+	Evidence        string                             `json:"evidence"`
+	References      []string                           `json:"references"`
+	Unit            string                             `json:"unit,omitempty"`
+	Workflow        string                             `json:"workflow,omitempty"`
+	LimitationClass integrationDoctorLimitationClass   `json:"limitation_class,omitempty"`
 }
 
 type integrationDoctorUnit struct {
@@ -66,11 +95,12 @@ type integrationDoctorDiagnostic struct {
 
 //nolint:govet // Field order preserves the stable JSON contract.
 type integrationDoctorResult struct {
-	Readiness   integrationDoctorReadiness    `json:"readiness"`
-	Summary     integrationDoctorSummary      `json:"summary"`
-	Units       []integrationDoctorUnit       `json:"units"`
-	Workflows   []integrationDoctorWorkflow   `json:"workflows"`
-	Diagnostics []integrationDoctorDiagnostic `json:"diagnostics"`
+	Readiness     integrationDoctorReadiness      `json:"readiness"`
+	Summary       integrationDoctorSummary        `json:"summary"`
+	Units         []integrationDoctorUnit         `json:"units"`
+	Workflows     []integrationDoctorWorkflow     `json:"workflows"`
+	Verifications []integrationDoctorVerification `json:"verifications"`
+	Diagnostics   []integrationDoctorDiagnostic   `json:"diagnostics"`
 }
 
 func newIntegrationDoctorDiagnostic(
@@ -95,7 +125,18 @@ func finalizeIntegrationDoctorResult(result *integrationDoctorResult) {
 		return fmt.Sprintf("%s\x00%s\x00%s\x00%s\x00%s", a.Scope, a.Unit, a.Workflow, a.Code, a.Message) <
 			fmt.Sprintf("%s\x00%s\x00%s\x00%s\x00%s", b.Scope, b.Unit, b.Workflow, b.Code, b.Message)
 	})
+	sort.SliceStable(result.Verifications, func(left, right int) bool {
+		a := result.Verifications[left]
+		b := result.Verifications[right]
+		return fmt.Sprintf("%s\x00%s\x00%s\x00%s\x00%s", a.Workflow, a.Unit, a.Category, a.Subject, a.Evidence) <
+			fmt.Sprintf("%s\x00%s\x00%s\x00%s\x00%s", b.Workflow, b.Unit, b.Category, b.Subject, b.Evidence)
+	})
 	result.Summary = integrationDoctorSummary{}
+	for _, verification := range result.Verifications {
+		if verification.State == integrationDoctorVerified {
+			result.Summary.Verified++
+		}
+	}
 	for _, diagnostic := range result.Diagnostics {
 		switch diagnostic.Severity {
 		case integrationDoctorError:

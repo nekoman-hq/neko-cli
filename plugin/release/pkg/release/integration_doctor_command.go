@@ -67,6 +67,7 @@ func HandleDoctorAt(root workspace.RepositoryRoot, request plugin.Request) (*plu
 		inspector: integrationDoctorInspectionUseCase{
 			sources:   filesystemIntegrationDoctorSourceReader{},
 			workflows: filesystemIntegrationDoctorWorkflowReader{},
+			files:     filesystemIntegrationDoctorRepositoryFileReader{},
 		},
 		clock: systemReleaseClock{},
 		root:  root,

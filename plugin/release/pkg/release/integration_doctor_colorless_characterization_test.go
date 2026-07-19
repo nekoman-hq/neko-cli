@@ -44,6 +44,7 @@ Errors               1
 Warnings             1
 Recommendations      0
 Not verifiable       0
+Locally verified     0
 Inspected units      0
 Inspected workflows  0
 

@@ -65,6 +65,7 @@ func integrationDoctorHighVolumePresentationFixture() integrationDoctorResult {
 		webWorkflow = ".github/workflows/release-web-production-with-a-deliberately-long-name.yml"
 	)
 	result := integrationDoctorResult{
+		Verifications: []integrationDoctorVerification{},
 		Units: []integrationDoctorUnit{
 			{ID: "api", Version: "2.4.1", TagPrefix: "api-v", Executor: "goreleaser", Delivery: "github-actions", Workflow: apiWorkflow, WorkingDirectory: "services/api"},
 			{ID: "web", Version: "3.8.2", TagPrefix: "web-v", Executor: "release-it", Delivery: "github-actions", Workflow: webWorkflow, WorkingDirectory: "apps/web"},

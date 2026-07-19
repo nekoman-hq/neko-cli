@@ -630,6 +630,10 @@ func integrationDoctorResultFromResponse(t *testing.T, response *plugin.Response
 	if !ok {
 		t.Fatalf("workflows type = %T", response.Data["workflows"])
 	}
+	result.Verifications, ok = response.Data["verifications"].([]integrationDoctorVerification)
+	if !ok {
+		t.Fatalf("verifications type = %T", response.Data["verifications"])
+	}
 	result.Diagnostics, ok = response.Data["diagnostics"].([]integrationDoctorDiagnostic)
 	if !ok {
 		t.Fatalf("diagnostics type = %T", response.Data["diagnostics"])
@@ -735,7 +739,7 @@ func TestIntegrationDoctorResultJSONHasStableSchemaWithoutPresentationMetadata(t
 	if err != nil {
 		t.Fatalf("marshal data: %v", err)
 	}
-	for _, key := range []string{`"readiness"`, `"summary"`, `"units"`, `"workflows"`, `"diagnostics"`} {
+	for _, key := range []string{`"readiness"`, `"summary"`, `"units"`, `"workflows"`, `"verifications"`, `"diagnostics"`} {
 		if !strings.Contains(string(encoded), key) {
 			t.Fatalf("JSON omitted %s: %s", key, encoded)
 		}

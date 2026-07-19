@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
 func TestIntegrationDoctorCharacterizesBroadLocalVerificationGaps(t *testing.T) {
@@ -19,7 +21,17 @@ func TestIntegrationDoctorCharacterizesBroadLocalVerificationGaps(t *testing.T) 
 	writeIntegrationDoctorBytes(t, filepath.Join(root.Path(), "install.sh"), []byte("#!/usr/bin/env bash\n"))
 
 	snapshot := (filesystemIntegrationDoctorWorkflowReader{}).Read(root.Path(), ".github/workflows/release.yml")
-	_, diagnostics := inspectIntegrationDoctorWorkflow(".github/workflows/release.yml", []string{"api"}, snapshot)
+	repository, err := releaseconfig.LoadReleaseRepository(root.Path())
+	if err != nil {
+		t.Fatalf("load release repository: %v", err)
+	}
+	_, _, diagnostics := inspectIntegrationDoctorWorkflow(
+		root.Path(),
+		".github/workflows/release.yml",
+		repository.Units,
+		snapshot,
+		filesystemIntegrationDoctorRepositoryFileReader{},
+	)
 	if got, want := integrationDoctorNotVerifiableCodes(diagnostics), []string{
 		"CONSUMER_BUILD_NOT_VERIFIABLE",
 		"REMOTE_WORKFLOW_NOT_VERIFIABLE",
@@ -39,10 +51,12 @@ func TestIntegrationDoctorCharacterizesBroadLocalVerificationGaps(t *testing.T) 
 		canonicalIntegrationDoctorWorkflow(t),
 	)
 	placeholderSnapshot := (filesystemIntegrationDoctorWorkflowReader{}).Read(root.Path(), ".github/workflows/release.yml")
-	_, placeholderDiagnostics := inspectIntegrationDoctorWorkflow(
+	_, _, placeholderDiagnostics := inspectIntegrationDoctorWorkflow(
+		root.Path(),
 		".github/workflows/release.yml",
-		[]string{"api"},
+		repository.Units,
 		placeholderSnapshot,
+		filesystemIntegrationDoctorRepositoryFileReader{},
 	)
 	if got, want := integrationDoctorNotVerifiableCodes(placeholderDiagnostics), []string{
 		"REMOTE_WORKFLOW_NOT_VERIFIABLE",
@@ -58,10 +72,12 @@ func TestIntegrationDoctorCharacterizesBroadLocalVerificationGaps(t *testing.T) 
 	if err := os.Remove(placeholderPath); err != nil {
 		t.Fatalf("remove workflow: %v", err)
 	}
-	_, missingDiagnostics := inspectIntegrationDoctorWorkflow(
+	_, _, missingDiagnostics := inspectIntegrationDoctorWorkflow(
+		root.Path(),
 		".github/workflows/release.yml",
-		[]string{"api"},
+		repository.Units,
 		(filesystemIntegrationDoctorWorkflowReader{}).Read(root.Path(), ".github/workflows/release.yml"),
+		filesystemIntegrationDoctorRepositoryFileReader{},
 	)
 	if got := integrationDoctorNotVerifiableCodes(missingDiagnostics); len(got) != 0 {
 		t.Fatalf("missing workflow unexpectedly emitted limitations: %v", got)

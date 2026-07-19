@@ -15,6 +15,7 @@ type integrationDoctorInspector interface {
 type integrationDoctorInspectionUseCase struct {
 	sources   integrationDoctorSourceReader
 	workflows integrationDoctorWorkflowReader
+	files     integrationDoctorRepositoryFileReader
 }
 
 func (useCase integrationDoctorInspectionUseCase) Inspect(
@@ -22,9 +23,10 @@ func (useCase integrationDoctorInspectionUseCase) Inspect(
 	request integrationDoctorRequest,
 ) *integrationDoctorResult {
 	result := &integrationDoctorResult{
-		Units:       make([]integrationDoctorUnit, 0),
-		Workflows:   make([]integrationDoctorWorkflow, 0),
-		Diagnostics: make([]integrationDoctorDiagnostic, 0),
+		Units:         make([]integrationDoctorUnit, 0),
+		Workflows:     make([]integrationDoctorWorkflow, 0),
+		Verifications: make([]integrationDoctorVerification, 0),
+		Diagnostics:   make([]integrationDoctorDiagnostic, 0),
 	}
 	source := inspectIntegrationDoctorSource(request.RepositoryRoot, useCase.sources.Read(request.RepositoryRoot))
 	result.Diagnostics = append(result.Diagnostics, source.Diagnostics...)
@@ -54,12 +56,15 @@ func (useCase integrationDoctorInspectionUseCase) Inspect(
 	}
 	sort.Strings(paths)
 	for _, path := range paths {
-		fact, diagnostics := inspectIntegrationDoctorWorkflow(
+		fact, verifications, diagnostics := inspectIntegrationDoctorWorkflow(
+			request.RepositoryRoot,
 			path,
 			workflowUnits[path],
 			useCase.workflows.Read(request.RepositoryRoot, path),
+			useCase.files,
 		)
 		result.Workflows = append(result.Workflows, fact)
+		result.Verifications = append(result.Verifications, verifications...)
 		result.Diagnostics = append(result.Diagnostics, diagnostics...)
 	}
 	finalizeIntegrationDoctorResult(result)
@@ -93,19 +98,21 @@ func selectIntegrationDoctorUnits(
 func integrationDoctorWorkflowUnits(
 	repository *releaseconfig.ReleaseRepository,
 	selected []releaseconfig.ReleaseUnit,
-) map[string][]string {
+) map[string][]releaseconfig.ReleaseUnit {
 	selectedPaths := map[string]struct{}{}
 	for _, unit := range selected {
 		selectedPaths[unit.Workflow] = struct{}{}
 	}
-	units := map[string][]string{}
+	units := map[string][]releaseconfig.ReleaseUnit{}
 	for _, unit := range repository.Units {
 		if _, inspect := selectedPaths[unit.Workflow]; inspect {
-			units[unit.Workflow] = append(units[unit.Workflow], unit.ID)
+			units[unit.Workflow] = append(units[unit.Workflow], unit)
 		}
 	}
 	for path := range units {
-		sort.Strings(units[path])
+		sort.Slice(units[path], func(left, right int) bool {
+			return units[path][left].ID < units[path][right].ID
+		})
 	}
 	return units
 }

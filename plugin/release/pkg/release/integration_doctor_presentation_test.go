@@ -22,6 +22,7 @@ func TestIntegrationDoctorPresentationUsesSummaryIndexAndCompleteDetails(t *test
 		{Label: "Warnings", Value: 2, Role: presentation.StyleWarning},
 		{Label: "Recommendations", Value: 0},
 		{Label: "Not verifiable", Value: 4, Role: presentation.StyleMuted},
+		{Label: "Locally verified", Value: 0},
 		{Label: "Inspected units", Value: 2},
 		{Label: "Inspected workflows", Value: 2},
 	}

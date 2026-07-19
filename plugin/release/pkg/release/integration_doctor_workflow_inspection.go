@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 	"gopkg.in/yaml.v3"
 )
 
@@ -24,15 +25,23 @@ type integrationDoctorWorkflowJob struct {
 	node        *yaml.Node
 	steps       []integrationDoctorWorkflowStep
 	permissions *yaml.Node
+	env         *yaml.Node
 }
 
 func inspectIntegrationDoctorWorkflow(
+	repositoryRoot string,
 	path string,
-	units []string,
+	units []releaseconfig.ReleaseUnit,
 	snapshot integrationDoctorWorkflowSnapshot,
-) (integrationDoctorWorkflow, []integrationDoctorDiagnostic) {
-	fact := integrationDoctorWorkflow{Path: path, Units: append([]string(nil), units...), Exists: snapshot.Exists}
+	files integrationDoctorRepositoryFileReader,
+) (integrationDoctorWorkflow, []integrationDoctorVerification, []integrationDoctorDiagnostic) {
+	unitIDs := make([]string, 0, len(units))
+	for _, unit := range units {
+		unitIDs = append(unitIDs, unit.ID)
+	}
+	fact := integrationDoctorWorkflow{Path: path, Units: unitIDs, Exists: snapshot.Exists}
 	sort.Strings(fact.Units)
+	verifications := make([]integrationDoctorVerification, 0)
 	diagnostics := make([]integrationDoctorDiagnostic, 0)
 	add := func(severity integrationDoctorSeverity, code, message, remediation string) {
 		diagnostic := newIntegrationDoctorDiagnostic(severity, "workflow", code, message, remediation)
@@ -52,18 +61,18 @@ func inspectIntegrationDoctorWorkflow(
 		}
 		add(integrationDoctorError, code, "The configured workflow cannot be inspected safely: "+snapshot.FailureText+".", "Restore a readable regular YAML file at the configured canonical path without symlink escape.")
 		fact.Classification = "malformed"
-		return fact, diagnostics
+		return fact, verifications, diagnostics
 	}
 	if !snapshot.Exists {
 		add(integrationDoctorError, "WORKFLOW_MISSING", "The configured GitHub Actions workflow file does not exist.", "Create it with `neko release github-workflow-init`, then replace the generated consumer placeholder.")
 		fact.Classification = "missing"
-		return fact, diagnostics
+		return fact, verifications, diagnostics
 	}
 	root := workflowDocumentRoot(snapshot.Document)
 	if root == nil || root.Kind != yaml.MappingNode {
 		add(integrationDoctorError, "WORKFLOW_YAML_INVALID", "The workflow document root is not a YAML mapping.", "Use a structurally valid GitHub Actions workflow mapping.")
 		fact.Classification = "malformed"
-		return fact, diagnostics
+		return fact, verifications, diagnostics
 	}
 
 	inspectIntegrationDoctorDispatch(root, add)
@@ -71,10 +80,22 @@ func inspectIntegrationDoctorWorkflow(
 	inspectIntegrationDoctorConcurrency(root, add)
 	jobs := integrationDoctorWorkflowJobs(root)
 	inspectIntegrationDoctorJob(jobs, add)
+	if !integrationDoctorDiagnosticsContainErrors(diagnostics) {
+		localFacts, localDiagnostics := inspectIntegrationDoctorConsumerReleaseStructure(
+			repositoryRoot,
+			path,
+			units,
+			root,
+			jobs,
+			files,
+		)
+		verifications = append(verifications, localFacts...)
+		diagnostics = append(diagnostics, localDiagnostics...)
+	}
 	appendIntegrationDoctorRemoteLimits(add)
 
 	fact.Classification = integrationDoctorWorkflowClassification(snapshot.Canonical, diagnostics)
-	return fact, diagnostics
+	return fact, verifications, diagnostics
 }
 
 func inspectIntegrationDoctorDispatch(
@@ -285,7 +306,6 @@ func inspectIntegrationDoctorValidator(
 		add(integrationDoctorError, "CONSUMER_PLACEHOLDER_PRESENT", "The canonical deliberately failing consumer placeholder is still present.", "Replace the placeholder with consumer-owned unit build and publication commands.")
 		return
 	}
-	add(integrationDoctorNotVerifiable, "CONSUMER_BUILD_NOT_VERIFIABLE", "Custom consumer build and publication commands cannot be proven correct by local structural inspection.", "Review the consumer commands, package credentials, artifact identity, and unit scoping in repository policy.")
 }
 
 func integrationDoctorCommandFlagMatches(command, flag, environment, input string) bool {
@@ -321,6 +341,7 @@ func integrationDoctorWorkflowJobs(root *yaml.Node) []integrationDoctorWorkflowJ
 		job := integrationDoctorWorkflowJob{
 			id: jobsNode.Content[index].Value, node: jobNode,
 			permissions: workflowMappingValue(jobNode, "permissions"),
+			env:         workflowMappingValue(jobNode, "env"),
 		}
 		for _, stepNode := range stepsNode.Content {
 			job.steps = append(job.steps, integrationDoctorWorkflowStep{

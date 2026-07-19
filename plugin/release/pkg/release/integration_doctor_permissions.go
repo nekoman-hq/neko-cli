@@ -57,6 +57,7 @@ func integrationDoctorPermissionJobs(root *yaml.Node) []integrationDoctorWorkflo
 			id:          id,
 			node:        jobNode,
 			permissions: workflowMappingValue(jobNode, "permissions"),
+			env:         workflowMappingValue(jobNode, "env"),
 		})
 	}
 	return jobs

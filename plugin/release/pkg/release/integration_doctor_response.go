@@ -18,11 +18,12 @@ const (
 
 func mapIntegrationDoctorResult(result *integrationDoctorResult, timestamp time.Time) *plugin.Response {
 	data := map[string]any{
-		"readiness":   result.Readiness,
-		"summary":     result.Summary,
-		"units":       append([]integrationDoctorUnit(nil), result.Units...),
-		"workflows":   append([]integrationDoctorWorkflow(nil), result.Workflows...),
-		"diagnostics": append([]integrationDoctorDiagnostic(nil), result.Diagnostics...),
+		"readiness":     result.Readiness,
+		"summary":       result.Summary,
+		"units":         append([]integrationDoctorUnit(nil), result.Units...),
+		"workflows":     append([]integrationDoctorWorkflow(nil), result.Workflows...),
+		"verifications": append([]integrationDoctorVerification{}, result.Verifications...),
+		"diagnostics":   append([]integrationDoctorDiagnostic(nil), result.Diagnostics...),
 	}
 	response := &plugin.Response{
 		Status:       "success",
@@ -67,6 +68,7 @@ func integrationDoctorSummaryProperties(result *integrationDoctorResult) []prese
 		integrationDoctorCountProperty("Warnings", result.Summary.Warnings, presentation.StyleWarning),
 		integrationDoctorCountProperty("Recommendations", result.Summary.Recommendations, presentation.StyleInfo),
 		integrationDoctorCountProperty("Not verifiable", result.Summary.NotVerifiable, presentation.StyleMuted),
+		integrationDoctorCountProperty("Locally verified", result.Summary.Verified, presentation.StyleSuccess),
 		{Label: "Inspected units", Value: len(result.Units)},
 		{Label: "Inspected workflows", Value: len(result.Workflows)},
 	}
