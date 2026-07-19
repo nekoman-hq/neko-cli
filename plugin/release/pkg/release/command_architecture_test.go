@@ -302,6 +302,108 @@ func TestIntegrationDoctorAvoidsGenericDiagnosticArchitecture(t *testing.T) {
 	}
 }
 
+func TestUnitOverviewApplicationHasNoMutationWorkflowParserDoctorGitNetworkTokenOrStoreDependencies(t *testing.T) {
+	for _, path := range []string{
+		"local_v2_source.go",
+		"unit_overview_source.go",
+		"unit_overview_inspection.go",
+	} {
+		source := readCommandBoundarySource(t, path)
+		for _, forbidden := range []string{
+			"GITHUB_TOKEN",
+			"TokenResolver",
+			"GitHubActionsDispatcher",
+			"GitHubActionsDispatchClient",
+			"net/http",
+			"os/exec",
+			"exec.Command",
+			"NewGitReleaseCoordinator",
+			"os.WriteFile",
+			"os.Mkdir",
+			"os.Chdir",
+			"os.Setenv",
+			"os.Getenv",
+			"os.LookupEnv",
+			"ReleaseExecutionJournalStore",
+			"DispatchJournalStore",
+			"EvidenceWriter",
+			"EvidenceStore",
+			"yaml.Unmarshal",
+			"gopkg.in/yaml",
+			"integrationDoctorWorkflow",
+			"inspectIntegrationDoctorWorkflow",
+			"ReleaseExecutor",
+			"plugin.Response",
+		} {
+			if strings.Contains(source, forbidden) {
+				t.Fatalf("%s contains prohibited unit-overview dependency %q", path, forbidden)
+			}
+		}
+	}
+}
+
+func TestUnitOverviewKeepsTypedCommandAndResponseBoundaries(t *testing.T) {
+	command := readCommandBoundarySource(t, "unit_overview_command.go")
+	for _, required := range []string{"parseUnitOverviewRequest", "handler.inspector.Inspect", "mapUnitOverviewResult"} {
+		if !strings.Contains(command, required) {
+			t.Fatalf("unit overview command boundary omits %q", required)
+		}
+	}
+	for _, forbidden := range []string{"LoadV2Config", "yaml.Unmarshal", "deriveCanonicalUnitOverviewRows", "derivePartialUnitOverviewRows"} {
+		if strings.Contains(command, forbidden) {
+			t.Fatalf("unit overview command boundary contains application responsibility %q", forbidden)
+		}
+	}
+	response := readCommandBoundarySource(t, "unit_overview_response.go")
+	if !strings.Contains(response, "plugin.Response") {
+		t.Fatal("unit overview response mapper does not own the plugin response boundary")
+	}
+}
+
+func TestUnitOverviewDoesNotReachDoctorWorkflowInspection(t *testing.T) {
+	for _, path := range []string{
+		"unit_overview_command.go",
+		"unit_overview_source.go",
+		"unit_overview_inspection.go",
+		"unit_overview_response.go",
+		"unit_overview_types.go",
+	} {
+		if source := readCommandBoundarySource(t, path); strings.Contains(source, "integrationDoctor") {
+			t.Fatalf("%s depends on integration-doctor orchestration", path)
+		}
+	}
+}
+
+func TestUnitOverviewAvoidsGenericInventoryArchitecture(t *testing.T) {
+	for _, path := range []string{
+		"local_v2_source.go",
+		"unit_overview_command.go",
+		"unit_overview_source.go",
+		"unit_overview_inspection.go",
+		"unit_overview_response.go",
+		"unit_overview_types.go",
+	} {
+		source := readCommandBoundarySource(t, path)
+		for _, forbidden := range []string{
+			"StateMachine",
+			"stateMachine",
+			"DiagnosticRegistry",
+			"InventoryRegistry",
+			"ProviderRegistry",
+			"InventoryFramework",
+			"TableDSL",
+			"DependencyBag",
+			"ServiceLocator",
+			"VisitorFramework",
+			"PipelineInspection",
+		} {
+			if strings.Contains(source, forbidden) {
+				t.Fatalf("%s contains prohibited unit-overview architecture %q", path, forbidden)
+			}
+		}
+	}
+}
+
 func TestReleaseProgressReporterIsInfallible(t *testing.T) {
 	source := readCommandBoundarySource(t, "release_progress.go")
 	if !strings.Contains(source, "ReportReleaseProgress(event ReleaseProgressEvent)") {
