@@ -79,6 +79,7 @@ to start a release.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Unit config and selection | Release Plugin | `.neko/release.config.json`, `--unit` | normalized selected unit | V2 schema and CLI output | yes | yes | workflow-side unit parsing rules beyond validation | unit naming and path ownership choices |
 | Current version state | Release Plugin | `.neko/release.state.json` | selected unit version | V2 state schema | yes | yes | plugin maps or build files as version authority | deciding initial versions |
+| Release unit overview | Release Plugin | strict local V2 config/state and pair-recovery readiness | ordered current unit inventory, alignment issues, and summary | `units` human/JSON output | yes | yes | workflow parsing, Git/tag verification, future-version planning, or build-system inference | none |
 | Next-version planning | Release Plugin | current version, requested change | next SemVer | `plan`, dry-run, release commands | yes | yes | workflow or adapter bump logic | selecting patch, minor, or major |
 | Tag calculation | Release Plugin | unit `tagPrefix`, next version | unit tag | V2 tag strategy | yes | yes | workflow tag formatting except validation | tag-prefix conventions |
 | Generated release files | Release Plugin or adapter-specific materializer | selected unit and executor needs | declared known files | materialization plan and known files | yes | partly | hidden workflow file rewrites | source files outside declared materialization |
@@ -114,11 +115,12 @@ Current path:
    use `neko release github-workflow-init`.
 5. Add the executor config and any product-specific build or publication files.
 6. Run `neko release validate --show`.
-7. Run `neko release doctor` and review local and not-verifiable findings.
-8. Inspect with `neko release plan --change patch`.
-9. Run `neko release patch`, `minor`, or `major`.
-10. Let GitHub Actions run `ci-validate-context` before build and publish.
-11. Use `neko release resume --dry-run` only for unresolved local evidence.
+7. Run `neko release units` and confirm the current unit is aligned.
+8. Run `neko release doctor` and review local and not-verifiable findings.
+9. Inspect with `neko release plan --change patch`.
+10. Run `neko release patch`, `minor`, or `major`.
+11. Let GitHub Actions run `ci-validate-context` before build and publish.
+12. Use `neko release resume --dry-run` only for unresolved local evidence.
 
 The scaffolder is create-only and separate from `init`: it creates a missing
 configured target, recognizes byte-identical output, and refuses different
@@ -144,20 +146,20 @@ Current path:
 5. Commit config/state, workflow files, executor config, and consumer build
    support files.
 6. Run `neko release validate --show`.
-7. Inspect integration for all units with `neko release doctor`, or one unit
+7. Inspect the complete current inventory with `neko release units` and resolve
+   config-only, state-only, or invalid unit rows.
+8. Inspect integration for all units with `neko release doctor`, or one unit
    and its complete shared-workflow scope with `--unit <unit>`.
-8. Inspect one unit with `neko release plan --change patch --unit <unit>`.
-9. Release one unit with `neko release patch --unit <unit>`.
-10. Let the workflow pass `unit`, `version`, `tag`, and `release_sha` to
+9. Inspect one unit with `neko release plan --change patch --unit <unit>`.
+10. Release one unit with `neko release patch --unit <unit>`.
+11. Let the workflow pass `unit`, `version`, `tag`, and `release_sha` to
    `ci-validate-context` and consume its validated outputs.
 
 Evolving product path:
 
-1. Add or import units.
-2. Inspect a unit overview before release planning.
-3. Use the current integration doctor for every release unit.
-4. Add pipeline inspection to explain additional local and CI readiness before
-   execution.
+1. Keep unit inventory and integration readiness as separate commands.
+2. Add pipeline inspection to explain additional local and CI readiness before
+   execution without folding it into `units` or `doctor`.
 
 ## Build-system-neutral consumers
 
@@ -258,6 +260,10 @@ Supported today:
 - Token-free, network-free, Git-command-free, mutation-free `doctor` with
   strict V2 source checks, structural workflow diagnostics, shared-workflow
   scope, stable JSON, and explicit not-verifiable facts.
+- Token-free, network-free, Git-command-free, mutation-free `units` with
+  strict V2 source handling, deterministic aligned/incomplete/invalid rows,
+  canonical current-version and tag-shape facts, responsive human output, and
+  stable JSON/exit behavior.
 - GitHub Actions-delivered `patch`, `minor`, and `major` releases.
 - Neko-owned state/materialization, release commit, unit tag, commit push, tag
   push, execution journal, dispatch journal, and workflow dispatch.
@@ -271,7 +277,6 @@ Not supported today:
 - workflow generation as an implicit side effect of `init` or `unit-add`;
 - managed workflow updates, arbitrary YAML merging, or force overwrite;
 - executor config scaffolding from `init` or `unit-add`;
-- a release unit overview command;
 - release pipeline inspection;
 - build-system adapters in Neko CLI;
 - V2 local non-dry-run execution;
@@ -281,10 +286,9 @@ Not supported today:
 
 Future Release V2 bootstrap work should add capabilities in this order:
 
-1. Release unit overview.
-2. Release pipeline inspection.
-3. Build-system adapter contract and a Gradle adapter.
-4. GitHub Actions packaging decision after the generated workflow contract is
+1. Release pipeline inspection.
+2. Build-system adapter contract and a Gradle adapter.
+3. GitHub Actions packaging decision after the generated workflow contract is
    proven in consumers.
 
 Build-system adapter work can start after the stable CI validation contract is

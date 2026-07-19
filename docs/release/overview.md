@@ -103,6 +103,9 @@ Implemented now:
 - Internal V2 `GitReleaseCoordinator` for targeted staging, deterministic release commits, unit tags, and explicit commit/tag pushes.
 - Non-destructive V2 recovery boundary.
 - Public V2 dry-run Git planning.
+- Strictly read-only `neko release units` inventory with current state versions,
+  tag shapes, unit alignment/issues, responsive human output, stable JSON, and
+  structured exit behavior.
 
 Not implemented yet:
 
@@ -111,7 +114,6 @@ Not implemented yet:
 - Executor scaffolding from `neko release init`.
 - Stable CI release-context validation.
 - Read-only integration doctor.
-- Release unit overview.
 - Release pipeline inspection.
 - Build-system adapters such as Gradle.
 - V2 local executor execution.

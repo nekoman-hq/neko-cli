@@ -172,6 +172,54 @@ its deliberately failing consumer placeholder is present. A structurally
 equivalent manual workflow is supported; custom build/publication correctness
 remains explicitly not verifiable.
 
+`neko release units` is the flat, Release V2-only inventory command. It has no
+command-specific flags and lists every config or state unit in canonical unit
+ID order. Current versions come only from state. Canonical versions are exposed
+as `version`; a safe raw invalid value remains `configured_version`. Tag facts
+come from canonical `TagSpec`: `tag_shape` is version-independent and
+`configured_tag` uses only the validated current state version. Neither field
+claims that a Git tag exists, and the command never calculates a future
+version.
+
+The unit alignment classification is closed: `aligned` means config and state
+exist and canonical fields validate; `config_only` and `state_only` identify a
+missing pair member; `invalid` identifies malformed or conflicting unit facts.
+Unit issues contain `severity`, `unit`, `code`, `message`, and `remediation`.
+Stable unit codes are `UNIT_STATE_MISSING`, `UNIT_CONFIG_MISSING`,
+`UNIT_VERSION_INVALID`, `UNIT_TAG_PREFIX_INVALID`,
+`UNIT_TAG_PREFIX_CONFLICT`, `UNIT_EXECUTOR_INVALID`,
+`UNIT_DELIVERY_INVALID`, `UNIT_WORKFLOW_PATH_INVALID`, and
+`UNIT_CONFIG_INVALID`.
+
+JSON `data` contains `status`, `summary`, `units`, `workflow_paths`, and an
+optional `source_issue`. `status` is `valid`, `has_issues`, or
+`source_invalid`. Summary contains numeric `total`, `aligned`, `incomplete`,
+`invalid`, and `workflow_paths` counts plus boolean `source_usable`. Unit rows
+contain only stable inventory facts: `id`, optional `display_name`, state
+version fields, tag fields, executor/delivery/workflow/working-directory
+fields, `alignment`, `issues`, and `issue_codes`. Empty issue lists remain JSON
+arrays; absent optional facts are omitted. Units sort by ID, issues by severity,
+unit, code, and message, and distinct workflow paths lexically.
+
+Human output uses responsive `HumanTable`. `Unit`, `Version`, and `Status` are
+essential; name, tag prefix, executor, delivery, workflow, working directory,
+and concise issue codes are optional. Unknown width uses deterministic vertical
+records, and invalid units remain visible. `valid` exits `0`; `has_issues` and
+`source_invalid` exit `1`. Missing, malformed, unsupported, V1-only, mixed, and
+recovery-blocked source states are nil-Go-error structured responses with a
+stable source issue. Source codes are `V2_SOURCE_INSPECTION_FAILED`,
+`MIXED_RELEASE_SOURCES`, `V1_SOURCE_UNSUPPORTED`, `V2_SOURCE_MISSING`,
+`V2_CONFIG_INVALID`, `V2_STATE_INVALID`, `V2_SCHEMA_UNSUPPORTED`,
+`V2_RECOVERY_BLOCKED`, `V2_CONFIG_MISSING`, `V2_STATE_MISSING`, and
+`V2_SOURCE_EMPTY`.
+
+The command reads only strict local V2 config/state and the existing pair
+recovery readiness marker. It does not parse workflow YAML, invoke Doctor
+workflow inspection, inspect Git or tags, read tokens, contact a network, read
+journals or Evidence, inspect build files, plan releases, execute releases, or
+write anything. `release doctor` remains the workflow-readiness command;
+release pipeline inspection remains unsupported.
+
 Unsupported or read-only boundaries:
 
 - Existing V2 configs with `delivery: local` are rejected with a clear unsupported-delivery validation error.

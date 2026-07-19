@@ -184,6 +184,48 @@ DSL, provider abstraction, or repair capability reaches the use case. The only
 recovery-related read is the existing V2 pair-recovery readiness check required
 to decide whether local config/state facts are trustworthy.
 
+### Release V2 unit overview
+
+`neko release units` is the active local Release V2 inventory command. It is a
+flat command with no selector or verification modes. Its focused flow is typed
+request parsing, explicit inspection-root resolution, strict local V2 source
+loading, deterministic unit-row and issue derivation, summary calculation, and
+command-boundary response mapping.
+
+The shared `filesystemLocalV2SourceReader` owns only V1/V2 presence, canonical
+strict config/state decoding, and the existing pair-recovery readiness check.
+The Doctor source facade delegates to that reader, but the overview never calls
+Doctor workflow orchestration, workflow readers, or YAML inspectors. Valid
+pairs use canonical config/state structural validation and normalization.
+Parseable schema-2 pairs with parity or unit validation findings use the union
+of config and state identities so config-only, state-only, and invalid units
+remain visible.
+
+Current versions come only from state through canonical SemVer validation.
+Invalid raw versions remain explicitly configured values without becoming
+canonical versions. Tag prefix validation and the version-independent tag
+shape reuse `TagSpec`; the configured current tag is derived only when the
+state version validates and never claims Git evidence. Executor, delivery, and
+workflow-path validation remain config-owned. The overview neither plans a
+next version nor opens configured workflow files.
+
+Alignment is the closed derived set `aligned`, `config_only`, `state_only`, and
+`invalid`; overall status is `valid`, `has_issues`, or `source_invalid`.
+Expected findings are structured nil-Go-error responses, and only `valid`
+requests exit `0`. Human output opts into Core's responsive `HumanTable` with
+Unit, Version, and Status as essential columns. Machine output contains stable
+typed summary, ordered rows, ordered issues, lexical workflow paths, and an
+optional source issue; transport-only presentation metadata remains outside
+the data contract.
+
+No workflow parser, Doctor workflow inspector, Git reader or mutator, network
+or GitHub client, token resolver, file writer, state persister, build-system
+reader, planner, release executor, dispatcher, journal/Evidence store, state
+machine, registry, provider abstraction, generic inventory framework, or
+repair capability reaches the use case. Runtime and static guards preserve
+source/workflow bytes, modes and mtimes, cwd/environment isolation, sequential
+repository isolation, JSON isolation, and Doctor behavior.
+
 ### V2 local delivery evaluation
 
 V2 local delivery is deliberately unsupported for executable V2 releases. `github-actions` is the only supported V2 delivery mode for committed V2 release units.
@@ -198,9 +240,8 @@ The retained inactive V2 local transaction scaffold is no longer a future produc
 
 ## Pending architecture decisions
 
-Release-unit overview and release-pipeline inspection remain separate future
-capabilities. They must not be inferred from or folded into the integration
-doctor.
+Release-pipeline inspection remains a separate future capability. It must not
+be inferred from or folded into the unit overview or integration doctor.
 
 Release V2 bootstrap planning is product capability planning, not a reopened
 architecture refactor stage. The current product boundary for GitHub Actions

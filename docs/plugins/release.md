@@ -227,12 +227,61 @@ not verifiable instead of inferred.
 
 ### `neko release units`
 
-List the current Release V2 unit inventory from local config and state:
+List every configured Release V2 unit and its current local state:
 
 ```bash
 neko release units
 neko release units --output json
 ```
+
+The flat command has no unit selector or verification flags. Units are ordered
+by canonical unit ID. Human output uses the responsive table contract with
+essential `Unit`, `Version`, and `Status` columns. `Name`, `Tag prefix`,
+`Executor`, `Delivery`, `Workflow`, `Working directory`, and concise issue
+codes are optional columns admitted in that priority order. Narrow terminals
+retain the essential facts or use bounded vertical records when they cannot
+fit; width-unknown output is deterministic vertical output. Invalid and
+incomplete units remain visible.
+
+Each JSON unit can contain `id`, optional `display_name`, canonical `version`,
+raw `configured_version`, `tag_prefix`, `tag_shape`, `configured_tag`,
+`executor`, `delivery`, `workflow_path`, `working_directory`, `alignment`,
+`issues`, and `issue_codes`. The current version comes only from
+`.neko/release.state.json`. An invalid raw version remains in
+`configured_version` while `version` and `configured_tag` are absent.
+`tag_shape` and `configured_tag` are derived through canonical `TagSpec`;
+`configured_tag` is a configured value for the validated current state
+version, not evidence that a local or remote Git tag exists. No next version is
+calculated.
+
+Alignment is one of `aligned`, `config_only`, `state_only`, or `invalid`.
+Unit issues use `error` or `warning` severity and the stable codes
+`UNIT_STATE_MISSING`, `UNIT_CONFIG_MISSING`, `UNIT_VERSION_INVALID`,
+`UNIT_TAG_PREFIX_INVALID`, `UNIT_TAG_PREFIX_CONFLICT`,
+`UNIT_EXECUTOR_INVALID`, `UNIT_DELIVERY_INVALID`,
+`UNIT_WORKFLOW_PATH_INVALID`, and `UNIT_CONFIG_INVALID`. The repository status
+is `valid`, `has_issues`, or `source_invalid`. Summary fields are `total`,
+`aligned`, `incomplete`, `invalid`, `workflow_paths`, and `source_usable`;
+distinct workflow paths are also returned lexically under `workflow_paths`.
+Unit issues are ordered by severity, unit ID, code, and message.
+
+Expected source problems are structured output, not command crashes. Source
+issue codes are `V2_SOURCE_INSPECTION_FAILED`, `MIXED_RELEASE_SOURCES`,
+`V1_SOURCE_UNSUPPORTED`, `V2_SOURCE_MISSING`, `V2_CONFIG_INVALID`,
+`V2_STATE_INVALID`, `V2_SCHEMA_UNSUPPORTED`, `V2_RECOVERY_BLOCKED`,
+`V2_CONFIG_MISSING`, `V2_STATE_MISSING`, and `V2_SOURCE_EMPTY`. A missing half
+of the V2 pair can still yield explicit config-only or state-only rows; unsafe,
+malformed, mixed, V1-only, unsupported, or recovery-blocked sources do not
+produce trusted rows. `valid` exits `0`; `has_issues` and `source_invalid` exit
+`1`.
+
+The overview reuses strict V2 loading, canonical version/tag/unit policy, and
+explicit repository-root handling. It is offline and strictly read-only: it
+does not open or parse workflow YAML, call the integration doctor, inspect Git
+or tags, read tokens, contact the network, inspect build systems, plan a future
+release, read journals or Evidence, execute releases, or mutate config, state,
+workflows, Git, cwd, environment, file modes, or mtimes. Use `release doctor`
+for GitHub Actions workflow readiness; pipeline inspection is not implemented.
 
 ---
 
