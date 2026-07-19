@@ -105,6 +105,14 @@ complete typed result in `Data`. Presentation metadata is transported between
 the plugin and Core but is excluded from public JSON and raw JSON. Do not add
 domain fields, callbacks, layout modes, or policy to Core.
 
+`HumanTable.Rows` may provide a human-only projection when complete machine
+data is not a slice of row maps. `HumanTable.Details` may reuse one
+`HumanProperties` declaration after a response-level property summary and the
+table. Core then composes the existing property/table/property renderers. Both
+fields are optional transport metadata; nil values preserve the established
+table path, and neither field enters public JSON or raw JSON. This is a bounded
+master/detail presentation capability, not a generic document or layout model.
+
 Ordered property/value responses are responsive as well. Core recognizes the
 established `items[property,value]` shape or an explicit
 `plugin.Response.HumanProperties` declaration. With a known writer width it

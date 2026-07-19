@@ -367,7 +367,9 @@ type Response struct {
 }
 
 type HumanTable struct {
-    Columns []HumanColumn `json:"columns"`
+    Columns []HumanColumn    `json:"columns"`
+    Rows    []map[string]any `json:"rows,omitempty"`
+    Details *HumanProperties `json:"details,omitempty"`
 }
 
 type HumanColumn struct {
@@ -443,6 +445,16 @@ it, but Core excludes it from public `--output json` and raw JSON. Commands
 without `HumanTable` retain the legacy inferred table and existing `wide`
 behavior. Plugins own field meaning, labels, order, and essential/optional
 classification; Core owns only layout mechanics.
+
+When the human table is a compact projection of differently shaped machine
+data, `Rows` can carry presentation-only row maps. If `Rows` is nil, Core keeps
+the established behavior of selecting a list from `Data`. `Details` can append
+one ordered `HumanProperties` view after a response-level `HumanProperties`
+summary and the table, producing the generic property/table/property order.
+Both fields are optional; their nil zero values are omitted from transport and
+do not alter existing responses. They must not replace complete typed `Data`.
+Their labels, projections, and direct values cross only the plugin transport
+and remain absent from public JSON and raw JSON.
 
 #### Property/value presentation
 

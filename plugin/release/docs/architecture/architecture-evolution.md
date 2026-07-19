@@ -175,8 +175,22 @@ The result closes severity and readiness policy without a generic state
 machine: any error is `not_ready`; warnings without errors are
 `ready_with_warnings`; recommendations and not-verifiable facts alone are
 `ready`. Diagnostics have stable severity/scope/unit/workflow/code/message/
-remediation fields and deterministic ordering. Human output uses responsive
-properties; JSON keeps the stable typed result projection.
+remediation fields and deterministic ordering. Human output is summary-first:
+responsive readiness/count properties precede a compact severity/code index,
+then complete responsive diagnostic properties. The index admits optional
+target and scope fields by width; complete workflow identity, message, and
+remediation remain in the ordered details. JSON and raw JSON keep the stable
+typed result projection and exclude every presentation-only value.
+
+The existing response fields could not express a property summary, table, and
+separate responsive detail values in one result because human renderers were
+exclusive and responsive tables could only read a machine-data list. Core
+therefore extends `HumanTable` with optional transport-only `rows` and
+`details`. They reuse existing row maps and `HumanProperties`; nil zero values
+are omitted and preserve every established table response. Core composes only
+generic property/table/property rendering and contains no Doctor terminology,
+diagnostic renderer, document model, layout DSL, registry, or state machine.
+Public JSON and raw JSON already exclude the complete `HumanTable` declaration.
 
 No writer, Git command or mutator, network client, token resolver, dispatcher,
 journal store, Evidence writer, release runner, executor, registry, workflow

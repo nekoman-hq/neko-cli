@@ -207,6 +207,17 @@ existing local V2 pair-recovery readiness marker required by the source
 contract. JSON contains stable `readiness`, `summary`, `units`, `workflows`,
 and `diagnostics` fields.
 
+Human output starts with readiness, severity counts, and inspected unit and
+workflow counts. A compact diagnostic index keeps `Severity` and `Code`
+essential and admits optional `Target` and `Scope` columns in that priority
+order. Complete ordered details follow with a presentation ordinal, severity,
+code, scope, optional unit, the full repository-relative workflow path,
+message, and remediation.
+Core fits or removes optional index columns, switches to vertical records, and
+wraps detail values from the actual output width. Width-unknown output uses the
+deterministic vertical fallback. Terminal width affects only this human view;
+JSON remains the stable automation contract.
+
 Each diagnostic has one closed severity (`error`, `warning`,
 `recommendation`, or `not_verifiable`), source/unit/workflow scope, optional
 unit and workflow identity, a stable code, message, and remediation. Errors

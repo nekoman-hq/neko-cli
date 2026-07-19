@@ -163,6 +163,14 @@ network clients, Git commands, journal stores, Evidence writers, or filesystem
 writers. Source validation only reads the local V2 pair-recovery readiness
 marker already owned by the strict config/state contract.
 
+Human output presents readiness and counts first, followed by a compact
+diagnostic index and complete responsive details. `Severity` and `Code` are
+essential index columns; optional `Target` then `Scope` are admitted while the
+actual width permits. Details retain the full workflow path, message, and
+remediation and wrap at known widths. Narrow output can use vertical records,
+and width-unknown or non-terminal output uses the deterministic vertical
+fallback. These layout choices do not alter JSON or raw JSON.
+
 Diagnostics use the closed severities `error`, `warning`, `recommendation`,
 and `not_verifiable`. Their stable fields are `severity`, `scope`, optional
 `unit`, optional `workflow`, `code`, `message`, and `remediation`. Ordering is
