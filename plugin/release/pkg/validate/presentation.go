@@ -33,7 +33,7 @@ func validationSummaryPresentation(result validationQueryResult) *presentation.P
 		properties = append(properties,
 			presentation.Property{Label: "Source", Value: "Legacy V1 config"},
 			presentation.Property{Label: "Schema", Value: "v1"},
-			presentation.Property{Label: "Configuration", Value: config.V1FileName},
+			presentation.Property{Label: "Configuration", Value: ".release.neko.json"},
 		)
 	} else {
 		properties = append(properties,

@@ -17,8 +17,8 @@ func TestValidationMachineResponseRemainsStableAcrossHumanPresentationChanges(t 
 	timestamp := time.Date(2026, time.July, 15, 9, 30, 0, 0, time.UTC)
 	tests := []struct {
 		name   string
-		result validationQueryResult
 		want   string
+		result validationQueryResult
 	}{
 		{
 			name:   "v2 default",
