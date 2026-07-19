@@ -12,12 +12,18 @@ import (
 func TestDeprecatedPresentationAliasesRemainSourceCompatible(t *testing.T) {
 	t.Parallel()
 
-	var _ plugin.HumanTable = presentation.Table{}
-	var _ plugin.HumanColumn = presentation.Column{}
-	var _ plugin.HumanProperties = presentation.Properties{}
-	var _ plugin.HumanProperty = presentation.Property{}
-	var _ plugin.HumanText = presentation.Text{}
-	var _ plugin.HumanStyleRole = presentation.StyleRole("")
+	acceptTable := func(plugin.HumanTable) {}
+	acceptColumn := func(plugin.HumanColumn) {}
+	acceptProperties := func(plugin.HumanProperties) {}
+	acceptProperty := func(plugin.HumanProperty) {}
+	acceptText := func(plugin.HumanText) {}
+	acceptStyleRole := func(plugin.HumanStyleRole) {}
+	acceptTable(presentation.Table{})
+	acceptColumn(presentation.Column{})
+	acceptProperties(presentation.Properties{})
+	acceptProperty(presentation.Property{})
+	acceptText(presentation.Text{})
+	acceptStyleRole(presentation.StyleRole(""))
 
 	legacy := plugin.Response{
 		HumanTable:      &plugin.HumanTable{},
