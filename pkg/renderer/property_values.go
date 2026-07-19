@@ -6,7 +6,6 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/nekoman-hq/neko-cli/pkg/log"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 )
 
@@ -18,8 +17,11 @@ const (
 )
 
 type propertyValue struct {
-	label string
-	value string
+	label      string
+	value      string
+	role       plugin.HumanStyleRole
+	emphasized bool
+	heading    bool
 }
 
 type propertyLayout struct {
@@ -33,6 +35,7 @@ func renderPropertyValues(
 	response *plugin.Response,
 	writer io.Writer,
 	widthProvider OutputWidthProvider,
+	styler humanStyler,
 ) (bool, error) {
 	properties, declared, err := responsePropertyValues(response)
 	if err != nil {
@@ -42,16 +45,24 @@ func renderPropertyValues(
 		return false, nil
 	}
 	if len(properties) == 0 {
-		_, _ = fmt.Fprintf(writer, "%sNo resources found.%s\n", log.ColorBrightBlack, log.ColorReset)
+		_, _ = fmt.Fprintln(writer, styler.semantic(plugin.HumanStyleMuted, false, "No resources found."))
 		return true, nil
 	}
 
 	outputWidth, widthAvailable := widthProvider.Width(writer)
+	compact := response.HumanProperties != nil && response.HumanProperties.Title != ""
+	if compact {
+		printHumanTitle(writer, response.HumanProperties.Title, styler)
+		_, _ = fmt.Fprintln(writer)
+	}
+	if containsPropertyHeadings(properties) {
+		return true, renderPropertyRecords(writer, properties, outputWidth, widthAvailable, styler)
+	}
 	layout := calculatePropertyLayout(properties, outputWidth, widthAvailable)
 	if layout.twoColumn {
-		return true, renderTwoColumnProperties(writer, properties, layout)
+		return true, renderTwoColumnProperties(writer, properties, layout, compact, styler)
 	}
-	return true, renderVerticalProperties(writer, properties, layout.outputWidth, widthAvailable)
+	return true, renderVerticalProperties(writer, properties, layout.outputWidth, widthAvailable, compact, styler)
 }
 
 func responsePropertyValues(response *plugin.Response) ([]propertyValue, bool, error) {
@@ -64,6 +75,9 @@ func responsePropertyValues(response *plugin.Response) ([]propertyValue, bool, e
 }
 
 func declaredPropertyValues(response *plugin.Response) ([]propertyValue, error) {
+	if strings.TrimSpace(response.HumanProperties.Title) != response.HumanProperties.Title {
+		return nil, fmt.Errorf("human property title must not have surrounding whitespace")
+	}
 	declarations := response.HumanProperties.Properties
 	if len(declarations) == 0 {
 		return nil, fmt.Errorf("human property declaration is empty")
@@ -74,6 +88,18 @@ func declaredPropertyValues(response *plugin.Response) ([]propertyValue, error) 
 		key := strings.TrimSpace(declaration.Key)
 		label := strings.TrimSpace(declaration.Label)
 		hasValue := declaration.Value != nil
+		if !validHumanStyleRole(declaration.Role) {
+			return nil, fmt.Errorf("human property declaration contains invalid semantic role %q", declaration.Role)
+		}
+		if declaration.Heading {
+			if label == "" || label != declaration.Label || key != "" || hasValue {
+				return nil, fmt.Errorf("human property heading must contain only one label")
+			}
+			properties = append(properties, propertyValue{
+				label: label, role: declaration.Role, emphasized: declaration.Emphasized, heading: true,
+			})
+			continue
+		}
 		if label == "" || label != declaration.Label || key != declaration.Key || (key == "") == !hasValue {
 			return nil, fmt.Errorf("human property declaration must contain one label and exactly one data key or value")
 		}
@@ -90,7 +116,9 @@ func declaredPropertyValues(response *plugin.Response) ([]propertyValue, error) 
 			}
 			seenKeys[key] = struct{}{}
 		}
-		properties = append(properties, propertyValue{label: label, value: formatValue(value)})
+		properties = append(properties, propertyValue{
+			label: label, value: formatValue(value), role: declaration.Role, emphasized: declaration.Emphasized,
+		})
 	}
 	return properties, nil
 }
@@ -148,15 +176,18 @@ func calculatePropertyLayout(properties []propertyValue, outputWidth int, widthA
 	return layout
 }
 
-func renderTwoColumnProperties(writer io.Writer, properties []propertyValue, layout propertyLayout) error {
-	_, _ = fmt.Fprintf(writer, "%s%s%s%sVALUE%s\n",
-		log.ColorCyan,
-		log.ColorBold,
-		paddedVisibleText("PROPERTY", layout.labelWidth),
-		strings.Repeat(" ", propertyColumnGap),
-		log.ColorReset,
-	)
-	log.PrintTableSeparatorTo(writer, layout.outputWidth)
+func renderTwoColumnProperties(
+	writer io.Writer,
+	properties []propertyValue,
+	layout propertyLayout,
+	compact bool,
+	styler humanStyler,
+) error {
+	if !compact {
+		heading := paddedVisibleText("PROPERTY", layout.labelWidth) + strings.Repeat(" ", propertyColumnGap) + "VALUE"
+		_, _ = fmt.Fprintln(writer, styler.semantic(plugin.HumanStyleInfo, true, heading))
+		printTableSeparator(writer, layout.outputWidth, styler)
+	}
 
 	for _, property := range properties {
 		labelLines := wrapVisibleLines(property.label, layout.labelWidth)
@@ -174,14 +205,26 @@ func renderTwoColumnProperties(writer io.Writer, properties []propertyValue, lay
 			if lineIndex < len(valueLines) {
 				valueLine = valueLines[lineIndex]
 			}
+			styledLabel := labelLine
+			if property.emphasized {
+				styledLabel = styler.semantic(plugin.HumanStyleEmphasis, false, labelLine)
+			}
 			_, _ = fmt.Fprintf(writer, "%s%s%s\n",
-				paddedVisibleText(labelLine, layout.labelWidth),
+				paddedStyledText(styledLabel, labelLine, layout.labelWidth),
 				strings.Repeat(" ", propertyColumnGap),
-				colorizeValue("value", valueLine),
+				stylePropertyValue(styler, property, valueLine),
 			)
 		}
 	}
 	return nil
+}
+
+func paddedStyledText(styledValue, plainValue string, width int) string {
+	padding := width - visibleWidth(plainValue)
+	if padding < 0 {
+		padding = 0
+	}
+	return styledValue + strings.Repeat(" ", padding)
 }
 
 func paddedVisibleText(value string, width int) string {
@@ -197,9 +240,11 @@ func renderVerticalProperties(
 	properties []propertyValue,
 	outputWidth int,
 	widthAvailable bool,
+	compact bool,
+	styler humanStyler,
 ) error {
 	for index, property := range properties {
-		if index > 0 {
+		if index > 0 && !compact {
 			_, _ = fmt.Fprintln(writer)
 		}
 		labelWidth := 0
@@ -207,14 +252,26 @@ func renderVerticalProperties(
 			labelWidth = outputWidth
 		}
 		for _, labelLine := range wrapVisibleLines(property.label, labelWidth) {
-			_, _ = fmt.Fprintf(writer, "%s%s%s%s\n", log.ColorCyan, log.ColorBold, labelLine, log.ColorReset)
+			role := plugin.HumanStyleInfo
+			emphasized := true
+			if compact {
+				role = plugin.HumanStyleDefault
+				emphasized = property.emphasized
+			}
+			_, _ = fmt.Fprintln(writer, styler.semantic(role, emphasized, labelLine))
 		}
-		renderVerticalPropertyValue(writer, property.value, outputWidth, widthAvailable)
+		renderVerticalPropertyValue(writer, property, outputWidth, widthAvailable, styler)
 	}
 	return nil
 }
 
-func renderVerticalPropertyValue(writer io.Writer, value string, outputWidth int, widthAvailable bool) {
+func renderVerticalPropertyValue(
+	writer io.Writer,
+	property propertyValue,
+	outputWidth int,
+	widthAvailable bool,
+	styler humanStyler,
+) {
 	indentWidth := verticalPropertyIndent
 	valueWidth := 0
 	if widthAvailable {
@@ -224,7 +281,69 @@ func renderVerticalPropertyValue(writer io.Writer, value string, outputWidth int
 		valueWidth = outputWidth - indentWidth
 	}
 	indent := strings.Repeat(" ", indentWidth)
-	for _, valueLine := range wrapVisibleLines(value, valueWidth) {
-		_, _ = fmt.Fprintf(writer, "%s%s\n", indent, colorizeValue("value", valueLine))
+	for _, valueLine := range wrapVisibleLines(property.value, valueWidth) {
+		_, _ = fmt.Fprintf(writer, "%s%s\n", indent, stylePropertyValue(styler, property, valueLine))
 	}
+}
+
+func containsPropertyHeadings(properties []propertyValue) bool {
+	for _, property := range properties {
+		if property.heading {
+			return true
+		}
+	}
+	return false
+}
+
+func renderPropertyRecords(
+	writer io.Writer,
+	properties []propertyValue,
+	outputWidth int,
+	widthAvailable bool,
+	styler humanStyler,
+) error {
+	records := 0
+	for _, property := range properties {
+		if property.heading {
+			if records > 0 {
+				_, _ = fmt.Fprintln(writer)
+				if widthAvailable && outputWidth > 0 {
+					separatorWidth := outputWidth
+					if separatorWidth > 32 {
+						separatorWidth = 32
+					}
+					printTableSeparator(writer, separatorWidth, styler)
+					_, _ = fmt.Fprintln(writer)
+				}
+			}
+			for _, line := range wrapVisibleLines(property.label, knownOutputWidth(outputWidth, widthAvailable)) {
+				_, _ = fmt.Fprintln(writer, styler.semantic(property.role, true, line))
+			}
+			records++
+			continue
+		}
+		if records == 0 {
+			return fmt.Errorf("human property record field appears before its heading")
+		}
+		_, _ = fmt.Fprintln(writer)
+		for _, line := range wrapVisibleLines(property.label, knownOutputWidth(outputWidth, widthAvailable)) {
+			_, _ = fmt.Fprintln(writer, styler.semantic(plugin.HumanStyleDefault, true, line))
+		}
+		renderVerticalPropertyValue(writer, property, outputWidth, widthAvailable, styler)
+	}
+	return nil
+}
+
+func knownOutputWidth(outputWidth int, available bool) int {
+	if !available {
+		return 0
+	}
+	return outputWidth
+}
+
+func stylePropertyValue(styler humanStyler, property propertyValue, value string) string {
+	if property.role == "" && !property.emphasized {
+		return colorizeValue(styler, "value", value)
+	}
+	return styler.semantic(property.role, property.emphasized, value)
 }

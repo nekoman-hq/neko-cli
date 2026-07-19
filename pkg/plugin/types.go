@@ -55,6 +55,7 @@ type HumanTable struct {
 	Columns []HumanColumn    `json:"columns"`
 	Rows    []map[string]any `json:"rows,omitempty"`
 	Details *HumanProperties `json:"details,omitempty"`
+	Title   string           `json:"title,omitempty"`
 }
 
 // HumanColumn declares one human-facing column. Slice order defines display
@@ -62,6 +63,7 @@ type HumanTable struct {
 type HumanColumn struct {
 	Key       string `json:"key"`
 	Label     string `json:"label"`
+	RoleKey   string `json:"role_key,omitempty"`
 	Essential bool   `json:"essential,omitempty"`
 }
 
@@ -69,7 +71,23 @@ type HumanColumn struct {
 // It is transport metadata and does not change the response Data contract.
 type HumanProperties struct {
 	Properties []HumanProperty `json:"properties"`
+	Title      string          `json:"title,omitempty"`
 }
+
+// HumanStyleRole expresses presentation meaning without exposing terminal
+// colors or ANSI sequences to plugin response mappers. The empty zero value is
+// rendered like HumanStyleDefault for backwards compatibility.
+type HumanStyleRole string
+
+const (
+	HumanStyleDefault  HumanStyleRole = "default"
+	HumanStyleEmphasis HumanStyleRole = "emphasis"
+	HumanStyleSuccess  HumanStyleRole = "success"
+	HumanStyleWarning  HumanStyleRole = "warning"
+	HumanStyleError    HumanStyleRole = "error"
+	HumanStyleInfo     HumanStyleRole = "info"
+	HumanStyleMuted    HumanStyleRole = "muted"
+)
 
 // HumanProperty declares one human-facing label and either maps it to a
 // response Data key or carries a presentation-only value. Slice order defines
@@ -77,9 +95,12 @@ type HumanProperties struct {
 //
 //nolint:govet // Field order preserves the stable human-property wire order.
 type HumanProperty struct {
-	Key   string `json:"key,omitempty"`
-	Label string `json:"label"`
-	Value any    `json:"value,omitempty"`
+	Key        string         `json:"key,omitempty"`
+	Label      string         `json:"label"`
+	Value      any            `json:"value,omitempty"`
+	Role       HumanStyleRole `json:"role,omitempty"`
+	Emphasized bool           `json:"emphasized,omitempty"`
+	Heading    bool           `json:"heading,omitempty"`
 }
 
 // HumanText declares preformatted human output for content that must remain

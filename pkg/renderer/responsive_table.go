@@ -6,13 +6,13 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/nekoman-hq/neko-cli/pkg/log"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 )
 
 type responsiveColumn struct {
 	key       string
 	label     string
+	roleKey   string
 	essential bool
 	width     int
 }
@@ -22,10 +22,14 @@ func renderResponsiveTable(
 	writer io.Writer,
 	wide bool,
 	widthProvider OutputWidthProvider,
+	styler humanStyler,
 ) (bool, error) {
+	if response.HumanTable == nil {
+		return false, nil
+	}
 	columns, ok := responsiveColumns(response.HumanTable)
 	if !ok {
-		return false, nil
+		return true, fmt.Errorf("human table declaration is invalid")
 	}
 	items := any(response.HumanTable.Rows)
 	if response.HumanTable.Rows == nil {
@@ -36,28 +40,35 @@ func renderResponsiveTable(
 	}
 	rows, ok := responsiveRows(items, columns)
 	if !ok {
-		return false, nil
+		return true, fmt.Errorf("human table rows do not satisfy the declaration")
 	}
 	if len(rows) == 0 {
-		_, _ = fmt.Fprintf(writer, "%sNo resources found.%s\n", log.ColorBrightBlack, log.ColorReset)
+		_, _ = fmt.Fprintln(writer, styler.semantic(plugin.HumanStyleMuted, false, "No resources found."))
 		return true, nil
 	}
 
 	outputWidth, available := widthProvider.Width(writer)
+	if response.HumanTable.Title != "" {
+		printHumanTitle(writer, response.HumanTable.Title, styler)
+		_, _ = fmt.Fprintln(writer)
+	}
 	if !available || outputWidth <= 0 {
-		return true, renderVerticalRecords(writer, columns, rows, 0, false)
+		return true, renderVerticalRecords(writer, columns, rows, 0, false, styler)
 	}
 
 	columns = calculateResponsiveColumnWidths(columns, rows, outputWidth)
 	selected, tableFits := selectResponsiveColumns(columns, outputWidth, wide)
 	if !tableFits {
-		return true, renderVerticalRecords(writer, columns, rows, outputWidth, true)
+		return true, renderVerticalRecords(writer, columns, rows, outputWidth, true, styler)
 	}
-	return true, renderResponsiveRows(writer, selected, rows)
+	return true, renderResponsiveRows(writer, selected, rows, styler)
 }
 
 func responsiveColumns(table *plugin.HumanTable) ([]responsiveColumn, bool) {
 	if table == nil || len(table.Columns) == 0 {
+		return nil, false
+	}
+	if strings.TrimSpace(table.Title) != table.Title {
 		return nil, false
 	}
 	columns := make([]responsiveColumn, 0, len(table.Columns))
@@ -65,14 +76,17 @@ func responsiveColumns(table *plugin.HumanTable) ([]responsiveColumn, bool) {
 	for _, declaration := range table.Columns {
 		key := strings.TrimSpace(declaration.Key)
 		label := strings.TrimSpace(declaration.Label)
-		if key == "" || label == "" {
+		roleKey := strings.TrimSpace(declaration.RoleKey)
+		if key == "" || label == "" || roleKey != declaration.RoleKey {
 			return nil, false
 		}
 		if _, exists := seen[key]; exists {
 			return nil, false
 		}
 		seen[key] = struct{}{}
-		columns = append(columns, responsiveColumn{key: key, label: label, essential: declaration.Essential})
+		columns = append(columns, responsiveColumn{
+			key: key, label: label, roleKey: roleKey, essential: declaration.Essential,
+		})
 	}
 	return columns, true
 }
@@ -91,6 +105,13 @@ func responsiveRows(items any, columns []responsiveColumn) ([]map[string]string,
 		row := make(map[string]string, len(columns))
 		for _, column := range columns {
 			row[column.key] = formatValue(item[column.key])
+			if column.roleKey != "" {
+				role, present := item[column.roleKey].(string)
+				if !present || !validHumanStyleRole(plugin.HumanStyleRole(role)) {
+					return nil, false
+				}
+				row[column.roleKey] = role
+			}
 		}
 		rows = append(rows, row)
 	}
@@ -169,18 +190,18 @@ func selectResponsiveColumns(columns []responsiveColumn, outputWidth int, wide b
 	return selected, true
 }
 
-func renderResponsiveRows(writer io.Writer, columns []responsiveColumn, rows []map[string]string) error {
-	_, _ = fmt.Fprintf(writer, "%s%s", log.ColorCyan, log.ColorBold)
+func renderResponsiveRows(writer io.Writer, columns []responsiveColumn, rows []map[string]string, styler humanStyler) error {
+	var heading strings.Builder
 	for _, column := range columns {
-		_, _ = fmt.Fprintf(writer, "%s%s", column.label, strings.Repeat(" ", column.width-visibleWidth(column.label)))
+		_, _ = fmt.Fprintf(&heading, "%s%s", column.label, strings.Repeat(" ", column.width-visibleWidth(column.label)))
 	}
-	_, _ = fmt.Fprintf(writer, "%s\n", log.ColorReset)
+	_, _ = fmt.Fprintln(writer, styler.semantic(plugin.HumanStyleInfo, true, heading.String()))
 
 	width := 0
 	for _, column := range columns {
 		width += column.width
 	}
-	log.PrintTableSeparatorTo(writer, width)
+	printTableSeparator(writer, width, styler)
 
 	for _, row := range rows {
 		for _, column := range columns {
@@ -190,7 +211,8 @@ func renderResponsiveRows(writer io.Writer, columns []responsiveColumn, rows []m
 				value = truncateVisible(value, contentWidth)
 			}
 			padding := column.width - visibleWidth(value)
-			_, _ = fmt.Fprintf(writer, "%s%s", colorizeValue(column.key, value), strings.Repeat(" ", padding))
+			styledValue := styleResponsiveValue(styler, column, row, value)
+			_, _ = fmt.Fprintf(writer, "%s%s", styledValue, strings.Repeat(" ", padding))
 		}
 		_, _ = fmt.Fprintln(writer)
 	}
@@ -203,6 +225,7 @@ func renderVerticalRecords(
 	rows []map[string]string,
 	outputWidth int,
 	widthAvailable bool,
+	styler humanStyler,
 ) error {
 	for rowIndex, row := range rows {
 		if rowIndex > 0 {
@@ -213,37 +236,56 @@ func renderVerticalRecords(
 			if widthAvailable && visibleWidth(heading) > outputWidth {
 				heading = truncateVisible(heading, outputWidth)
 			}
-			_, _ = fmt.Fprintf(writer, "%s%s%s%s\n", log.ColorCyan, log.ColorBold, heading, log.ColorReset)
+			_, _ = fmt.Fprintln(writer, styler.semantic(plugin.HumanStyleEmphasis, false, heading))
 		}
 		for _, column := range columns {
-			renderVerticalField(writer, column, row[column.key], outputWidth, widthAvailable)
+			renderVerticalField(writer, column, row, outputWidth, widthAvailable, styler)
 		}
 	}
 	return nil
 }
 
-func renderVerticalField(writer io.Writer, column responsiveColumn, value string, outputWidth int, widthAvailable bool) {
+func renderVerticalField(
+	writer io.Writer,
+	column responsiveColumn,
+	row map[string]string,
+	outputWidth int,
+	widthAvailable bool,
+	styler humanStyler,
+) {
+	value := row[column.key]
 	prefix := column.label + ": "
 	if !widthAvailable || visibleWidth(prefix)+visibleWidth(value) <= outputWidth {
-		_, _ = fmt.Fprintf(writer, "%s%s:%s %s\n", log.ColorCyan, column.label, log.ColorReset, colorizeValue(column.key, value))
+		_, _ = fmt.Fprintf(writer, "%s %s\n",
+			styler.semantic(plugin.HumanStyleInfo, false, column.label+":"),
+			styleResponsiveValue(styler, column, row, value),
+		)
 		return
 	}
 
 	prefixWidth := visibleWidth(prefix)
 	valueWidth := outputWidth - prefixWidth
 	if valueWidth < 4 {
-		_, _ = fmt.Fprintf(writer, "%s%s:%s\n", log.ColorCyan, column.label, log.ColorReset)
+		_, _ = fmt.Fprintln(writer, styler.semantic(plugin.HumanStyleInfo, false, column.label+":"))
 		indentWidth := 2
 		if outputWidth <= indentWidth {
 			indentWidth = 0
 		}
-		writeWrappedVerticalValue(writer, column.key, value, strings.Repeat(" ", indentWidth), outputWidth-indentWidth)
+		writeWrappedVerticalValue(writer, column, row, value, strings.Repeat(" ", indentWidth), outputWidth-indentWidth, styler)
 		return
 	}
-	writeWrappedVerticalValue(writer, column.key, value, prefix, valueWidth)
+	writeWrappedVerticalValue(writer, column, row, value, prefix, valueWidth, styler)
 }
 
-func writeWrappedVerticalValue(writer io.Writer, key, value, prefix string, valueWidth int) {
+func writeWrappedVerticalValue(
+	writer io.Writer,
+	column responsiveColumn,
+	row map[string]string,
+	value string,
+	prefix string,
+	valueWidth int,
+	styler humanStyler,
+) {
 	if valueWidth <= 0 {
 		return
 	}
@@ -256,9 +298,24 @@ func writeWrappedVerticalValue(writer io.Writer, key, value, prefix string, valu
 		}
 		if strings.HasSuffix(prefix, ": ") && index == 0 {
 			label := strings.TrimSuffix(prefix, ": ")
-			_, _ = fmt.Fprintf(writer, "%s%s:%s %s\n", log.ColorCyan, label, log.ColorReset, colorizeValue(key, line))
+			_, _ = fmt.Fprintf(writer, "%s %s\n",
+				styler.semantic(plugin.HumanStyleInfo, false, label+":"),
+				styleResponsiveValue(styler, column, row, line),
+			)
 			continue
 		}
-		_, _ = fmt.Fprintf(writer, "%s%s\n", linePrefix, colorizeValue(key, line))
+		_, _ = fmt.Fprintf(writer, "%s%s\n", linePrefix, styleResponsiveValue(styler, column, row, line))
 	}
+}
+
+func styleResponsiveValue(
+	styler humanStyler,
+	column responsiveColumn,
+	row map[string]string,
+	value string,
+) string {
+	if column.roleKey == "" {
+		return colorizeValue(styler, column.key, value)
+	}
+	return styler.semantic(plugin.HumanStyleRole(row[column.roleKey]), false, value)
 }

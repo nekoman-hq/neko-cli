@@ -2,12 +2,13 @@ package renderer
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/nekoman-hq/neko-cli/pkg/log"
+	"github.com/nekoman-hq/neko-cli/internal/terminalstyle"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 )
 
@@ -21,25 +22,34 @@ func TestHumanRendererUsesEstablishedLoggerPaletteAndResets(t *testing.T) {
 		}},
 	}
 	var output bytes.Buffer
-	if err := RenderTo(response, FormatTable, &output); err != nil {
+	if err := RenderWithOptionsTo(response, RenderOptions{
+		Format:        FormatTable,
+		ColorProvider: fixedColorProvider(true),
+	}, &output); err != nil {
 		t.Fatalf("RenderTo: %v", err)
 	}
 
 	got := output.String()
 	for name, sequence := range map[string]string{
-		"information heading": log.ColorCyan + log.ColorBold,
-		"muted separator":     log.ColorBrightBlack,
-		"success":             log.ColorGreen,
-		"version":             log.ColorPurple,
-		"reset":               log.ColorReset,
+		"information heading": terminalstyle.Cyan + terminalstyle.Bold,
+		"muted separator":     terminalstyle.BrightBlack,
+		"success":             terminalstyle.Green,
+		"version":             terminalstyle.Purple,
+		"reset":               terminalstyle.Reset,
 	} {
 		if !strings.Contains(got, sequence) {
 			t.Errorf("human output omitted %s sequence %q: %q", name, sequence, got)
 		}
 	}
-	if !strings.HasSuffix(got, log.ColorReset+"   \n") {
+	if !strings.HasSuffix(got, terminalstyle.Reset+"   \n") {
 		t.Fatalf("human row does not reset its final styled value: %q", got)
 	}
+}
+
+type fixedColorProvider bool
+
+func (enabled fixedColorProvider) ColorEnabled(io.Writer) bool {
+	return bool(enabled)
 }
 
 func TestMachineOutputModesRemainANSIFree(t *testing.T) {
