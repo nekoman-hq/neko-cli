@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"reflect"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -25,6 +26,17 @@ func TestResponsiveTableUsesDeclaredOrderAndFitsOptionalColumnsByPriority(t *tes
 		t.Fatalf("lower-priority optional column should not fit at width 26: %q", lines[0])
 	}
 	assertRenderedLinesFit(t, output, 26)
+}
+
+func TestResponsiveTablePrioritizesUnitRowsOverWorkflowSummaryLists(t *testing.T) {
+	units := []map[string]any{{"id": "api", "version": "1.2.3"}}
+	data := map[string]any{
+		"workflow_paths": []string{".github/workflows/release.yml"},
+		"units":          units,
+	}
+	if got := findListInData(data); !reflect.DeepEqual(got, units) {
+		t.Fatalf("selected list = %#v, want unit rows", got)
+	}
 }
 
 func TestResponsiveTableFallsBackToVerticalRecordsWhenEssentialColumnsDoNotFit(t *testing.T) {

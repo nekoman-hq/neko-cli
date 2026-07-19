@@ -326,7 +326,7 @@ func findListInData(data map[string]any) any {
 	}
 
 	// Priority keys for lists
-	priorityKeys := []string{"items", "releases", "resources", "results", "data", "list"}
+	priorityKeys := []string{"items", "releases", "resources", "results", "units", "data", "list"}
 
 	for _, key := range priorityKeys {
 		if val, ok := data[key]; ok {
