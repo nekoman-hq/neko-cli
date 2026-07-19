@@ -38,11 +38,11 @@ func TestIntegrationDoctorCharacterizesBroadLocalVerificationGaps(t *testing.T) 
 	if got, want := integrationDoctorNotVerifiableCodes(diagnostics), []string{
 		"CONSUMER_BUILD_NOT_VERIFIABLE",
 		"INSTALLATION_ARTIFACTS_NOT_VERIFIABLE",
+		"PUBLICATION_CREDENTIALS_NOT_VERIFIABLE",
+		"PUBLICATION_TARGET_NOT_VERIFIABLE",
 		"REMOTE_WORKFLOW_NOT_VERIFIABLE",
 		"REPOSITORY_VARIABLES_NOT_VERIFIABLE",
-		"PUBLICATION_CREDENTIALS_NOT_VERIFIABLE",
 		"REMOTE_DISPATCH_AUTHORIZATION_NOT_VERIFIABLE",
-		"PUBLICATION_TARGET_NOT_VERIFIABLE",
 	}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("not-verifiable codes = %v, want %v", got, want)
 	}
@@ -66,11 +66,11 @@ func TestIntegrationDoctorCharacterizesBroadLocalVerificationGaps(t *testing.T) 
 	)
 	if got, want := integrationDoctorNotVerifiableCodes(placeholderDiagnostics), []string{
 		"INSTALLATION_ARTIFACTS_NOT_VERIFIABLE",
+		"PUBLICATION_CREDENTIALS_NOT_VERIFIABLE",
+		"PUBLICATION_TARGET_NOT_VERIFIABLE",
 		"REMOTE_WORKFLOW_NOT_VERIFIABLE",
 		"REPOSITORY_VARIABLES_NOT_VERIFIABLE",
-		"PUBLICATION_CREDENTIALS_NOT_VERIFIABLE",
 		"REMOTE_DISPATCH_AUTHORIZATION_NOT_VERIFIABLE",
-		"PUBLICATION_TARGET_NOT_VERIFIABLE",
 	}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("placeholder not-verifiable codes = %v, want %v", got, want)
 	}
