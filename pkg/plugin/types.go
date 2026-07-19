@@ -69,6 +69,8 @@ type HumanColumn struct {
 
 // HumanProperties declares an ordered property/value view for one result.
 // It is transport metadata and does not change the response Data contract.
+//
+//nolint:govet // Field order preserves the stable human-properties wire order.
 type HumanProperties struct {
 	Properties []HumanProperty `json:"properties"`
 	Title      string          `json:"title,omitempty"`

@@ -32,7 +32,10 @@ func TestRendererDoesNotDependOnLogger(t *testing.T) {
 				continue
 			}
 			for _, specification := range importDeclaration.Specs {
-				importSpecification := specification.(*ast.ImportSpec)
+				importSpecification, ok := specification.(*ast.ImportSpec)
+				if !ok {
+					t.Fatalf("unexpected non-import specification in %s", entry.Name())
+				}
 				path, unquoteErr := strconv.Unquote(importSpecification.Path.Value)
 				if unquoteErr != nil {
 					t.Fatalf("unquote import in %s: %v", entry.Name(), unquoteErr)

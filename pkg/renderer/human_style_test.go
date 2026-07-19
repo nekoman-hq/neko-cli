@@ -112,12 +112,12 @@ func TestDefaultHumanColorPolicyKeepsNonTTYDestinationsANSIFree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create redirected output: %v", err)
 	}
-	if err := RenderWithOptionsTo(response, RenderOptions{Format: FormatTable}, file); err != nil {
+	if renderErr := RenderWithOptionsTo(response, RenderOptions{Format: FormatTable}, file); renderErr != nil {
 		_ = file.Close()
-		t.Fatalf("render redirected output: %v", err)
+		t.Fatalf("render redirected output: %v", renderErr)
 	}
-	if err := file.Close(); err != nil {
-		t.Fatalf("close redirected output: %v", err)
+	if closeErr := file.Close(); closeErr != nil {
+		t.Fatalf("close redirected output: %v", closeErr)
 	}
 	redirected, err := os.ReadFile(filePath)
 	if err != nil {
@@ -129,22 +129,22 @@ func TestDefaultHumanColorPolicyKeepsNonTTYDestinationsANSIFree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create pipe: %v", err)
 	}
-	if err := RenderWithOptionsTo(response, RenderOptions{Format: FormatTable}, writer); err != nil {
+	if renderErr := RenderWithOptionsTo(response, RenderOptions{Format: FormatTable}, writer); renderErr != nil {
 		_ = writer.Close()
 		_ = reader.Close()
-		t.Fatalf("render piped output: %v", err)
+		t.Fatalf("render piped output: %v", renderErr)
 	}
-	if err := writer.Close(); err != nil {
+	if closeErr := writer.Close(); closeErr != nil {
 		_ = reader.Close()
-		t.Fatalf("close pipe writer: %v", err)
+		t.Fatalf("close pipe writer: %v", closeErr)
 	}
 	piped, err := io.ReadAll(reader)
 	if err != nil {
 		_ = reader.Close()
 		t.Fatalf("read piped output: %v", err)
 	}
-	if err := reader.Close(); err != nil {
-		t.Fatalf("close pipe reader: %v", err)
+	if closeErr := reader.Close(); closeErr != nil {
+		t.Fatalf("close pipe reader: %v", closeErr)
 	}
 	assertNoANSISequence(t, "piped output", string(piped))
 }
