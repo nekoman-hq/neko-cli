@@ -370,22 +370,40 @@ type HumanTable struct {
     Columns []HumanColumn    `json:"columns"`
     Rows    []map[string]any `json:"rows,omitempty"`
     Details *HumanProperties `json:"details,omitempty"`
+    Title   string           `json:"title,omitempty"`
 }
 
 type HumanColumn struct {
     Key       string `json:"key"`
     Label     string `json:"label"`
+    RoleKey   string `json:"role_key,omitempty"`
     Essential bool   `json:"essential,omitempty"`
 }
 
 type HumanProperties struct {
     Properties []HumanProperty `json:"properties"`
+    Title      string          `json:"title,omitempty"`
 }
 
+type HumanStyleRole string
+
+const (
+    HumanStyleDefault  HumanStyleRole = "default"
+    HumanStyleEmphasis HumanStyleRole = "emphasis"
+    HumanStyleSuccess  HumanStyleRole = "success"
+    HumanStyleWarning  HumanStyleRole = "warning"
+    HumanStyleError    HumanStyleRole = "error"
+    HumanStyleInfo     HumanStyleRole = "info"
+    HumanStyleMuted    HumanStyleRole = "muted"
+)
+
 type HumanProperty struct {
-    Key   string `json:"key,omitempty"`
-    Label string `json:"label"`
-    Value any    `json:"value,omitempty"`
+    Key        string         `json:"key,omitempty"`
+    Label      string         `json:"label"`
+    Value      any            `json:"value,omitempty"`
+    Role       HumanStyleRole `json:"role,omitempty"`
+    Emphasized bool           `json:"emphasized,omitempty"`
+    Heading    bool           `json:"heading,omitempty"`
 }
 
 type HumanText struct {
@@ -446,6 +464,14 @@ without `HumanTable` retain the legacy inferred table and existing `wide`
 behavior. Plugins own field meaning, labels, order, and essential/optional
 classification; Core owns only layout mechanics.
 
+`Title` adds a neutral emphasized section label. A column may use `RoleKey` to
+read a `HumanStyleRole` from its presentation row; this styles only that
+column. Properties may carry a semantic `Role`, opt into emphasis, and mark a
+record `Heading`. The closed roles are default foreground, emphasis, success,
+warning, error, info, and muted secondary text. Plugins choose semantic roles;
+Core alone maps them to terminal presentation. The empty role preserves the
+default behavior.
+
 When the human table is a compact projection of differently shaped machine
 data, `Rows` can carry presentation-only row maps. If `Rows` is nil, Core keeps
 the established behavior of selecting a list from `Data`. `Details` can append
@@ -479,6 +505,13 @@ their own layouts.
 metadata. Core excludes them from public `--output json` and raw JSON, just as
 it excludes `human_table` and `human_text`. GitHub output is still selected only
 by explicit GitHub output declarations and destination options.
+
+Semantic color is enabled only for interactive human output written to a
+terminal. A non-empty `NO_COLOR` disables it, and pipes, redirects, files,
+public JSON, raw JSON, and GitHub output remain ANSI-free. Core provides this
+policy and style mapping through its renderer; plugins must never emit ANSI
+sequences or branch on terminal capability. Styling changes presentation only,
+never machine data, command meaning, or exit behavior.
 
 ---
 

@@ -207,16 +207,25 @@ existing local V2 pair-recovery readiness marker required by the source
 contract. JSON contains stable `readiness`, `summary`, `units`, `workflows`,
 and `diagnostics` fields.
 
-Human output starts with readiness, severity counts, and inspected unit and
-workflow counts. A compact diagnostic index keeps `Severity` and `Code`
-essential and admits optional `Target` and `Scope` columns in that priority
-order. Complete ordered details follow with a presentation ordinal, severity,
-code, scope, optional unit, the full repository-relative workflow path,
-message, and remediation.
+Human output starts with the `Release Integration Doctor` title, readiness,
+severity counts, and inspected unit and workflow counts. A `Diagnostics`
+section contains a compact index that keeps `Severity` and `Code` essential and
+admits optional `Target` and `Scope` columns in that priority order. Complete
+ordered records follow with a severity/code heading, scope, optional unit, the
+full repository-relative workflow path, message, and remediation.
 Core fits or removes optional index columns, switches to vertical records, and
 wraps detail values from the actual output width. Width-unknown output uses the
 deterministic vertical fallback. Terminal width affects only this human view;
 JSON remains the stable automation contract.
+
+On an interactive terminal, readiness and non-zero counts use semantic color:
+ready/success is green, warnings are yellow, errors are red, recommendations
+are cyan, and not-verifiable facts use muted secondary text. Diagnostic
+severity and code carry the same severity role; targets, scopes, messages, and
+remediation remain neutral. Zero counts remain neutral. A non-empty `NO_COLOR`
+disables color, and redirected, piped, JSON, raw JSON, and GitHub output is
+ANSI-free. This hierarchy is presentation-only and does not change diagnostic
+meaning, order, readiness, or exit codes.
 
 Each diagnostic has one closed severity (`error`, `warning`,
 `recommendation`, or `not_verifiable`), source/unit/workflow scope, optional

@@ -211,12 +211,17 @@ The public command contract is duplicated between `manifest.json` and the switch
 - Output: `mapIntegrationDoctorResult` alone constructs the plugin response.
   JSON contains `readiness`, severity counts, ordered units, ordered workflows,
   and ordered diagnostics. Transport-only presentation metadata composes a
-  readiness/count property summary, a compact severity/code index with optional
-  target and scope, and complete ordered property details. Core alone fits
-  optional columns, selects table or vertical records, and wraps long workflow,
-  message, and remediation values at normal, narrow, and unknown widths. Public
-  JSON and raw JSON exclude the presentation projection. `not_ready` requests
-  exit code `1`; the two ready states request exit code `0`.
+  titled readiness/count summary, a titled severity/code index with optional
+  target and scope, and complete ordered property records headed by severity and
+  code. The mapper assigns closed semantic roles to readiness, positive counts,
+  severity, and code while leaving ordinary diagnostic fields neutral. Core
+  alone maps roles to interactive terminal styles, fits optional columns,
+  selects table or vertical records, and wraps long workflow, message, and
+  remediation values at normal, narrow, and unknown widths. A non-empty
+  `NO_COLOR` and every non-terminal destination disable ANSI. Public JSON, raw
+  JSON, and GitHub output exclude the presentation projection and remain
+  ANSI-free. `not_ready` requests exit code `1`; the two ready states request
+  exit code `0`.
 - Side effects: no config/state/workflow writer, Git command or mutator,
   network client, token resolver, dispatcher, journal store, Evidence writer,
   release runner, executor, or publication adapter reaches the use case. It

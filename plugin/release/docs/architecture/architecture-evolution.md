@@ -176,20 +176,28 @@ machine: any error is `not_ready`; warnings without errors are
 `ready_with_warnings`; recommendations and not-verifiable facts alone are
 `ready`. Diagnostics have stable severity/scope/unit/workflow/code/message/
 remediation fields and deterministic ordering. Human output is summary-first:
-responsive readiness/count properties precede a compact severity/code index,
-then complete responsive diagnostic properties. The index admits optional
-target and scope fields by width; complete workflow identity, message, and
-remediation remain in the ordered details. JSON and raw JSON keep the stable
-typed result projection and exclude every presentation-only value.
+a titled responsive readiness/count summary precedes a titled compact
+severity/code index, then complete responsive diagnostic records headed by
+severity and code. The index admits optional target and scope fields by width;
+complete workflow identity, message, and remediation remain in the ordered
+details. The response mapper assigns closed semantic roles without emitting
+ANSI or inspecting terminal capability. Core maps those roles only for
+interactive terminal human output; a non-empty `NO_COLOR` and non-terminal
+destinations disable color. JSON, raw JSON, and GitHub output keep the stable
+typed result projection, exclude every presentation-only value, and remain
+ANSI-free. Styling cannot affect diagnostic ordering, readiness, or exit
+policy.
 
 The existing response fields could not express a property summary, table, and
 separate responsive detail values in one result because human renderers were
 exclusive and responsive tables could only read a machine-data list. Core
-therefore extends `HumanTable` with optional transport-only `rows` and
-`details`. They reuse existing row maps and `HumanProperties`; nil zero values
-are omitted and preserve every established table response. Core composes only
-generic property/table/property rendering and contains no Doctor terminology,
-diagnostic renderer, document model, layout DSL, registry, or state machine.
+therefore extends `HumanTable` with optional transport-only `rows`, `details`,
+and neutral titles, and adds bounded semantic roles/headings to the existing
+human presentation types. They reuse row maps and `HumanProperties`; nil and
+empty zero values are omitted and preserve every established table response.
+Core composes only generic property/table/property rendering and contains no
+Doctor terminology, diagnostic renderer, document model, layout DSL, theme
+engine, registry, provider abstraction, or state machine.
 Public JSON and raw JSON already exclude the complete `HumanTable` declaration.
 
 No writer, Git command or mutator, network client, token resolver, dispatcher,

@@ -97,10 +97,13 @@ Data: map[string]any{
 ```
 
 Responsive tables are explicitly opt-in through `plugin.Response.HumanTable`.
-Its ordered `HumanColumn` declarations carry only a data key, human label, and
-essential marker. Core owns terminal-width detection, ANSI/Unicode display
-width, optional-column fitting, vertical fallback, wrapping, and bounded
-human-only truncation. A plugin owns the semantic priority and must retain the
+Its ordered `HumanColumn` declarations carry a data key, human label, essential
+marker, and optional presentation-row `RoleKey`. `HumanTable` and
+`HumanProperties` may provide neutral titles; `HumanProperty` may declare a
+closed semantic `HumanStyleRole`, emphasis, or a record heading. Core owns
+terminal-width detection, ANSI/Unicode display width, optional-column fitting,
+vertical fallback, wrapping, bounded human-only truncation, and the semantic
+style mapping. A plugin owns semantic meaning and priority and must retain the
 complete typed result in `Data`. Presentation metadata is transported between
 the plugin and Core but is excluded from public JSON and raw JSON. Do not add
 domain fields, callbacks, layout modes, or policy to Core.
@@ -123,6 +126,12 @@ width-unknown output uses deterministic vertical properties. A plugin owns
 labels, order, grouping, and any presentation-only `HumanProperty.Value`; Core
 must not interpret domain meaning. Presentation metadata remains absent from
 public JSON and raw JSON.
+
+Core applies semantic ANSI styles only to interactive terminal human output.
+A non-empty `NO_COLOR`, a pipe, redirect, or file disables color; public JSON,
+raw JSON, and GitHub output are always ANSI-free. Plugins declare meaning but
+must not inspect terminals or emit ANSI themselves. Styling is presentation
+only and cannot alter typed data or exit behavior.
 
 ### 4. Config File Naming
 
