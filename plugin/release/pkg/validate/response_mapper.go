@@ -42,12 +42,15 @@ func mapValidationQueryResponse(result validationQueryResult, failure *validatio
 		return response
 	}
 
-	return &plugin.Response{
+	response := &plugin.Response{
 		Status:       "success",
 		Metadata:     metadataValue,
 		Data:         map[string]any{"items": validationResponseItems(result)},
 		RendererHint: "table",
 	}
+	response.PresentationProperties = validationSummaryPresentation(result)
+	response.PresentationTable = validationUnitPresentation(result)
+	return response
 }
 
 func validationResponseItems(result validationQueryResult) []map[string]any {

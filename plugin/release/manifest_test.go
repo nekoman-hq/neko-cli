@@ -217,6 +217,23 @@ func TestIntegrationDoctorManifestContract(t *testing.T) {
 	}
 }
 
+func TestValidateManifestClarifiesRepositoryWideValidation(t *testing.T) {
+	command, present := loadManifestCommands(t)["validate"]
+	if !present {
+		t.Fatal("validate command is missing")
+	}
+	if command.Description != "Validate the complete release configuration" {
+		t.Fatalf("validate description = %q", command.Description)
+	}
+	want := map[string]string{
+		"show": "Display structured release configuration details and unit summaries",
+		"unit": "Focus displayed V2 unit details; the complete repository is still validated.",
+	}
+	if got := flagDescriptions(command); !reflect.DeepEqual(got, want) {
+		t.Fatalf("validate flag descriptions = %#v, want %#v", got, want)
+	}
+}
+
 func TestUnitOverviewManifestContract(t *testing.T) {
 	command, present := loadManifestCommands(t)["units"]
 	if !present {

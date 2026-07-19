@@ -26,10 +26,12 @@ type legacyValidationDetails struct {
 
 //nolint:govet // Logical query-result order keeps source and mode ahead of format-specific data.
 type validationQueryResult struct {
-	SourceFormat config.SourceFormat
-	Legacy       legacyValidationDetails
-	Units        []config.ReleaseUnit
-	Show         bool
+	SourceFormat        config.SourceFormat
+	Legacy              legacyValidationDetails
+	Units               []config.ReleaseUnit
+	SelectedUnit        string
+	ConfiguredUnitCount int
+	Show                bool
 }
 
 type validationQueryFailure struct {
@@ -84,7 +86,12 @@ func (useCase validationQueryUseCase) Query(request validationQueryRequest) (val
 }
 
 func queryV2Validation(repository *config.ReleaseRepository, request validationQueryRequest) (validationQueryResult, *validationQueryFailure) {
-	result := validationQueryResult{SourceFormat: config.SourceFormatV2, Show: request.Show}
+	result := validationQueryResult{
+		SourceFormat:        config.SourceFormatV2,
+		SelectedUnit:        request.Unit,
+		ConfiguredUnitCount: len(repository.Units),
+		Show:                request.Show,
+	}
 	units := repository.Units
 	if request.Unit != "" {
 		unit, err := config.ResolveReleaseUnit(repository, request.Unit, config.UnitResolutionOptions{})
@@ -107,7 +114,12 @@ func cloneValidationUnits(units []config.ReleaseUnit) []config.ReleaseUnit {
 }
 
 func (useCase validationQueryUseCase) queryV1Validation(repository *config.ReleaseRepository, request validationQueryRequest) (validationQueryResult, *validationQueryFailure) {
-	result := validationQueryResult{SourceFormat: config.SourceFormatV1, Show: request.Show}
+	result := validationQueryResult{
+		SourceFormat:        config.SourceFormatV1,
+		SelectedUnit:        request.Unit,
+		ConfiguredUnitCount: len(repository.Units),
+		Show:                request.Show,
+	}
 	unit, err := config.ResolveReleaseUnit(repository, request.Unit, config.UnitResolutionOptions{})
 	if err != nil {
 		return result, validationFailure("UNIT_RESOLUTION_FAILED", err)

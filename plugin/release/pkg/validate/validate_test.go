@@ -127,6 +127,24 @@ func TestHandleValidateV2ShowFocusesRequestedUnit(t *testing.T) {
 	}
 }
 
+func TestHandleValidateV2UnitStillValidatesCompleteRepository(t *testing.T) {
+	withWorkingDirectory(t)
+	mustWrite(t, ".github/workflows/release-api.yml", "name: release api\n")
+	mustWrite(t, ".github/workflows/release-web.yml", "name: release web\n")
+	writeV2(t, `{"schemaVersion":2,"units":[
+  {"id":"api","paths":["api/**"],"workingDirectory":".","tagPrefix":"api/v","executor":{"type":"goreleaser","delivery":"github-actions","workflow":".github/workflows/release-api.yml"}},
+  {"id":"web","paths":["web/**"],"workingDirectory":".","tagPrefix":"web/v","executor":{"type":"release-it","delivery":"github-actions","workflow":".github/workflows/release-web.yml"}}
+]}`, `{"schemaVersion":2,"units":{"api":{"version":"1.0.0"}}}`)
+
+	resp, err := HandleValidate(plugin.Request{Flags: map[string]any{"show": true, "unit": "api"}})
+	if err != nil {
+		t.Fatalf("HandleValidate: %v", err)
+	}
+	if resp.Status != "error" || resp.Error == nil || resp.Error.Code != "CONFIG_INVALID" {
+		t.Fatalf("selected unit bypassed repository-wide validation: %#v", resp)
+	}
+}
+
 func TestHandleValidateV1StillUsesLegacyConfig(t *testing.T) {
 	withWorkingDirectory(t)
 	t.Setenv("GITHUB_TOKEN", "test-token")

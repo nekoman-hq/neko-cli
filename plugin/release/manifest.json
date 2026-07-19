@@ -472,7 +472,7 @@
     },
     {
       "name": "validate",
-      "description": "Validate the release configuration",
+      "description": "Validate the complete release configuration",
       "outputs": [
         "table",
         "json"
@@ -483,13 +483,13 @@
           "type": "bool",
           "required": false,
           "default": false,
-          "description": "Display current configuration details"
+          "description": "Display structured release configuration details and unit summaries"
         },
         {
           "name": "unit",
           "type": "string",
           "required": false,
-          "description": "Selects the release unit. Required when a V2 repository defines multiple units."
+          "description": "Focus displayed V2 unit details; the complete repository is still validated."
         }
       ]
     },

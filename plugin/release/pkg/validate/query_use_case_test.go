@@ -112,7 +112,8 @@ func TestValidationQueryUseCaseReadsV2WithoutLegacyRequirementsOrMutation(t *tes
 	if failure != nil {
 		t.Fatalf("Query failure: %#v", failure)
 	}
-	if requirements.calls != 0 || len(result.Units) != 1 || result.Units[0].ID != "api" {
+	if requirements.calls != 0 || len(result.Units) != 1 || result.Units[0].ID != "api" ||
+		result.SelectedUnit != "api" || result.ConfiguredUnitCount != 2 {
 		t.Fatalf("result/dependencies = %#v/%#v", result, requirements)
 	}
 	result.Units[0].Paths[0] = "mutated"

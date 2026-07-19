@@ -1,10 +1,13 @@
 package validate
 
 import (
+	"bytes"
 	"encoding/json"
 	"testing"
 	"time"
 
+	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/pkg/renderer"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
@@ -63,11 +66,8 @@ func TestValidationMachineResponseRemainsStableAcrossHumanPresentationChanges(t 
 			t.Parallel()
 
 			response := mapValidationQueryResponse(test.result, nil, timestamp)
-			got, err := json.Marshal(response)
-			if err != nil {
-				t.Fatalf("marshal response: %v", err)
-			}
-			if string(got) != test.want {
+			got := validationPublicJSON(t, response)
+			if got != test.want {
 				t.Fatalf("machine response changed:\nwant %s\n got %s", test.want, got)
 			}
 		})
@@ -87,12 +87,22 @@ func TestValidationFailureContractKeepsLegacyExitBehavior(t *testing.T) {
 	if response.ExitCode != 0 {
 		t.Fatalf("exit code = %d, want legacy value 0", response.ExitCode)
 	}
-	got, err := json.Marshal(response)
-	if err != nil {
-		t.Fatalf("marshal response: %v", err)
-	}
+	got := validationPublicJSON(t, response)
 	want := `{"status":"error","metadata":{"timestamp":"2026-07-15T09:30:00Z","plugin":"release","version":"dev","command":"validate"},"error":{"details":{"hint":"Run 'neko release init' to create V2 config/state, or 'neko release migrate' to convert an existing V1 config"},"code":"CONFIG_NOT_FOUND","message":"No release configuration found"}}`
-	if string(got) != want {
+	if got != want {
 		t.Fatalf("failure response changed:\nwant %s\n got %s", want, got)
 	}
+}
+
+func validationPublicJSON(t *testing.T, response *plugin.Response) string {
+	t.Helper()
+	var pretty bytes.Buffer
+	if err := renderer.RenderTo(response, renderer.FormatJSON, &pretty); err != nil {
+		t.Fatalf("render public JSON: %v", err)
+	}
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, pretty.Bytes()); err != nil {
+		t.Fatalf("compact public JSON: %v", err)
+	}
+	return compact.String()
 }
