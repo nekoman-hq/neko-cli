@@ -29,12 +29,15 @@ Neko CLI is a **plugin-based command-line tool** for managing software releases.
 ```
 neko-cli/
 ├── cmd/                    # CLI commands (root, plugin loading)
-├── pkg/                    # Shared packages
+├── pkg/                    # Supported importable contracts and APIs
 │   ├── dispatcher/         # Plugin execution & communication
 │   ├── plugin/             # Plugin types (Request, Response, Manifest)
+│   ├── presentation/       # Plugin-to-Core presentation declarations
 │   ├── renderer/           # kubectl-style output rendering
 │   ├── log/                # Logging utilities
 │   └── errors/             # Error handling
+├── internal/               # Private Core implementation packages
+│   └── terminalstyle/      # Shared ANSI and terminal capability primitives
 └── plugin/
     └── release/            # Release management plugin
         ├── main.go         # Plugin entry point
@@ -96,21 +99,21 @@ Data: map[string]any{
 }
 ```
 
-Responsive tables are explicitly opt-in through `plugin.Response.HumanTable`.
-Its ordered `HumanColumn` declarations carry a data key, human label, essential
-marker, and optional presentation-row `RoleKey`. `HumanTable` and
-`HumanProperties` may provide neutral titles; `HumanProperty` may declare a
-closed semantic `HumanStyleRole`, emphasis, or a record heading. Core owns
+Responsive tables are explicitly opt-in through `plugin.Response.PresentationTable`.
+Its ordered `presentation.Column` declarations carry a data key, human label, essential
+marker, and optional presentation-row `RoleKey`. `presentation.Table` and
+`presentation.Properties` may provide neutral titles; `presentation.Property` may declare a
+closed semantic `presentation.StyleRole`, emphasis, or a record heading. Core owns
 terminal-width detection, ANSI/Unicode display width, optional-column fitting,
-vertical fallback, wrapping, bounded human-only truncation, and the semantic
+vertical fallback, wrapping, bounded presentation-only truncation, and the semantic
 style mapping. A plugin owns semantic meaning and priority and must retain the
 complete typed result in `Data`. Presentation metadata is transported between
 the plugin and Core but is excluded from public JSON and raw JSON. Do not add
 domain fields, callbacks, layout modes, or policy to Core.
 
-`HumanTable.Rows` may provide a human-only projection when complete machine
-data is not a slice of row maps. `HumanTable.Details` may reuse one
-`HumanProperties` declaration after a response-level property summary and the
+`presentation.Table.Rows` may provide a presentation-only projection when complete machine
+data is not a slice of row maps. `presentation.Table.Details` may reuse one
+`presentation.Properties` declaration after a response-level property summary and the
 table. Core then composes the existing property/table/property renderers. Both
 fields are optional transport metadata; nil values preserve the established
 table path, and neither field enters public JSON or raw JSON. This is a bounded
@@ -118,16 +121,16 @@ master/detail presentation capability, not a generic document or layout model.
 
 Ordered property/value responses are responsive as well. Core recognizes the
 established `items[property,value]` shape or an explicit
-`plugin.Response.HumanProperties` declaration. With a known writer width it
+`plugin.Response.PresentationProperties` declaration. With a known writer width it
 bounds the label column, preserves value space, uses ANSI- and Unicode-aware
 visible-cell measurement, wraps at grapheme-safe word boundaries, aligns
 continuation lines below the value column, and bounds the separator. Narrow and
 width-unknown output uses deterministic vertical properties. A plugin owns
-labels, order, grouping, and any presentation-only `HumanProperty.Value`; Core
+labels, order, grouping, and any presentation-only `presentation.Property.Value`; Core
 must not interpret domain meaning. Presentation metadata remains absent from
 public JSON and raw JSON.
 
-Core applies semantic ANSI styles only to interactive terminal human output.
+Core applies semantic ANSI styles only to interactive terminal human-readable output.
 A non-empty `NO_COLOR`, a pipe, redirect, or file disables color; public JSON,
 raw JSON, and GitHub output are always ANSI-free. Plugins declare meaning but
 must not inspect terminals or emit ANSI themselves. Styling is presentation

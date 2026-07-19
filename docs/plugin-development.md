@@ -353,60 +353,64 @@ type Context struct {
 
 The plugin returns a `Response` via stdout:
 
+Presentation declarations come from
+`github.com/nekoman-hq/neko-cli/pkg/presentation`.
+
 ```sh
 type Response struct {
-    Status          string           `json:"status"`        // "success" or "error"
-    Metadata        ResponseMetadata `json:"metadata"`
-    Data            map[string]any   `json:"data,omitempty"`
-    Error           *ResponseError   `json:"error,omitempty"`
-    RendererHint    string           `json:"renderer_hint,omitempty"`    // "table", "json", "text"
-    Logs            []LogEntry       `json:"logs,omitempty"`             // Populated by dispatcher
-    HumanTable      *HumanTable      `json:"human_table,omitempty"`      // Optional table presentation metadata
-    HumanProperties *HumanProperties `json:"human_properties,omitempty"` // Optional property presentation metadata
-    HumanText       *HumanText       `json:"human_text,omitempty"`       // Optional preformatted human output
+    Status                 string                   `json:"status"` // "success" or "error"
+    Metadata               ResponseMetadata         `json:"metadata"`
+    Data                   map[string]any           `json:"data,omitempty"`
+    Error                  *ResponseError           `json:"error,omitempty"`
+    RendererHint           string                   `json:"renderer_hint,omitempty"`
+    Logs                   []LogEntry               `json:"logs,omitempty"`
+    PresentationTable      *presentation.Table      `json:"-"`
+    PresentationProperties *presentation.Properties `json:"-"`
+    PresentationText       *presentation.Text       `json:"-"`
 }
 
-type HumanTable struct {
-    Columns []HumanColumn    `json:"columns"`
+// Package presentation
+type Table struct {
+    Columns []Column         `json:"columns"`
     Rows    []map[string]any `json:"rows,omitempty"`
-    Details *HumanProperties `json:"details,omitempty"`
+    Details *Properties      `json:"details,omitempty"`
     Title   string           `json:"title,omitempty"`
 }
 
-type HumanColumn struct {
+type Column struct {
     Key       string `json:"key"`
     Label     string `json:"label"`
     RoleKey   string `json:"role_key,omitempty"`
     Essential bool   `json:"essential,omitempty"`
 }
 
-type HumanProperties struct {
-    Properties []HumanProperty `json:"properties"`
-    Title      string          `json:"title,omitempty"`
+type Properties struct {
+    Properties []Property `json:"properties"`
+    Title      string     `json:"title,omitempty"`
 }
 
-type HumanStyleRole string
+type StyleRole string
 
 const (
-    HumanStyleDefault  HumanStyleRole = "default"
-    HumanStyleEmphasis HumanStyleRole = "emphasis"
-    HumanStyleSuccess  HumanStyleRole = "success"
-    HumanStyleWarning  HumanStyleRole = "warning"
-    HumanStyleError    HumanStyleRole = "error"
-    HumanStyleInfo     HumanStyleRole = "info"
-    HumanStyleMuted    HumanStyleRole = "muted"
+    StyleDefault  StyleRole = "default"
+    StyleEmphasis StyleRole = "emphasis"
+    StyleSuccess  StyleRole = "success"
+    StyleWarning  StyleRole = "warning"
+    StyleError    StyleRole = "error"
+    StyleInfo     StyleRole = "info"
+    StyleMuted    StyleRole = "muted"
 )
 
-type HumanProperty struct {
-    Key        string         `json:"key,omitempty"`
-    Label      string         `json:"label"`
-    Value      any            `json:"value,omitempty"`
-    Role       HumanStyleRole `json:"role,omitempty"`
-    Emphasized bool           `json:"emphasized,omitempty"`
-    Heading    bool           `json:"heading,omitempty"`
+type Property struct {
+    Key        string    `json:"key,omitempty"`
+    Label      string    `json:"label"`
+    Value      any       `json:"value,omitempty"`
+    Role       StyleRole `json:"role,omitempty"`
+    Emphasized bool      `json:"emphasized,omitempty"`
+    Heading    bool      `json:"heading,omitempty"`
 }
 
-type HumanText struct {
+type Text struct {
     Content string `json:"content"`
 }
 
@@ -423,6 +427,20 @@ type ResponseError struct {
     Details map[string]any `json:"details,omitempty"`
 }
 ```
+
+Core serializes `PresentationTable`, `PresentationProperties`, and
+`PresentationText` with the established `human_table`, `human_properties`, and
+`human_text` plugin-protocol tags. Those wire names remain unchanged so already
+installed plugins continue to work. Presentation metadata is excluded from the
+public JSON renderer, raw JSON, and GitHub output.
+
+For Go source compatibility, `pkg/plugin` temporarily retains deprecated type
+aliases `HumanTable`, `HumanColumn`, `HumanProperties`, `HumanProperty`,
+`HumanText`, and `HumanStyleRole`, their `HumanStyle*` constants, and deprecated
+response fields `HumanTable`, `HumanProperties`, and `HumanText`. New code must
+import `pkg/presentation` and populate only the canonical `Presentation*`
+response fields. Supplying conflicting canonical and deprecated response fields
+is rejected.
 
 ### Renderer Hints
 
@@ -447,8 +465,9 @@ Data: map[string]any{
 }
 ```
 
-Commands may opt in to responsive human output by attaching `HumanTable` to
-the response. Column order is declaration order; non-essential columns use the
+Commands may opt in to responsive human-readable output by attaching a
+`presentation.Table` to `Response.PresentationTable`. Column order is
+declaration order; non-essential columns use the
 same order as their admission priority. Core measures the actual output
 writer, ANSI-free Unicode display cells, and the declared values. It renders a
 table when all essential columns fit, adds optional columns while they fit,
@@ -460,22 +479,22 @@ vertical records when the complete declaration does not fit.
 This capability is presentation-only. Keep complete command data in `Data`.
 The `human_table` declaration crosses the plugin transport so Core can render
 it, but Core excludes it from public `--output json` and raw JSON. Commands
-without `HumanTable` retain the legacy inferred table and existing `wide`
+without a table presentation retain the legacy inferred table and existing `wide`
 behavior. Plugins own field meaning, labels, order, and essential/optional
 classification; Core owns only layout mechanics.
 
 `Title` adds a neutral emphasized section label. A column may use `RoleKey` to
-read a `HumanStyleRole` from its presentation row; this styles only that
+read a `presentation.StyleRole` from its presentation row; this styles only that
 column. Properties may carry a semantic `Role`, opt into emphasis, and mark a
 record `Heading`. The closed roles are default foreground, emphasis, success,
 warning, error, info, and muted secondary text. Plugins choose semantic roles;
 Core alone maps them to terminal presentation. The empty role preserves the
 default behavior.
 
-When the human table is a compact projection of differently shaped machine
+When the table presentation is a compact projection of differently shaped machine
 data, `Rows` can carry presentation-only row maps. If `Rows` is nil, Core keeps
 the established behavior of selecting a list from `Data`. `Details` can append
-one ordered `HumanProperties` view after a response-level `HumanProperties`
+one ordered `presentation.Properties` view after a response-level `presentation.Properties`
 summary and the table, producing the generic property/table/property order.
 Both fields are optional; their nil zero values are omitted from transport and
 do not alter existing responses. They must not replace complete typed `Data`.
@@ -485,8 +504,8 @@ and remain absent from public JSON and raw JSON.
 #### Property/value presentation
 
 Core recognizes ordered `items` containing exactly `property` and `value`, and
-plugins can explicitly declare property order with `HumanProperties`. A
-`HumanProperty` either references one stable `Data` key through `Key` or carries
+plugins can explicitly declare property order with `presentation.Properties`. A
+`presentation.Property` either references one stable `Data` key through `Key` or carries
 one presentation-only `Value`; the two sources are mutually exclusive. Direct
 values support human-readable grouping that differs from the stable machine
 projection, while complete typed command data remains in `Data`.
@@ -506,7 +525,7 @@ metadata. Core excludes them from public `--output json` and raw JSON, just as
 it excludes `human_table` and `human_text`. GitHub output is still selected only
 by explicit GitHub output declarations and destination options.
 
-Semantic color is enabled only for interactive human output written to a
+Semantic color is enabled only for interactive human-readable output written to a
 terminal. A non-empty `NO_COLOR` disables it, and pipes, redirects, files,
 public JSON, raw JSON, and GitHub output remain ANSI-free. Core provides this
 policy and style mapping through its renderer; plugins must never emit ANSI

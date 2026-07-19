@@ -34,7 +34,7 @@ No repair command, remote reconciliation, unsafe completion inference, or schema
 
 ### Responsive Evidence presentation
 
-Evidence summaries opt in to Core's small typed `HumanTable` transport declaration. The Release Plugin owns the ordered labels and essential/optional meaning; Core owns only actual-writer width detection, Unicode- and ANSI-aware visible-cell measurement, optional-column fitting, table-versus-vertical choice, wrapping, and truthful `wide` behavior. Width-unavailable output uses deterministic vertical records. Commands without the declaration retain legacy rendering.
+Evidence summaries opt in to Core's small typed `presentation.Table` transport declaration. The Release Plugin owns the ordered labels and essential/optional meaning; Core owns only actual-writer width detection, Unicode- and ANSI-aware visible-cell measurement, optional-column fitting, table-versus-vertical choice, wrapping, and truthful `wide` behavior. Width-unavailable output uses deterministic vertical records. Commands without the declaration retain legacy rendering.
 
 Presentation metadata does not alter `Data` and is excluded from public JSON and raw JSON. Existing unfiltered Evidence JSON retains the complete `items`, typed `evidence`, and `diagnostics` contract. Full forensic values are not summary columns and remain available through JSON and read-only detail inspection.
 
@@ -175,7 +175,7 @@ The result closes severity and readiness policy without a generic state
 machine: any error is `not_ready`; warnings without errors are
 `ready_with_warnings`; recommendations and not-verifiable facts alone are
 `ready`. Diagnostics have stable severity/scope/unit/workflow/code/message/
-remediation fields and deterministic ordering. Human output is summary-first:
+remediation fields and deterministic ordering. Human-readable output is summary-first:
 a titled responsive readiness/count summary precedes a titled compact
 severity/code index, then complete responsive diagnostic records headed by
 severity and code. The index admits optional target and scope fields by width;
@@ -191,14 +191,14 @@ policy.
 The existing response fields could not express a property summary, table, and
 separate responsive detail values in one result because human renderers were
 exclusive and responsive tables could only read a machine-data list. Core
-therefore extends `HumanTable` with optional transport-only `rows`, `details`,
+therefore extends `presentation.Table` with optional transport-only `rows`, `details`,
 and neutral titles, and adds bounded semantic roles/headings to the existing
-human presentation types. They reuse row maps and `HumanProperties`; nil and
+presentation declaration types. They reuse row maps and `presentation.Properties`; nil and
 empty zero values are omitted and preserve every established table response.
 Core composes only generic property/table/property rendering and contains no
 Doctor terminology, diagnostic renderer, document model, layout DSL, theme
 engine, registry, provider abstraction, or state machine.
-Public JSON and raw JSON already exclude the complete `HumanTable` declaration.
+Public JSON and raw JSON already exclude the complete `presentation.Table` declaration.
 
 No writer, Git command or mutator, network client, token resolver, dispatcher,
 journal store, Evidence writer, release runner, executor, registry, workflow
@@ -234,7 +234,7 @@ next version nor opens configured workflow files.
 Alignment is the closed derived set `aligned`, `config_only`, `state_only`, and
 `invalid`; overall status is `valid`, `has_issues`, or `source_invalid`.
 Expected findings are structured nil-Go-error responses, and only `valid`
-requests exit `0`. Human output opts into Core's responsive `HumanTable` with
+requests exit `0`. Human-readable output opts into Core's responsive `presentation.Table` with
 Unit, Version, and Status as essential columns. Machine output contains stable
 typed summary, ordered rows, ordered issues, lexical workflow paths, and an
 optional source issue; transport-only presentation metadata remains outside

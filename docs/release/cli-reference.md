@@ -103,7 +103,7 @@ The command is create-only:
 - `--dry-run`: make no write and return classification plus the complete
   generated YAML, including for a conflict.
 
-Human output uses ordered target/status/action/scope/version/write/guidance
+Human-readable output uses ordered target/status/action/scope/version/write/guidance
 fields; preview uses readable preformatted YAML. JSON returns typed `target`,
 `classification`, `action`, `written`, `unchanged`, `dry_run`,
 `contract_version`, `selected_unit`, `units_using_workflow`, and `guidance`;
@@ -163,7 +163,7 @@ network clients, Git commands, journal stores, Evidence writers, or filesystem
 writers. Source validation only reads the local V2 pair-recovery readiness
 marker already owned by the strict config/state contract.
 
-Human output presents readiness and counts first, followed by a compact
+Human-readable output presents readiness and counts first, followed by a compact
 diagnostic index and complete responsive details. `Severity` and `Code` are
 essential index columns; optional `Target` then `Scope` are admitted while the
 actual width permits. Details retain the full workflow path, message, and
@@ -209,8 +209,8 @@ fields, `alignment`, `issues`, and `issue_codes`. Empty issue lists remain JSON
 arrays; absent optional facts are omitted. Units sort by ID, issues by severity,
 unit, code, and message, and distinct workflow paths lexically.
 
-Human output uses responsive `HumanTable`. `Unit`, `Version`, and `Status` are
-essential; name, tag prefix, executor, delivery, workflow, working directory,
+Human-readable output uses a responsive `presentation.Table`. `Unit`, `Version`,
+and `Status` are essential; name, tag prefix, executor, delivery, workflow, working directory,
 and concise issue codes are optional. Unknown width uses deterministic vertical
 records, and invalid units remain visible. `valid` exits `0`; `has_issues` and
 `source_invalid` exit `1`. Missing, malformed, unsupported, V1-only, mixed, and
@@ -240,7 +240,7 @@ The execution journal records V2 release phases and recovery evidence under the 
 
 `neko release evidence` is read-only. It inspects release-execution journals, dispatch journals, migration journals, V1 compensation evidence, and V2 pair-recovery evidence with redacted summaries and diagnostics for corrupt, unsupported, conflicting, terminal, unresolved, and completed evidence. Human table output prioritizes family, state, classification, resume eligibility, and manual recovery; optional unit/version/tag/pending/automatic/lifecycle columns are admitted by available terminal width. Narrow, piped, redirected, or otherwise width-unknown human output uses vertical records. `--output wide` permits every declared summary column but excludes forensic detail fields.
 
-`neko release evidence --identity <prefix>` selects one complete redacted record after `--family` and `--unit` filters. Prefixes must be 8-64 lowercase hexadecimal characters; uppercase input is rejected rather than normalized, full identities are accepted, and zero or ambiguous matches fail. Human output uses property/value detail. JSON retains `data.items`, `data.evidence`, and `data.diagnostics`, including the complete typed record, while existing summary JSON remains byte-for-byte schema compatible and excludes presentation metadata.
+`neko release evidence --identity <prefix>` selects one complete redacted record after `--family` and `--unit` filters. Prefixes must be 8-64 lowercase hexadecimal characters; uppercase input is rejected rather than normalized, full identities are accepted, and zero or ambiguous matches fail. Human-readable output uses property/value detail. JSON retains `data.items`, `data.evidence`, and `data.diagnostics`, including the complete typed record, while existing summary JSON remains byte-for-byte schema compatible and excludes presentation metadata.
 
 `neko release evidence-archive` supports only `archive-completed` for completed `release-execution`, `v1-compensation`, and completed `v2-pair-recovery` evidence. It still requires `--family`, the exact 64-character `--identity`, the current `--digest-sha256` from inspection output, and `--confirm-archive`; identity prefixes are inspection-only. It writes an exact private archive before removing the completed source evidence. Neither Evidence command repairs, retries, infers remote state, or archives dispatch/migration evidence.
 

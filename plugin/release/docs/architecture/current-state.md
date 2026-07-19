@@ -124,7 +124,7 @@ The public command contract is duplicated between `manifest.json` and the switch
 - V2 planning: resolves one unit, builds `BuildV2ReleaseExecutionContext` with read-only planning semantics, and reuses `planV2ReleaseFacts` for requirements validation, `BuildReleasePlan`, materialization planning/validation, `KnownReleaseFiles`, and GitHub Actions dispatch-summary facts. The command response is mapped from `ReleasePlanInspection`, not from dry-run text.
 - V1 planning: resolves the virtual `default` unit and uses `PlanV1Release` for a local planning subset. The result explicitly limits V1 known-release-file and latest-tag-evidence semantics instead of running V1 release logic.
 - Side effects: reads config/state, executor config, manifest/version files, and local file hashes needed by canonical planning. It does not read tokens, construct token resolvers, open remotes, read execution or dispatch journals, inspect recovery evidence, create directories, write files, mutate Git, dispatch workflows, publish, or run executors.
-- Output: `MapReleasePlanInspection` preserves the established machine-readable `data.items` rows and complete typed limitations. Its transport-only `HumanProperties` projection renders selected source/unit, current version, requested change, next version, tag, executor, delivery, workflow, working directory, unit root, planned materialized files, known release files, readiness, blockers, individually titled limitations, and local-only status. Core alone selects bounded two-column or vertical property layout from the actual writer width; presentation metadata remains absent from public JSON.
+- Output: `MapReleasePlanInspection` preserves the established machine-readable `data.items` rows and complete typed limitations. Its transport-only `presentation.Properties` projection renders selected source/unit, current version, requested change, next version, tag, executor, delivery, workflow, working directory, unit root, planned materialized files, known release files, readiness, blockers, individually titled limitations, and local-only status. Core alone selects bounded two-column or vertical property layout from the actual writer width; presentation metadata remains absent from public JSON.
 - Tests: command parser/handler/response tests, V1/V2 inspection tests, local-blocker tests, explicit-root tests, no-mutation and secret absence tests, manifest/docs/route tests, and architecture guards protecting canonical planning reuse and the absence of mutation-capable dependencies.
 
 #### GitHub Actions workflow scaffolding
@@ -265,7 +265,7 @@ The public command contract is duplicated between `manifest.json` and the switch
 - Output: `mapUnitOverviewResult` alone constructs the plugin response. Machine
   data contains `status`, `summary`, `units`, `workflow_paths`, and optional
   `source_issue`. Unit rows expose only stable inventory facts and preserve
-  empty issues as arrays. Transport-only `HumanTable` metadata declares Unit,
+  empty issues as arrays. Transport-only `presentation.Table` metadata declares Unit,
   Version, and Status essential, followed by optional name, tag, executor,
   delivery, workflow, working-directory, and concise issue columns. Core owns
   width detection, fitting, truncation/wrapping, and vertical fallback.
