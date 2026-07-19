@@ -46,9 +46,15 @@ type Response struct {
 }
 
 // HumanTable declares ordered columns for an opt-in responsive human table.
-// It is transport metadata and does not change the response Data contract.
+// Rows may provide a presentation-only projection when the machine-readable
+// Data uses a different shape. Details may append one responsive property view
+// after the table. All fields are transport metadata and do not change Data.
+//
+//nolint:govet // Field order preserves the stable human-table wire order.
 type HumanTable struct {
-	Columns []HumanColumn `json:"columns"`
+	Columns []HumanColumn    `json:"columns"`
+	Rows    []map[string]any `json:"rows,omitempty"`
+	Details *HumanProperties `json:"details,omitempty"`
 }
 
 // HumanColumn declares one human-facing column. Slice order defines display

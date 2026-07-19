@@ -295,6 +295,9 @@ func renderTableWithWidth(resp *plugin.Response, w io.Writer, wide bool, widthPr
 	if rendered, err := renderHumanText(resp, w); rendered || err != nil {
 		return err
 	}
+	if rendered, err := renderResponsiveTableWithDetails(resp, w, wide, widthProvider); rendered || err != nil {
+		return err
+	}
 	if rendered, err := renderPropertyValues(resp, w, widthProvider); rendered || err != nil {
 		return err
 	}
@@ -310,6 +313,39 @@ func renderTableWithWidth(resp *plugin.Response, w io.Writer, wide bool, widthPr
 
 	// Single object or key-value data
 	return renderKeyValue(resp.Data, w)
+}
+
+func renderResponsiveTableWithDetails(
+	response *plugin.Response,
+	writer io.Writer,
+	wide bool,
+	widthProvider OutputWidthProvider,
+) (bool, error) {
+	if response.HumanProperties == nil || response.HumanTable == nil || response.HumanTable.Details == nil {
+		return false, nil
+	}
+	if rendered, err := renderPropertyValues(response, writer, widthProvider); !rendered || err != nil {
+		return true, err
+	}
+	_, _ = fmt.Fprintln(writer)
+	if rendered, err := renderResponsiveTable(response, writer, wide, widthProvider); !rendered || err != nil {
+		if err != nil {
+			return true, err
+		}
+		return true, fmt.Errorf("human table declaration could not be rendered")
+	}
+
+	_, _ = fmt.Fprintln(writer)
+	detailResponse := *response
+	detailResponse.HumanProperties = response.HumanTable.Details
+	detailResponse.HumanTable = nil
+	if rendered, err := renderPropertyValues(&detailResponse, writer, widthProvider); !rendered || err != nil {
+		if err != nil {
+			return true, err
+		}
+		return true, fmt.Errorf("human table detail declaration could not be rendered")
+	}
+	return true, nil
 }
 
 // findListInData searches for any slice/array in the data map.

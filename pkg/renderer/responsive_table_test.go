@@ -165,6 +165,9 @@ func TestHumanTableMetadataCrossesTransportButDoesNotLeakIntoPublicJSON(t *testi
 	if !bytes.Contains(transport, []byte(`"human_table"`)) {
 		t.Fatalf("transport response omitted human table declaration: %s", transport)
 	}
+	if bytes.Contains(transport, []byte(`"rows"`)) || bytes.Contains(transport, []byte(`"details"`)) {
+		t.Fatalf("zero-value table extensions changed existing transport: %s", transport)
+	}
 
 	var output bytes.Buffer
 	if err := RenderTo(response, FormatJSON, &output); err != nil {
@@ -189,6 +192,95 @@ func TestHumanTableMetadataDoesNotLeakIntoRawJSON(t *testing.T) {
 	}
 	if output.String() != `{"value":"complete"}` {
 		t.Fatalf("raw JSON output changed: %q", output.String())
+	}
+}
+
+func TestResponsiveTableComposesSummaryRowsAndPropertyDetails(t *testing.T) {
+	response := &plugin.Response{
+		Status: "success",
+		Data: map[string]any{
+			"items": []map[string]any{{"name": "machine item", "state": "stable"}},
+		},
+		HumanProperties: &plugin.HumanProperties{Properties: []plugin.HumanProperty{
+			{Label: "Readiness", Value: "review"},
+		}},
+		HumanTable: &plugin.HumanTable{
+			Columns: []plugin.HumanColumn{
+				{Key: "severity", Label: "Severity", Essential: true},
+				{Key: "code", Label: "Code", Essential: true},
+			},
+			Rows: []map[string]any{{"severity": "warning", "code": "CONFIG_REVIEW"}},
+			Details: &plugin.HumanProperties{Properties: []plugin.HumanProperty{
+				{Label: "Detail", Value: "Review the complete local configuration before continuing."},
+			}},
+		},
+	}
+
+	output := ansi.Strip(renderResponsiveForTest(t, response, FormatTable, fixedOutputWidth{width: 64, available: true}))
+	summaryAt := strings.Index(output, "Readiness")
+	rowAt := strings.Index(output, "CONFIG_REVIEW")
+	detailAt := strings.Index(output, "Review the complete local configuration")
+	if summaryAt < 0 || rowAt <= summaryAt || detailAt <= rowAt || strings.Contains(output, "machine item") {
+		t.Fatalf("composed presentation order or row isolation changed:\n%s", output)
+	}
+	assertRenderedLinesFit(t, output, 64)
+}
+
+func TestResponsiveTableRowsAndDetailsCrossTransportButStayOutOfMachineOutput(t *testing.T) {
+	response := &plugin.Response{
+		Status: "success",
+		Data:   map[string]any{"items": []map[string]any{{"name": "machine item"}}},
+		HumanProperties: &plugin.HumanProperties{Properties: []plugin.HumanProperty{
+			{Label: "Summary", Value: "human summary"},
+		}},
+		HumanTable: &plugin.HumanTable{
+			Columns: []plugin.HumanColumn{{Key: "name", Label: "Name", Essential: true}},
+			Rows:    []map[string]any{{"name": "human row"}},
+			Details: &plugin.HumanProperties{Properties: []plugin.HumanProperty{
+				{Label: "Detail", Value: "human detail"},
+			}},
+		},
+	}
+
+	transport, err := json.Marshal(response)
+	if err != nil {
+		t.Fatalf("marshal transport: %v", err)
+	}
+	for _, value := range []string{`"rows"`, `"details"`, "human row", "human detail"} {
+		if !bytes.Contains(transport, []byte(value)) {
+			t.Fatalf("transport omitted %q: %s", value, transport)
+		}
+	}
+	var transported plugin.Response
+	if err := json.Unmarshal(transport, &transported); err != nil {
+		t.Fatalf("unmarshal transport: %v", err)
+	}
+	output := ansi.Strip(renderResponsiveForTest(t, &transported, FormatTable, fixedOutputWidth{width: 60, available: true}))
+	if !strings.Contains(output, "human row") || !strings.Contains(output, "human detail") {
+		t.Fatalf("transported presentation was not rendered:\n%s", output)
+	}
+
+	var publicJSON bytes.Buffer
+	if err := RenderTo(&transported, FormatJSON, &publicJSON); err != nil {
+		t.Fatalf("render public JSON: %v", err)
+	}
+	for _, value := range []string{"human row", "human detail", "human summary", "human_table"} {
+		if strings.Contains(publicJSON.String(), value) {
+			t.Fatalf("public JSON leaked %q:\n%s", value, publicJSON.String())
+		}
+	}
+	if !strings.Contains(publicJSON.String(), "machine item") {
+		t.Fatalf("public JSON lost machine data:\n%s", publicJSON.String())
+	}
+
+	transported.RendererHint = "raw-json"
+	transported.Data = map[string]any{"raw": `{"value":"machine only"}`}
+	var rawJSON bytes.Buffer
+	if err := RenderWithOptionsTo(&transported, RenderOptions{Format: FormatTable}, &rawJSON); err != nil {
+		t.Fatalf("render raw JSON: %v", err)
+	}
+	if rawJSON.String() != `{"value":"machine only"}` {
+		t.Fatalf("raw JSON changed: %q", rawJSON.String())
 	}
 }
 

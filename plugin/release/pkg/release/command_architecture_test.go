@@ -280,6 +280,7 @@ func TestIntegrationDoctorAvoidsGenericDiagnosticArchitecture(t *testing.T) {
 		"integration_doctor_inspection.go",
 		"integration_doctor_source.go",
 		"integration_doctor_workflow_inspection.go",
+		"integration_doctor_response.go",
 	} {
 		source := readCommandBoundarySource(t, path)
 		for _, forbidden := range []string{
@@ -297,6 +298,29 @@ func TestIntegrationDoctorAvoidsGenericDiagnosticArchitecture(t *testing.T) {
 		} {
 			if strings.Contains(source, forbidden) {
 				t.Fatalf("%s contains prohibited generic doctor architecture %q", path, forbidden)
+			}
+		}
+	}
+}
+
+func TestIntegrationDoctorPresentationKeepsCoreDomainNeutral(t *testing.T) {
+	for _, path := range []string{
+		"../../../../pkg/plugin/types.go",
+		"../../../../pkg/renderer/renderer.go",
+		"../../../../pkg/renderer/responsive_table.go",
+		"../../../../pkg/renderer/property_values.go",
+	} {
+		source := strings.ToLower(readCommandBoundarySource(t, path))
+		for _, forbidden := range []string{
+			"doctor",
+			"diagnostic",
+			"documentmodel",
+			"layoutdsl",
+			"rendererregistry",
+			"statemachine",
+		} {
+			if strings.Contains(source, forbidden) {
+				t.Fatalf("%s contains prohibited domain or framework term %q", path, forbidden)
 			}
 		}
 	}

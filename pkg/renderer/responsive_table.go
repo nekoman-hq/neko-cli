@@ -27,7 +27,10 @@ func renderResponsiveTable(
 	if !ok {
 		return false, nil
 	}
-	items := findListInData(response.Data)
+	items := any(response.HumanTable.Rows)
+	if response.HumanTable.Rows == nil {
+		items = findListInData(response.Data)
+	}
 	if items == nil {
 		return false, nil
 	}
