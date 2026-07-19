@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/nekoman-hq/neko-cli/internal/terminalstyle"
+	"github.com/nekoman-hq/neko-cli/internal/terminal"
 	"github.com/nekoman-hq/neko-cli/pkg/presentation"
 )
 
@@ -18,7 +18,7 @@ type ColorProvider interface {
 type terminalColorProvider struct{}
 
 func (terminalColorProvider) ColorEnabled(writer io.Writer) bool {
-	return terminalstyle.ColorEnabled(writer)
+	return terminal.ColorEnabled(writer)
 }
 
 func colorProvider(provider ColorProvider) ColorProvider {
@@ -49,16 +49,16 @@ func (styler presentationStyler) semantic(role presentation.StyleRole, emphasize
 		emphasized = true
 	}
 	if emphasized {
-		style += terminalstyle.Bold
+		style += terminal.Bold
 	}
-	return terminalstyle.Apply(style, text)
+	return terminal.Apply(style, text)
 }
 
 func (styler presentationStyler) ansi(style, text string) string {
 	if !styler.enabled {
 		return text
 	}
-	return terminalstyle.Apply(style, text)
+	return terminal.Apply(style, text)
 }
 
 func semanticANSIStyle(role presentation.StyleRole) string {
@@ -66,15 +66,15 @@ func semanticANSIStyle(role presentation.StyleRole) string {
 	case "", presentation.StyleDefault, presentation.StyleEmphasis:
 		return ""
 	case presentation.StyleSuccess:
-		return terminalstyle.Green
+		return terminal.Green
 	case presentation.StyleWarning:
-		return terminalstyle.Yellow
+		return terminal.Yellow
 	case presentation.StyleError:
-		return terminalstyle.Red
+		return terminal.Red
 	case presentation.StyleInfo:
-		return terminalstyle.Cyan
+		return terminal.Cyan
 	case presentation.StyleMuted:
-		return terminalstyle.BrightBlack
+		return terminal.BrightBlack
 	default:
 		return ""
 	}

@@ -1,4 +1,4 @@
-package terminalstyle
+package terminal
 
 import (
 	"go/parser"
@@ -46,7 +46,7 @@ func TestPublicPackagesUseOnlyFocusedPrivateTerminalPrimitives(t *testing.T) {
 	t.Parallel()
 
 	root := architectureRepositoryRoot(t)
-	wantImport := modulePath + "/internal/terminalstyle"
+	wantImport := modulePath + "/internal/terminal"
 	users := map[string]bool{"log": false, "renderer": false}
 	err := filepath.WalkDir(filepath.Join(root, "pkg"), func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {

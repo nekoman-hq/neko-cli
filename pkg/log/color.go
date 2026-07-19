@@ -1,6 +1,6 @@
 package log
 
-import "github.com/nekoman-hq/neko-cli/internal/terminalstyle"
+import "github.com/nekoman-hq/neko-cli/internal/terminal"
 
 /*
 @Author     Benjamin Senekowitsch
@@ -11,60 +11,60 @@ import "github.com/nekoman-hq/neko-cli/internal/terminalstyle"
 const (
 	// ColorReset resets all text attributes (color, bold, etc.) to terminal defaults.
 	// This should be used after any colored text to prevent color bleeding.
-	ColorReset = terminalstyle.Reset
+	ColorReset = terminal.Reset
 
 	// ColorBold applies bold/bright text formatting.
 	// Can be combined with color codes for emphasized output.
-	ColorBold = terminalstyle.Bold
+	ColorBold = terminal.Bold
 
 	// Standard ANSI color codes (normal intensity)
 
 	// ColorRed applies red text color. Typically used for errors and failures.
-	ColorRed = terminalstyle.Red
+	ColorRed = terminal.Red
 
 	// ColorGreen applies green text color. Typically used for success and completion.
-	ColorGreen = terminalstyle.Green
+	ColorGreen = terminal.Green
 
 	// ColorYellow applies yellow text color. Typically used for warnings and caution.
-	ColorYellow = terminalstyle.Yellow
+	ColorYellow = terminal.Yellow
 
 	// ColorBlue applies blue text color. Typically used for informational messages.
-	ColorBlue = terminalstyle.Blue
+	ColorBlue = terminal.Blue
 
 	// ColorPurple applies purple/magenta text color. Typically used for versions and special values.
-	ColorPurple = terminalstyle.Purple
+	ColorPurple = terminal.Purple
 
 	// ColorCyan applies cyan text color. Typically used for headers and labels.
-	ColorCyan = terminalstyle.Cyan
+	ColorCyan = terminal.Cyan
 
 	// Bright/intense ANSI color codes (high intensity variants)
 
 	// ColorBrightBlack applies bright black (gray) text color.
-	ColorBrightBlack = terminalstyle.BrightBlack
+	ColorBrightBlack = terminal.BrightBlack
 
 	// ColorBrightRed applies bright red text color.
 	// Typically used for critical errors and fatal messages.
-	ColorBrightRed = terminalstyle.BrightRed
+	ColorBrightRed = terminal.BrightRed
 
 	// ColorBrightGreen applies bright green text color.
 	// Typically used for successful operations and positive states.
-	ColorBrightGreen = terminalstyle.BrightGreen
+	ColorBrightGreen = terminal.BrightGreen
 
 	// ColorBrightYellow applies bright yellow text color.
 	// Typically used for important warnings and highlights.
-	ColorBrightYellow = terminalstyle.BrightYellow
+	ColorBrightYellow = terminal.BrightYellow
 
 	// ColorBrightBlue applies bright blue text color.
-	ColorBrightBlue = terminalstyle.BrightBlue
+	ColorBrightBlue = terminal.BrightBlue
 
 	// ColorBrightPurple applies bright purple/magenta text color.
-	ColorBrightPurple = terminalstyle.BrightPurple
+	ColorBrightPurple = terminal.BrightPurple
 
 	// ColorBrightCyan applies bright cyan text color.
-	ColorBrightCyan = terminalstyle.BrightCyan
+	ColorBrightCyan = terminal.BrightCyan
 
 	// ColorBrightWhite applies bright white text color.
-	ColorBrightWhite = terminalstyle.BrightWhite
+	ColorBrightWhite = terminal.BrightWhite
 )
 
 // ColorText wraps the given text with ANSI color codes.
@@ -82,5 +82,5 @@ const (
 //	colored := ColorText(ColorGreen, "Success!")
 //	fmt.Println(colored) // Prints "Success!" in green
 func ColorText(color, text string) string {
-	return terminalstyle.Apply(color, text)
+	return terminal.Apply(color, text)
 }

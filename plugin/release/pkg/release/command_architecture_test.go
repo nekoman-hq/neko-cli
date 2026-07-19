@@ -249,7 +249,7 @@ func TestIntegrationDoctorApplicationHasNoMutationTokenNetworkGitOrStoreDependen
 			"EvidenceWriter",
 			"atomicGitHubWorkflowOutputCreator",
 			"plugin.Response",
-			"internal/terminalstyle",
+			"internal/terminal",
 			"golang.org/x/term",
 			"StyleRole",
 			"\\x1b",
@@ -310,7 +310,7 @@ func TestIntegrationDoctorAvoidsGenericDiagnosticArchitecture(t *testing.T) {
 
 func TestIntegrationDoctorPresentationKeepsCoreDomainNeutral(t *testing.T) {
 	for _, path := range []string{
-		"../../../../internal/terminalstyle/style.go",
+		"../../../../internal/terminal/style.go",
 		"../../../../pkg/plugin/types.go",
 		"../../../../pkg/renderer/renderer.go",
 		"../../../../pkg/renderer/responsive_table.go",

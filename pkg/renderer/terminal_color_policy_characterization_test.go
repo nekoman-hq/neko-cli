@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nekoman-hq/neko-cli/internal/terminalstyle"
+	"github.com/nekoman-hq/neko-cli/internal/terminal"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 )
 
@@ -31,17 +31,17 @@ func TestPresentationRendererUsesEstablishedLoggerPaletteAndResets(t *testing.T)
 
 	got := output.String()
 	for name, sequence := range map[string]string{
-		"information heading": terminalstyle.Cyan + terminalstyle.Bold,
-		"muted separator":     terminalstyle.BrightBlack,
-		"success":             terminalstyle.Green,
-		"version":             terminalstyle.Purple,
-		"reset":               terminalstyle.Reset,
+		"information heading": terminal.Cyan + terminal.Bold,
+		"muted separator":     terminal.BrightBlack,
+		"success":             terminal.Green,
+		"version":             terminal.Purple,
+		"reset":               terminal.Reset,
 	} {
 		if !strings.Contains(got, sequence) {
 			t.Errorf("human output omitted %s sequence %q: %q", name, sequence, got)
 		}
 	}
-	if !strings.HasSuffix(got, terminalstyle.Reset+"   \n") {
+	if !strings.HasSuffix(got, terminal.Reset+"   \n") {
 		t.Fatalf("human row does not reset its final styled value: %q", got)
 	}
 }

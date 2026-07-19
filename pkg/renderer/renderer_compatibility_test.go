@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nekoman-hq/neko-cli/internal/terminalstyle"
+	"github.com/nekoman-hq/neko-cli/internal/terminal"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 )
 
@@ -25,10 +25,10 @@ func TestLegacyCompactListRenderingRemainsStable(t *testing.T) {
 		t.Fatalf("RenderTo: %v", err)
 	}
 
-	want := terminalstyle.Cyan + terminalstyle.Bold + "COMMITS  FROM    VERSION  " + terminalstyle.Reset + "\n" +
-		terminalstyle.BrightBlack + "──────────────────────────" + terminalstyle.Reset + "\n" +
-		"2        " + terminalstyle.Purple + "v1.2.2" + terminalstyle.Reset + "  " + terminalstyle.Purple + "v1.2.3" + terminalstyle.Reset + "   \n" +
-		"5        " + terminalstyle.Purple + "v1.2.3" + terminalstyle.Reset + "  " + terminalstyle.Purple + "v1.3.0" + terminalstyle.Reset + "   \n"
+	want := terminal.Cyan + terminal.Bold + "COMMITS  FROM    VERSION  " + terminal.Reset + "\n" +
+		terminal.BrightBlack + "──────────────────────────" + terminal.Reset + "\n" +
+		"2        " + terminal.Purple + "v1.2.2" + terminal.Reset + "  " + terminal.Purple + "v1.2.3" + terminal.Reset + "   \n" +
+		"5        " + terminal.Purple + "v1.2.3" + terminal.Reset + "  " + terminal.Purple + "v1.3.0" + terminal.Reset + "   \n"
 	if output.String() != want {
 		t.Fatalf("legacy compact list output changed:\nwant %q\n got %q", want, output.String())
 	}
@@ -50,9 +50,9 @@ func TestPropertyValueRenderingUsesDeterministicVerticalFallbackWithoutWidth(t *
 		t.Fatalf("RenderTo: %v", err)
 	}
 
-	want := terminalstyle.Cyan + terminalstyle.Bold + "Status" + terminalstyle.Reset + "\n" +
+	want := terminal.Cyan + terminal.Bold + "Status" + terminal.Reset + "\n" +
 		"  ready\n\n" +
-		terminalstyle.Cyan + terminalstyle.Bold + "Unit" + terminalstyle.Reset + "\n" +
+		terminal.Cyan + terminal.Bold + "Unit" + terminal.Reset + "\n" +
 		"  api\n"
 	if output.String() != want {
 		t.Fatalf("legacy property/value output changed:\nwant %q\n got %q", want, output.String())
@@ -80,16 +80,16 @@ func TestLegacyDescribeRenderingRemainsStable(t *testing.T) {
 		t.Fatalf("RenderDescribeTo: %v", err)
 	}
 
-	want := "\n" + terminalstyle.Cyan + terminalstyle.Bold + "━━━ Command Metadata ━━━" + terminalstyle.Reset + "\n" +
-		terminalstyle.BrightBlack + "Plugin:" + terminalstyle.Reset + "     release\n" +
-		terminalstyle.BrightBlack + "Command:" + terminalstyle.Reset + "    validate\n" +
-		terminalstyle.BrightBlack + "Version:" + terminalstyle.Reset + "    4.2.0\n" +
-		terminalstyle.BrightBlack + "Timestamp:" + terminalstyle.Reset + "  2026-07-18 10:11:12\n" +
-		terminalstyle.BrightBlack + "Status:" + terminalstyle.Reset + "     " + terminalstyle.Green + "✓ success" + terminalstyle.Reset + "\n\n" +
-		"\n" + terminalstyle.Yellow + terminalstyle.Bold + "━━━ Execution Logs (1 entries) ━━━" + terminalstyle.Reset + "\n" +
-		terminalstyle.BrightBlack + "10:11:12" + terminalstyle.Reset + " " + terminalstyle.BrightBlack + "• " + terminalstyle.Reset + "checked\n\n" +
-		"\n" + terminalstyle.Green + terminalstyle.Bold + "━━━ Output ━━━" + terminalstyle.Reset + "\n" +
-		terminalstyle.Cyan + terminalstyle.Bold + "Status" + terminalstyle.Reset + "\n" +
+	want := "\n" + terminal.Cyan + terminal.Bold + "━━━ Command Metadata ━━━" + terminal.Reset + "\n" +
+		terminal.BrightBlack + "Plugin:" + terminal.Reset + "     release\n" +
+		terminal.BrightBlack + "Command:" + terminal.Reset + "    validate\n" +
+		terminal.BrightBlack + "Version:" + terminal.Reset + "    4.2.0\n" +
+		terminal.BrightBlack + "Timestamp:" + terminal.Reset + "  2026-07-18 10:11:12\n" +
+		terminal.BrightBlack + "Status:" + terminal.Reset + "     " + terminal.Green + "✓ success" + terminal.Reset + "\n\n" +
+		"\n" + terminal.Yellow + terminal.Bold + "━━━ Execution Logs (1 entries) ━━━" + terminal.Reset + "\n" +
+		terminal.BrightBlack + "10:11:12" + terminal.Reset + " " + terminal.BrightBlack + "• " + terminal.Reset + "checked\n\n" +
+		"\n" + terminal.Green + terminal.Bold + "━━━ Output ━━━" + terminal.Reset + "\n" +
+		terminal.Cyan + terminal.Bold + "Status" + terminal.Reset + "\n" +
 		"  ready\n"
 	if output.String() != want {
 		t.Fatalf("legacy describe output changed:\nwant %q\n got %q", want, output.String())

@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
-	"github.com/nekoman-hq/neko-cli/internal/terminalstyle"
+	"github.com/nekoman-hq/neko-cli/internal/terminal"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 	"github.com/nekoman-hq/neko-cli/pkg/presentation"
 )
@@ -21,13 +21,13 @@ func TestSemanticPresentationStylesUseSharedPaletteOnlyWhenEnabled(t *testing.T)
 	response := semanticPropertyResponse()
 	enabled := renderStyledResponseForTest(t, response, fixedColorProvider(true))
 	for name, sequence := range map[string]string{
-		"title":    terminalstyle.Bold + "Semantic output" + terminalstyle.Reset,
-		"emphasis": terminalstyle.Bold + "emphasis" + terminalstyle.Reset,
-		"success":  terminalstyle.Green + "success" + terminalstyle.Reset,
-		"warning":  terminalstyle.Yellow + "warning" + terminalstyle.Reset,
-		"error":    terminalstyle.Red + "error" + terminalstyle.Reset,
-		"info":     terminalstyle.Cyan + "info" + terminalstyle.Reset,
-		"muted":    terminalstyle.BrightBlack + "muted" + terminalstyle.Reset,
+		"title":    terminal.Bold + "Semantic output" + terminal.Reset,
+		"emphasis": terminal.Bold + "emphasis" + terminal.Reset,
+		"success":  terminal.Green + "success" + terminal.Reset,
+		"warning":  terminal.Yellow + "warning" + terminal.Reset,
+		"error":    terminal.Red + "error" + terminal.Reset,
+		"info":     terminal.Cyan + "info" + terminal.Reset,
+		"muted":    terminal.BrightBlack + "muted" + terminal.Reset,
 	} {
 		if !strings.Contains(enabled, sequence) {
 			t.Errorf("styled output omitted %s sequence %q:\n%q", name, sequence, enabled)
@@ -63,14 +63,14 @@ func TestSemanticTableRolesStyleOnlyDeclaredCells(t *testing.T) {
 	}
 	output := renderStyledResponseForTest(t, response, fixedColorProvider(true))
 	for _, styled := range []string{
-		terminalstyle.Red + "ERROR" + terminalstyle.Reset,
-		terminalstyle.Red + "CONFIG_INVALID" + terminalstyle.Reset,
+		terminal.Red + "ERROR" + terminal.Reset,
+		terminal.Red + "CONFIG_INVALID" + terminal.Reset,
 	} {
 		if !strings.Contains(output, styled) {
 			t.Fatalf("semantic table omitted %q:\n%q", styled, output)
 		}
 	}
-	if strings.Contains(output, terminalstyle.Red+"api") {
+	if strings.Contains(output, terminal.Red+"api") {
 		t.Fatalf("semantic table colored the neutral target cell:\n%q", output)
 	}
 }
@@ -90,8 +90,8 @@ func TestPresentationPropertyHeadingsCreateResponsiveStyledRecords(t *testing.T)
 		}},
 	}
 	output := renderStyledResponseForTest(t, response, fixedColorProvider(true))
-	if !strings.Contains(output, terminalstyle.Red+terminalstyle.Bold+"ERROR · CONFIG_INVALID"+terminalstyle.Reset) ||
-		!strings.Contains(output, terminalstyle.Yellow+terminalstyle.Bold+"WARNING · CONCURRENCY_MISSING"+terminalstyle.Reset) {
+	if !strings.Contains(output, terminal.Red+terminal.Bold+"ERROR · CONFIG_INVALID"+terminal.Reset) ||
+		!strings.Contains(output, terminal.Yellow+terminal.Bold+"WARNING · CONCURRENCY_MISSING"+terminal.Reset) {
 		t.Fatalf("record headings lost semantic styles:\n%q", output)
 	}
 	plain := ansi.Strip(output)

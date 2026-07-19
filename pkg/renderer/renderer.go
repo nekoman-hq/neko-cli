@@ -15,7 +15,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/nekoman-hq/neko-cli/internal/terminalstyle"
+	"github.com/nekoman-hq/neko-cli/internal/terminal"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 	"github.com/nekoman-hq/neko-cli/pkg/presentation"
 )
@@ -214,13 +214,13 @@ func colorizeStatus(styler presentationStyler, status string) string {
 func getLogLevelColor(level string) string {
 	switch level {
 	case "error":
-		return terminalstyle.Red
+		return terminal.Red
 	case "warn":
-		return terminalstyle.Yellow
+		return terminal.Yellow
 	case "verbose":
-		return terminalstyle.Purple
+		return terminal.Purple
 	default:
-		return terminalstyle.BrightBlack
+		return terminal.BrightBlack
 	}
 }
 
@@ -652,7 +652,7 @@ func colorizeValue(styler presentationStyler, key, value string) string {
 
 	// Version coloring
 	if keyLower == "metadata" || strings.HasPrefix(value, "v") {
-		return styler.ansi(terminalstyle.Purple, value)
+		return styler.ansi(terminal.Purple, value)
 	}
 
 	// Boolean coloring
@@ -665,7 +665,7 @@ func colorizeValue(styler presentationStyler, key, value string) string {
 
 	// Name highlighting
 	if keyLower == "name" || keyLower == "id" {
-		return styler.ansi(terminalstyle.BrightWhite, value)
+		return styler.ansi(terminal.BrightWhite, value)
 	}
 
 	return value
