@@ -13,9 +13,10 @@ type integrationDoctorInspector interface {
 }
 
 type integrationDoctorInspectionUseCase struct {
-	sources   integrationDoctorSourceReader
-	workflows integrationDoctorWorkflowReader
-	files     integrationDoctorRepositoryFileReader
+	sources    integrationDoctorSourceReader
+	workflows  integrationDoctorWorkflowReader
+	files      integrationDoctorRepositoryFileReader
+	identities integrationDoctorRepositoryIdentityReader
 }
 
 func (useCase integrationDoctorInspectionUseCase) Inspect(
@@ -50,6 +51,7 @@ func (useCase integrationDoctorInspectionUseCase) Inspect(
 	}
 
 	workflowUnits := integrationDoctorWorkflowUnits(source.Repository, selectedUnits)
+	repositoryIdentity, repositoryIdentityErr := useCase.identities.ReadOrigin(request.RepositoryRoot)
 	paths := make([]string, 0, len(workflowUnits))
 	for path := range workflowUnits {
 		paths = append(paths, path)
@@ -60,8 +62,11 @@ func (useCase integrationDoctorInspectionUseCase) Inspect(
 			request.RepositoryRoot,
 			path,
 			workflowUnits[path],
+			source.Repository.Units,
 			useCase.workflows.Read(request.RepositoryRoot, path),
 			useCase.files,
+			repositoryIdentity,
+			repositoryIdentityErr,
 		)
 		result.Workflows = append(result.Workflows, fact)
 		result.Verifications = append(result.Verifications, verifications...)

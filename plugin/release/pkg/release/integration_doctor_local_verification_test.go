@@ -9,11 +9,11 @@ import (
 
 func TestRepositoryDoctorRepresentsFocusedLocalVerification(t *testing.T) {
 	result := integrationDoctorResultFromResponse(t, runIntegrationDoctor(t, repositoryInspectionRoot(t), nil))
-	if result.Summary.Verified != 6 {
-		t.Fatalf("verified facts = %d, want 6", result.Summary.Verified)
+	if result.Summary.Verified != 9 {
+		t.Fatalf("verified facts = %d, want 9", result.Summary.Verified)
 	}
-	if len(result.Verifications) != 6 {
-		t.Fatalf("verifications = %d, want 6: %#v", len(result.Verifications), result.Verifications)
+	if len(result.Verifications) != 9 {
+		t.Fatalf("verifications = %d, want 9: %#v", len(result.Verifications), result.Verifications)
 	}
 
 	byWorkflow := make(map[string][]string)
@@ -34,6 +34,7 @@ func TestRepositoryDoctorRepresentsFocusedLocalVerification(t *testing.T) {
 	wantCategories := []string{
 		"consumer_structure",
 		"goreleaser_configuration",
+		"installation_wiring",
 	}
 	for _, behavior := range repositoryWorkflowBehaviors() {
 		got := append([]string(nil), byWorkflow[behavior.path]...)

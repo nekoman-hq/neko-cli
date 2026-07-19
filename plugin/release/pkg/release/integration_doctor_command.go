@@ -65,9 +65,10 @@ func HandleDoctor(request plugin.Request) (*plugin.Response, error) {
 func HandleDoctorAt(root workspace.RepositoryRoot, request plugin.Request) (*plugin.Response, error) {
 	handler := integrationDoctorCommandHandler{
 		inspector: integrationDoctorInspectionUseCase{
-			sources:   filesystemIntegrationDoctorSourceReader{},
-			workflows: filesystemIntegrationDoctorWorkflowReader{},
-			files:     filesystemIntegrationDoctorRepositoryFileReader{},
+			sources:    filesystemIntegrationDoctorSourceReader{},
+			workflows:  filesystemIntegrationDoctorWorkflowReader{},
+			files:      filesystemIntegrationDoctorRepositoryFileReader{},
+			identities: filesystemIntegrationDoctorRepositoryIdentityReader{},
 		},
 		clock: systemReleaseClock{},
 		root:  root,

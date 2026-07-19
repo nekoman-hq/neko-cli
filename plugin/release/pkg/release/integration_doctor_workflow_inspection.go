@@ -32,8 +32,11 @@ func inspectIntegrationDoctorWorkflow(
 	repositoryRoot string,
 	path string,
 	units []releaseconfig.ReleaseUnit,
+	repositoryUnits []releaseconfig.ReleaseUnit,
 	snapshot integrationDoctorWorkflowSnapshot,
 	files integrationDoctorRepositoryFileReader,
+	repositoryIdentity integrationDoctorRepositoryIdentity,
+	repositoryIdentityErr error,
 ) (integrationDoctorWorkflow, []integrationDoctorVerification, []integrationDoctorDiagnostic) {
 	unitIDs := make([]string, 0, len(units))
 	for _, unit := range units {
@@ -92,6 +95,17 @@ func inspectIntegrationDoctorWorkflow(
 		verifications = append(verifications, localFacts...)
 		diagnostics = append(diagnostics, localDiagnostics...)
 	}
+	installationFact, installationDiagnostics := inspectIntegrationDoctorInstallation(
+		repositoryRoot,
+		path,
+		repositoryUnits,
+		jobs,
+		files,
+		repositoryIdentity,
+		repositoryIdentityErr,
+	)
+	verifications = append(verifications, installationFact)
+	diagnostics = append(diagnostics, installationDiagnostics...)
 	appendIntegrationDoctorRemoteLimits(add)
 
 	fact.Classification = integrationDoctorWorkflowClassification(snapshot.Canonical, diagnostics)
@@ -361,7 +375,6 @@ func appendIntegrationDoctorRemoteLimits(add func(integrationDoctorSeverity, str
 	limits := []struct{ code, message, remediation string }{
 		{"REMOTE_WORKFLOW_NOT_VERIFIABLE", "The workflow's presence and content on the remote default branch are not locally verifiable.", "Confirm the inspected workflow is committed and available on the remote default branch."},
 		{"REPOSITORY_VARIABLES_NOT_VERIFIABLE", "Repository variable values used for version pins are not locally verifiable.", "Confirm Neko CLI and Release plugin version variables exist and resolve to supported pinned versions."},
-		{"INSTALLATION_ARTIFACTS_NOT_VERIFIABLE", "Remote install URLs and referenced distribution artifacts are not locally verifiable.", "Verify installation sources and artifacts through the repository's supply-chain policy."},
 		{"PUBLICATION_CREDENTIALS_NOT_VERIFIABLE", "Package or publication credentials are not locally verifiable.", "Confirm required secrets exist with least privilege and are scoped to consumer steps."},
 		{"REMOTE_DISPATCH_AUTHORIZATION_NOT_VERIFIABLE", "Remote workflow-dispatch permissions are not locally verifiable.", "Confirm the dispatch identity can run the configured workflow on the remote repository."},
 		{"PUBLICATION_TARGET_NOT_VERIFIABLE", "The publication target's acceptance of the release version is not locally verifiable.", "Confirm the target registry or release service can accept the planned version and artifact identity."},

@@ -29,14 +29,17 @@ func TestIntegrationDoctorCharacterizesBroadLocalVerificationGaps(t *testing.T) 
 		root.Path(),
 		".github/workflows/release.yml",
 		repository.Units,
+		repository.Units,
 		snapshot,
 		filesystemIntegrationDoctorRepositoryFileReader{},
+		integrationDoctorRepositoryIdentity{},
+		os.ErrNotExist,
 	)
 	if got, want := integrationDoctorNotVerifiableCodes(diagnostics), []string{
 		"CONSUMER_BUILD_NOT_VERIFIABLE",
+		"INSTALLATION_ARTIFACTS_NOT_VERIFIABLE",
 		"REMOTE_WORKFLOW_NOT_VERIFIABLE",
 		"REPOSITORY_VARIABLES_NOT_VERIFIABLE",
-		"INSTALLATION_ARTIFACTS_NOT_VERIFIABLE",
 		"PUBLICATION_CREDENTIALS_NOT_VERIFIABLE",
 		"REMOTE_DISPATCH_AUTHORIZATION_NOT_VERIFIABLE",
 		"PUBLICATION_TARGET_NOT_VERIFIABLE",
@@ -55,13 +58,16 @@ func TestIntegrationDoctorCharacterizesBroadLocalVerificationGaps(t *testing.T) 
 		root.Path(),
 		".github/workflows/release.yml",
 		repository.Units,
+		repository.Units,
 		placeholderSnapshot,
 		filesystemIntegrationDoctorRepositoryFileReader{},
+		integrationDoctorRepositoryIdentity{},
+		os.ErrNotExist,
 	)
 	if got, want := integrationDoctorNotVerifiableCodes(placeholderDiagnostics), []string{
+		"INSTALLATION_ARTIFACTS_NOT_VERIFIABLE",
 		"REMOTE_WORKFLOW_NOT_VERIFIABLE",
 		"REPOSITORY_VARIABLES_NOT_VERIFIABLE",
-		"INSTALLATION_ARTIFACTS_NOT_VERIFIABLE",
 		"PUBLICATION_CREDENTIALS_NOT_VERIFIABLE",
 		"REMOTE_DISPATCH_AUTHORIZATION_NOT_VERIFIABLE",
 		"PUBLICATION_TARGET_NOT_VERIFIABLE",
@@ -76,8 +82,11 @@ func TestIntegrationDoctorCharacterizesBroadLocalVerificationGaps(t *testing.T) 
 		root.Path(),
 		".github/workflows/release.yml",
 		repository.Units,
+		repository.Units,
 		(filesystemIntegrationDoctorWorkflowReader{}).Read(root.Path(), ".github/workflows/release.yml"),
 		filesystemIntegrationDoctorRepositoryFileReader{},
+		integrationDoctorRepositoryIdentity{},
+		os.ErrNotExist,
 	)
 	if got := integrationDoctorNotVerifiableCodes(missingDiagnostics); len(got) != 0 {
 		t.Fatalf("missing workflow unexpectedly emitted limitations: %v", got)

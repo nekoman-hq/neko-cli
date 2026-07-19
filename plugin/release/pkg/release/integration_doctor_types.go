@@ -50,6 +50,7 @@ const (
 type integrationDoctorLimitationClass string
 
 const (
+	integrationDoctorRemoteLimitation  integrationDoctorLimitationClass = "remote"
 	integrationDoctorRuntimeLimitation integrationDoctorLimitationClass = "runtime"
 )
 
