@@ -121,7 +121,9 @@ func inspectIntegrationDoctorWorkflow(
 	)
 	verifications = append(verifications, publicationFact)
 	diagnostics = append(diagnostics, publicationDiagnostics...)
-	appendIntegrationDoctorRemoteLimits(add)
+	boundaryFacts, boundaryDiagnostics := inspectIntegrationDoctorBoundaryLimitations(path, root)
+	verifications = append(verifications, boundaryFacts...)
+	diagnostics = append(diagnostics, boundaryDiagnostics...)
 
 	fact.Classification = integrationDoctorWorkflowClassification(snapshot.Canonical, diagnostics)
 	return fact, verifications, diagnostics
@@ -384,17 +386,6 @@ func integrationDoctorWorkflowJobs(root *yaml.Node) []integrationDoctorWorkflowJ
 		jobs = append(jobs, job)
 	}
 	return jobs
-}
-
-func appendIntegrationDoctorRemoteLimits(add func(integrationDoctorSeverity, string, string, string)) {
-	limits := []struct{ code, message, remediation string }{
-		{"REMOTE_WORKFLOW_NOT_VERIFIABLE", "The workflow's presence and content on the remote default branch are not locally verifiable.", "Confirm the inspected workflow is committed and available on the remote default branch."},
-		{"REPOSITORY_VARIABLES_NOT_VERIFIABLE", "Repository variable values used for version pins are not locally verifiable.", "Confirm Neko CLI and Release plugin version variables exist and resolve to supported pinned versions."},
-		{"REMOTE_DISPATCH_AUTHORIZATION_NOT_VERIFIABLE", "Remote workflow-dispatch permissions are not locally verifiable.", "Confirm the dispatch identity can run the configured workflow on the remote repository."},
-	}
-	for _, limit := range limits {
-		add(integrationDoctorNotVerifiable, limit.code, limit.message, limit.remediation)
-	}
 }
 
 func integrationDoctorWorkflowClassification(canonical bool, diagnostics []integrationDoctorDiagnostic) string {

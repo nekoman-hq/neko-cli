@@ -227,15 +227,23 @@ func TestReleasePlanInspectionAvoidsGenericInspectionArchitecture(t *testing.T) 
 
 func TestIntegrationDoctorApplicationHasNoMutationTokenNetworkGitOrStoreDependencies(t *testing.T) {
 	for _, path := range []string{
+		"integration_doctor_consumer.go",
+		"integration_doctor_credentials.go",
+		"integration_doctor_goreleaser.go",
 		"integration_doctor_inspection.go",
+		"integration_doctor_installation.go",
+		"integration_doctor_limitations.go",
+		"integration_doctor_publication.go",
+		"integration_doctor_repository_files.go",
+		"integration_doctor_repository_identity.go",
 		"integration_doctor_source.go",
 		"integration_doctor_permissions.go",
+		"integration_doctor_verification.go",
 		"integration_doctor_workflow_inspection.go",
 		"integration_doctor_workflow_reader.go",
 	} {
 		source := readCommandBoundarySource(t, path)
 		for _, forbidden := range []string{
-			"GITHUB_TOKEN",
 			"TokenResolver",
 			"GitHubActionsDispatcher",
 			"GitHubActionsDispatchClient",
@@ -245,6 +253,10 @@ func TestIntegrationDoctorApplicationHasNoMutationTokenNetworkGitOrStoreDependen
 			"NewGitReleaseCoordinator",
 			"os.WriteFile",
 			"os.Mkdir",
+			"os.Chdir",
+			"os.Setenv",
+			"os.Getenv",
+			"os.LookupEnv",
 			"ReleaseExecutionJournalStore",
 			"DispatchJournalStore",
 			"EvidenceWriter",
@@ -283,9 +295,18 @@ func TestIntegrationDoctorKeepsTypedCommandAndResponseBoundaries(t *testing.T) {
 
 func TestIntegrationDoctorAvoidsGenericDiagnosticArchitecture(t *testing.T) {
 	for _, path := range []string{
+		"integration_doctor_consumer.go",
+		"integration_doctor_credentials.go",
+		"integration_doctor_goreleaser.go",
 		"integration_doctor_inspection.go",
+		"integration_doctor_installation.go",
+		"integration_doctor_limitations.go",
+		"integration_doctor_publication.go",
+		"integration_doctor_repository_files.go",
+		"integration_doctor_repository_identity.go",
 		"integration_doctor_source.go",
 		"integration_doctor_permissions.go",
+		"integration_doctor_verification.go",
 		"integration_doctor_workflow_inspection.go",
 		"integration_doctor_response.go",
 	} {

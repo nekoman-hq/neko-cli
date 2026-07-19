@@ -50,8 +50,9 @@ const (
 type integrationDoctorLimitationClass string
 
 const (
-	integrationDoctorRemoteLimitation  integrationDoctorLimitationClass = "remote"
-	integrationDoctorRuntimeLimitation integrationDoctorLimitationClass = "runtime"
+	integrationDoctorRemoteLimitation           integrationDoctorLimitationClass = "remote"
+	integrationDoctorRuntimeLimitation          integrationDoctorLimitationClass = "runtime"
+	integrationDoctorMutationRequiredLimitation integrationDoctorLimitationClass = "mutation_required"
 )
 
 //nolint:govet // Field order preserves the additive JSON contract.
