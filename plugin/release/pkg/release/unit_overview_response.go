@@ -28,7 +28,7 @@ func mapUnitOverviewResult(result *unitOverviewResult, timestamp time.Time) *plu
 		"status":         result.Status,
 		"summary":        result.Summary,
 		"units":          units,
-		"workflow_paths": append([]string(nil), result.WorkflowPaths...),
+		"workflow_paths": append(make([]string, 0, len(result.WorkflowPaths)), result.WorkflowPaths...),
 	}
 	if result.SourceIssue != nil {
 		data["source_issue"] = *result.SourceIssue

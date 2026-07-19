@@ -247,6 +247,20 @@ func TestUnitOverviewJSONSchemaIsDeterministicAndPresentationFree(t *testing.T) 
 	}
 }
 
+func TestUnitOverviewJSONKeepsEmptyCollectionsAsArrays(t *testing.T) {
+	root := newUnitOverviewRepository(t)
+	response := runUnitOverview(t, root)
+	encoded, err := json.Marshal(response.Data)
+	if err != nil {
+		t.Fatalf("marshal empty-source response: %v", err)
+	}
+	for _, required := range []string{`"units":[]`, `"workflow_paths":[]`} {
+		if !strings.Contains(string(encoded), required) {
+			t.Fatalf("empty collection %s must remain an array: %s", required, encoded)
+		}
+	}
+}
+
 type unitOverviewResponseView struct {
 	sourceIssue   *unitOverviewIssue
 	status        unitOverviewStatus
