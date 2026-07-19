@@ -90,6 +90,15 @@ func TestPublicPackagesUseOnlyFocusedPrivateTerminalPrimitives(t *testing.T) {
 	}
 }
 
+func TestLegacyTerminalPackagePathDoesNotReturn(t *testing.T) {
+	t.Parallel()
+
+	legacyPath := filepath.Join(architectureRepositoryRoot(t), "internal", "terminal"+"style")
+	if _, err := os.Stat(legacyPath); !os.IsNotExist(err) {
+		t.Fatalf("legacy private terminal package path exists or cannot be checked: %v", err)
+	}
+}
+
 func TestRendererAndLoggerRemainIndependent(t *testing.T) {
 	t.Parallel()
 
