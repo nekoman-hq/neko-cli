@@ -37,7 +37,7 @@ neko-cli/
 │   ├── log/                # Logging utilities
 │   └── errors/             # Error handling
 ├── internal/               # Private Core implementation packages
-│   └── terminalstyle/      # Shared ANSI and terminal capability primitives
+│   └── terminal/           # Focused ANSI styling and terminal capability primitives
 └── plugin/
     └── release/            # Release management plugin
         ├── main.go         # Plugin entry point
@@ -260,13 +260,12 @@ When refactoring old code to plugin style, these patterns indicate deprecated co
 
 ### Completed
 - ✅ Core plugin dispatcher
-- ✅ Release plugin: `init`, `init-options`, `history`, `contributors`
+- ✅ Release plugin: `init`, `init-options`, `history`, `contributors`, `validate`
 - ✅ Renderer with table/json/text output
 - ✅ Dynamic flag loading from manifest
 
 ### In Progress / TODO
 - Release plugin: `release` command (partially implemented)
-- Release plugin: `validate` command
 - Other plugins (deploy, etc.)
 
 ## Author

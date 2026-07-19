@@ -28,7 +28,10 @@ V2 with multiple units:
 `validate` is special:
 
 - Without `--unit`, it validates the complete repository config and state.
-- With `--unit`, it still validates everything, but `--show` focuses the selected unit.
+- With `--unit`, it still validates everything and names the selection in the
+  human summary; `--show` focuses the unit table and details on that selection.
+- Without `--show`, human output is a concise validation summary and contains
+  no unit table.
 
 Examples:
 

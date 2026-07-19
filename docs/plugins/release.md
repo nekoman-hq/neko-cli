@@ -528,7 +528,7 @@ Flokkq <webcla21@htl-kaindorf.at>                                   1
 
 ### `neko release validate`
 
-Validate the release configuration.
+Validate the complete release configuration.
 
 **Usage:**
 ```bash
@@ -539,8 +539,8 @@ neko release validate [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--show` | bool | `false` | Display current configuration details |
-| `--unit` | string | | Focus displayed V2 unit details. Required only for unit-bound release commands in multi-unit repositories. |
+| `--show` | bool | `false` | Display structured release configuration details and unit summaries |
+| `--unit` | string | | Focus displayed V2 unit details; the complete repository is still validated. |
 
 **Examples:**
 ```bash
@@ -551,19 +551,36 @@ neko release validate
 neko release validate --show
 ```
 
-**Sample Output for legacy V1 repositories (with --show):**
+Without `--show`, human output stays concise and does not include a unit table:
+
 ```
-PROPERTY        VALUE
-────────────────────────────
-Project Name    neko-cli
-Project Owner   nekoman-hq
-Project Type    other
-Release System  goreleaser
-Version         2.1.7
-Status          ✓ Valid
+Release Configuration Validation
+
+Status            ✓ Valid
+Source            V2 config and state
+Schema            v2
+Configuration     .neko/release.config.json
+State             .neko/release.state.json
+Configured units  3
 ```
 
-For V2 repositories, `--show` displays schema type, units, versions, working directories, tag prefixes, executor, delivery, workflow when configured, and paths.
+For V2 repositories, `--show` adds one responsive row per displayed unit.
+`Unit`, `Version`, and `Kind` are essential columns; `Executor`, `Delivery`,
+and `Workflow` are admitted in that priority order when terminal width permits.
+Complete details follow the table in this order: version, kind, working
+directory, tag prefix, executor, delivery, workflow, and paths. Paths are one
+entry per line. Plugin name, manifest, asset prefix, and binary follow only for
+units with `kind: plugin`.
+
+V1 `--show` uses one virtual `default` unit with essential `Unit`, `Version`,
+and `Project type` columns plus optional `Release system`. Its details contain
+the legacy project name, owner, type, release system, and version; no V2 state
+path is displayed.
+
+`--unit` never narrows validation. V2 config and state are decoded and validated
+as a complete pair before the selected unit is used to focus displayed details.
+Public `--output json` retains the established `data.items` schema, values, and
+order and does not include presentation metadata.
 
 ---
 

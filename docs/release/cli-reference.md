@@ -81,6 +81,37 @@ neko release plugin-index --output /tmp/plugin-index.json
 
 For `plugin-index --output`, relative paths are resolved from the repository root. Explicit absolute paths remain supported for CI or temporary artifacts. Repository-contained output is blocked from overwriting release config/state, recovery evidence, Git internals, or plugin manifest inputs.
 
+### Validate presentation
+
+`neko release validate` validates the complete repository release source. In V2 this
+means strict decoding and repository-wide validation of both
+`.neko/release.config.json` and `.neko/release.state.json`, even when `--unit`
+is supplied. `--unit` only focuses displayed V2 details.
+
+Default human output is a concise `Release Configuration Validation` summary
+with status, source, schema, config path, V2 state path, an explicit selected
+unit when supplied, and the complete configured-unit count for V2. It does not
+include a unit table.
+
+`--show` adds a responsive V2 unit table. Its essential columns are `Unit`,
+`Version`, and `Kind`; optional columns are considered in `Executor`,
+`Delivery`, `Workflow` order. Complete per-unit details follow the table in
+version, kind, working directory, tag prefix, executor, delivery, workflow, and
+paths order. Paths render one per line, and plugin name, manifest, asset prefix,
+and binary are appended only for plugin units. V1 uses one virtual `default`
+row with essential `Unit`, `Version`, and `Project type`, optional `Release
+system`, and legacy-only details.
+
+The flags are:
+
+```text
+--show  Display structured release configuration details and unit summaries
+--unit  Focus displayed V2 unit details; the complete repository is still validated.
+```
+
+Human presentation metadata does not alter the established public JSON
+`data.items` schema, values, or ordering.
+
 `neko release github-workflow-init [--unit <unit-id>] [--path
 <configured-path>] [--dry-run]` creates the canonical GitHub Actions Release V2
 workflow without overwriting consumer content. All flags are optional. With no
@@ -374,6 +405,8 @@ github-workflow-init
 ```
 
 It is required for unit-bound commands when a V2 repository defines multiple units.
+`validate` is not unit-bound: it validates the complete repository without a
+unit and treats `--unit` only as a presentation focus.
 
 ## Migrate
 

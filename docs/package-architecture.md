@@ -46,15 +46,15 @@ the mapping from semantic roles to terminal styles. Presentation declarations
 must never import the renderer, and the renderer must not import the logger.
 
 `pkg/log` is independent of the renderer. Both packages may use only the
-private `internal/terminalstyle` primitives for ANSI application and terminal
+private `internal/terminal` primitives for ANSI application and terminal
 color capability. This avoids a renderer-to-logger dependency while keeping
 terminal policy consistent.
 
-`internal/terminalstyle` remains under `internal/` because its ANSI palette,
+`internal/terminal` remains under `internal/` because its ANSI palette,
 reset application, TTY check, and `NO_COLOR` policy are implementation details,
-not an external theming or styling API. The focused name remains accurate; a
-broader `internal/terminal` package would imply responsibilities it does not
-currently own.
+not an external theming or styling API. Its responsibilities remain limited to
+styling primitives in `style.go` and terminal/color capability policy in
+`capability.go`; it does not own layout, logging, or presentation semantics.
 
 ## Protocol compatibility
 
