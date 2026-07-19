@@ -6,7 +6,11 @@ package plugin
 @Since      03.02.2026
 */
 
-import "time"
+import (
+	"time"
+
+	"github.com/nekoman-hq/neko-cli/pkg/presentation"
+)
 
 // Request represents the input data passed to a plugin when executing a command.
 // It contains the command to execute, its arguments, flags, and contextual information
@@ -32,84 +36,27 @@ type Context struct {
 //
 //nolint:govet // Field order preserves the stable response protocol order.
 type Response struct {
-	Status          string           `json:"status"`                     // Execution status (e.g., "success", "error")
-	Metadata        ResponseMetadata `json:"metadata"`                   // Metadata about the response
-	Data            map[string]any   `json:"data,omitempty"`             // Optional structured data returned by the plugin
-	Error           *ResponseError   `json:"error,omitempty"`            // Error details if the execution failed
-	RendererHint    string           `json:"renderer_hint,omitempty"`    // Hint for how to render the response (e.g., "table", "json", "text")
-	Logs            []LogEntry       `json:"logs,omitempty"`             // Log entries generated during execution
-	HumanTable      *HumanTable      `json:"human_table,omitempty"`      // Optional transport-only declaration for responsive human output
-	HumanProperties *HumanProperties `json:"human_properties,omitempty"` // Optional ordered property declaration for one human-facing object
-	HumanText       *HumanText       `json:"human_text,omitempty"`       // Optional transport-only preformatted human output
-	GitHubOutput    *GitHubOutput    `json:"github_output,omitempty"`    // Optional ordered declaration for GitHub Actions output
-	ExitCode        int              `json:"exit_code,omitempty"`        // Optional non-zero Core CLI exit request
-}
+	Status                 string                   `json:"status"`                  // Execution status (e.g., "success", "error")
+	Metadata               ResponseMetadata         `json:"metadata"`                // Metadata about the response
+	Data                   map[string]any           `json:"data,omitempty"`          // Optional structured data returned by the plugin
+	Error                  *ResponseError           `json:"error,omitempty"`         // Error details if the execution failed
+	RendererHint           string                   `json:"renderer_hint,omitempty"` // Hint for how to render the response (e.g., "table", "json", "text")
+	Logs                   []LogEntry               `json:"logs,omitempty"`          // Log entries generated during execution
+	PresentationTable      *presentation.Table      `json:"-"`                       // Optional responsive table declaration
+	PresentationProperties *presentation.Properties `json:"-"`                       // Optional ordered property declaration
+	PresentationText       *presentation.Text       `json:"-"`                       // Optional preformatted text declaration
 
-// HumanTable declares ordered columns for an opt-in responsive human table.
-// Rows may provide a presentation-only projection when the machine-readable
-// Data uses a different shape. Details may append one responsive property view
-// after the table. All fields are transport metadata and do not change Data.
-//
-//nolint:govet // Field order preserves the stable human-table wire order.
-type HumanTable struct {
-	Columns []HumanColumn    `json:"columns"`
-	Rows    []map[string]any `json:"rows,omitempty"`
-	Details *HumanProperties `json:"details,omitempty"`
-	Title   string           `json:"title,omitempty"`
-}
-
-// HumanColumn declares one human-facing column. Slice order defines display
-// order and optional-column priority.
-type HumanColumn struct {
-	Key       string `json:"key"`
-	Label     string `json:"label"`
-	RoleKey   string `json:"role_key,omitempty"`
-	Essential bool   `json:"essential,omitempty"`
-}
-
-// HumanProperties declares an ordered property/value view for one result.
-// It is transport metadata and does not change the response Data contract.
-//
-//nolint:govet // Field order preserves the stable human-properties wire order.
-type HumanProperties struct {
-	Properties []HumanProperty `json:"properties"`
-	Title      string          `json:"title,omitempty"`
-}
-
-// HumanStyleRole expresses presentation meaning without exposing terminal
-// colors or ANSI sequences to plugin response mappers. The empty zero value is
-// rendered like HumanStyleDefault for backwards compatibility.
-type HumanStyleRole string
-
-const (
-	HumanStyleDefault  HumanStyleRole = "default"
-	HumanStyleEmphasis HumanStyleRole = "emphasis"
-	HumanStyleSuccess  HumanStyleRole = "success"
-	HumanStyleWarning  HumanStyleRole = "warning"
-	HumanStyleError    HumanStyleRole = "error"
-	HumanStyleInfo     HumanStyleRole = "info"
-	HumanStyleMuted    HumanStyleRole = "muted"
-)
-
-// HumanProperty declares one human-facing label and either maps it to a
-// response Data key or carries a presentation-only value. Slice order defines
-// display order. Key and Value are mutually exclusive.
-//
-//nolint:govet // Field order preserves the stable human-property wire order.
-type HumanProperty struct {
-	Key        string         `json:"key,omitempty"`
-	Label      string         `json:"label"`
-	Value      any            `json:"value,omitempty"`
-	Role       HumanStyleRole `json:"role,omitempty"`
-	Emphasized bool           `json:"emphasized,omitempty"`
-	Heading    bool           `json:"heading,omitempty"`
-}
-
-// HumanText declares preformatted human output for content that must remain
-// readable outside a table, such as a generated configuration preview. It is
-// transport metadata and does not change the response Data contract.
-type HumanText struct {
-	Content string `json:"content"`
+	// Deprecated: use PresentationTable. The field remains for Go source
+	// compatibility and is serialized through the established human_table tag.
+	HumanTable *presentation.Table `json:"-"`
+	// Deprecated: use PresentationProperties. The field remains for Go source
+	// compatibility and is serialized through the established human_properties tag.
+	HumanProperties *presentation.Properties `json:"-"`
+	// Deprecated: use PresentationText. The field remains for Go source
+	// compatibility and is serialized through the established human_text tag.
+	HumanText    *presentation.Text `json:"-"`
+	GitHubOutput *GitHubOutput      `json:"github_output,omitempty"` // Optional ordered declaration for GitHub Actions output
+	ExitCode     int                `json:"exit_code,omitempty"`     // Optional non-zero Core CLI exit request
 }
 
 // GitHubOutput declares an ordered set of response Data fields to encode for

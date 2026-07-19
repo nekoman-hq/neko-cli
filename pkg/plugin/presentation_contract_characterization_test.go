@@ -37,8 +37,15 @@ func TestPresentationTransportContractCharacterization(t *testing.T) {
 	if err := json.Unmarshal(encoded, &decoded); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
 	}
-	if !reflect.DeepEqual(decoded, response) {
-		t.Fatalf("presentation transport round trip changed\nwant: %#v\n got: %#v", response, decoded)
+	if !reflect.DeepEqual(decoded.HumanTable, response.HumanTable) ||
+		!reflect.DeepEqual(decoded.HumanProperties, response.HumanProperties) ||
+		!reflect.DeepEqual(decoded.HumanText, response.HumanText) {
+		t.Fatalf("deprecated presentation fields did not round trip\nwant: %#v\n got: %#v", response, decoded)
+	}
+	if !reflect.DeepEqual(decoded.PresentationTable, response.HumanTable) ||
+		!reflect.DeepEqual(decoded.PresentationProperties, response.HumanProperties) ||
+		!reflect.DeepEqual(decoded.PresentationText, response.HumanText) {
+		t.Fatalf("canonical presentation fields were not populated\nwant: %#v\n got: %#v", response, decoded)
 	}
 }
 
@@ -46,9 +53,9 @@ func TestExportedPresentationTypeShapeCharacterization(t *testing.T) {
 	t.Parallel()
 
 	assertJSONFields(t, reflect.TypeOf(HumanTable{}), []fieldContract{
-		{name: "Columns", jsonName: "columns", typeName: "[]plugin.HumanColumn"},
+		{name: "Columns", jsonName: "columns", typeName: "[]presentation.Column"},
 		{name: "Rows", jsonName: "rows,omitempty", typeName: "[]map[string]interface {}"},
-		{name: "Details", jsonName: "details,omitempty", typeName: "*plugin.HumanProperties"},
+		{name: "Details", jsonName: "details,omitempty", typeName: "*presentation.Properties"},
 		{name: "Title", jsonName: "title,omitempty", typeName: "string"},
 	})
 	assertJSONFields(t, reflect.TypeOf(HumanColumn{}), []fieldContract{
@@ -58,14 +65,14 @@ func TestExportedPresentationTypeShapeCharacterization(t *testing.T) {
 		{name: "Essential", jsonName: "essential,omitempty", typeName: "bool"},
 	})
 	assertJSONFields(t, reflect.TypeOf(HumanProperties{}), []fieldContract{
-		{name: "Properties", jsonName: "properties", typeName: "[]plugin.HumanProperty"},
+		{name: "Properties", jsonName: "properties", typeName: "[]presentation.Property"},
 		{name: "Title", jsonName: "title,omitempty", typeName: "string"},
 	})
 	assertJSONFields(t, reflect.TypeOf(HumanProperty{}), []fieldContract{
 		{name: "Key", jsonName: "key,omitempty", typeName: "string"},
 		{name: "Label", jsonName: "label", typeName: "string"},
 		{name: "Value", jsonName: "value,omitempty", typeName: "interface {}"},
-		{name: "Role", jsonName: "role,omitempty", typeName: "plugin.HumanStyleRole"},
+		{name: "Role", jsonName: "role,omitempty", typeName: "presentation.StyleRole"},
 		{name: "Emphasized", jsonName: "emphasized,omitempty", typeName: "bool"},
 		{name: "Heading", jsonName: "heading,omitempty", typeName: "bool"},
 	})
