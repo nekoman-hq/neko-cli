@@ -4,104 +4,114 @@ on:
   workflow_dispatch:
     inputs:
       unit:
+        description: Neko Release V2 unit id
         required: true
         type: string
       version:
+        description: Neko-authoritative release version
         required: true
         type: string
       tag:
+        description: Neko-created unit tag
         required: true
         type: string
       release_sha:
+        description: Neko-created release commit SHA
         required: true
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: release-plugin-ui-${{ inputs.tag }}
+  group: release-${{ inputs.unit }}-${{ inputs.tag }}
   cancel-in-progress: false
 
 jobs:
-  validate-build-publish:
-    name: Validate, build, and publish plugin-ui
+  validate:
+    name: Validate and build plugin-ui
     runs-on: ubuntu-latest
+    outputs:
+      unit: ${{ steps.release-context.outputs.unit }}
+      version: ${{ steps.release-context.outputs.version }}
+      tag: ${{ steps.release-context.outputs.tag }}
+      release_sha: ${{ steps.release-context.outputs.release_sha }}
     env:
-      RELEASE_UNIT: ${{ inputs.unit }}
-      RELEASE_VERSION: ${{ inputs.version }}
-      RELEASE_TAG: ${{ inputs.tag }}
-      RELEASE_SHA: ${{ inputs.release_sha }}
-      RELEASE_WORKFLOW: .github/workflows/release-plugin-ui.yml
       GORELEASER_CONFIG: .goreleaser.plugin-ui.yaml
     steps:
-      - name: Validate dispatch inputs
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if [[ "$RELEASE_UNIT" != "plugin-ui" ]]; then
-            echo "::error::unit must be plugin-ui, got '$RELEASE_UNIT'"
-            exit 1
-          fi
-
-          if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
-            echo "::error::version must be a semver-like value, got '$RELEASE_VERSION'"
-            exit 1
-          fi
-
-          expected_tag="plugin-ui/v${RELEASE_VERSION}"
-          if [[ "$RELEASE_TAG" != "$expected_tag" ]]; then
-            echo "::error::tag must be '${expected_tag}', got '$RELEASE_TAG'"
-            exit 1
-          fi
-
-          if [[ ! "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::release_sha must be a 40-character lowercase Git SHA"
-            exit 1
-          fi
-
-      - name: Checkout dispatched tag
+      - name: Checkout the exact release commit with tags
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ inputs.release_sha }}
           fetch-depth: 0
+          fetch-tags: true
           persist-credentials: false
 
-      - name: Validate tag and release SHA
+      - name: Install pinned Neko CLI
         shell: bash
+        env:
+          NEKO_VERSION: ${{ vars.NEKO_VERSION }}
+          NEKO_INSTALL_DIR: ${{ runner.temp }}/neko/bin
         run: |
           set -euo pipefail
+          : "${NEKO_VERSION:?Set repository variable NEKO_VERSION to a supported Neko CLI version}"
+          curl -fsSL https://raw.githubusercontent.com/nekoman-hq/neko-cli/main/install.sh \
+            --output "$RUNNER_TEMP/install-neko.sh"
+          bash "$RUNNER_TEMP/install-neko.sh"
+          echo "$NEKO_INSTALL_DIR" >> "$GITHUB_PATH"
 
-          head_sha="$(git rev-parse HEAD)"
-          tag_sha="$(git rev-list -n 1 "$RELEASE_TAG")"
-
-          if [[ "$head_sha" != "$RELEASE_SHA" ]]; then
-            echo "::error::checked-out HEAD $head_sha does not match release_sha $RELEASE_SHA"
-            exit 1
-          fi
-
-          if [[ "$tag_sha" != "$RELEASE_SHA" ]]; then
-            echo "::error::tag $RELEASE_TAG points to $tag_sha, expected $RELEASE_SHA"
-            exit 1
-          fi
-
-      - name: Validate release state, manifest, and config
+      - name: Install pinned Neko Release Plugin
         shell: bash
+        env:
+          NEKO_RELEASE_PLUGIN_VERSION: ${{ vars.NEKO_RELEASE_PLUGIN_VERSION }}
         run: |
           set -euo pipefail
+          : "${NEKO_RELEASE_PLUGIN_VERSION:?Set repository variable NEKO_RELEASE_PLUGIN_VERSION to a supported Release Plugin version}"
+          neko plugin install release --version "$NEKO_RELEASE_PLUGIN_VERSION"
 
-          jq -e --arg version "$RELEASE_VERSION" '.units["plugin-ui"].version == $version' .neko/release.state.json > /dev/null
+      - name: Validate Neko release context
+        id: release-context
+        shell: bash
+        env:
+          RELEASE_UNIT: ${{ inputs.unit }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          neko release ci-validate-context \
+            --unit "$RELEASE_UNIT" \
+            --version "$RELEASE_VERSION" \
+            --tag "$RELEASE_TAG" \
+            --release-sha "$RELEASE_SHA" \
+            --output github \
+            --github-output-file "$GITHUB_OUTPUT"
+
+      - name: Record validated release context
+        shell: bash
+        env:
+          RELEASE_UNIT: ${{ steps.release-context.outputs.unit }}
+          RELEASE_VERSION: ${{ steps.release-context.outputs.version }}
+          RELEASE_TAG: ${{ steps.release-context.outputs.tag }}
+          RELEASE_SHA: ${{ steps.release-context.outputs.release_sha }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Validated plugin-ui dispatch"
+            echo ""
+            echo "- unit: \`$RELEASE_UNIT\`"
+            echo "- version: \`$RELEASE_VERSION\`"
+            echo "- tag: \`$RELEASE_TAG\`"
+            echo "- release_sha: \`$RELEASE_SHA\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Validate materialized plugin manifest
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.release-context.outputs.version }}
+        run: |
+          set -euo pipefail
           jq -e --arg version "$RELEASE_VERSION" '.version == $version' plugin/ui/manifest.json > /dev/null
-
-          jq -e --arg workflow "$RELEASE_WORKFLOW" '
-            .schemaVersion == 2 and
-            any(.units[]; .id == "plugin-ui" and
-              .tagPrefix == "plugin-ui/v" and
-              .executor.type == "goreleaser" and
-              .executor.delivery == "github-actions" and
-              .executor.workflow == $workflow)
-          ' .neko/release.config.json > /dev/null
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -125,7 +135,7 @@ jobs:
       - name: Snapshot build plugin-ui only
         uses: goreleaser/goreleaser-action@v6
         env:
-          PLUGIN_UI_VERSION: ${{ inputs.version }}
+          PLUGIN_UI_VERSION: ${{ steps.release-context.outputs.version }}
         with:
           distribution: goreleaser
           version: "~> v2"
@@ -137,10 +147,33 @@ jobs:
           set -euo pipefail
           git diff --exit-code
 
+  publish:
+    name: Publish plugin-ui
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GORELEASER_CONFIG: .goreleaser.plugin-ui.yaml
+    steps:
+      - name: Checkout the validated release commit with tags
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.release_sha }}
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
       - name: Package plugin-ui artifacts
         uses: goreleaser/goreleaser-action@v6
         env:
-          PLUGIN_UI_VERSION: ${{ inputs.version }}
+          PLUGIN_UI_VERSION: ${{ needs.validate.outputs.version }}
         with:
           distribution: goreleaser
           version: "~> v2"
@@ -150,6 +183,9 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          RELEASE_SHA: ${{ needs.validate.outputs.release_sha }}
         run: |
           set -euo pipefail
 
@@ -167,9 +203,9 @@ jobs:
         env:
           INDEX_OUTPUT: ${{ runner.temp }}/plugin-index.json
           GITHUB_REPOSITORY: ${{ github.repository }}
-          RELEASE_UNIT: ${{ inputs.unit }}
-          RELEASE_VERSION: ${{ inputs.version }}
-          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_UNIT: ${{ needs.validate.outputs.unit }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
         run: .github/scripts/generate-plugin-index.sh
 
       - name: Publish plugin registry index
@@ -178,11 +214,16 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           INDEX_PATH: ${{ runner.temp }}/plugin-index.json
-          PLUGIN_REGISTRY_TARGET_SHA: ${{ inputs.release_sha }}
+          PLUGIN_REGISTRY_TARGET_SHA: ${{ needs.validate.outputs.release_sha }}
         run: .github/scripts/publish-plugin-index.sh
 
       - name: Publish summary
         shell: bash
+        env:
+          RELEASE_UNIT: ${{ needs.validate.outputs.unit }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          RELEASE_SHA: ${{ needs.validate.outputs.release_sha }}
         run: |
           set -euo pipefail
           {
