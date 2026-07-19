@@ -151,7 +151,9 @@ func TestPluginReleaseWorkflowsPublishPluginIndexAfterPluginRelease(t *testing.T
 		t.Run(tt.path, func(t *testing.T) {
 			workflow := readFile(t, filepath.Join(root, tt.path))
 			for _, want := range []string{
-				"permissions:\n  contents: write",
+				"permissions:\n  contents: read",
+				"  publish:\n",
+				"    permissions:\n      contents: write",
 				"Generate plugin registry index",
 				"Publish plugin registry index",
 				"plugin-index.json",
