@@ -32,8 +32,8 @@ func TestIntegrationDoctorHumanPresentationUsesSummaryIndexAndCompleteDetails(t 
 	wantColumns := []plugin.HumanColumn{
 		{Key: "severity", Label: "Severity", RoleKey: integrationDoctorSemanticRoleKey, Essential: true},
 		{Key: "code", Label: "Code", RoleKey: integrationDoctorSemanticRoleKey, Essential: true},
-		{Key: "target", Label: "Target"},
-		{Key: "scope", Label: "Scope"},
+		{Key: "target", Label: "Target", RoleKey: integrationDoctorDefaultRoleKey},
+		{Key: "scope", Label: "Scope", RoleKey: integrationDoctorDefaultRoleKey},
 	}
 	if response.HumanTable == nil || response.HumanTable.Title != integrationDoctorDiagnosticsTitle ||
 		!reflect.DeepEqual(response.HumanTable.Columns, wantColumns) {
@@ -135,17 +135,21 @@ func TestIntegrationDoctorDiagnosticDetailsPreserveExactFieldOrder(t *testing.T)
 				Emphasized: true,
 				Heading:    true,
 			},
-			{Label: "Scope", Value: diagnostic.Scope},
+			{Label: "Scope", Value: diagnostic.Scope, Role: plugin.HumanStyleDefault},
 		}
 		if diagnostic.Unit != "" {
-			want = append(want, plugin.HumanProperty{Label: "Unit", Value: diagnostic.Unit})
+			want = append(want, plugin.HumanProperty{
+				Label: "Unit", Value: diagnostic.Unit, Role: plugin.HumanStyleDefault,
+			})
 		}
 		if diagnostic.Workflow != "" {
-			want = append(want, plugin.HumanProperty{Label: "Workflow", Value: diagnostic.Workflow})
+			want = append(want, plugin.HumanProperty{
+				Label: "Workflow", Value: diagnostic.Workflow, Role: plugin.HumanStyleDefault,
+			})
 		}
 		want = append(want,
-			plugin.HumanProperty{Label: "Message", Value: diagnostic.Message},
-			plugin.HumanProperty{Label: "Remediation", Value: diagnostic.Remediation},
+			plugin.HumanProperty{Label: "Message", Value: diagnostic.Message, Role: plugin.HumanStyleDefault},
+			plugin.HumanProperty{Label: "Remediation", Value: diagnostic.Remediation, Role: plugin.HumanStyleDefault},
 		)
 		if offset+len(want) > len(properties) || !reflect.DeepEqual(properties[offset:offset+len(want)], want) {
 			t.Fatalf("detail for %s fields = %#v, want %#v", diagnostic.Code, properties[offset:], want)
@@ -183,6 +187,9 @@ func TestIntegrationDoctorCompactTargetsShortenOnlyUnambiguousWorkflowBasenames(
 		}
 		if got := rows[index][integrationDoctorSemanticRoleKey]; got != string(wantRoles[index]) {
 			t.Fatalf("semantic role %d = %#v, want %q", index, got, wantRoles[index])
+		}
+		if got := rows[index][integrationDoctorDefaultRoleKey]; got != string(plugin.HumanStyleDefault) {
+			t.Fatalf("default role %d = %#v, want %q", index, got, plugin.HumanStyleDefault)
 		}
 	}
 }

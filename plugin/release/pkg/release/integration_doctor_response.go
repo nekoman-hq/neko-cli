@@ -12,6 +12,7 @@ const (
 	integrationDoctorHumanTitle       = "Release Integration Doctor"
 	integrationDoctorDiagnosticsTitle = "Diagnostics"
 	integrationDoctorSemanticRoleKey  = "semantic_role"
+	integrationDoctorDefaultRoleKey   = "default_role"
 )
 
 func mapIntegrationDoctorResult(result *integrationDoctorResult, timestamp time.Time) *plugin.Response {
@@ -38,8 +39,8 @@ func mapIntegrationDoctorResult(result *integrationDoctorResult, timestamp time.
 			Columns: []plugin.HumanColumn{
 				{Key: "severity", Label: "Severity", RoleKey: integrationDoctorSemanticRoleKey, Essential: true},
 				{Key: "code", Label: "Code", RoleKey: integrationDoctorSemanticRoleKey, Essential: true},
-				{Key: "target", Label: "Target"},
-				{Key: "scope", Label: "Scope"},
+				{Key: "target", Label: "Target", RoleKey: integrationDoctorDefaultRoleKey},
+				{Key: "scope", Label: "Scope", RoleKey: integrationDoctorDefaultRoleKey},
 			},
 			Rows: integrationDoctorDiagnosticRows(result.Diagnostics),
 			Details: &plugin.HumanProperties{
@@ -106,6 +107,7 @@ func integrationDoctorDiagnosticRows(diagnostics []integrationDoctorDiagnostic) 
 			"target":                         integrationDoctorDiagnosticTarget(diagnostic, collidingBasenames),
 			"scope":                          diagnostic.Scope,
 			integrationDoctorSemanticRoleKey: string(role),
+			integrationDoctorDefaultRoleKey:  string(plugin.HumanStyleDefault),
 		})
 	}
 	return rows
@@ -159,16 +161,22 @@ func integrationDoctorDiagnosticDetailProperties(diagnostics []integrationDoctor
 			Emphasized: true,
 			Heading:    true,
 		})
-		properties = append(properties, plugin.HumanProperty{Label: "Scope", Value: diagnostic.Scope})
+		properties = append(properties, plugin.HumanProperty{
+			Label: "Scope", Value: diagnostic.Scope, Role: plugin.HumanStyleDefault,
+		})
 		if diagnostic.Unit != "" {
-			properties = append(properties, plugin.HumanProperty{Label: "Unit", Value: diagnostic.Unit})
+			properties = append(properties, plugin.HumanProperty{
+				Label: "Unit", Value: diagnostic.Unit, Role: plugin.HumanStyleDefault,
+			})
 		}
 		if diagnostic.Workflow != "" {
-			properties = append(properties, plugin.HumanProperty{Label: "Workflow", Value: diagnostic.Workflow})
+			properties = append(properties, plugin.HumanProperty{
+				Label: "Workflow", Value: diagnostic.Workflow, Role: plugin.HumanStyleDefault,
+			})
 		}
 		properties = append(properties,
-			plugin.HumanProperty{Label: "Message", Value: diagnostic.Message},
-			plugin.HumanProperty{Label: "Remediation", Value: diagnostic.Remediation},
+			plugin.HumanProperty{Label: "Message", Value: diagnostic.Message, Role: plugin.HumanStyleDefault},
+			plugin.HumanProperty{Label: "Remediation", Value: diagnostic.Remediation, Role: plugin.HumanStyleDefault},
 		)
 	}
 	return properties

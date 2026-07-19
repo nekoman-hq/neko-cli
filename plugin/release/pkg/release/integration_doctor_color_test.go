@@ -101,11 +101,11 @@ func TestIntegrationDoctorStylesHeadingsWithoutColoringOrdinaryFields(t *testing
 	result := integrationDoctorResult{Diagnostics: []integrationDoctorDiagnostic{{
 		Severity:    integrationDoctorError,
 		Scope:       "workflow",
-		Unit:        "api",
-		Workflow:    ".github/workflows/release-api.yml",
+		Unit:        "versioned-unit",
+		Workflow:    ".github/workflows/versioned-release.yml",
 		Code:        "CHECKOUT_REF_INVALID",
-		Message:     "Checkout does not use the dispatched release commit identity.",
-		Remediation: "Set checkout ref to the dispatched release commit identity.",
+		Message:     "verifiable.",
+		Remediation: "v1 remains ordinary.",
 	}}}
 	finalizeIntegrationDoctorResult(&result)
 	output := renderIntegrationDoctorWithColorForTest(t, mapIntegrationDoctorResultForTest(result), 100, true)
@@ -117,17 +117,20 @@ func TestIntegrationDoctorStylesHeadingsWithoutColoringOrdinaryFields(t *testing
 		}
 	}
 	for _, ordinary := range []string{
-		"api",
-		".github/workflows/release-api.yml",
+		"versioned-unit",
+		".github/workflows/versioned-release.yml",
 		"workflow",
-		"Checkout does not use the dispatched release commit identity.",
-		"Set checkout ref to the dispatched release commit identity.",
+		"verifiable.",
+		"v1 remains ordinary.",
 	} {
 		for _, color := range []string{"\x1b[31m", "\x1b[33m", "\x1b[36m", "\x1b[90m"} {
 			if strings.Contains(output, color+ordinary) {
 				t.Fatalf("ordinary Doctor field %q received semantic color %q:\n%q", ordinary, color, output)
 			}
 		}
+	}
+	if strings.Contains(output, "\x1b[35m") {
+		t.Fatalf("ordinary Doctor values received legacy version-prefix color:\n%q", output)
 	}
 	if !strings.Contains(output, "\x1b[31mERROR\x1b[0m") ||
 		!strings.Contains(output, "\x1b[31mCHECKOUT_REF_INVALID\x1b[0m") ||
