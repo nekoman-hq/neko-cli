@@ -193,10 +193,50 @@ Nekocli dogfoods three independent V2 GitHub Actions units:
 | `plugin-release` | `plugin-release/vX.Y.Z` | `.github/workflows/release-plugin-release.yml` | `.goreleaser.plugin-release.yaml` | release plugin assets with `plugin/release/manifest.json` |
 | `plugin-ui` | `plugin-ui/vX.Y.Z` | `.github/workflows/release-plugin-ui.yml` | `.goreleaser.plugin-ui.yaml` | UI plugin assets with `plugin/ui/manifest.json` |
 
-Neko CLI creates the state/materialization commit, creates the unit tag, pushes commit then tag, and dispatches the workflow with `unit`, `version`, `tag`, and `release_sha`.
+Neko CLI creates the state/materialization commit, creates the unit tag, pushes
+commit then tag, and dispatches the workflow with the four required string
+inputs `unit`, `version`, `tag`, and `release_sha`. `workflow_dispatch` is the
+only trigger, and concurrency is
+`release-${{ inputs.unit }}-${{ inputs.tag }}` with cancellation disabled.
 
-Each workflow checks out the dispatched release commit with complete tag history, validates the dispatched context through `neko release ci-validate-context`, validates the plugin manifest for plugin units, runs `go test ./...`, checks its dedicated GoReleaser config, performs a snapshot build for only that unit, and then publishes a GitHub Release for the exact pushed tag.
+Each workflow defaults to `contents: read` and has two jobs. The `validate` job
+checks out `${{ inputs.release_sha }}` with complete history and explicit tags,
+does not persist checkout credentials, installs Neko from the canonical
+`install.sh` URL pinned by repository variable `NEKO_VERSION`, and installs the
+Release Plugin pinned by `NEKO_RELEASE_PLUGIN_VERSION`. Its one
+`release-context` step invokes:
+
+```text
+neko release ci-validate-context \
+  --unit "$RELEASE_UNIT" \
+  --version "$RELEASE_VERSION" \
+  --tag "$RELEASE_TAG" \
+  --release-sha "$RELEASE_SHA" \
+  --output github \
+  --github-output-file "$GITHUB_OUTPUT"
+```
+
+The validated `unit`, `version`, `tag`, and `release_sha` step outputs become
+same-named `validate` job outputs. Read-only tests, dedicated GoReleaser config
+checking, unit-scoped snapshot builds, and plugin-manifest checks consume those
+validated values. The dependent `publish` job checks out the validated job
+output SHA with the same safe checkout settings and uses only
+`needs.validate.outputs.*` release identity.
+
+Only `publish` grants `contents: write`. The CLI GoReleaser publication and the
+plugin `gh release create` plus registry update steps consume
+`secrets.GITHUB_TOKEN`; no validation or build-check step receives the secret.
+GitHub Actions cannot grant token permissions at step scope, so the separate
+publication job is the narrowest boundary that preserves real GitHub Release
+and registry publication. The local Doctor consequently reports its generic
+`PERMISSIONS_BROAD` warning for each workflow, while the repository contract
+tests prove the write grant is confined to `publish`; all avoidable checkout,
+concurrency, installation, and validator findings are absent.
 
 For prefixed plugin tags, the workflow does not run `goreleaser release` as the publisher because the free GoReleaser release command parses the full current tag as SemVer. Instead, GoReleaser packages archives and checksums with the dedicated plugin config, and `gh release create "$RELEASE_TAG"` creates the GitHub Release for the exact `plugin-release/vX.Y.Z` or `plugin-ui/vX.Y.Z` tag.
 
-No workflow calculates versions, commits, tags, pushes, rewrites manifests, or uses the global mixed-artifact `.goreleaser.yaml` for publishing. Plugin workflows receive `PLUGIN_RELEASE_VERSION` or `PLUGIN_UI_VERSION` from the dispatch input. The CLI workflow receives `CLI_VERSION`.
+No workflow calculates versions, commits, tags, pushes, rewrites manifests, or
+uses the global mixed-artifact `.goreleaser.yaml` for publishing. Plugin
+workflows receive `PLUGIN_RELEASE_VERSION` or `PLUGIN_UI_VERSION` from the
+validated version output. The CLI workflow receives `CLI_VERSION` from that
+same output.
