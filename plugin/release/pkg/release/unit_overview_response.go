@@ -61,7 +61,7 @@ func unitOverviewMachineRow(row unitOverviewRow) map[string]any {
 	value := map[string]any{
 		"id":          row.ID,
 		"alignment":   row.Alignment,
-		"issues":      append([]unitOverviewIssue(nil), row.Issues...),
+		"issues":      append(make([]unitOverviewIssue, 0, len(row.Issues)), row.Issues...),
 		"issue_codes": unitOverviewIssueCodes(row.Issues),
 	}
 	if row.DisplayName != "" {

@@ -237,6 +237,9 @@ func TestUnitOverviewJSONSchemaIsDeterministicAndPresentationFree(t *testing.T) 
 			t.Fatalf("JSON omitted %s: %s", required, first)
 		}
 	}
+	if !strings.Contains(string(first), `"issues":[]`) {
+		t.Fatalf("valid unit issues must be a stable empty list: %s", first)
+	}
 	for _, forbidden := range []string{"human_table", "human_properties", "renderer_hint", "next_version", "planned_version", "tag_exists"} {
 		if strings.Contains(string(first), forbidden) {
 			t.Fatalf("JSON contains forbidden field %q: %s", forbidden, first)
