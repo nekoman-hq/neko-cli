@@ -118,6 +118,345 @@ jobs:
 	}
 }
 
+func TestIntegrationDoctorPermissionScopeAcceptsRecognizedSameJobPublication(t *testing.T) {
+	tests := []struct {
+		name string
+		yaml string
+	}{
+		{
+			name: "GitHub Release through GoReleaser",
+			yaml: `
+permissions:
+  contents: read
+jobs:
+  validate:
+    steps:
+      - run: neko release ci-validate-context
+  publish:
+    permissions:
+      contents: write
+    steps:
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          args: release --config .goreleaser.yaml --clean
+`,
+		},
+		{
+			name: "GitHub Release through GitHub CLI",
+			yaml: `
+permissions:
+  contents: read
+jobs:
+  publish:
+    permissions:
+      contents: write
+    steps:
+      - run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" dist/*.zip
+`,
+		},
+		{
+			name: "GitHub Release asset upload through GitHub CLI",
+			yaml: `
+permissions:
+  contents: read
+jobs:
+  publish:
+    permissions:
+      contents: write
+    steps:
+      - run: gh release upload "$RELEASE_TAG" dist/*.zip
+`,
+		},
+		{
+			name: "GitHub Packages container publication",
+			yaml: `
+permissions:
+  contents: read
+jobs:
+  publish:
+    permissions:
+      packages: write
+    steps:
+      - run: docker push ghcr.io/example/service:"$RELEASE_VERSION"
+`,
+		},
+		{
+			name: "GitHub Packages build-push action",
+			yaml: `
+permissions:
+  contents: read
+jobs:
+  publish:
+    permissions:
+      packages: write
+    steps:
+      - uses: docker/build-push-action@v6
+        with:
+          push: true
+          tags: ghcr.io/example/service:latest
+`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := integrationDoctorPermissionDiagnosticCodes(t, test.yaml); len(got) != 0 {
+				t.Fatalf("permission diagnostics = %v, want none", got)
+			}
+		})
+	}
+}
+
+func TestIntegrationDoctorPermissionScopeRejectsUnsupportedOrUnjustifiedWrites(t *testing.T) {
+	tests := []struct {
+		name string
+		yaml string
+	}{
+		{
+			name: "workflow write-all",
+			yaml: `
+permissions: write-all
+jobs:
+  publish:
+    steps:
+      - run: gh release create "$RELEASE_TAG"
+`,
+		},
+		{
+			name: "reusable job write-all",
+			yaml: `
+permissions:
+  contents: read
+jobs:
+  publish:
+    permissions: write-all
+    uses: example/release/.github/workflows/publish.yml@main
+`,
+		},
+		{
+			name: "validation job write",
+			yaml: `
+permissions:
+  contents: read
+jobs:
+  validate:
+    permissions:
+      contents: write
+    steps:
+      - run: neko release ci-validate-context
+  publish:
+    permissions:
+      contents: write
+    steps:
+      - run: gh release create "$RELEASE_TAG"
+`,
+		},
+		{
+			name: "publish-looking step name without mutation",
+			yaml: `
+permissions:
+  contents: read
+jobs:
+  release:
+    permissions:
+      contents: write
+    steps:
+      - name: Publish GitHub Release
+        run: echo publish
+`,
+		},
+		{
+			name: "GoReleaser snapshot without publication",
+			yaml: `
+permissions:
+  contents: read
+jobs:
+  publish:
+    permissions:
+      contents: write
+    steps:
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          args: release --snapshot --skip=publish --clean
+`,
+		},
+		{
+			name: "unrelated action write scope",
+			yaml: `
+permissions:
+  contents: read
+jobs:
+  publish:
+    permissions:
+      actions: write
+    steps:
+      - run: gh release create "$RELEASE_TAG"
+`,
+		},
+		{
+			name: "unrelated security write scope",
+			yaml: `
+permissions:
+  contents: read
+jobs:
+  publish:
+    permissions:
+      security-events: write
+    steps:
+      - run: gh release create "$RELEASE_TAG"
+`,
+		},
+		{
+			name: "unrelated deployment write scope",
+			yaml: `
+permissions:
+  contents: read
+jobs:
+  publish:
+    permissions:
+      deployments: write
+    steps:
+      - run: gh release create "$RELEASE_TAG"
+`,
+		},
+		{
+			name: "package write without package publication",
+			yaml: `
+permissions:
+  contents: read
+jobs:
+  publish:
+    permissions:
+      packages: write
+    steps:
+      - run: echo package
+`,
+		},
+		{
+			name: "OIDC write without supported publication",
+			yaml: `
+permissions:
+  contents: read
+jobs:
+  publish:
+    permissions:
+      id-token: write
+    steps:
+      - run: cloudctl publish
+`,
+		},
+		{
+			name: "unsupported permission value",
+			yaml: `
+permissions:
+  contents: admin
+jobs:
+  validate:
+    steps:
+      - run: neko release ci-validate-context
+`,
+		},
+		{
+			name: "unsupported write value for read-only scope",
+			yaml: `
+permissions:
+  models: write
+jobs:
+  validate:
+    steps:
+      - run: neko release ci-validate-context
+`,
+		},
+		{
+			name: "unsupported permission shape",
+			yaml: `
+permissions:
+  - contents: read
+jobs:
+  validate:
+    steps:
+      - run: neko release ci-validate-context
+`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := integrationDoctorPermissionDiagnosticCodes(t, test.yaml)
+			if !slices.Equal(got, []string{"PERMISSIONS_BROAD"}) {
+				t.Fatalf("permission diagnostics = %v, want [PERMISSIONS_BROAD]", got)
+			}
+		})
+	}
+}
+
+func TestIntegrationDoctorPermissionScopeUnderstandsReadOnlyAndReplacementShapes(t *testing.T) {
+	tests := []struct {
+		name string
+		yaml string
+	}{
+		{
+			name: "read-all workflow default",
+			yaml: `
+permissions: read-all
+jobs:
+  validate:
+    steps:
+      - run: neko release ci-validate-context
+`,
+		},
+		{
+			name: "empty workflow permission mapping",
+			yaml: `
+permissions: {}
+jobs:
+  validate:
+    steps:
+      - run: neko release ci-validate-context
+`,
+		},
+		{
+			name: "every job declares an explicit read scope",
+			yaml: `
+jobs:
+  validate:
+    permissions:
+      contents: read
+    steps:
+      - run: neko release ci-validate-context
+  inspect:
+    permissions: {}
+    steps:
+      - run: echo inspect
+`,
+		},
+		{
+			name: "current read-only GitHub scopes",
+			yaml: `
+permissions:
+  artifact-metadata: read
+  code-quality: read
+  models: read
+  vulnerability-alerts: read
+jobs:
+  validate:
+    steps:
+      - run: neko release ci-validate-context
+`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := integrationDoctorPermissionDiagnosticCodes(t, test.yaml); len(got) != 0 {
+				t.Fatalf("permission diagnostics = %v, want none", got)
+			}
+		})
+	}
+}
+
 func integrationDoctorPermissionDiagnosticCodes(t *testing.T, content string) []string {
 	t.Helper()
 	root := integrationDoctorPermissionWorkflowRoot(t, content)

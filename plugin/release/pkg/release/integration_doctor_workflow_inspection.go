@@ -125,31 +125,6 @@ func inspectIntegrationDoctorDispatch(
 	}
 }
 
-func inspectIntegrationDoctorPermissions(
-	root *yaml.Node,
-	add func(integrationDoctorSeverity, string, string, string),
-) {
-	workflowPermissions := workflowMappingValue(root, "permissions")
-	explicit := workflowPermissions != nil
-	broad := workflowPermissionsAreBroad(workflowPermissions)
-	jobs := integrationDoctorWorkflowJobs(root)
-	if workflowPermissions == nil && len(jobs) > 0 {
-		explicit = true
-	}
-	for _, job := range jobs {
-		if workflowPermissions == nil && job.permissions == nil {
-			explicit = false
-		}
-		broad = broad || workflowPermissionsAreBroad(job.permissions)
-	}
-	if !explicit {
-		add(integrationDoctorWarning, "PERMISSIONS_IMPLICIT", "Workflow and jobs rely on implicit GitHub token permissions.", "Declare least-privilege permissions explicitly at workflow or job scope.")
-	}
-	if broad {
-		add(integrationDoctorWarning, "PERMISSIONS_BROAD", "The workflow grants one or more write permissions.", "Keep contents read-only by default and grant only the consumer step's required permissions.")
-	}
-}
-
 func inspectIntegrationDoctorConcurrency(
 	root *yaml.Node,
 	add func(integrationDoctorSeverity, string, string, string),
@@ -359,21 +334,6 @@ func integrationDoctorWorkflowJobs(root *yaml.Node) []integrationDoctorWorkflowJ
 		jobs = append(jobs, job)
 	}
 	return jobs
-}
-
-func workflowPermissionsAreBroad(node *yaml.Node) bool {
-	if node == nil {
-		return false
-	}
-	if node.Kind == yaml.ScalarNode {
-		return node.Value == "write" || node.Value == "write-all"
-	}
-	for _, child := range node.Content {
-		if workflowPermissionsAreBroad(child) {
-			return true
-		}
-	}
-	return false
 }
 
 func appendIntegrationDoctorRemoteLimits(add func(integrationDoctorSeverity, string, string, string)) {

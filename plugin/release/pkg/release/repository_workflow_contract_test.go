@@ -33,33 +33,21 @@ func TestRepositoryDogfoodDoctorAcceptance(t *testing.T) {
 
 	first := integrationDoctorResultFromResponse(t, runIntegrationDoctor(t, root, nil))
 	second := integrationDoctorResultFromResponse(t, runIntegrationDoctor(t, root, nil))
-	if first.Readiness != integrationDoctorReadyWithWarnings {
-		t.Fatalf("readiness = %q, want ready_with_warnings", first.Readiness)
+	if first.Readiness != integrationDoctorReady {
+		t.Fatalf("readiness = %q, want ready", first.Readiness)
 	}
-	if first.Summary.Errors != 0 {
-		t.Fatalf("Doctor errors = %d, diagnostics=%#v", first.Summary.Errors, first.Diagnostics)
+	if first.Summary.Errors != 0 || first.Summary.Warnings != 0 || first.Summary.Recommendations != 0 || first.Summary.NotVerifiable != 21 {
+		t.Fatalf("Doctor summary = %#v, diagnostics=%#v", first.Summary, first.Diagnostics)
 	}
 	if !reflect.DeepEqual(first.Diagnostics, second.Diagnostics) {
 		t.Fatal("repository Doctor diagnostics are not deterministic")
 	}
-	permissionWarnings := make(map[string]int)
 	for _, diagnostic := range first.Diagnostics {
-		if diagnostic.Severity == integrationDoctorWarning && diagnostic.Code != "PERMISSIONS_BROAD" {
+		if diagnostic.Severity != integrationDoctorNotVerifiable {
 			t.Errorf("avoidable warning remained: %#v", diagnostic)
 		}
-		if diagnostic.Severity == integrationDoctorWarning {
-			permissionWarnings[diagnostic.Workflow]++
-		}
-		if diagnostic.Severity == integrationDoctorError {
-			t.Errorf("workflow error remained: %#v", diagnostic)
-		}
 	}
-	for _, behavior := range repositoryWorkflowBehaviors() {
-		if permissionWarnings[behavior.path] != 1 {
-			t.Errorf("%s permission warnings = %d, want the one publication-write warning", behavior.path, permissionWarnings[behavior.path])
-		}
-	}
-	for _, removed := range []string{"CHECKOUT_TAGS_INCOMPLETE", "CONCURRENCY_IDENTITY_INCOMPLETE"} {
+	for _, removed := range []string{"PERMISSIONS_BROAD", "PERMISSIONS_IMPLICIT", "CHECKOUT_TAGS_INCOMPLETE", "CONCURRENCY_IDENTITY_INCOMPLETE"} {
 		assertIntegrationDoctorCodeAbsent(t, first.Diagnostics, removed)
 	}
 	for _, retained := range []string{

@@ -229,6 +229,7 @@ func TestIntegrationDoctorApplicationHasNoMutationTokenNetworkGitOrStoreDependen
 	for _, path := range []string{
 		"integration_doctor_inspection.go",
 		"integration_doctor_source.go",
+		"integration_doctor_permissions.go",
 		"integration_doctor_workflow_inspection.go",
 		"integration_doctor_workflow_reader.go",
 	} {
@@ -284,6 +285,7 @@ func TestIntegrationDoctorAvoidsGenericDiagnosticArchitecture(t *testing.T) {
 	for _, path := range []string{
 		"integration_doctor_inspection.go",
 		"integration_doctor_source.go",
+		"integration_doctor_permissions.go",
 		"integration_doctor_workflow_inspection.go",
 		"integration_doctor_response.go",
 	} {
