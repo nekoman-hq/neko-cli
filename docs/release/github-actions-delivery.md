@@ -170,6 +170,18 @@ dispatch inputs are allowed; additional required inputs are not, because Neko
 cannot supply them. Unrelated pull-request or branch verification triggers are
 not treated as publication conflicts merely by existing.
 
+Permissions are evaluated at their actual workflow/job scope. Omitted job
+declarations inherit workflow permissions; explicit job permissions replace
+that default. A workflow-level write or any `write-all` remains
+`PERMISSIONS_BROAD`.
+Job-scoped `contents: write` is accepted only when that job contains a direct
+GoReleaser publication or `gh release create`/`gh release upload`; job-scoped
+`packages: write` additionally supports an explicit GitHub Container Registry
+push. Unsupported shapes, values, unrelated write scopes, OIDC writes, and
+write grants supported only by names, paths, secrets, or non-mutating commands
+remain warnings. This is local structural evidence, not remote publication
+proof.
+
 Readiness is `not_ready` with exit code `1` when any error exists,
 `ready_with_warnings` with exit code `0` when only warnings remain, and `ready`
 with exit code `0` when findings are recommendations or locally not verifiable.
@@ -228,10 +240,12 @@ plugin `gh release create` plus registry update steps consume
 `secrets.GITHUB_TOKEN`; no validation or build-check step receives the secret.
 GitHub Actions cannot grant token permissions at step scope, so the separate
 publication job is the narrowest boundary that preserves real GitHub Release
-and registry publication. The local Doctor consequently reports its generic
-`PERMISSIONS_BROAD` warning for each workflow, while the repository contract
-tests prove the write grant is confined to `publish`; all avoidable checkout,
-concurrency, installation, and validator findings are absent.
+and registry publication. The local Doctor accepts these three scoped
+publication grants: the repository result is `ready` with zero errors,
+warnings, and recommendations. It retains seven honest `not_verifiable` facts
+per workflow (21 total) for remote workflow state, repository variables,
+installation artifacts, publication credentials, dispatch authorization,
+consumer build correctness, and publication-target acceptance.
 
 For prefixed plugin tags, the workflow does not run `goreleaser release` as the publisher because the free GoReleaser release command parses the full current tag as SemVer. Instead, GoReleaser packages archives and checksums with the dedicated plugin config, and `gh release create "$RELEASE_TAG"` creates the GitHub Release for the exact `plugin-release/vX.Y.Z` or `plugin-ui/vX.Y.Z` tag.
 

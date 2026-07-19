@@ -203,6 +203,17 @@ The public command contract is duplicated between `manifest.json` and the switch
   consumer extension point. Optional extra inputs and unrelated verification
   triggers are not rejected blindly. No build-system heuristic claims custom
   consumer commands are correct.
+- Permission inspection: one focused Doctor file parses the supported GitHub
+  permission scalar/mapping forms, applies workflow inheritance and explicit
+  job replacement, and accepts a job write only when a same-job direct
+  predicate supports that scope. The closed predicates recognize non-snapshot
+  GoReleaser release, direct GitHub CLI release creation/upload, and explicit
+  GitHub Container Registry pushes. Workflow writes, `write-all`, unsupported
+  forms, OIDC, unrelated scopes, and unsupported job writes remain
+  `PERMISSIONS_BROAD`; missing explicit coverage remains
+  `PERMISSIONS_IMPLICIT`. The inspection does not evaluate expressions, parse
+  shell programs, inspect invoked scripts, infer from names/paths/secrets, or
+  prove remote publication.
 - Result: diagnostics use the closed severities `error`, `warning`,
   `recommendation`, and `not_verifiable`. Stable ordering is severity, scope,
   unit, workflow, code, and message. Any error yields `not_ready`; otherwise a

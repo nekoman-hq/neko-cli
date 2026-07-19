@@ -218,6 +218,17 @@ its deliberately failing consumer placeholder is present. A structurally
 equivalent manual workflow is supported; custom build/publication correctness
 remains explicitly not verifiable.
 
+Permission diagnostics distinguish workflow defaults from job overrides. An
+omitted job declaration inherits the workflow permission set; an explicit job
+declaration replaces it. Workflow-level writes, `write-all`, unsupported
+permission forms, and unjustified job writes emit the warning
+`PERMISSIONS_BROAD`. A job-scoped `contents: write` is justified only by a
+same-job non-snapshot, non-skip-publish GoReleaser release or direct
+`gh release create`/`gh release upload`. A job-scoped
+`packages: write` is justified only by a literal GitHub Container Registry
+push. No OIDC publisher is structurally recognized. Names, paths, secret
+presence, and publish-looking no-op commands never count as evidence.
+
 `neko release units` is the flat, Release V2-only inventory command. It has no
 command-specific flags and lists every config or state unit in canonical unit
 ID order. Current versions come only from state. Canonical versions are exposed

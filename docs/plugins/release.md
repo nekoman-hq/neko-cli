@@ -243,6 +243,27 @@ variables, install artifacts, credentials, dispatch authorization, custom
 consumer build correctness, and publication-target acceptance are reported as
 not verifiable instead of inferred.
 
+Permission inspection follows GitHub Actions scope replacement directly. An
+omitted job declaration inherits the workflow declaration; an explicit job
+declaration replaces it for that job. Supported scopes use their GitHub-valid
+`read`, `write`, and `none` values (`id-token` has `write|none`; `models` and
+`vulnerability-alerts` have `read|none`), plus the scalar `read-all` and
+`write-all` forms and an empty mapping.
+`PERMISSIONS_IMPLICIT` remains a warning when neither the workflow nor every
+job declares permissions. Any workflow-level write, `write-all`, unsupported
+scope/value/shape, or job write without matching same-job publication evidence
+produces the warning `PERMISSIONS_BROAD`.
+
+The local evidence is intentionally narrow. `contents: write` is justified
+only by a same-job GoReleaser `release` action that is not snapshot/skip-publish,
+or a direct `gh release create`/`gh release upload` command. `packages: write`
+is justified only by a direct `docker push ghcr.io/...` command or a
+`docker/build-push-action` step with `push: true` and a literal `ghcr.io/...`
+tag. Job or step names, paths, secret presence, echo commands, and a job named
+`publish` are not evidence. No OIDC publication form is currently recognized,
+so `id-token: write` remains conservative. The Doctor does not inspect invoked
+scripts or prove that a recognized command succeeds remotely.
+
 ---
 
 ### `neko release units`
