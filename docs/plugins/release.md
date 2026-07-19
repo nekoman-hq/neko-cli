@@ -225,6 +225,17 @@ not verifiable instead of inferred.
 
 ---
 
+### `neko release units`
+
+List the current Release V2 unit inventory from local config and state:
+
+```bash
+neko release units
+neko release units --output json
+```
+
+---
+
 ### `neko release patch`
 
 Create a patch release, incrementing the Z in X.Y.Z (e.g., 1.2.3 → 1.2.4).

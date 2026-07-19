@@ -32,6 +32,7 @@ func TestMainOwnsOneExplicitRootBoundary(t *testing.T) {
 		"initcmd.HandleUnitAddAt(root, req)",
 		"release.HandleReleaseWithV1ExecutorsAt(root, req, release.Patch, v1Executors...)",
 		"release.HandleDoctorAt(root, req)",
+		"release.HandleUnitsAt(root, req)",
 		"release.HandleResumeAt(root, req)",
 		"evidence.HandleEvidenceAt(root, req)",
 		"history.HandleHistoryAt(root, req)",
@@ -45,14 +46,14 @@ func TestMainOwnsOneExplicitRootBoundary(t *testing.T) {
 	}
 }
 
-func TestMainUsesInspectionRootOnlyForDoctor(t *testing.T) {
+func TestMainUsesInspectionRootOnlyForSourceInspectionCommands(t *testing.T) {
 	sourceBytes, err := os.ReadFile("main.go")
 	if err != nil {
 		t.Fatalf("read main.go: %v", err)
 	}
 	source := string(sourceBytes)
 	for _, required := range []string{
-		`if req.Command == "doctor"`,
+		`if req.Command == "doctor" || req.Command == "units"`,
 		"workspace.ResolveInspectionRepositoryRoot(req.Context.WorkingDir)",
 		"workspace.ResolveRepositoryRoot(req.Context.WorkingDir)",
 	} {

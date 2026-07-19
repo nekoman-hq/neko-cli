@@ -343,6 +343,15 @@
       ]
     },
     {
+      "name": "units",
+      "description": "List configured Release V2 units, current state versions, tag shapes, metadata, and alignment issues without workflow, Git, network, or token inspection",
+      "outputs": [
+        "table",
+        "json"
+      ],
+      "flags": []
+    },
+    {
       "name": "ci-validate-context",
       "description": "Validate a dispatched Release V2 context against local config, state, HEAD, and tag history without mutation or network access",
       "outputs": [

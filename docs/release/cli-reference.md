@@ -7,6 +7,7 @@ neko release init --unit plugin-release --kind plugin --plugin-name release --pl
 neko release unit-add --unit api --executor goreleaser --delivery github-actions --workflow .github/workflows/release-api.yml --tag-prefix api/v --paths "apps/api/**"
 neko release github-workflow-init --dry-run
 neko release doctor
+neko release units
 neko release init-options
 ```
 
@@ -58,6 +59,8 @@ neko release plan --change major --unit api
 neko release doctor
 neko release doctor --unit api
 neko release doctor --output json
+neko release units
+neko release units --output json
 neko release github-workflow-init --dry-run
 neko release github-workflow-init --unit api
 neko release github-workflow-init --path .github/workflows/release-api.yml

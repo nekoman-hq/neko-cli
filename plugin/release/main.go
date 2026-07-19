@@ -41,7 +41,7 @@ func main() {
 
 	var root workspace.RepositoryRoot
 	var err error
-	if req.Command == "doctor" {
+	if req.Command == "doctor" || req.Command == "units" {
 		root, err = workspace.ResolveInspectionRepositoryRoot(req.Context.WorkingDir)
 	} else {
 		root, err = workspace.ResolveRepositoryRoot(req.Context.WorkingDir)
@@ -90,6 +90,8 @@ func handleRequestAt(root workspace.RepositoryRoot, req plugin.Request, v1Execut
 		return release.HandlePlanAt(root, req)
 	case "doctor":
 		return release.HandleDoctorAt(root, req)
+	case "units":
+		return release.HandleUnitsAt(root, req)
 	case "ci-validate-context":
 		return release.HandleReleaseContextValidationAt(root, req)
 	case "github-workflow-init":

@@ -2,23 +2,12 @@ package release
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
-type integrationDoctorSourceSnapshot struct {
-	Config        *releaseconfig.V2ReleaseConfig
-	State         *releaseconfig.V2ReleaseState
-	ConfigError   error
-	StateError    error
-	InspectionErr error
-	ConfigPresent bool
-	StatePresent  bool
-	V1Present     bool
-	RecoveryReady bool
-}
+type integrationDoctorSourceSnapshot = localV2SourceSnapshot
 
 type integrationDoctorSourceReader interface {
 	Read(string) integrationDoctorSourceSnapshot
@@ -27,35 +16,7 @@ type integrationDoctorSourceReader interface {
 type filesystemIntegrationDoctorSourceReader struct{}
 
 func (filesystemIntegrationDoctorSourceReader) Read(root string) integrationDoctorSourceSnapshot {
-	snapshot := integrationDoctorSourceSnapshot{RecoveryReady: true}
-	var err error
-	snapshot.ConfigPresent, err = releaseContextPathPresent(releaseconfig.V2ConfigPath(root))
-	if err != nil {
-		snapshot.InspectionErr = err
-		return snapshot
-	}
-	snapshot.StatePresent, err = releaseContextPathPresent(releaseconfig.V2StatePath(root))
-	if err != nil {
-		snapshot.InspectionErr = err
-		return snapshot
-	}
-	snapshot.V1Present, err = releaseContextPathPresent(filepath.Join(root, releaseconfig.V1FileName)) //nolint:staticcheck
-	if err != nil {
-		snapshot.InspectionErr = err
-		return snapshot
-	}
-	if snapshot.ConfigPresent {
-		snapshot.Config, snapshot.ConfigError = releaseconfig.LoadV2Config(releaseconfig.V2ConfigPath(root))
-	}
-	if snapshot.StatePresent {
-		snapshot.State, snapshot.StateError = releaseconfig.LoadV2State(releaseconfig.V2StatePath(root))
-	}
-	if snapshot.ConfigPresent && snapshot.StatePresent {
-		if err := releaseconfig.ValidateV2PairRecoveryReadiness(root); err != nil {
-			snapshot.RecoveryReady = false
-		}
-	}
-	return snapshot
+	return (filesystemLocalV2SourceReader{}).Read(root)
 }
 
 type integrationDoctorSourceInspection struct {
