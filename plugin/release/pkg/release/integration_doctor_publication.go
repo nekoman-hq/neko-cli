@@ -224,7 +224,7 @@ func integrationDoctorPublicationLimitation(
 ) integrationDoctorDiagnostic {
 	message := "A supported local publication identity could not be fully established; remote target state and runtime acceptance were not checked."
 	if locallyVerified {
-		message = "Provider, local repository target, validated tag/SHA flow, artifact identities, and plugin-registry ordering were locally verified; remote target presence/enabled state, future version or upload acceptance, mutable overwrite authorization, service availability, and runtime artifact behavior remain unknown."
+		message = "Provider, local repository target, validated tag/SHA flow, artifact identities, and plugin-registry ordering where applicable were locally verified; remote target presence/enabled state, future version or upload acceptance, mutable overwrite authorization, service availability, and runtime artifact behavior remain unknown."
 	}
 	return newIntegrationDoctorWorkflowDiagnostic(
 		integrationDoctorNotVerifiable,
