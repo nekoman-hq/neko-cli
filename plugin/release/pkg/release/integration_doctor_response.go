@@ -18,12 +18,13 @@ const (
 
 func mapIntegrationDoctorResult(result *integrationDoctorResult, timestamp time.Time) *plugin.Response {
 	data := map[string]any{
-		"readiness":     result.Readiness,
-		"summary":       result.Summary,
-		"units":         append([]integrationDoctorUnit(nil), result.Units...),
-		"workflows":     append([]integrationDoctorWorkflow(nil), result.Workflows...),
-		"verifications": append([]integrationDoctorVerification{}, result.Verifications...),
-		"diagnostics":   append([]integrationDoctorDiagnostic(nil), result.Diagnostics...),
+		"readiness":           result.Readiness,
+		"summary":             result.Summary,
+		"remote_verification": result.RemoteVerification,
+		"units":               append([]integrationDoctorUnit(nil), result.Units...),
+		"workflows":           append([]integrationDoctorWorkflow(nil), result.Workflows...),
+		"verifications":       append([]integrationDoctorVerification{}, result.Verifications...),
+		"diagnostics":         append([]integrationDoctorDiagnostic(nil), result.Diagnostics...),
 	}
 	response := &plugin.Response{
 		Status:       "success",
@@ -57,7 +58,11 @@ func mapIntegrationDoctorResult(result *integrationDoctorResult, timestamp time.
 }
 
 func integrationDoctorSummaryProperties(result *integrationDoctorResult) []presentation.Property {
-	return []presentation.Property{
+	verifiedLabel := "Locally verified"
+	if result.RemoteVerification.Requested {
+		verifiedLabel = "Verified facts"
+	}
+	properties := []presentation.Property{
 		{
 			Label:      "Readiness",
 			Value:      string(result.Readiness),
@@ -68,10 +73,19 @@ func integrationDoctorSummaryProperties(result *integrationDoctorResult) []prese
 		integrationDoctorCountProperty("Warnings", result.Summary.Warnings, presentation.StyleWarning),
 		integrationDoctorCountProperty("Recommendations", result.Summary.Recommendations, presentation.StyleInfo),
 		integrationDoctorCountProperty("Not verifiable", result.Summary.NotVerifiable, presentation.StyleMuted),
-		integrationDoctorCountProperty("Locally verified", result.Summary.Verified, presentation.StyleSuccess),
+		integrationDoctorCountProperty(verifiedLabel, result.Summary.Verified, presentation.StyleSuccess),
 		{Label: "Inspected units", Value: len(result.Units)},
 		{Label: "Inspected workflows", Value: len(result.Workflows)},
 	}
+	if result.RemoteVerification.Requested {
+		properties = append(properties,
+			presentation.Property{Label: "Remote verification", Value: string(result.RemoteVerification.Status), Emphasized: true},
+			integrationDoctorCountProperty("Remote verified", result.RemoteVerification.Verified, presentation.StyleSuccess),
+			integrationDoctorCountProperty("Remote unresolved", result.RemoteVerification.Unresolved, presentation.StyleMuted),
+			integrationDoctorCountProperty("Remote failed", result.RemoteVerification.Failed, presentation.StyleError),
+		)
+	}
+	return properties
 }
 
 func integrationDoctorReadinessRole(readiness integrationDoctorReadiness) presentation.StyleRole {

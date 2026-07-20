@@ -30,7 +30,22 @@ func parseIntegrationDoctorRequest(
 		}
 		unitID = value
 	}
-	return integrationDoctorRequest{RepositoryRoot: root.Path(), UnitID: unitID}, nil
+	verifyRemote := false
+	if raw, present := request.Flags["verify-remote"]; present {
+		value, ok := raw.(bool)
+		if !ok {
+			return integrationDoctorRequest{}, failureFromMessage(
+				"INVALID_DOCTOR_REQUEST",
+				"--verify-remote must be a boolean",
+			)
+		}
+		verifyRemote = value
+	}
+	return integrationDoctorRequest{
+		RepositoryRoot: root.Path(),
+		UnitID:         unitID,
+		VerifyRemote:   verifyRemote,
+	}, nil
 }
 
 func (handler integrationDoctorCommandHandler) Handle(
@@ -63,12 +78,20 @@ func HandleDoctor(request plugin.Request) (*plugin.Response, error) {
 // HandleDoctorAt reports Release V2 GitHub Actions integration readiness at
 // an explicit repository root without mutation, tokens, Git, or network use.
 func HandleDoctorAt(root workspace.RepositoryRoot, request plugin.Request) (*plugin.Response, error) {
+	readClient, err := newIntegrationDoctorGitHubReadClient()
+	if err != nil {
+		return nil, fmt.Errorf("construct integration doctor GitHub read client: %w", err)
+	}
 	handler := integrationDoctorCommandHandler{
 		inspector: integrationDoctorInspectionUseCase{
 			sources:    filesystemIntegrationDoctorSourceReader{},
 			workflows:  filesystemIntegrationDoctorWorkflowReader{},
 			files:      filesystemIntegrationDoctorRepositoryFileReader{},
 			identities: filesystemIntegrationDoctorRepositoryIdentityReader{},
+			remote: integrationDoctorGitHubRemoteInspector{
+				reader: readClient,
+				tokens: EnvironmentGitHubActionsDispatchTokenResolver{},
+			},
 		},
 		clock: systemReleaseClock{},
 		root:  root,

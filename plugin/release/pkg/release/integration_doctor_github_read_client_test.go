@@ -30,23 +30,23 @@ func TestIntegrationDoctorGitHubReadClientUsesOnlyExactGETOperations(t *testing.
 		writer.Header().Set("Content-Type", "application/json")
 		switch request.URL.Path {
 		case "/repos/acme/example":
-			fmt.Fprint(writer, `{"name":"example","owner":{"login":"acme"},"default_branch":"main","visibility":"private","private":true}`)
+			_, _ = fmt.Fprint(writer, `{"name":"example","owner":{"login":"acme"},"default_branch":"main","visibility":"private","private":true}`)
 		case "/repos/acme/example/contents/.github/workflows/release.yml":
-			fmt.Fprintf(writer, `{"type":"file","path":%q,"encoding":"base64","content":%q}`, workflow, base64.StdEncoding.EncodeToString(workflowBytes))
+			_, _ = fmt.Fprintf(writer, `{"type":"file","path":%q,"encoding":"base64","content":%q}`, workflow, base64.StdEncoding.EncodeToString(workflowBytes))
 		case "/repos/acme/example/actions/workflows/release.yml":
-			fmt.Fprintf(writer, `{"path":%q,"state":"active"}`, workflow)
+			_, _ = fmt.Fprintf(writer, `{"path":%q,"state":"active"}`, workflow)
 		case "/repos/acme/example/actions/variables/NEKO_VERSION":
-			fmt.Fprint(writer, `{"name":"NEKO_VERSION","value":"3.0.4"}`)
+			_, _ = fmt.Fprint(writer, `{"name":"NEKO_VERSION","value":"3.0.4"}`)
 		case "/repos/acme/example/actions/secrets/SIGNING_KEY":
-			fmt.Fprint(writer, `{"name":"SIGNING_KEY","created_at":"2026-07-01T00:00:00Z","updated_at":"2026-07-02T00:00:00Z","value":"must-never-enter-model"}`)
+			_, _ = fmt.Fprint(writer, `{"name":"SIGNING_KEY","created_at":"2026-07-01T00:00:00Z","updated_at":"2026-07-02T00:00:00Z","value":"must-never-enter-model"}`)
 		case "/repos/acme/example/actions/permissions":
-			fmt.Fprint(writer, `{"enabled":true,"allowed_actions":"selected"}`)
+			_, _ = fmt.Fprint(writer, `{"enabled":true,"allowed_actions":"selected"}`)
 		case "/repos/acme/example/releases/tags/plugin-release/v4.2.0":
-			fmt.Fprint(writer, `{"tag_name":"plugin-release/v4.2.0","draft":false,"prerelease":false,"assets":[{"name":"plugin-release_4.2.0_Darwin_arm64.tar.gz"}]}`)
+			_, _ = fmt.Fprint(writer, `{"tag_name":"plugin-release/v4.2.0","draft":false,"prerelease":false,"assets":[{"name":"plugin-release_4.2.0_Darwin_arm64.tar.gz"}]}`)
 		case "/repos/acme/example/git/ref/tags/plugin-release/v4.2.0":
-			fmt.Fprint(writer, `{"ref":"refs/tags/plugin-release/v4.2.0","object":{"type":"commit","sha":"abc123"}}`)
+			_, _ = fmt.Fprint(writer, `{"ref":"refs/tags/plugin-release/v4.2.0","object":{"type":"commit","sha":"abc123"}}`)
 		case "/repos/acme/example/actions/runs/42":
-			fmt.Fprint(writer, `{"id":42,"workflow_id":7,"status":"completed","conclusion":"success"}`)
+			_, _ = fmt.Fprint(writer, `{"id":42,"workflow_id":7,"status":"completed","conclusion":"success"}`)
 		default:
 			http.NotFound(writer, request)
 		}
@@ -130,6 +130,7 @@ func TestIntegrationDoctorGitHubReadClientUsesOnlyExactGETOperations(t *testing.
 }
 
 func TestIntegrationDoctorGitHubReadClientClassifiesFailuresWithoutRetryOrBodyLeak(t *testing.T) {
+	//nolint:govet // Table fields follow classification input then expected state.
 	tests := []struct {
 		name      string
 		status    int
@@ -152,7 +153,7 @@ func TestIntegrationDoctorGitHubReadClientClassifiesFailuresWithoutRetryOrBodyLe
 					writer.Header().Set(name, value)
 				}
 				writer.WriteHeader(test.status)
-				fmt.Fprint(writer, `{"message":"private-body-read-client-secret"}`)
+				_, _ = fmt.Fprint(writer, `{"message":"private-body-read-client-secret"}`)
 			}))
 			defer server.Close()
 			client := newIntegrationDoctorGitHubReadClientForTest(t, server.URL)
@@ -182,7 +183,7 @@ func TestIntegrationDoctorGitHubReadClientBoundsBodiesAndHonorsCancellation(t *t
 			<-request.Context().Done()
 			return
 		}
-		fmt.Fprint(writer, strings.Repeat("x", integrationDoctorGitHubReadBodyLimit+1))
+		_, _ = fmt.Fprint(writer, strings.Repeat("x", integrationDoctorGitHubReadBodyLimit+1))
 	}))
 	defer server.Close()
 	client := newIntegrationDoctorGitHubReadClientForTest(t, server.URL)
@@ -210,13 +211,42 @@ func TestIntegrationDoctorGitHubReadClientBoundsBodiesAndHonorsCancellation(t *t
 
 func TestIntegrationDoctorGitHubReadClientRejectsMalformedSuccessfulResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
-		fmt.Fprint(writer, `{"name":"example","owner":{"login":"acme"}}`)
+		_, _ = fmt.Fprint(writer, `{"name":"example","owner":{"login":"acme"}}`)
 	}))
 	defer server.Close()
 	client := newIntegrationDoctorGitHubReadClientForTest(t, server.URL)
 	_, outcome := client.Repository(context.Background(), integrationDoctorRepositoryIdentity{Owner: "acme", Repository: "example"}, GitHubActionsDispatchToken{})
 	if outcome.State != integrationDoctorUnavailable {
 		t.Fatalf("outcome=%#v", outcome)
+	}
+}
+
+func TestIntegrationDoctorGitHubReadClientClassifiesExactWorkflowRunLookups(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		status    int
+		wantState integrationDoctorVerificationState
+	}{
+		{name: "missing", status: http.StatusNotFound, wantState: integrationDoctorMissing},
+		{name: "unauthorized", status: http.StatusUnauthorized, wantState: integrationDoctorUnauthorized},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				if request.URL.Path != "/repos/acme/example/actions/runs/42" || request.Method != http.MethodGet {
+					t.Errorf("request=%s %s", request.Method, request.URL.Path)
+				}
+				writer.WriteHeader(test.status)
+			}))
+			defer server.Close()
+			client := newIntegrationDoctorGitHubReadClientForTest(t, server.URL)
+			_, outcome := client.WorkflowRun(
+				context.Background(), integrationDoctorRepositoryIdentity{Owner: "acme", Repository: "example"},
+				"42", GitHubActionsDispatchToken{},
+			)
+			if outcome.State != test.wantState {
+				t.Fatalf("outcome=%#v", outcome)
+			}
+		})
 	}
 }
 

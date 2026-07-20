@@ -57,6 +57,37 @@ func TestIntegrationDoctorCustomEquivalentIsReadyWithExplicitNotVerifiableFacts(
 	)
 }
 
+func TestIntegrationDoctorRemoteVerificationRequiresExplicitBooleanFlag(t *testing.T) {
+	root := newIntegrationDoctorRepository(t, map[string]string{"api": ".github/workflows/release.yml"})
+	writeIntegrationDoctorWorkflow(t, root, ".github/workflows/release.yml", customIntegrationDoctorWorkflow(t))
+
+	defaultRequest, failure := parseIntegrationDoctorRequest(root, plugin.Request{})
+	if failure != nil || defaultRequest.VerifyRemote {
+		t.Fatalf("default request = %#v, failure = %#v", defaultRequest, failure)
+	}
+	explicitRequest, failure := parseIntegrationDoctorRequest(root, plugin.Request{
+		Flags: map[string]any{"verify-remote": true},
+	})
+	if failure != nil || !explicitRequest.VerifyRemote {
+		t.Fatalf("explicit request = %#v, failure = %#v", explicitRequest, failure)
+	}
+	response := runIntegrationDoctor(t, root, nil)
+	result := integrationDoctorResultFromResponse(t, response)
+	if result.RemoteVerification != (integrationDoctorRemoteSummary{
+		Status: integrationDoctorRemoteNotRequested,
+	}) {
+		t.Fatalf("default remote summary = %#v", result.RemoteVerification)
+	}
+
+	invalid, err := HandleDoctorAt(root, plugin.Request{
+		Command: integrationDoctorCommandName,
+		Flags:   map[string]any{"verify-remote": "true"},
+	})
+	if err != nil || invalid.ExitCode != 1 || invalid.Error == nil || invalid.Error.Code != "INVALID_DOCTOR_REQUEST" {
+		t.Fatalf("invalid response = %#v, err = %v", invalid, err)
+	}
+}
+
 func TestIntegrationDoctorWarningsRemainSuccessful(t *testing.T) {
 	root := newIntegrationDoctorRepository(t, map[string]string{"api": ".github/workflows/release.yml"})
 	workflow := bytes.Replace(customIntegrationDoctorWorkflow(t), []byte("  contents: read"), []byte("  contents: write"), 1)
@@ -621,6 +652,10 @@ func integrationDoctorResultFromResponse(t *testing.T, response *plugin.Response
 	result.Summary, ok = response.Data["summary"].(integrationDoctorSummary)
 	if !ok {
 		t.Fatalf("summary type = %T", response.Data["summary"])
+	}
+	result.RemoteVerification, ok = response.Data["remote_verification"].(integrationDoctorRemoteSummary)
+	if !ok {
+		t.Fatalf("remote verification type = %T", response.Data["remote_verification"])
 	}
 	result.Units, ok = response.Data["units"].([]integrationDoctorUnit)
 	if !ok {

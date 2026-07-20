@@ -76,7 +76,8 @@ func TestManifestMatchesPublicReleaseContract(t *testing.T) {
 			"unit":   "string",
 		},
 		"doctor": {
-			"unit": "string",
+			"unit":          "string",
+			"verify-remote": "bool",
 		},
 		"units": {},
 		"ci-validate-context": {
@@ -207,10 +208,11 @@ func TestIntegrationDoctorManifestContract(t *testing.T) {
 	if !reflect.DeepEqual(command.Outputs, []string{"table", "json"}) {
 		t.Fatalf("outputs = %#v", command.Outputs)
 	}
-	if len(command.Flags) != 1 || command.Flags[0].Name != "unit" || command.Flags[0].Type != "string" || command.Flags[0].Required {
+	if len(command.Flags) != 2 || command.Flags[0].Name != "unit" || command.Flags[0].Type != "string" || command.Flags[0].Required ||
+		command.Flags[1].Name != "verify-remote" || command.Flags[1].Type != "bool" || command.Flags[1].Required {
 		t.Fatalf("doctor flags = %#v", command.Flags)
 	}
-	for _, forbidden := range []string{"fix", "remote", "token", "write", "pipeline", "overview"} {
+	for _, forbidden := range []string{"fix", "token", "write", "pipeline", "overview"} {
 		if _, present := flagDescriptions(command)[forbidden]; present {
 			t.Fatalf("doctor manifest exposes unsupported flag %q", forbidden)
 		}

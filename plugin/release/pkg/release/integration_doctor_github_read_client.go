@@ -21,6 +21,7 @@ const (
 	integrationDoctorGitHubReadBodyLimit = 1 << 20
 )
 
+//nolint:govet // Field order keeps the remote classification contract readable.
 type integrationDoctorGitHubReadOutcome struct {
 	State          integrationDoctorVerificationState
 	HTTPStatus     int
@@ -58,8 +59,8 @@ type integrationDoctorGitHubSecretMetadata struct {
 }
 
 type integrationDoctorGitHubActionsPolicy struct {
-	Enabled        bool
 	AllowedActions string
+	Enabled        bool
 }
 
 type integrationDoctorGitHubRelease struct {
@@ -96,6 +97,8 @@ type integrationDoctorGitHubReader interface {
 
 // integrationDoctorGitHubReadClient contains only the fixed GitHub GET
 // operations used by explicit Doctor remote verification.
+//
+//nolint:govet // Fields are grouped by construction concern.
 type integrationDoctorGitHubReadClient struct {
 	baseURL    string
 	httpClient *http.Client
@@ -180,6 +183,7 @@ func (client *integrationDoctorGitHubReadClient) Repository(
 	if outcome.State != integrationDoctorVerified {
 		return integrationDoctorGitHubRepository{}, outcome
 	}
+	//nolint:govet // Field order mirrors the focused GitHub response.
 	var payload struct {
 		Name          string `json:"name"`
 		DefaultBranch string `json:"default_branch"`
@@ -213,6 +217,7 @@ func (client *integrationDoctorGitHubReadClient) WorkflowContent(
 	if outcome.State != integrationDoctorVerified {
 		return integrationDoctorGitHubWorkflowContent{}, outcome
 	}
+	//nolint:govet // Field order mirrors the focused GitHub response.
 	var payload struct {
 		Path     string `json:"path"`
 		Encoding string `json:"encoding"`
@@ -324,6 +329,7 @@ func (client *integrationDoctorGitHubReadClient) ReleaseByTag(
 	if outcome.State != integrationDoctorVerified {
 		return integrationDoctorGitHubRelease{}, outcome
 	}
+	//nolint:govet // Field order mirrors the focused GitHub release response.
 	var payload struct {
 		TagName    string `json:"tag_name"`
 		Draft      bool   `json:"draft"`

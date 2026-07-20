@@ -328,7 +328,7 @@
     },
     {
       "name": "doctor",
-      "description": "Diagnose local Release V2 GitHub Actions integration readiness without tokens, network, Git mutation, or file mutation",
+      "description": "Diagnose Release V2 GitHub Actions integration readiness locally, with optional explicit read-only remote verification",
       "outputs": [
         "table",
         "json"
@@ -339,6 +339,12 @@
           "type": "string",
           "required": false,
           "description": "Inspect one Release V2 unit while retaining checks for every unit sharing its workflow"
+        },
+        {
+          "name": "verify-remote",
+          "type": "bool",
+          "required": false,
+          "description": "Explicitly verify supported GitHub metadata with GET-only read requests"
         }
       ]
     },

@@ -331,6 +331,116 @@ func TestIntegrationDoctorAvoidsGenericDiagnosticArchitecture(t *testing.T) {
 	}
 }
 
+func TestIntegrationDoctorRemoteClientIsGETOnlyAndCannotReachMutationCapabilities(t *testing.T) {
+	client := readCommandBoundarySource(t, "integration_doctor_github_read_client.go")
+	if !strings.Contains(client, "http.MethodGet") || strings.Count(client, "httpClient.Do(request)") != 1 {
+		t.Fatal("Doctor GitHub read client does not expose one bounded GET transport boundary")
+	}
+	for _, forbidden := range []string{
+		"http.MethodPost",
+		"http.MethodPut",
+		"http.MethodPatch",
+		"http.MethodDelete",
+		"workflow_dispatch",
+		"/dispatches",
+		"/releases/latest",
+		"CreateRelease",
+		"UploadRelease",
+		"UpdateVariable",
+		"UpdateSecret",
+		"UpdateWorkflow",
+		"exec.Command",
+		"os/exec",
+		"os.WriteFile",
+		"os.Mkdir",
+		"os.Chdir",
+	} {
+		if strings.Contains(client, forbidden) {
+			t.Fatalf("Doctor GitHub read client contains mutation capability %q", forbidden)
+		}
+	}
+	for _, path := range []string{
+		"integration_doctor_remote_inspection.go",
+		"integration_doctor_remote_artifacts.go",
+		"integration_doctor_remote_mapping.go",
+		"integration_doctor_remote_result.go",
+	} {
+		source := readCommandBoundarySource(t, path)
+		for _, forbidden := range []string{
+			"GitHubActionsDispatcher",
+			"GitHubActionsDispatchClient",
+			"DispatchJournalStore",
+			"ReleaseExecutionJournalStore",
+			"EvidenceWriter",
+			"os.WriteFile",
+			"os.Mkdir",
+			"os.Chdir",
+			"os/exec",
+			"exec.Command",
+			"plugin.Response",
+			"PipelineInspection",
+			"DoctorRepair",
+			"ProviderRegistry",
+			"StateMachine",
+			"DependencyBag",
+			"ServiceLocator",
+		} {
+			if strings.Contains(source, forbidden) {
+				t.Fatalf("%s contains prohibited remote Doctor capability %q", path, forbidden)
+			}
+		}
+	}
+}
+
+func TestIntegrationDoctorDefaultPathGuardsRemoteAndTokenAccess(t *testing.T) {
+	inspection := readCommandBoundarySource(t, "integration_doctor_inspection.go")
+	if !strings.Contains(inspection, "if request.VerifyRemote && useCase.remote != nil") {
+		t.Fatal("Doctor inspection does not guard its remote capability with the explicit request")
+	}
+	command := readCommandBoundarySource(t, "integration_doctor_command.go")
+	if !strings.Contains(command, `request.Flags["verify-remote"]`) ||
+		!strings.Contains(command, "EnvironmentGitHubActionsDispatchTokenResolver") {
+		t.Fatal("Doctor command does not own explicit remote request and token composition")
+	}
+	for _, path := range []string{
+		"integration_doctor_inspection.go",
+		"integration_doctor_consumer.go",
+		"integration_doctor_installation.go",
+		"integration_doctor_credentials.go",
+		"integration_doctor_publication.go",
+	} {
+		source := readCommandBoundarySource(t, path)
+		for _, forbidden := range []string{"os.Getenv", "os.LookupEnv", "Authorization", "Bearer "} {
+			if strings.Contains(source, forbidden) {
+				t.Fatalf("default/local Doctor path %s contains token access %q", path, forbidden)
+			}
+		}
+	}
+}
+
+func TestIntegrationDoctorRemoteUsesExactIdentitiesWithoutDiscoveryFallbacks(t *testing.T) {
+	combined := readCommandBoundarySource(t, "integration_doctor_remote_inspection.go") +
+		readCommandBoundarySource(t, "integration_doctor_remote_artifacts.go") +
+		readCommandBoundarySource(t, "integration_doctor_github_read_client.go")
+	for _, forbidden := range []string{
+		"/releases/latest",
+		"per_page",
+		"newest",
+		"latest matching",
+		"git tag --list",
+		"FindUnresolved",
+		"ReleaseExecutionJournal",
+		"DispatchJournal",
+	} {
+		if strings.Contains(combined, forbidden) {
+			t.Fatalf("remote Doctor contains discovery or journal fallback %q", forbidden)
+		}
+	}
+	if strings.Contains(readCommandBoundarySource(t, "integration_doctor_remote_inspection.go"), ".WorkflowRun(") {
+		t.Fatal("remote Doctor queries a workflow run without a durable Doctor-owned run id")
+	}
+}
+
 func TestIntegrationDoctorPresentationKeepsCoreDomainNeutral(t *testing.T) {
 	for _, path := range []string{
 		"../../../../internal/terminal/style.go",

@@ -17,17 +17,25 @@ type integrationDoctorInspectionUseCase struct {
 	workflows  integrationDoctorWorkflowReader
 	files      integrationDoctorRepositoryFileReader
 	identities integrationDoctorRepositoryIdentityReader
+	remote     integrationDoctorRemoteInspector
 }
 
 func (useCase integrationDoctorInspectionUseCase) Inspect(
-	_ context.Context,
+	ctx context.Context,
 	request integrationDoctorRequest,
 ) *integrationDoctorResult {
 	result := &integrationDoctorResult{
+		RemoteVerification: integrationDoctorRemoteSummary{
+			Requested: request.VerifyRemote,
+			Status:    integrationDoctorRemoteNotRequested,
+		},
 		Units:         make([]integrationDoctorUnit, 0),
 		Workflows:     make([]integrationDoctorWorkflow, 0),
 		Verifications: make([]integrationDoctorVerification, 0),
 		Diagnostics:   make([]integrationDoctorDiagnostic, 0),
+	}
+	if request.VerifyRemote {
+		result.RemoteVerification.Status = integrationDoctorRemoteUnavailable
 	}
 	source := inspectIntegrationDoctorSource(request.RepositoryRoot, useCase.sources.Read(request.RepositoryRoot))
 	result.Diagnostics = append(result.Diagnostics, source.Diagnostics...)
@@ -57,13 +65,15 @@ func (useCase integrationDoctorInspectionUseCase) Inspect(
 		paths = append(paths, path)
 	}
 	sort.Strings(paths)
+	remoteWorkflows := make([]integrationDoctorRemoteWorkflow, 0, len(paths))
 	for _, path := range paths {
+		snapshot := useCase.workflows.Read(request.RepositoryRoot, path)
 		fact, verifications, diagnostics := inspectIntegrationDoctorWorkflow(
 			request.RepositoryRoot,
 			path,
 			workflowUnits[path],
 			source.Repository.Units,
-			useCase.workflows.Read(request.RepositoryRoot, path),
+			snapshot,
 			useCase.files,
 			repositoryIdentity,
 			repositoryIdentityErr,
@@ -71,6 +81,20 @@ func (useCase integrationDoctorInspectionUseCase) Inspect(
 		result.Workflows = append(result.Workflows, fact)
 		result.Verifications = append(result.Verifications, verifications...)
 		result.Diagnostics = append(result.Diagnostics, diagnostics...)
+		remoteWorkflows = append(remoteWorkflows, integrationDoctorRemoteWorkflow{
+			Path: path, Units: append([]releaseconfig.ReleaseUnit(nil), workflowUnits[path]...), Snapshot: snapshot,
+		})
+	}
+	if request.VerifyRemote && useCase.remote != nil {
+		remoteInspection := useCase.remote.Inspect(ctx, integrationDoctorRemoteRequest{
+			RepositoryRoot: request.RepositoryRoot,
+			Repository:     source.Repository,
+			Workflows:      remoteWorkflows,
+			Identity:       repositoryIdentity,
+			IdentityErr:    repositoryIdentityErr,
+			Files:          useCase.files,
+		})
+		applyIntegrationDoctorRemoteInspection(result, remoteInspection)
 	}
 	finalizeIntegrationDoctorResult(result)
 	return result
