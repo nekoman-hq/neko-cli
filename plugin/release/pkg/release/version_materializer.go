@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool"
-	"gopkg.in/yaml.v3"
+	jreleaserconfig "github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool/jreleaser"
 )
 
 type VersionMaterializer interface {
@@ -71,7 +71,7 @@ func (JReleaserMaterializer) Plan(ctx *ReleaseExecutionContext) (*Materializatio
 	if !existed {
 		return nil, fmt.Errorf("%s not found", jReleaserConfigFile)
 	}
-	after, err := materializeJReleaserVersion(before, ctx.NextVersion)
+	after, err := jreleaserconfig.RewriteProjectVersion(before, ctx.NextVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -153,60 +153,4 @@ func readMaterializedFile(path string) ([]byte, os.FileMode, bool, error) {
 		return nil, 0, false, fmt.Errorf("read materialized file %s: %w", path, err)
 	}
 	return data, info.Mode().Perm(), true, nil
-}
-
-func materializeJReleaserVersion(content []byte, nextVersion string) ([]byte, error) {
-	var doc yaml.Node
-	if err := yaml.Unmarshal(content, &doc); err != nil {
-		return nil, fmt.Errorf("parse %s: %w", jReleaserConfigFile, err)
-	}
-	versionNode, err := findYAMLPath(&doc, "project", "version")
-	if err != nil {
-		return nil, fmt.Errorf("locate project.version in %s: %w", jReleaserConfigFile, err)
-	}
-	lines := strings.SplitAfter(string(content), "\n")
-	if versionNode.Line < 1 || versionNode.Line > len(lines) {
-		return nil, fmt.Errorf("project.version line %d is outside %s", versionNode.Line, jReleaserConfigFile)
-	}
-	line := lines[versionNode.Line-1]
-	prefixIndex := strings.Index(line, "version:")
-	if prefixIndex < 0 {
-		return nil, fmt.Errorf("project.version line does not contain version key")
-	}
-	lineEnding := ""
-	if strings.HasSuffix(line, "\n") {
-		lineEnding = "\n"
-		line = strings.TrimSuffix(line, "\n")
-	}
-	if strings.HasSuffix(line, "\r") {
-		lineEnding = "\r" + lineEnding
-		line = strings.TrimSuffix(line, "\r")
-	}
-	prefix := line[:prefixIndex+len("version:")]
-	lines[versionNode.Line-1] = prefix + " " + nextVersion + lineEnding
-	return []byte(strings.Join(lines, "")), nil
-}
-
-func findYAMLPath(doc *yaml.Node, path ...string) (*yaml.Node, error) {
-	if doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
-		return nil, fmt.Errorf("document is empty")
-	}
-	node := doc.Content[0]
-	for _, part := range path {
-		if node.Kind != yaml.MappingNode {
-			return nil, fmt.Errorf("%s is not a mapping", part)
-		}
-		var next *yaml.Node
-		for i := 0; i+1 < len(node.Content); i += 2 {
-			if node.Content[i].Value == part {
-				next = node.Content[i+1]
-				break
-			}
-		}
-		if next == nil {
-			return nil, fmt.Errorf("%s not found", part)
-		}
-		node = next
-	}
-	return node, nil
 }

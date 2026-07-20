@@ -105,7 +105,7 @@ func inspectIntegrationDoctorInstallation(
 	cliUnit, cliConfig, cliConfigPath, cliConfigOK := integrationDoctorFindCLIArtifactConfig(
 		repositoryRoot, repositoryUnits, cliArchivePrefix, files,
 	)
-	if !cliConfigOK || !integrationDoctorCLIArchiveMatchesInstaller(cliConfig, cliArchivePrefix) {
+	if !cliConfigOK || !goreleaserfacts.CLIArchiveSupportsInstallation(cliConfig, cliArchivePrefix) {
 		add(cliUnit.ID, "CLI_INSTALLER_ARCHIVE_MISMATCH", "The CLI installer archive identity is incompatible with local GoReleaser output.", "Align CLI archive prefix, OS/architecture labels, tar.gz defaults, and Windows zip output.")
 	}
 
@@ -126,7 +126,11 @@ func inspectIntegrationDoctorInstallation(
 			add(releasePluginUnit.ID, "RELEASE_PLUGIN_METADATA_MISMATCH", "Release plugin manifest, unit metadata, and current state version are not locally aligned.", "Align plugin name, manifest version, binary name, asset prefix, and state version.")
 		}
 		pluginConfig, pluginConfigPath, pluginConfigOK := integrationDoctorLoadUnitGoReleaserConfig(repositoryRoot, releasePluginUnit, files)
-		if !pluginConfigOK || !integrationDoctorPluginArchiveMatchesInstaller(pluginConfig, releasePluginUnit) {
+		if !pluginConfigOK || !goreleaserfacts.PluginArtifactSupportsInstallation(
+			pluginConfig,
+			releasePluginUnit.PluginBinaryName,
+			releasePluginUnit.PluginAssetPrefix,
+		) {
 			add(releasePluginUnit.ID, "RELEASE_PLUGIN_ARCHIVE_MISMATCH", "Release plugin archive identity is incompatible with the local plugin installer contract.", "Publish a tar.gz archive using the configured plugin asset prefix, version, OS, architecture, binary, and manifest identity.")
 		}
 		fact.References = append(fact.References, releasePluginUnit.PluginManifestPath, pluginConfigPath)
@@ -276,38 +280,6 @@ func integrationDoctorLoadUnitGoReleaserConfig(
 		}
 	}
 	return goreleaserfacts.Config{}, "", false
-}
-
-func integrationDoctorCLIArchiveMatchesInstaller(
-	config goreleaserfacts.Config,
-	archivePrefix string,
-) bool {
-	archive, ok := goreleaserfacts.ArchiveByID(config.Archives, archivePrefix)
-	if !ok || !goreleaserfacts.Contains(archive.Formats, "tar.gz") ||
-		!strings.Contains(archive.NameTemplate, archivePrefix+"_") ||
-		!strings.Contains(archive.NameTemplate, ".Os") ||
-		!strings.Contains(archive.NameTemplate, ".Arch") {
-		return false
-	}
-	for _, override := range archive.FormatOverrides {
-		if override.Goos == "windows" && goreleaserfacts.Contains(override.Formats, "zip") {
-			return true
-		}
-	}
-	return false
-}
-
-func integrationDoctorPluginArchiveMatchesInstaller(
-	config goreleaserfacts.Config,
-	unit releaseconfig.ReleaseUnit,
-) bool {
-	build, buildOK := goreleaserfacts.BuildByID(config.Builds, unit.PluginBinaryName)
-	archive, archiveOK := goreleaserfacts.ArchiveByID(config.Archives, unit.PluginAssetPrefix)
-	return buildOK && archiveOK && build.Binary == unit.PluginBinaryName &&
-		goreleaserfacts.Contains(archive.IDs, build.ID) &&
-		goreleaserfacts.Contains(archive.Formats, "tar.gz") &&
-		strings.Contains(archive.NameTemplate, unit.PluginAssetPrefix+"_") &&
-		strings.Contains(archive.NameTemplate, ".Os") && strings.Contains(archive.NameTemplate, ".Arch")
 }
 
 func integrationDoctorReleasePluginUnit(units []releaseconfig.ReleaseUnit) (releaseconfig.ReleaseUnit, bool) {

@@ -1,149 +1,34 @@
 package jreleaser
 
-/*
-@Author     Benjamin Senekowitsch
-@Contact    senekowitsch@nekoman.at
-@Since      24.12.2025
-*/
+import jreleaserconfig "github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool/jreleaser"
 
-import (
-	"fmt"
-	"os"
-	"path/filepath"
-
-	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool"
-	"gopkg.in/yaml.v3"
-)
-
-type Config struct {
-	Project Project `yaml:"project"`
-	Release Release `yaml:"release"`
-}
-
-type Project struct {
-	Authors   *[]string        `yaml:"authors,omitempty"`
-	Languages ProjectLanguages `yaml:"languages"`
-	Links     ProjectLinks     `yaml:"links"`
-
-	Name          string `yaml:"name"`
-	Version       string `yaml:"version"`
-	License       string `yaml:"license"`
-	InceptionYear string `yaml:"inceptionYear"`
-
-	Description string `yaml:"description,omitempty"`
-	LongDesc    string `yaml:"longDescription,omitempty"`
-}
-
-type ProjectLinks struct {
-	Homepage string `yaml:"homepage"`
-}
-
-type ProjectLanguages struct {
-	Java JavaLanguage `yaml:"java"`
-}
-
-type JavaLanguage struct {
-	GroupID string `yaml:"groupId"`
-	Version string `yaml:"version"`
-}
-
-type Release struct {
-	Github GithubRelease `yaml:"github"`
-}
-
-type GithubRelease struct {
-	Owner       string    `yaml:"owner"`
-	Name        string    `yaml:"name"`
-	TagName     string    `yaml:"tagName"`
-	ReleaseName string    `yaml:"releaseName"`
-	Changelog   Changelog `yaml:"changelog"`
-	Overwrite   bool      `yaml:"overwrite"`
-}
-
-type Changelog struct {
-	IncludeLabels *[]string        `yaml:"includeLabels,omitempty"`
-	Labelers      *[]Labeler       `yaml:"labelers,omitempty"`
-	Categories    *[]Category      `yaml:"categories,omitempty"`
-	Contributors  *Contributors    `yaml:"contributors,omitempty"`
-	Append        *ChangelogAppend `yaml:"append,omitempty"`
-
-	Sort      string `yaml:"sort"`
-	Formatted string `yaml:"formatted"`
-	Preset    string `yaml:"preset"`
-
-	Enabled          bool `yaml:"enabled"`
-	SkipMergeCommits bool `yaml:"skipMergeCommits"`
-}
-
-type Contributors struct {
-	Format  string `yaml:"format,omitempty"`
-	Enabled bool   `yaml:"enabled"`
-}
-
-type ChangelogAppend struct {
-	Title   string `yaml:"title"`
-	Target  string `yaml:"target"`
-	Enabled bool   `yaml:"enabled"`
-}
-
-type Labeler struct {
-	Label string `yaml:"label"`
-	Title string `yaml:"title"`
-	Order int    `yaml:"order"`
-}
-
-type Category struct {
-	Title  string   `yaml:"title"`
-	Key    string   `yaml:"key"`
-	Labels []string `yaml:"labels"`
-	Order  int      `yaml:"order"`
-}
+// Compatibility aliases preserve the established V1 JReleaser package API
+// while canonical configuration ownership lives in internal/releasetool.
+type Config = jreleaserconfig.Config
+type Project = jreleaserconfig.Project
+type ProjectLinks = jreleaserconfig.ProjectLinks
+type ProjectLanguages = jreleaserconfig.ProjectLanguages
+type JavaLanguage = jreleaserconfig.JavaLanguage
+type Release = jreleaserconfig.Release
+type GithubRelease = jreleaserconfig.GithubRelease
+type Changelog = jreleaserconfig.Changelog
+type Contributors = jreleaserconfig.Contributors
+type ChangelogAppend = jreleaserconfig.ChangelogAppend
+type Labeler = jreleaserconfig.Labeler
+type Category = jreleaserconfig.Category
 
 func LoadConfig() (*Config, error) {
-	return LoadConfigAt("")
+	return jreleaserconfig.LoadConfig()
 }
 
 func LoadConfigAt(repositoryRoot string) (*Config, error) {
-	data, err := os.ReadFile(filepath.Join(repositoryRoot, releasetool.JReleaserConfigFile))
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
-	}
-
-	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse config: %w", err)
-	}
-
-	return &cfg, nil
+	return jreleaserconfig.LoadConfigAt(repositoryRoot)
 }
 
-func SaveConfig(cfg *Config) (err error) {
-	return SaveConfigAt("", cfg)
+func SaveConfig(config *Config) error {
+	return jreleaserconfig.SaveConfig(config)
 }
 
-func SaveConfigAt(repositoryRoot string, cfg *Config) (err error) {
-	file, err := os.Create(filepath.Join(repositoryRoot, releasetool.JReleaserConfigFile))
-	if err != nil {
-		return fmt.Errorf("create jreleaser.yml: %w", err)
-	}
-	defer func() {
-		if cerr := file.Close(); cerr != nil && err == nil {
-			err = fmt.Errorf("close file: %w", cerr)
-		}
-	}()
-
-	encoder := yaml.NewEncoder(file)
-	defer func() {
-		if cerr := encoder.Close(); cerr != nil && err == nil {
-			err = fmt.Errorf("close encoder: %w", cerr)
-		}
-	}()
-
-	encoder.SetIndent(2)
-
-	if err = encoder.Encode(cfg); err != nil {
-		return fmt.Errorf("encode config: %w", err)
-	}
-
-	return nil
+func SaveConfigAt(repositoryRoot string, config *Config) error {
+	return jreleaserconfig.SaveConfigAt(repositoryRoot, config)
 }

@@ -51,13 +51,13 @@ func TestIntegrationDoctorCLIArchiveContractMatrix(t *testing.T) {
 		NameTemplate:    "neko-cli_{{ .Os }}_{{ .Arch }}",
 		FormatOverrides: []goreleaserfacts.FormatOverride{{Goos: "windows", Formats: []string{"zip"}}},
 	}}}
-	if !integrationDoctorCLIArchiveMatchesInstaller(valid, "neko-cli") {
+	if !goreleaserfacts.CLIArchiveSupportsInstallation(valid, "neko-cli") {
 		t.Fatal("valid CLI archive contract was rejected")
 	}
 	invalid := valid
 	invalid.Archives = append([]goreleaserfacts.Archive(nil), valid.Archives...)
 	invalid.Archives[0].NameTemplate = "other_{{ .Os }}_{{ .Arch }}"
-	if integrationDoctorCLIArchiveMatchesInstaller(invalid, "neko-cli") {
+	if goreleaserfacts.CLIArchiveSupportsInstallation(invalid, "neko-cli") {
 		t.Fatal("CLI archive prefix mismatch was accepted")
 	}
 }
@@ -74,7 +74,7 @@ func TestIntegrationDoctorReleasePluginArtifactContractMatrix(t *testing.T) {
 			NameTemplate: "plugin-release_{{ .Os }}_{{ .Arch }}",
 		}},
 	}
-	if !integrationDoctorPluginArchiveMatchesInstaller(valid, unit) {
+	if !goreleaserfacts.PluginArtifactSupportsInstallation(valid, unit.PluginBinaryName, unit.PluginAssetPrefix) {
 		t.Fatal("valid Release plugin archive contract was rejected")
 	}
 	for name, mutate := range map[string]func(goreleaserfacts.Config, releaseconfig.ReleaseUnit) (goreleaserfacts.Config, releaseconfig.ReleaseUnit){
@@ -92,7 +92,7 @@ func TestIntegrationDoctorReleasePluginArtifactContractMatrix(t *testing.T) {
 			config.Builds = append([]goreleaserfacts.Build(nil), valid.Builds...)
 			config.Archives = append([]goreleaserfacts.Archive(nil), valid.Archives...)
 			config, mutatedUnit := mutate(config, unit)
-			if integrationDoctorPluginArchiveMatchesInstaller(config, mutatedUnit) {
+			if goreleaserfacts.PluginArtifactSupportsInstallation(config, mutatedUnit.PluginBinaryName, mutatedUnit.PluginAssetPrefix) {
 				t.Fatal("mismatched plugin artifact was accepted")
 			}
 		})

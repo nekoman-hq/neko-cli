@@ -121,7 +121,7 @@ func (r *ReleaseIt) detectPackageManagerAt(repositoryRoot string) string {
 		log.PluginV(log.Init,
 			fmt.Sprintf("Detected package manager: %s (found %s)",
 				log.ColorText(log.ColorCyan, "bun"),
-				log.ColorText(log.ColorYellow, "bun.lockb"),
+				log.ColorText(log.ColorYellow, "bun.lock"),
 			),
 		)
 		return "bun"

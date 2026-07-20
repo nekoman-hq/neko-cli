@@ -18,8 +18,12 @@ func TestGoReleaserFactsRemainNeutralAndInfrastructureFree(t *testing.T) {
 	}
 	forbiddenImports := []string{
 		"github.com/nekoman-hq/neko-cli/internal/terminal",
+		"github.com/nekoman-hq/neko-cli/pkg/log",
 		"github.com/nekoman-hq/neko-cli/pkg/plugin",
 		"github.com/nekoman-hq/neko-cli/pkg/presentation",
+		"github.com/nekoman-hq/neko-cli/plugin/release/internal/doctor",
+		"github.com/nekoman-hq/neko-cli/plugin/release/internal/githubdispatch",
+		"github.com/nekoman-hq/neko-cli/plugin/release/internal/releaseworkflow",
 		"github.com/nekoman-hq/neko-cli/plugin/release/pkg/git",
 		"github.com/nekoman-hq/neko-cli/plugin/release/pkg/release",
 		"io/fs",
@@ -52,7 +56,11 @@ func TestGoReleaserFactsRemainNeutralAndInfrastructureFree(t *testing.T) {
 				continue
 			}
 			for _, specification := range general.Specs {
-				name := specification.(*ast.TypeSpec).Name.Name
+				typeSpecification, ok := specification.(*ast.TypeSpec)
+				if !ok {
+					t.Fatalf("%s contains non-type specification in type declaration", entry.Name())
+				}
+				name := typeSpecification.Name.Name
 				for _, forbidden := range []string{"Diagnostic", "Severity", "Remediation", "Readiness"} {
 					if strings.Contains(name, forbidden) {
 						t.Errorf("%s declares Doctor-owned type %q", entry.Name(), name)

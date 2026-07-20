@@ -276,40 +276,16 @@ func integrationDoctorPublicationRemoteContract(
 }
 
 func integrationDoctorCLIInstallerAssets(prefix string) []string {
-	return integrationDoctorPlatformArchiveAssets(prefix, "", map[string]string{
-		"Darwin": "tar.gz", "Linux": "tar.gz", "Windows": "zip",
+	return goreleaserfacts.PlatformArchiveAssets(prefix, "", goreleaserfacts.PlatformFormats{
+		Darwin: "tar.gz", Linux: "tar.gz", Windows: "zip",
 	})
 }
 
 func integrationDoctorPluginInstallerAssets(prefix, version string) []string {
-	assets := integrationDoctorPlatformArchiveAssets(prefix, version, map[string]string{
-		"Darwin": "tar.gz", "Linux": "tar.gz", "Windows": "tar.gz",
+	assets := goreleaserfacts.PlatformArchiveAssets(prefix, version, goreleaserfacts.PlatformFormats{
+		Darwin: "tar.gz", Linux: "tar.gz", Windows: "tar.gz",
 	})
 	assets = append(assets, prefix+"_"+version+"_checksums.txt")
-	sort.Strings(assets)
-	return assets
-}
-
-func integrationDoctorPlatformArchiveAssets(
-	prefix string,
-	version string,
-	formats map[string]string,
-) []string {
-	assets := make([]string, 0, len(formats)*3)
-	for _, operatingSystem := range []string{"Darwin", "Linux", "Windows"} {
-		format := formats[operatingSystem]
-		if format == "" {
-			continue
-		}
-		for _, architecture := range []string{"arm64", "i386", "x86_64"} {
-			parts := []string{prefix}
-			if version != "" {
-				parts = append(parts, version)
-			}
-			parts = append(parts, operatingSystem, architecture)
-			assets = append(assets, strings.Join(parts, "_")+"."+format)
-		}
-	}
 	sort.Strings(assets)
 	return assets
 }

@@ -69,8 +69,8 @@ func classifiesAsRealPublication(arguments string) bool {
 }
 
 func commaListContains(value, wanted string) bool {
-	for _, item := range strings.Split(value, ",") {
-		if strings.TrimSpace(strings.Trim(item, "'\"")) == wanted {
+	for _, item := range strings.Split(strings.Trim(value, "'\""), ",") {
+		if item == wanted {
 			return true
 		}
 	}

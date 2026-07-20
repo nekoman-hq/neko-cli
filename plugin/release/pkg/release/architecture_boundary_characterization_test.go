@@ -1,4 +1,7 @@
+//nolint:staticcheck // Characterization intentionally compiles the supported deprecated V1 compatibility API.
 package release
+
+//lint:file-ignore SA1019 This characterization intentionally compiles the supported deprecated V1 compatibility API.
 
 import (
 	"go/ast"
@@ -198,8 +201,8 @@ func TestActiveV2CoordinatorRemainsDirectAndCompatibilityTransactionStaysQuarant
 }
 
 type parsedReleaseProductionFile struct {
-	path string
 	file *ast.File
+	path string
 }
 
 func parseReleaseProductionFiles(t *testing.T) []parsedReleaseProductionFile {
@@ -261,8 +264,8 @@ func receiverTypeName(expression ast.Expr) string {
 func orderedReceiverCapabilityCalls(method *ast.FuncDecl) []string {
 	receiverName := method.Recv.List[0].Names[0].Name
 	type positionedCall struct {
-		position token.Pos
 		name     string
+		position token.Pos
 	}
 	var calls []positionedCall
 	ast.Inspect(method.Body, func(node ast.Node) bool {
@@ -306,7 +309,10 @@ func assertCompatibilityTypesConfinedToDeclarations(t *testing.T, files []parsed
 				continue
 			}
 			for _, specification := range general.Specs {
-				typeSpecification := specification.(*ast.TypeSpec)
+				typeSpecification, ok := specification.(*ast.TypeSpec)
+				if !ok {
+					t.Fatalf("%s contains non-type specification in type declaration", parsed.path)
+				}
 				for _, name := range typeNames {
 					if typeSpecification.Name.Name == name {
 						owners[name] = parsed.path

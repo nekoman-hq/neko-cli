@@ -34,19 +34,20 @@ before:
 	if build, ok := BuildByID(config.Builds, "cli"); !ok || build.Binary != "neko" {
 		t.Fatalf("build lookup = %#v, %t", build, ok)
 	}
-	if archive, ok := ArchiveByID(config.Archives, "cli"); !ok || !Contains(archive.IDs, "cli") {
+	if archive, ok := ArchiveByID(config.Archives, "cli"); !ok || !contains(archive.IDs, "cli") {
 		t.Fatalf("archive lookup = %#v, %t", archive, ok)
 	}
 }
 
-func TestParseConfigRejectsInvalidAndMultipleDocuments(t *testing.T) {
+func TestParseConfigPreservesHistoricalYAMLCompatibility(t *testing.T) {
 	if _, err := ParseConfig([]byte("version: [two\n")); err == nil {
 		t.Fatal("invalid YAML was accepted")
 	}
-	if _, err := ParseConfig([]byte("version: 2\n---\nversion: 2\n")); err == nil {
-		t.Fatal("multiple YAML documents were accepted")
+	config, err := ParseConfig([]byte("version: 2\nproject_name: first\n---\nversion: 1\nproject_name: second\n"))
+	if err != nil || config.Version != 2 || config.ProjectName != "first" {
+		t.Fatalf("multi-document compatibility = %#v, %v", config, err)
 	}
-	if config, err := ParseConfig(nil); err != nil || !reflect.DeepEqual(config, Config{}) {
+	if config, err = ParseConfig(nil); err != nil || !reflect.DeepEqual(config, Config{}) {
 		t.Fatalf("empty config = %#v, %v", config, err)
 	}
 }

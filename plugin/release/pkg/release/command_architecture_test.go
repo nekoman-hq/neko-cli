@@ -1,7 +1,11 @@
 package release
 
 import (
+	"go/ast"
 	"os"
+	"path"
+	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -294,28 +298,107 @@ func TestIntegrationDoctorKeepsTypedCommandAndResponseBoundaries(t *testing.T) {
 }
 
 func TestIntegrationDoctorUsesCanonicalGoReleaserFacts(t *testing.T) {
-	source := readCommandBoundarySource(t, "integration_doctor_goreleaser.go")
-	for _, required := range []string{
-		"internal/releasetool/goreleaser",
-		"goreleaserfacts.ParseConfig",
-		"goreleaserfacts.ClassifyArguments",
-		"goreleaserfacts.VerifyArtifactContract",
-		"mapIntegrationDoctorGoReleaserFindings",
-	} {
-		if !strings.Contains(source, required) {
-			t.Fatalf("Doctor GoReleaser boundary omits canonical fact %q", required)
+	const canonicalImport = "github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool/goreleaser"
+	requiredCallNames := []string{"ParseConfig", "ClassifyArguments", "VerifyArtifactContract"}
+	requiredCalls := make(map[string]bool, len(requiredCallNames))
+	for _, name := range requiredCallNames {
+		requiredCalls[name] = false
+	}
+	forbiddenTypes := map[string]bool{
+		"integrationDoctorGoReleaserBuild":          true,
+		"integrationDoctorGoReleaserArchive":        true,
+		"integrationDoctorGoReleaserFormatOverride": true,
+		"integrationDoctorGoReleaserChecksum":       true,
+		"integrationDoctorGoReleaserRelease":        true,
+		"integrationDoctorGoReleaserConfig":         true,
+	}
+	foundCanonicalImport := false
+	for _, parsed := range parseReleaseProductionFiles(t) {
+		imports := make(map[string]string, len(parsed.file.Imports))
+		for _, specification := range parsed.file.Imports {
+			importPath, err := strconv.Unquote(specification.Path.Value)
+			if err != nil {
+				t.Fatalf("unquote import in %s: %v", parsed.path, err)
+			}
+			localName := path.Base(importPath)
+			if specification.Name != nil {
+				localName = specification.Name.Name
+			}
+			imports[localName] = importPath
+			if importPath == canonicalImport {
+				foundCanonicalImport = true
+			}
+		}
+		ast.Inspect(parsed.file, func(node ast.Node) bool {
+			switch typed := node.(type) {
+			case *ast.TypeSpec:
+				if forbiddenTypes[typed.Name.Name] {
+					t.Errorf("%s retains reusable GoReleaser DTO %s", parsed.path, typed.Name.Name)
+				}
+				tags := releaseArchitectureYAMLTags(typed.Type)
+				for _, signature := range [][]string{
+					{"project_name", "builds", "archives"},
+					{"id", "binary", "main", "goos"},
+					{"id", "ids", "formats", "name_template", "format_overrides"},
+				} {
+					if releaseArchitectureContainsAll(tags, signature...) {
+						t.Errorf("%s declares alternate focused GoReleaser DTO %s", parsed.path, typed.Name.Name)
+					}
+				}
+			case *ast.CallExpr:
+				selector, ok := typed.Fun.(*ast.SelectorExpr)
+				if !ok {
+					return true
+				}
+				identifier, ok := selector.X.(*ast.Ident)
+				if ok && imports[identifier.Name] == canonicalImport {
+					if _, required := requiredCalls[selector.Sel.Name]; required {
+						requiredCalls[selector.Sel.Name] = true
+					}
+				}
+			}
+			return true
+		})
+	}
+	if !foundCanonicalImport {
+		t.Fatal("Release production does not import canonical GoReleaser facts")
+	}
+	for _, call := range requiredCallNames {
+		if !requiredCalls[call] {
+			t.Errorf("Release production does not consume canonical goreleaser.%s", call)
 		}
 	}
-	for _, forbidden := range []string{
-		"type integrationDoctorGoReleaserBuild",
-		"type integrationDoctorGoReleaserArchive",
-		"type integrationDoctorGoReleaserConfig",
-		"yaml.Unmarshal(content, &config)",
-	} {
-		if strings.Contains(source, forbidden) {
-			t.Fatalf("Doctor retains reusable GoReleaser ownership %q", forbidden)
+}
+
+func releaseArchitectureYAMLTags(expression ast.Expr) map[string]bool {
+	structure, ok := expression.(*ast.StructType)
+	if !ok {
+		return nil
+	}
+	tags := make(map[string]bool)
+	for _, field := range structure.Fields.List {
+		if field.Tag == nil {
+			continue
+		}
+		value, err := strconv.Unquote(field.Tag.Value)
+		if err != nil {
+			continue
+		}
+		name := strings.Split(reflect.StructTag(value).Get("yaml"), ",")[0]
+		if name != "" && name != "-" {
+			tags[name] = true
 		}
 	}
+	return tags
+}
+
+func releaseArchitectureContainsAll(values map[string]bool, wants ...string) bool {
+	for _, want := range wants {
+		if !values[want] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestIntegrationDoctorAvoidsGenericDiagnosticArchitecture(t *testing.T) {

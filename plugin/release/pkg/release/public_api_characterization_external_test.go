@@ -1,4 +1,7 @@
+//nolint:staticcheck // Explicit types and interface values characterize the supported public API at compile time.
 package release_test
+
+//lint:file-ignore ST1023,SA4023 Explicit types and interface values characterize the supported public API at compile time.
 
 import (
 	"context"

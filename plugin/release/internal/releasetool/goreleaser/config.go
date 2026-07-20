@@ -1,9 +1,7 @@
 package goreleaser
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 
 	"gopkg.in/yaml.v3"
 )
@@ -49,23 +47,13 @@ type Config struct {
 	Release     Release   `yaml:"release"`
 }
 
-// ParseConfig parses one focused GoReleaser YAML document. Empty YAML retains
-// the prior zero-value configuration behavior so the verifier can classify it
-// as an unsupported project shape.
+// ParseConfig parses the focused GoReleaser fields while preserving the
+// historical yaml.Unmarshal contract, including first-document handling and
+// tolerance of unrelated GoReleaser fields.
 func ParseConfig(content []byte) (Config, error) {
-	decoder := yaml.NewDecoder(bytes.NewReader(content))
 	var config Config
-	if err := decoder.Decode(&config); err != nil {
-		if err == io.EOF {
-			return config, nil
-		}
+	if err := yaml.Unmarshal(content, &config); err != nil {
 		return Config{}, fmt.Errorf("parse focused GoReleaser config: %w", err)
-	}
-	var trailing yaml.Node
-	if err := decoder.Decode(&trailing); err != nil && err != io.EOF {
-		return Config{}, fmt.Errorf("parse trailing GoReleaser YAML: %w", err)
-	} else if err == nil && len(trailing.Content) > 0 {
-		return Config{}, fmt.Errorf("focused GoReleaser config must contain one YAML document")
 	}
 	return config, nil
 }
@@ -88,7 +76,7 @@ func ArchiveByID(archives []Archive, id string) (Archive, bool) {
 	return Archive{}, false
 }
 
-func Contains(values []string, want string) bool {
+func contains(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {
 			return true
@@ -97,9 +85,9 @@ func Contains(values []string, want string) bool {
 	return false
 }
 
-func ContainsAll(values []string, wants ...string) bool {
+func containsAll(values []string, wants ...string) bool {
 	for _, want := range wants {
-		if !Contains(values, want) {
+		if !contains(values, want) {
 			return false
 		}
 	}

@@ -13,6 +13,14 @@ type ArtifactExpectation struct {
 	Plugin         bool
 }
 
+// PlatformFormats names the archive format expected for each supported
+// installer platform.
+type PlatformFormats struct {
+	Darwin  string
+	Linux   string
+	Windows string
+}
+
 type FindingKind string
 
 const (
@@ -51,15 +59,15 @@ func VerifyArtifactContract(config Config, expectations []ArtifactExpectation) [
 		if build.Binary != expectation.Binary || strings.TrimSpace(build.Main) == "" {
 			findings = append(findings, Finding{Kind: FindingBinaryMismatch, UnitID: expectation.UnitID, ExpectedID: expectation.BuildID, ExpectedBinary: expectation.Binary})
 		}
-		if !ContainsAll(build.Goos, "darwin", "linux", "windows") {
+		if !containsAll(build.Goos, "darwin", "linux", "windows") {
 			findings = append(findings, Finding{Kind: FindingPlatformMismatch, UnitID: expectation.UnitID, ExpectedID: expectation.BuildID})
 		}
 		archive, archiveOK := ArchiveByID(config.Archives, expectation.BuildID)
-		if !archiveOK || !Contains(archive.IDs, expectation.BuildID) {
+		if !archiveOK || !contains(archive.IDs, expectation.BuildID) {
 			findings = append(findings, Finding{Kind: FindingArchiveIdentityMismatch, UnitID: expectation.UnitID, ExpectedID: expectation.BuildID})
 			continue
 		}
-		if !Contains(archive.Formats, "tar.gz") ||
+		if !contains(archive.Formats, "tar.gz") ||
 			!strings.Contains(archive.NameTemplate, expectation.BuildID+"_") ||
 			!strings.Contains(archive.NameTemplate, ".Os") ||
 			!strings.Contains(archive.NameTemplate, ".Arch") {
@@ -70,17 +78,47 @@ func VerifyArtifactContract(config Config, expectations []ArtifactExpectation) [
 			!strings.Contains(config.Checksum.NameTemplate, "checksums.txt")) {
 			findings = append(findings, Finding{Kind: FindingChecksumMissing, UnitID: expectation.UnitID, ExpectedID: expectation.BuildID})
 		}
-		if !Contains(config.Release.IDs, expectation.BuildID) {
+		if !contains(config.Release.IDs, expectation.BuildID) {
 			findings = append(findings, Finding{Kind: FindingReleaseIdentityMismatch, UnitID: expectation.UnitID, ExpectedID: expectation.BuildID})
 		}
 	}
 	return findings
 }
 
+// CLIArchiveSupportsInstallation verifies the focused CLI archive shape used
+// by the existing installer contract.
+func CLIArchiveSupportsInstallation(config Config, archiveID string) bool {
+	archive, ok := ArchiveByID(config.Archives, archiveID)
+	if !ok || !contains(archive.Formats, "tar.gz") ||
+		!strings.Contains(archive.NameTemplate, archiveID+"_") ||
+		!strings.Contains(archive.NameTemplate, ".Os") ||
+		!strings.Contains(archive.NameTemplate, ".Arch") {
+		return false
+	}
+	for _, override := range archive.FormatOverrides {
+		if override.Goos == "windows" && contains(override.Formats, "zip") {
+			return true
+		}
+	}
+	return false
+}
+
+// PluginArtifactSupportsInstallation verifies the focused plugin build and
+// archive shape used by the existing plugin installer contract.
+func PluginArtifactSupportsInstallation(config Config, binaryName, assetPrefix string) bool {
+	build, buildOK := BuildByID(config.Builds, binaryName)
+	archive, archiveOK := ArchiveByID(config.Archives, assetPrefix)
+	return buildOK && archiveOK && build.Binary == binaryName &&
+		contains(archive.IDs, build.ID) &&
+		contains(archive.Formats, "tar.gz") &&
+		strings.Contains(archive.NameTemplate, assetPrefix+"_") &&
+		strings.Contains(archive.NameTemplate, ".Os") && strings.Contains(archive.NameTemplate, ".Arch")
+}
+
 // PublicationAssets derives the exact platform archive and checksum names used
 // by the existing Release Plugin remote verification contract.
 func PublicationAssets(config Config, prefix, version string, plugin bool) []string {
-	formats := map[string]string{"Darwin": "tar.gz", "Linux": "tar.gz", "Windows": "tar.gz"}
+	formats := PlatformFormats{Darwin: "tar.gz", Linux: "tar.gz", Windows: "tar.gz"}
 	archive, present := ArchiveByID(config.Archives, prefix)
 	if !present {
 		return nil
@@ -91,18 +129,18 @@ func PublicationAssets(config Config, prefix, version string, plugin bool) []str
 		}
 		switch override.Goos {
 		case "darwin":
-			formats["Darwin"] = override.Formats[0]
+			formats.Darwin = override.Formats[0]
 		case "linux":
-			formats["Linux"] = override.Formats[0]
+			formats.Linux = override.Formats[0]
 		case "windows":
-			formats["Windows"] = override.Formats[0]
+			formats.Windows = override.Formats[0]
 		}
 	}
 	nameVersion := ""
 	if plugin {
 		nameVersion = version
 	}
-	assets := platformArchiveAssets(prefix, nameVersion, formats)
+	assets := PlatformArchiveAssets(prefix, nameVersion, formats)
 	if config.Checksum != nil {
 		assets = append(assets, prefix+"_"+version+"_checksums.txt")
 	}
@@ -110,10 +148,20 @@ func PublicationAssets(config Config, prefix, version string, plugin bool) []str
 	return assets
 }
 
-func platformArchiveAssets(prefix, version string, formats map[string]string) []string {
-	assets := make([]string, 0, len(formats)*3)
-	for _, operatingSystem := range []string{"Darwin", "Linux", "Windows"} {
-		format := formats[operatingSystem]
+// PlatformArchiveAssets derives deterministic archive names for the supported
+// installer platforms and architectures.
+func PlatformArchiveAssets(prefix, version string, formats PlatformFormats) []string {
+	platforms := []struct {
+		name   string
+		format string
+	}{
+		{name: "Darwin", format: formats.Darwin},
+		{name: "Linux", format: formats.Linux},
+		{name: "Windows", format: formats.Windows},
+	}
+	assets := make([]string, 0, len(platforms)*3)
+	for _, platform := range platforms {
+		format := platform.format
 		if format == "" {
 			continue
 		}
@@ -122,7 +170,7 @@ func platformArchiveAssets(prefix, version string, formats map[string]string) []
 			if version != "" {
 				parts = append(parts, version)
 			}
-			parts = append(parts, operatingSystem, architecture)
+			parts = append(parts, platform.name, architecture)
 			assets = append(assets, strings.Join(parts, "_")+"."+format)
 		}
 	}
