@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -35,6 +36,57 @@ func TestEnvironmentGitHubActionsDispatchTokenResolverPreservesMissingTokenError
 	_, err := (EnvironmentGitHubActionsDispatchTokenResolver{}).ResolveGitHubActionsDispatchToken(context.Background())
 	if err == nil || err.Error() != "GitHub Actions dispatch requires GITHUB_TOKEN with the appropriate repository Actions write permission" {
 		t.Fatalf("missing-token error changed: %v", err)
+	}
+}
+
+func TestGitHubActionsDispatchClientPreservesOptionValidation(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		option GitHubActionsDispatchClientOption
+		want   string
+	}{
+		{name: "empty base URL", option: WithGitHubActionsDispatchAPIBaseURL(" "), want: "API base URL is empty"},
+		{name: "invalid scheme", option: WithGitHubActionsDispatchAPIBaseURL("ftp://example.test"), want: "must be http or https"},
+		{name: "missing transport", option: WithGitHubActionsDispatchTransport(nil), want: "transport is missing"},
+		{name: "nonpositive timeout", option: WithGitHubActionsDispatchTimeout(0), want: "timeout must be positive"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := NewGitHubActionsDispatchClient(test.option); err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("NewGitHubActionsDispatchClient error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestGitHubActionsDispatchClientOptionCanConfigureConstructedClient(t *testing.T) {
+	client, err := NewGitHubActionsDispatchClient()
+	if err != nil {
+		t.Fatalf("NewGitHubActionsDispatchClient: %v", err)
+	}
+	requests := 0
+	transport := dispatchClientRoundTripper(func(request *http.Request) (*http.Response, error) {
+		requests++
+		return &http.Response{
+			StatusCode: http.StatusNoContent,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader("")),
+			Request:    request,
+		}, nil
+	})
+	if optionErr := WithGitHubActionsDispatchTransport(transport)(client); optionErr != nil {
+		t.Fatalf("configure constructed client: %v", optionErr)
+	}
+	result, err := client.Dispatch(
+		context.Background(),
+		GitHubRepositoryTarget{Owner: "owner", Repository: "repo", APIBaseURL: "https://api.github.test"},
+		newDispatchClientTestRequest(t),
+		GitHubActionsDispatchToken{secret: "secret-token"},
+	)
+	if err != nil {
+		t.Fatalf("Dispatch: %v", err)
+	}
+	if requests != 1 || result.State != DispatchJournalAccepted {
+		t.Fatalf("requests=%d result=%#v", requests, result)
 	}
 }
 
@@ -239,4 +291,10 @@ func assertWorkflowDispatchBody(t *testing.T, body map[string]any) {
 	if _, ok := inputs["ignored"]; ok {
 		t.Fatalf("unexpected ignored input leaked: %#v", inputs)
 	}
+}
+
+type dispatchClientRoundTripper func(*http.Request) (*http.Response, error)
+
+func (transport dispatchClientRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	return transport(request)
 }

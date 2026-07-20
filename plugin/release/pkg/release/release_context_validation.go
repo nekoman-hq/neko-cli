@@ -6,6 +6,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releaseworkflow"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
@@ -153,10 +154,10 @@ func validateReleaseContextRequestSyntax(request ReleaseContextValidationRequest
 		name  string
 		value string
 	}{
-		{name: workflowDispatchInputUnit, value: request.UnitID},
-		{name: workflowDispatchInputVersion, value: request.Version},
-		{name: workflowDispatchInputTag, value: request.Tag},
-		{name: workflowDispatchInputReleaseSHA, value: request.ReleaseSHA},
+		{name: releaseworkflow.DispatchInputUnit, value: request.UnitID},
+		{name: releaseworkflow.DispatchInputVersion, value: request.Version},
+		{name: releaseworkflow.DispatchInputTag, value: request.Tag},
+		{name: releaseworkflow.DispatchInputReleaseSHA, value: request.ReleaseSHA},
 	}
 	for _, value := range values {
 		if !exactRequiredValue(value.value) {

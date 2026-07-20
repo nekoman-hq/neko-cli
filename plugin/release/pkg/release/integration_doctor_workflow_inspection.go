@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releaseworkflow"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 	"gopkg.in/yaml.v3"
 )
@@ -139,8 +140,8 @@ func inspectIntegrationDoctorDispatch(
 		add(integrationDoctorError, "WORKFLOW_DISPATCH_MISSING", "The workflow does not expose workflow_dispatch.", "Add workflow_dispatch with the canonical Release V2 inputs.")
 	} else {
 		inputs := workflowMappingValue(dispatch, "inputs")
-		definitions := map[string]workflowDispatchInputDefinition{}
-		for _, definition := range canonicalWorkflowDispatchInputContract() {
+		definitions := map[string]releaseworkflow.DispatchInputDefinition{}
+		for _, definition := range releaseworkflow.CanonicalDispatchInputContract() {
 			definitions[definition.Name] = definition
 			input := workflowMappingValue(inputs, definition.Name)
 			if input == nil {
@@ -296,10 +297,10 @@ func inspectIntegrationDoctorValidator(
 	add func(integrationDoctorSeverity, string, string, string),
 ) {
 	wants := []struct{ flag, environment, input string }{
-		{"--unit", "RELEASE_UNIT", workflowDispatchInputUnit},
-		{"--version", "RELEASE_VERSION", workflowDispatchInputVersion},
-		{"--tag", "RELEASE_TAG", workflowDispatchInputTag},
-		{"--release-sha", "RELEASE_SHA", workflowDispatchInputReleaseSHA},
+		{"--unit", "RELEASE_UNIT", releaseworkflow.DispatchInputUnit},
+		{"--version", "RELEASE_VERSION", releaseworkflow.DispatchInputVersion},
+		{"--tag", "RELEASE_TAG", releaseworkflow.DispatchInputTag},
+		{"--release-sha", "RELEASE_SHA", releaseworkflow.DispatchInputReleaseSHA},
 	}
 	for _, want := range wants {
 		if !integrationDoctorCommandFlagMatches(validator.run, want.flag, want.environment, want.input) {

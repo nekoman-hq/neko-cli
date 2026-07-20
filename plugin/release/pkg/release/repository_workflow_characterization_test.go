@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releaseworkflow"
 	"gopkg.in/yaml.v3"
 )
 
@@ -67,7 +68,7 @@ func TestRepositoryDogfoodWorkflowsRetainConsumerBehavior(t *testing.T) {
 }
 
 func TestRepositoryDogfoodWorkflowDispatchUsesSharedContract(t *testing.T) {
-	canonicalInputs := canonicalWorkflowDispatchInputContract()
+	canonicalInputs := releaseworkflow.CanonicalDispatchInputContract()
 	for _, behavior := range repositoryWorkflowBehaviors() {
 		t.Run(behavior.unit, func(t *testing.T) {
 			_, root := readRepositoryWorkflow(t, behavior.path)

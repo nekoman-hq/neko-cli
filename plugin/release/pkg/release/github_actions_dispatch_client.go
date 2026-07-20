@@ -1,28 +1,13 @@
 package release
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io"
-	"net"
 	"net/http"
-	"net/url"
-	"os"
 	"strconv"
-	"strings"
 	"time"
 
-	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata"
-)
-
-const (
-	githubAPIVersion              = "2026-03-10"
-	defaultDispatchRequestTimeout = 15 * time.Second
-	maxDispatchResponseBytes      = 4096
-	maxStoredDispatchErrorLength  = 1024
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/githubdispatch"
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releaseworkflow"
 )
 
 // GitHubActionsWorkflowDispatchClient sends exactly one workflow_dispatch HTTP
@@ -31,15 +16,12 @@ type GitHubActionsWorkflowDispatchClient interface {
 	Dispatch(ctx context.Context, target GitHubRepositoryTarget, request *ReleaseDispatchRequest, token GitHubActionsDispatchToken) (GitHubActionsDispatchResponse, error)
 }
 
-// GitHubActionsDispatchClient is the production HTTP implementation of the
-// GitHub Actions workflow_dispatch adapter.
-//
-//nolint:govet // Fields are grouped by construction concern, not memory layout.
+// GitHubActionsDispatchClient preserves the supported root API while
+// delegating the bounded POST to the focused transport package.
 type GitHubActionsDispatchClient struct {
-	baseURLOverride string
-	httpClient      *http.Client
-	timeout         time.Duration
-	userAgent       string
+	client   *githubdispatch.Client
+	protocol githubdispatch.Protocol
+	options  []githubdispatch.ClientOption
 }
 
 // GitHubActionsDispatchClientOption configures a GitHub Actions dispatch client
@@ -64,8 +46,7 @@ type GitHubActionsDispatchResponse struct {
 // NewGitHubActionsDispatchClient creates a production-safe dispatch client.
 func NewGitHubActionsDispatchClient(options ...GitHubActionsDispatchClientOption) (*GitHubActionsDispatchClient, error) {
 	client := &GitHubActionsDispatchClient{
-		timeout:   defaultDispatchRequestTimeout,
-		userAgent: githubActionsDispatchUserAgent(),
+		protocol: githubdispatch.Protocol{APIVersion: githubAPIVersion, UserAgent: githubActionsDispatchUserAgent()},
 	}
 	for _, option := range options {
 		if option == nil {
@@ -75,65 +56,54 @@ func NewGitHubActionsDispatchClient(options ...GitHubActionsDispatchClientOption
 			return nil, err
 		}
 	}
-	if client.httpClient == nil {
-		client.httpClient = &http.Client{
-			// Redirects are intentionally disabled so Authorization can never be
-			// forwarded to a different host.
-			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
-		}
+	transport, err := githubdispatch.NewClient(client.protocol, client.options...)
+	if err != nil {
+		return nil, err
 	}
+	client.client = transport
 	return client, nil
 }
 
 // WithGitHubActionsDispatchAPIBaseURL overrides the API base URL for tests.
 func WithGitHubActionsDispatchAPIBaseURL(baseURL string) GitHubActionsDispatchClientOption {
 	return func(client *GitHubActionsDispatchClient) error {
-		baseURL = strings.TrimSpace(baseURL)
-		if baseURL == "" {
-			return fmt.Errorf("github actions dispatch API base URL is empty")
-		}
-		parsed, err := url.Parse(baseURL)
-		if err != nil {
-			return fmt.Errorf("parse github actions dispatch API base URL: %w", err)
-		}
-		if parsed.Scheme != "https" && parsed.Scheme != "http" {
-			return fmt.Errorf("github actions dispatch API base URL must be http or https")
-		}
-		client.baseURLOverride = strings.TrimRight(baseURL, "/")
-		return nil
+		return client.applyTransportOption(githubdispatch.WithAPIBaseURL(baseURL))
 	}
 }
 
 // WithGitHubActionsDispatchTransport injects an HTTP transport for tests.
 func WithGitHubActionsDispatchTransport(transport http.RoundTripper) GitHubActionsDispatchClientOption {
 	return func(client *GitHubActionsDispatchClient) error {
-		if transport == nil {
-			return fmt.Errorf("github actions dispatch transport is missing")
-		}
-		client.httpClient = &http.Client{
-			Transport: transport,
-			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
-		}
-		return nil
+		return client.applyTransportOption(githubdispatch.WithTransport(transport))
 	}
 }
 
 // WithGitHubActionsDispatchTimeout overrides the bounded request timeout.
 func WithGitHubActionsDispatchTimeout(timeout time.Duration) GitHubActionsDispatchClientOption {
 	return func(client *GitHubActionsDispatchClient) error {
-		if timeout <= 0 {
-			return fmt.Errorf("github actions dispatch timeout must be positive")
-		}
-		client.timeout = timeout
-		return nil
+		return client.applyTransportOption(githubdispatch.WithTimeout(timeout))
 	}
 }
 
-func (client *GitHubActionsDispatchClient) Dispatch(ctx context.Context, target GitHubRepositoryTarget, request *ReleaseDispatchRequest, token GitHubActionsDispatchToken) (GitHubActionsDispatchResponse, error) {
+func (client *GitHubActionsDispatchClient) applyTransportOption(option githubdispatch.ClientOption) error {
+	options := append(append([]githubdispatch.ClientOption(nil), client.options...), option)
+	transport, err := githubdispatch.NewClient(client.protocol, options...)
+	if err != nil {
+		return err
+	}
+	client.options = options
+	client.client = transport
+	return nil
+}
+
+// Dispatch maps the supported root request and result contracts around the
+// neutral transport outcome. Journal policy remains in the root package.
+func (client *GitHubActionsDispatchClient) Dispatch(
+	ctx context.Context,
+	target GitHubRepositoryTarget,
+	request *ReleaseDispatchRequest,
+	token GitHubActionsDispatchToken,
+) (GitHubActionsDispatchResponse, error) {
 	if request == nil {
 		return GitHubActionsDispatchResponse{}, errDispatchRequestMissing()
 	}
@@ -141,257 +111,54 @@ func (client *GitHubActionsDispatchClient) Dispatch(ctx context.Context, target 
 	if secret == "" {
 		return GitHubActionsDispatchResponse{}, missingGitHubActionsDispatchTokenError()
 	}
-	endpoint, err := client.dispatchEndpoint(target, request.WorkflowFileName)
+	bearerToken, err := githubdispatch.NewBearerToken(secret)
+	if err != nil {
+		return GitHubActionsDispatchResponse{}, missingGitHubActionsDispatchTokenError()
+	}
+	response, err := client.client.Post(ctx, target, githubdispatch.Request{
+		WorkflowFilename: request.WorkflowFileName,
+		Ref:              request.Tag,
+		Inputs:           releaseworkflow.CanonicalDispatchInputs(request.Inputs),
+	}, bearerToken)
 	if err != nil {
 		return GitHubActionsDispatchResponse{}, err
 	}
-	payload := workflowDispatchPayload{
-		Ref:    request.Tag,
-		Inputs: canonicalWorkflowDispatchInputs(request),
-	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return GitHubActionsDispatchResponse{}, fmt.Errorf("marshal github actions dispatch body: %w", err)
-	}
-	requestCtx, cancel := context.WithTimeout(ctx, client.timeout)
-	defer cancel()
-	httpRequest, err := http.NewRequestWithContext(requestCtx, http.MethodPost, endpoint, bytes.NewReader(body))
-	if err != nil {
-		return GitHubActionsDispatchResponse{}, fmt.Errorf("build github actions dispatch request: %w", err)
-	}
-	httpRequest.Header.Set("Accept", "application/vnd.github+json")
-	httpRequest.Header.Set("Authorization", "Bearer "+secret)
-	httpRequest.Header.Set("Content-Type", "application/json")
-	httpRequest.Header.Set("X-GitHub-Api-Version", githubAPIVersion)
-	httpRequest.Header.Set("User-Agent", client.userAgent)
-
-	response, err := client.httpClient.Do(httpRequest)
-	if err != nil {
-		return GitHubActionsDispatchResponse{
-			State:            DispatchJournalUnknown,
-			Error:            sanitizeDispatchText(classifyTransportError(err), secret),
-			RecoveryGuidance: dispatchJournalRecoveryGuidance(DispatchJournalUnknown),
-		}, nil
-	}
-	defer func() { _ = response.Body.Close() }()
-	return classifyGitHubActionsDispatchResponse(response, secret), nil
+	state := dispatchJournalStateForOutcome(response.Outcome)
+	return GitHubActionsDispatchResponse{
+		State:             state,
+		HTTPStatus:        response.HTTPStatus,
+		WorkflowRunID:     response.WorkflowRunID,
+		RunURL:            response.RunURL,
+		HTMLURL:           response.HTMLURL,
+		ResponseTimestamp: response.ResponseTimestamp,
+		Error:             response.Error,
+		RecoveryGuidance:  dispatchJournalRecoveryGuidance(state),
+	}, nil
 }
 
-func (client *GitHubActionsDispatchClient) dispatchEndpoint(target GitHubRepositoryTarget, workflowFilename string) (string, error) {
-	baseURL := strings.TrimRight(target.APIBaseURL, "/")
-	if client.baseURLOverride != "" {
-		baseURL = client.baseURLOverride
-	}
-	if baseURL == "" {
-		return "", fmt.Errorf("github actions dispatch API base URL is missing")
-	}
-	workflowFilename = strings.TrimSpace(workflowFilename)
-	if workflowFilename == "" || strings.Contains(workflowFilename, "/") || strings.Contains(workflowFilename, "\\") {
-		return "", fmt.Errorf("github actions dispatch workflow filename is invalid")
-	}
-	path := "/repos/" + url.PathEscape(target.Owner) + "/" + url.PathEscape(target.Repository) +
-		"/actions/workflows/" + url.PathEscape(workflowFilename) + "/dispatches"
-	return baseURL + path, nil
-}
-
-//nolint:govet // JSON field order must stay ref then inputs.
-type workflowDispatchPayload struct {
-	Ref    string            `json:"ref"`
-	Inputs map[string]string `json:"inputs"`
-}
-
-func canonicalWorkflowDispatchInputs(request *ReleaseDispatchRequest) map[string]string {
-	// Workflow inputs are intentionally minimal: the workflow must derive
-	// executor, delivery, paths and configuration from the checked-out tag.
-	contract := canonicalWorkflowDispatchInputContract()
-	inputs := make(map[string]string, len(contract))
-	for _, definition := range contract {
-		inputs[definition.Name] = request.Inputs[definition.Name]
-	}
-	return inputs
-}
-
-func classifyGitHubActionsDispatchResponse(response *http.Response, token string) GitHubActionsDispatchResponse {
-	status := response.StatusCode
-	body := readBoundedDispatchBody(response.Body)
-	result := GitHubActionsDispatchResponse{
-		HTTPStatus:        status,
-		ResponseTimestamp: response.Header.Get("Date"),
-	}
-	switch {
-	case status >= 200 && status <= 299:
-		result.State = DispatchJournalAccepted
-		metadata := parseOptionalWorkflowRunMetadata(body)
-		result.WorkflowRunID = metadata.RunID
-		result.RunURL = metadata.RunURL
-		result.HTMLURL = metadata.HTMLURL
-		if metadata.ResponseTimestamp != "" {
-			result.ResponseTimestamp = metadata.ResponseTimestamp
-		}
-		result.RecoveryGuidance = dispatchJournalRecoveryGuidance(DispatchJournalAccepted)
-	case isDefinitiveDispatchRejectionStatus(status):
-		result.State = DispatchJournalRejected
-		result.Error = sanitizeDispatchText(parseGitHubDispatchError(body, status), token)
-		result.RecoveryGuidance = dispatchJournalRecoveryGuidance(DispatchJournalRejected)
+func dispatchJournalStateForOutcome(outcome githubdispatch.Outcome) DispatchJournalState {
+	switch outcome {
+	case githubdispatch.OutcomeAccepted:
+		return DispatchJournalAccepted
+	case githubdispatch.OutcomeRejected:
+		return DispatchJournalRejected
+	case githubdispatch.OutcomeUnknown:
+		return DispatchJournalUnknown
 	default:
-		result.State = DispatchJournalUnknown
-		result.Error = sanitizeDispatchText(fmt.Sprintf("GitHub Actions dispatch returned HTTP %d; outcome is uncertain", status), token)
-		result.RecoveryGuidance = dispatchJournalRecoveryGuidance(DispatchJournalUnknown)
+		return DispatchJournalUnknown
 	}
-	return result
-}
-
-func isDefinitiveDispatchRejectionStatus(status int) bool {
-	switch status {
-	case http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusUnprocessableEntity, http.StatusTooManyRequests:
-		return true
-	default:
-		return false
-	}
-}
-
-func parseOptionalWorkflowRunMetadata(body []byte) DispatchJournalMetadata {
-	if len(bytes.TrimSpace(body)) == 0 {
-		return DispatchJournalMetadata{}
-	}
-	var payload struct {
-		ID        json.Number `json:"id"`
-		RunID     json.Number `json:"run_id"`
-		RunURL    string      `json:"url"`
-		HTMLURL   string      `json:"html_url"`
-		CreatedAt string      `json:"created_at"`
-	}
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.UseNumber()
-	if err := decoder.Decode(&payload); err != nil {
-		return DispatchJournalMetadata{}
-	}
-	runID := payload.RunID.String()
-	if runID == "" {
-		runID = payload.ID.String()
-	}
-	return DispatchJournalMetadata{
-		RunID:             runID,
-		RunURL:            payload.RunURL,
-		HTMLURL:           payload.HTMLURL,
-		ResponseTimestamp: payload.CreatedAt,
-	}
-}
-
-func parseGitHubDispatchError(body []byte, status int) string {
-	var payload struct {
-		Message          string `json:"message"`
-		DocumentationURL string `json:"documentation_url"`
-	}
-	if len(bytes.TrimSpace(body)) > 0 {
-		if err := json.Unmarshal(body, &payload); err == nil && payload.Message != "" {
-			message := payload.Message
-			if payload.DocumentationURL != "" {
-				message += " (" + payload.DocumentationURL + ")"
-			}
-			if status == http.StatusTooManyRequests {
-				message += "; request was not accepted and requires a later explicit retry or resume decision"
-			}
-			return capDispatchText(message)
-		}
-	}
-	if status == http.StatusTooManyRequests {
-		return "GitHub Actions dispatch was rejected with HTTP 429; request was not accepted and requires a later explicit retry or resume decision"
-	}
-	return fmt.Sprintf("GitHub Actions dispatch was rejected with HTTP %d", status)
-}
-
-func classifyTransportError(err error) string {
-	if errors.Is(err, context.Canceled) {
-		return "GitHub Actions dispatch context was canceled after request start; outcome is uncertain"
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return "GitHub Actions dispatch timed out after request start; outcome is uncertain"
-	}
-	var netErr net.Error
-	if errors.As(err, &netErr) && netErr.Timeout() {
-		return "GitHub Actions dispatch timed out after request start; outcome is uncertain"
-	}
-	return "GitHub Actions dispatch transport failed after request start; outcome is uncertain: " + err.Error()
-}
-
-func readBoundedDispatchBody(body io.Reader) []byte {
-	if body == nil {
-		return nil
-	}
-	data, _ := io.ReadAll(io.LimitReader(body, maxDispatchResponseBytes))
-	return data
 }
 
 func sanitizeDispatchText(value, token string) string {
-	value = capDispatchText(value)
-	token = strings.TrimSpace(token)
-	if token != "" {
-		value = strings.ReplaceAll(value, token, "[redacted]")
+	bearerToken, err := githubdispatch.NewBearerToken(token)
+	if err != nil {
+		return githubdispatch.CapText(value)
 	}
-	value = strings.ReplaceAll(value, "Bearer [redacted]", "Bearer [redacted]")
-	return value
+	return githubdispatch.SanitizeText(value, bearerToken)
 }
 
 func capDispatchText(value string) string {
-	value = strings.TrimSpace(value)
-	if len(value) <= maxStoredDispatchErrorLength {
-		return value
-	}
-	return value[:maxStoredDispatchErrorLength] + "...[truncated]"
-}
-
-func githubActionsDispatchUserAgent() string {
-	version := strings.TrimSpace(metadata.Version)
-	if version == "" {
-		version = "dev"
-	}
-	return "neko-cli/" + version
-}
-
-// GitHubActionsDispatchToken is a validated secret-bearing value. Its string
-// representations are always redacted; only dispatch adapters can unwrap it.
-type GitHubActionsDispatchToken struct {
-	secret string
-}
-
-// NewGitHubActionsDispatchToken validates a token for explicit resolver and
-// client implementations without exposing its value through formatting.
-func NewGitHubActionsDispatchToken(value string) (GitHubActionsDispatchToken, error) {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return GitHubActionsDispatchToken{}, missingGitHubActionsDispatchTokenError()
-	}
-	return GitHubActionsDispatchToken{secret: value}, nil
-}
-
-func (token GitHubActionsDispatchToken) secretValue() string {
-	return token.secret
-}
-
-func (GitHubActionsDispatchToken) String() string {
-	return "[redacted]"
-}
-
-func (GitHubActionsDispatchToken) GoString() string {
-	return "[redacted]"
-}
-
-// GitHubActionsDispatchTokenResolver resolves the production dispatch token.
-type GitHubActionsDispatchTokenResolver interface {
-	ResolveGitHubActionsDispatchToken(ctx context.Context) (GitHubActionsDispatchToken, error)
-}
-
-// EnvironmentGitHubActionsDispatchTokenResolver resolves GITHUB_TOKEN for real
-// internal dispatch attempts.
-type EnvironmentGitHubActionsDispatchTokenResolver struct{}
-
-func (EnvironmentGitHubActionsDispatchTokenResolver) ResolveGitHubActionsDispatchToken(_ context.Context) (GitHubActionsDispatchToken, error) {
-	return NewGitHubActionsDispatchToken(os.Getenv("GITHUB_TOKEN"))
-}
-
-func missingGitHubActionsDispatchTokenError() error {
-	return fmt.Errorf("GitHub Actions dispatch requires GITHUB_TOKEN with the appropriate repository Actions write permission")
+	return githubdispatch.CapText(value)
 }
 
 func dispatchHTTPStatus(status int) string {

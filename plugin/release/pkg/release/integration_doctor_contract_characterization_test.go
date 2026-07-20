@@ -7,10 +7,13 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releaseworkflow"
+	"gopkg.in/yaml.v3"
 )
 
 func TestIntegrationDoctorReusesCanonicalDispatchAndWorkflowContracts(t *testing.T) {
-	contract := canonicalWorkflowDispatchInputContract()
+	contract := releaseworkflow.CanonicalDispatchInputContract()
 	wantInputs := []string{"unit", "version", "tag", "release_sha"}
 	if len(contract) != len(wantInputs) {
 		t.Fatalf("dispatch input count = %d, want %d", len(contract), len(wantInputs))
@@ -21,15 +24,34 @@ func TestIntegrationDoctorReusesCanonicalDispatchAndWorkflowContracts(t *testing
 		}
 	}
 
-	spec := canonicalGitHubActionsReleaseWorkflowSpec()
-	if !reflect.DeepEqual(spec.Inputs, contract) {
-		t.Fatalf("workflow inputs = %#v, want canonical contract %#v", spec.Inputs, contract)
+	canonical, err := RenderCanonicalGitHubActionsReleaseWorkflow()
+	if err != nil {
+		t.Fatalf("render canonical workflow: %v", err)
 	}
-	if spec.CancelReleaseInFlight {
+	var document yaml.Node
+	if err := yaml.Unmarshal(canonical, &document); err != nil {
+		t.Fatalf("parse canonical workflow: %v", err)
+	}
+	root := workflowDocumentRoot(&document)
+	dispatch := workflowMappingValue(workflowMappingValue(root, "on"), "workflow_dispatch")
+	inputs := workflowMappingKeys(workflowMappingValue(dispatch, "inputs"))
+	if !reflect.DeepEqual(inputs, wantInputs) {
+		t.Fatalf("workflow inputs = %#v, want canonical contract %#v", inputs, wantInputs)
+	}
+	cancel, ok := workflowBool(workflowMappingValue(workflowMappingValue(root, "concurrency"), "cancel-in-progress"))
+	if !ok || cancel {
 		t.Fatal("canonical release workflow must preserve in-flight releases")
 	}
-	if spec.ValidationStepID != "release-context" {
-		t.Fatalf("validation step id = %q, want release-context", spec.ValidationStepID)
+	jobs := integrationDoctorWorkflowJobs(root)
+	if len(jobs) != 1 {
+		t.Fatalf("canonical workflow jobs = %d, want 1", len(jobs))
+	}
+	foundValidationStep := false
+	for _, step := range jobs[0].steps {
+		foundValidationStep = foundValidationStep || step.id == "release-context"
+	}
+	if !foundValidationStep {
+		t.Fatal("canonical workflow validation step id changed")
 	}
 }
 

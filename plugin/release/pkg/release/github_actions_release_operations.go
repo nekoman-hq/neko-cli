@@ -3,9 +3,9 @@ package release
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"strings"
 
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releaseworkflow"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
@@ -599,10 +599,5 @@ func (runner *GitHubActionsReleaseRunner) newUseCase(repositoryRoot string) *git
 }
 
 func sanitizeRemoteForLog(raw string) string {
-	parsed, err := url.Parse(raw)
-	if err != nil || parsed.User == nil {
-		return raw
-	}
-	parsed.User = nil
-	return parsed.String()
+	return releaseworkflow.SanitizeRemoteForLog(raw)
 }

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releaseworkflow"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
 	"gopkg.in/yaml.v3"
 )
@@ -112,7 +113,7 @@ func assertRepositoryWorkflowDispatchContract(t *testing.T, root *yaml.Node) {
 		t.Fatalf("triggers = %v, want only workflow_dispatch", keys)
 	}
 	inputs := workflowMappingValue(workflowMappingValue(on, "workflow_dispatch"), "inputs")
-	canonical := canonicalWorkflowDispatchInputContract()
+	canonical := releaseworkflow.CanonicalDispatchInputContract()
 	if len(workflowMappingKeys(inputs)) != len(canonical) {
 		t.Fatalf("dispatch inputs = %v", workflowMappingKeys(inputs))
 	}

@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releaseworkflow"
 )
 
 const (
@@ -112,7 +114,7 @@ func newIntegrationDoctorGitHubReadClient(
 	options ...integrationDoctorGitHubReadClientOption,
 ) (*integrationDoctorGitHubReadClient, error) {
 	client := &integrationDoctorGitHubReadClient{
-		baseURL:   githubActionsAPIBaseURL,
+		baseURL:   releaseworkflow.GitHubActionsAPIBaseURL,
 		timeout:   integrationDoctorGitHubReadTimeout,
 		userAgent: githubActionsDispatchUserAgent(),
 	}

@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releaseworkflow"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
@@ -79,7 +80,7 @@ func BuildReleaseDispatchRequest(ctx *ReleaseExecutionContext, result *GitReleas
 	if err != nil {
 		return nil, err
 	}
-	inputs := canonicalWorkflowDispatchInputValues(ctx.Unit.ID, ctx.NextVersion, ctx.Tag, result.CommitSHA)
+	inputs := releaseworkflow.CanonicalDispatchInputValues(ctx.Unit.ID, ctx.NextVersion, ctx.Tag, result.CommitSHA)
 	return &ReleaseDispatchRequest{
 		RepositoryRemoteName: remoteName,
 		UnitID:               ctx.Unit.ID,
@@ -113,7 +114,7 @@ func BuildReleaseDispatchDryRunSummary(ctx *ReleaseExecutionContext) (*ReleaseDi
 	if strings.TrimSpace(ctx.Workflow) == "" {
 		return nil, fmt.Errorf("github-actions workflow is missing")
 	}
-	inputs := canonicalWorkflowDispatchInputValues(ctx.Unit.ID, ctx.NextVersion, ctx.Tag, "pending release commit")
+	inputs := releaseworkflow.CanonicalDispatchInputValues(ctx.Unit.ID, ctx.NextVersion, ctx.Tag, "pending release commit")
 	return &ReleaseDispatchDryRunSummary{
 		Ref:             ctx.Tag,
 		Inputs:          inputs,

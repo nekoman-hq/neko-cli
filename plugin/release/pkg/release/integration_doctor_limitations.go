@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releaseworkflow"
 	"gopkg.in/yaml.v3"
 )
 
@@ -117,7 +118,7 @@ func integrationDoctorHasDispatchContract(root *yaml.Node) bool {
 	if dispatch == nil || inputs == nil {
 		return false
 	}
-	for _, definition := range canonicalWorkflowDispatchInputContract() {
+	for _, definition := range releaseworkflow.CanonicalDispatchInputContract() {
 		if workflowMappingValue(inputs, definition.Name) == nil {
 			return false
 		}
