@@ -692,8 +692,15 @@ func TestReleaseProgressReporterIsInfallible(t *testing.T) {
 
 func readCommandBoundarySource(t *testing.T, path string) string {
 	t.Helper()
-	if strings.HasPrefix(path, "integration_doctor_") {
+	switch {
+	case strings.HasPrefix(path, "integration_doctor_"):
 		path = filepath.Join("..", "..", "internal", "doctor", path)
+	case strings.HasPrefix(path, "unit_overview_"):
+		path = filepath.Join("..", "..", "internal", "unitoverview", path)
+	case strings.HasPrefix(path, "github_workflow_scaffold_"):
+		path = filepath.Join("..", "..", "internal", "workflowinit", path)
+	case strings.HasPrefix(path, "release_context_"):
+		path = filepath.Join("..", "..", "internal", "contextvalidation", path)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
