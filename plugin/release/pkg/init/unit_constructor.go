@@ -90,10 +90,10 @@ func normalizeV2UnitRequest(request v2UnitRequest) (v2InitConfig, error) {
 		return v2InitConfig{}, fmt.Errorf("version %q must be valid SemVer: %w", version, err)
 	}
 	if request.Executor == "" {
-		return v2InitConfig{}, fmt.Errorf("missing required flag: --executor (goreleaser|jreleaser|release-it)")
+		return v2InitConfig{}, fmt.Errorf("missing required flag: --executor (%s)", supportedExecutorValues("|"))
 	}
 	if !request.Executor.IsValid() {
-		return v2InitConfig{}, fmt.Errorf("invalid executor: %s (must be: goreleaser, jreleaser, or release-it)", request.Executor)
+		return v2InitConfig{}, fmt.Errorf("invalid executor: %s (must be: %s)", request.Executor, supportedExecutorDescription())
 	}
 	if request.Delivery == "" {
 		return v2InitConfig{}, fmt.Errorf("missing required flag: --delivery (github-actions)")

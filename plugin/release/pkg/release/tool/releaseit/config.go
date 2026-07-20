@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool"
 )
 
 type Config struct {
@@ -40,7 +42,7 @@ func LoadConfig() (*Config, error) {
 }
 
 func LoadConfigAt(repositoryRoot string) (*Config, error) {
-	data, err := os.ReadFile(filepath.Join(repositoryRoot, ".release-it.json"))
+	data, err := os.ReadFile(filepath.Join(repositoryRoot, releasetool.ReleaseItConfigFile))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
@@ -58,7 +60,7 @@ func SaveConfig(cfg *Config) (err error) {
 }
 
 func SaveConfigAt(repositoryRoot string, cfg *Config) (err error) {
-	file, err := os.Create(filepath.Join(repositoryRoot, ".release-it.json"))
+	file, err := os.Create(filepath.Join(repositoryRoot, releasetool.ReleaseItConfigFile))
 	if err != nil {
 		return fmt.Errorf("create .release-it.json: %w", err)
 	}

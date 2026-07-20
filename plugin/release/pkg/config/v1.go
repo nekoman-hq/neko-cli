@@ -1,6 +1,8 @@
 // Package config is mainly for the implementation of .release.neko.json
 package config
 
+import "github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool"
+
 /*
 @Author     Benjamin Senekowitsch
 @Contact    senekowitsch@nekoman.at
@@ -24,9 +26,9 @@ const (
 )
 
 const (
-	V1ReleaseTypeReleaseIt  V1ReleaseSystem = "release-it"
-	V1ReleaseTypeJReleaser  V1ReleaseSystem = "jreleaser"
-	V1ReleaseTypeGoReleaser V1ReleaseSystem = "goreleaser"
+	V1ReleaseTypeReleaseIt  V1ReleaseSystem = V1ReleaseSystem(releasetool.ReleaseIt)
+	V1ReleaseTypeJReleaser  V1ReleaseSystem = V1ReleaseSystem(releasetool.JReleaser)
+	V1ReleaseTypeGoReleaser V1ReleaseSystem = V1ReleaseSystem(releasetool.GoReleaser)
 )
 
 // V1ReleaseConfig is the legacy .release.neko.json schema.
@@ -58,10 +60,5 @@ func (p V1ProjectType) IsValid() bool {
 //
 // Deprecated: V1 is supported only as the legacy compatibility format.
 func (r V1ReleaseSystem) IsValid() bool {
-	switch r {
-	case V1ReleaseTypeReleaseIt, V1ReleaseTypeJReleaser, V1ReleaseTypeGoReleaser:
-		return true
-	default:
-		return false
-	}
+	return releasetool.Identity(r).Valid()
 }

@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool"
 )
 
 const (
@@ -25,9 +27,9 @@ const (
 type ExecutorType string
 
 const (
-	ExecutorJReleaser  ExecutorType = "jreleaser"
-	ExecutorReleaseIt  ExecutorType = "release-it"
-	ExecutorGoReleaser ExecutorType = "goreleaser"
+	ExecutorJReleaser  ExecutorType = ExecutorType(releasetool.JReleaser)
+	ExecutorReleaseIt  ExecutorType = ExecutorType(releasetool.ReleaseIt)
+	ExecutorGoReleaser ExecutorType = ExecutorType(releasetool.GoReleaser)
 )
 
 // DeliveryType is the configured release delivery channel.
@@ -547,12 +549,7 @@ func tagPrefixesOverlap(a, b string) bool {
 
 // IsValid reports whether the executor is supported by V2.
 func (e ExecutorType) IsValid() bool {
-	switch e {
-	case ExecutorJReleaser, ExecutorReleaseIt, ExecutorGoReleaser:
-		return true
-	default:
-		return false
-	}
+	return releasetool.Identity(e).Valid()
 }
 
 // IsValid reports whether the delivery type is a recognized release delivery

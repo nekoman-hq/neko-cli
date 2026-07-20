@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool"
 	config2 "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 	release2 "github.com/nekoman-hq/neko-cli/plugin/release/pkg/release"
 
@@ -115,7 +116,7 @@ func (j *JReleaser) ensureDependencies() {
 }
 
 func (j *JReleaser) Name() string {
-	return "jreleaser"
+	return string(releasetool.JReleaser)
 }
 
 func (j *JReleaser) Init(cfg *config2.V1ReleaseConfig) error {
@@ -237,7 +238,7 @@ func (j *JReleaser) Rollback() error {
 func (j *JReleaser) runJReleaserInit(repositoryRoot string, cfg *config2.V1ReleaseConfig) error {
 	log.PluginV(log.Init, "Generating JReleaser configuration...")
 
-	exists, err := j.files.Exists(repositoryRoot, "jreleaser.yml")
+	exists, err := j.files.Exists(repositoryRoot, releasetool.JReleaserConfigFile)
 	if err != nil {
 		return fmt.Errorf("failed to check jreleaser.yml: %w", err)
 	}
@@ -353,7 +354,7 @@ func (j *JReleaser) syncJReleaser(repositoryRoot string, v *semver.Version) erro
 		),
 	)
 
-	exists, err := j.files.Exists(repositoryRoot, "jreleaser.yml")
+	exists, err := j.files.Exists(repositoryRoot, releasetool.JReleaserConfigFile)
 	if err != nil {
 		return fmt.Errorf("failed to check jreleaser.yml: %w", err)
 	}

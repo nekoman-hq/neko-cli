@@ -126,7 +126,7 @@ func GetAvailableOptions() (*plugin.Response, error) {
 		},
 		{
 			"option":      "executor",
-			"values":      "goreleaser, jreleaser, release-it",
+			"values":      supportedExecutorValues(", "),
 			"required":    true,
 			"description": "Release executor",
 		},

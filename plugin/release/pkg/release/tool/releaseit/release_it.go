@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 	release2 "github.com/nekoman-hq/neko-cli/plugin/release/pkg/release"
 
@@ -100,7 +101,7 @@ func (r *ReleaseIt) ensureDependencies() {
 }
 
 func (r *ReleaseIt) Name() string {
-	return "release-it"
+	return string(releasetool.ReleaseIt)
 }
 
 func (r *ReleaseIt) ensurePackageManager(repositoryRoot string) {
@@ -254,7 +255,7 @@ func (r *ReleaseIt) Rollback() error {
 }
 
 func (r *ReleaseIt) runReleaseItInit(repositoryRoot string, cfg *config.V1ReleaseConfig) error {
-	exists, err := r.files.Exists(repositoryRoot, ".release-it.json")
+	exists, err := r.files.Exists(repositoryRoot, releasetool.ReleaseItConfigFile)
 	if err != nil {
 		return fmt.Errorf("failed to check .release-it.json: %w", err)
 	}

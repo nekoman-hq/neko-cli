@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 	release2 "github.com/nekoman-hq/neko-cli/plugin/release/pkg/release"
 
@@ -113,7 +114,7 @@ func (g *GoReleaser) ensureDependencies() {
 }
 
 func (g *GoReleaser) Name() string {
-	return "goreleaser"
+	return string(releasetool.GoReleaser)
 }
 
 func (g *GoReleaser) Init(_ *config.V1ReleaseConfig) error {
@@ -269,7 +270,11 @@ func (g *GoReleaser) runGoreleaserInit(repositoryRoot string) error {
 }
 
 func (g *GoReleaser) goreleaserConfigExists(repositoryRoot string) (bool, error) {
-	for _, file := range []string{".goreleaser.yml", ".goreleaser.yaml"} {
+	candidates, err := releasetool.ConfigCandidates(releasetool.GoReleaser)
+	if err != nil {
+		return false, err
+	}
+	for _, file := range candidates {
 		exists, err := g.files.Exists(repositoryRoot, file)
 		if err != nil {
 			return false, fmt.Errorf("failed to check %s: %w", file, err)

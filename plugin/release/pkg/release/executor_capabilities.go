@@ -3,7 +3,7 @@ package release
 import (
 	"fmt"
 
-	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool"
 )
 
 // ExecutorCapabilities documents the ownership boundary between Neko CLI and
@@ -34,72 +34,33 @@ type ExecutorCapabilities struct {
 
 // ResolveExecutorCapabilities returns the current local-executor behavior.
 func ResolveExecutorCapabilities(executorType string) (ExecutorCapabilities, error) {
-	switch releaseconfig.ExecutorType(executorType) {
-	case releaseconfig.ExecutorGoReleaser:
-		return ExecutorCapabilities{
-			Type:                          string(releaseconfig.ExecutorGoReleaser),
-			UpdatesVersionFiles:           false,
-			CreatesCommit:                 true,
-			CreatesTag:                    true,
-			Pushes:                        true,
-			CreatesGitHubRelease:          true,
-			SupportsLocalExecution:        true,
-			SupportsDryRun:                true,
-			RequiresRepositoryCleanliness: true,
-			MayRequireRollback:            true,
-			VersionFilesOwner:             "none",
-			CommitOwner:                   "neko-cli",
-			TagOwner:                      "neko-cli",
-			PushOwner:                     "neko-cli",
-			GitHubReleaseOwner:            "goreleaser",
-			StateBeforeExecutor:           true,
-			StateCommitGuaranteed:         true,
-			StateCommitGuarantee:          "Neko CLI writes and stages .neko/release.state.json before its release commit",
-		}, nil
-	case releaseconfig.ExecutorJReleaser:
-		return ExecutorCapabilities{
-			Type:                          string(releaseconfig.ExecutorJReleaser),
-			UpdatesVersionFiles:           true,
-			CreatesCommit:                 true,
-			CreatesTag:                    true,
-			Pushes:                        true,
-			CreatesGitHubRelease:          true,
-			SupportsLocalExecution:        true,
-			SupportsDryRun:                true,
-			RequiresRepositoryCleanliness: true,
-			MayRequireRollback:            true,
-			VersionFilesOwner:             "neko-cli",
-			CommitOwner:                   "neko-cli",
-			TagOwner:                      "jreleaser",
-			PushOwner:                     "neko-cli + jreleaser",
-			GitHubReleaseOwner:            "jreleaser",
-			StateBeforeExecutor:           true,
-			StateCommitGuaranteed:         true,
-			StateCommitGuarantee:          "Neko CLI writes and stages .neko/release.state.json before its release metadata commit; JReleaser creates the tag and release later",
-		}, nil
-	case releaseconfig.ExecutorReleaseIt:
-		return ExecutorCapabilities{
-			Type:                          string(releaseconfig.ExecutorReleaseIt),
-			UpdatesVersionFiles:           true,
-			CreatesCommit:                 true,
-			CreatesTag:                    true,
-			Pushes:                        true,
-			CreatesGitHubRelease:          true,
-			SupportsLocalExecution:        true,
-			SupportsDryRun:                false,
-			RequiresRepositoryCleanliness: true,
-			MayRequireRollback:            true,
-			VersionFilesOwner:             "release-it",
-			CommitOwner:                   "release-it",
-			TagOwner:                      "release-it",
-			PushOwner:                     "release-it",
-			GitHubReleaseOwner:            "release-it",
-			StateBeforeExecutor:           true,
-			StateCommitGuaranteed:         false,
-			StateCommitGuarantee:          "release-it owns commit, tag, push, and GitHub release creation; root V2 state cannot be guaranteed in that commit from a nested unit root",
-			V2LocalExecutionBlockedReason: "V2 local release-it is blocked because .neko/release.state.json lives at the repository root and release-it owns the release commit from the unit root",
-		}, nil
-	default:
+	identity, err := releasetool.ParseIdentity(executorType)
+	if err != nil {
 		return ExecutorCapabilities{}, fmt.Errorf("unknown executor: %s", executorType)
 	}
+	behavior, err := releasetool.V1BehaviorFor(identity)
+	if err != nil {
+		return ExecutorCapabilities{}, fmt.Errorf("unknown executor: %s", executorType)
+	}
+	return ExecutorCapabilities{
+		Type:                          string(behavior.Identity),
+		UpdatesVersionFiles:           behavior.UpdatesVersionFiles,
+		CreatesCommit:                 behavior.CreatesCommit,
+		CreatesTag:                    behavior.CreatesTag,
+		Pushes:                        behavior.Pushes,
+		CreatesGitHubRelease:          behavior.CreatesGitHubRelease,
+		SupportsLocalExecution:        behavior.SupportsLocalExecution,
+		SupportsDryRun:                behavior.SupportsDryRun,
+		RequiresRepositoryCleanliness: behavior.RequiresRepositoryCleanliness,
+		MayRequireRollback:            behavior.MayRequireRollback,
+		VersionFilesOwner:             behavior.VersionFilesOwner,
+		CommitOwner:                   behavior.CommitOwner,
+		TagOwner:                      behavior.TagOwner,
+		PushOwner:                     behavior.PushOwner,
+		GitHubReleaseOwner:            behavior.GitHubReleaseOwner,
+		StateBeforeExecutor:           behavior.StateBeforeExecutor,
+		StateCommitGuaranteed:         behavior.StateCommitGuaranteed,
+		StateCommitGuarantee:          behavior.StateCommitGuarantee,
+		V2LocalExecutionBlockedReason: behavior.V2LocalExecutionBlockedReason,
+	}, nil
 }

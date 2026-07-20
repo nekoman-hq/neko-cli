@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool"
 	"gopkg.in/yaml.v3"
 )
 
@@ -17,12 +17,16 @@ type VersionMaterializer interface {
 }
 
 func ResolveVersionMaterializer(executor string) (VersionMaterializer, error) {
-	switch releaseconfig.ExecutorType(executor) {
-	case releaseconfig.ExecutorGoReleaser:
+	identity, err := releasetool.ParseIdentity(executor)
+	if err != nil {
+		return nil, fmt.Errorf("unknown executor: %s", executor)
+	}
+	switch identity {
+	case releasetool.GoReleaser:
 		return GoReleaserMaterializer{}, nil
-	case releaseconfig.ExecutorJReleaser:
+	case releasetool.JReleaser:
 		return JReleaserMaterializer{}, nil
-	case releaseconfig.ExecutorReleaseIt:
+	case releasetool.ReleaseIt:
 		return ReleaseItMaterializer{}, nil
 	default:
 		return nil, fmt.Errorf("unknown executor: %s", executor)

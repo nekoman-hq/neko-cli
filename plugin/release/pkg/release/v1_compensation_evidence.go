@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool"
 )
 
 const v1CompensationEvidenceSchemaVersion = 1
@@ -14,9 +16,9 @@ const v1CompensationEvidenceSchemaVersion = 1
 type V1CompensationExecutor string
 
 const (
-	V1CompensationExecutorGoReleaser V1CompensationExecutor = "goreleaser"
-	V1CompensationExecutorJReleaser  V1CompensationExecutor = "jreleaser"
-	V1CompensationExecutorReleaseIt  V1CompensationExecutor = "release-it"
+	V1CompensationExecutorGoReleaser V1CompensationExecutor = V1CompensationExecutor(releasetool.GoReleaser)
+	V1CompensationExecutorJReleaser  V1CompensationExecutor = V1CompensationExecutor(releasetool.JReleaser)
+	V1CompensationExecutorReleaseIt  V1CompensationExecutor = V1CompensationExecutor(releasetool.ReleaseIt)
 )
 
 type V1ReleaseEffectStatus string

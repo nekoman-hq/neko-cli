@@ -11,14 +11,15 @@ import (
 
 	coreconfig "github.com/nekoman-hq/neko-cli/pkg/config"
 	"github.com/nekoman-hq/neko-cli/pkg/log"
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
 const (
-	releaseItConfigFile      = ".release-it.json"
-	jReleaserConfigFile      = "jreleaser.yml"
-	goReleaserConfigFileYML  = ".goreleaser.yml"
-	goReleaserConfigFileYAML = ".goreleaser.yaml"
+	releaseItConfigFile      = releasetool.ReleaseItConfigFile
+	jReleaserConfigFile      = releasetool.JReleaserConfigFile
+	goReleaserConfigFileYML  = releasetool.GoReleaserConfigFileYML
+	goReleaserConfigFileYAML = releasetool.GoReleaserConfigFileYAML
 )
 
 // ValidateRequirements checks that the required environment and release-system
@@ -106,16 +107,11 @@ func validateRequirementsForExecutor(executor, unitRoot string, requireToken boo
 }
 
 func requiredReleaseSystemFiles(executor string) ([]string, error) {
-	switch releaseconfig.ExecutorType(executor) {
-	case releaseconfig.ExecutorReleaseIt:
-		return []string{releaseItConfigFile}, nil
-	case releaseconfig.ExecutorJReleaser:
-		return []string{jReleaserConfigFile}, nil
-	case releaseconfig.ExecutorGoReleaser:
-		return []string{goReleaserConfigFileYML, goReleaserConfigFileYAML}, nil
-	default:
+	identity, err := releasetool.ParseIdentity(executor)
+	if err != nil {
 		return nil, fmt.Errorf("unknown release system: %s", executor)
 	}
+	return releasetool.ConfigCandidates(identity)
 }
 
 func joinQuotedFiles(files []string) string {

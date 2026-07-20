@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool"
 	"gopkg.in/yaml.v3"
 )
 
@@ -103,7 +104,7 @@ func LoadConfig() (*Config, error) {
 }
 
 func LoadConfigAt(repositoryRoot string) (*Config, error) {
-	data, err := os.ReadFile(filepath.Join(repositoryRoot, "jreleaser.yml"))
+	data, err := os.ReadFile(filepath.Join(repositoryRoot, releasetool.JReleaserConfigFile))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
@@ -121,7 +122,7 @@ func SaveConfig(cfg *Config) (err error) {
 }
 
 func SaveConfigAt(repositoryRoot string, cfg *Config) (err error) {
-	file, err := os.Create(filepath.Join(repositoryRoot, "jreleaser.yml"))
+	file, err := os.Create(filepath.Join(repositoryRoot, releasetool.JReleaserConfigFile))
 	if err != nil {
 		return fmt.Errorf("create jreleaser.yml: %w", err)
 	}
