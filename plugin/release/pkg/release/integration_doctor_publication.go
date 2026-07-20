@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	goreleaserfacts "github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool/goreleaser"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 	"gopkg.in/yaml.v3"
 )
@@ -56,7 +57,11 @@ func inspectIntegrationDoctorPublication(
 			continue
 		}
 		fact.References = append(fact.References, configPath)
-		if integrationDoctorDiagnosticsContainErrors(inspectIntegrationDoctorGoReleaserConfig(workflowPath, configPath, config, []releaseconfig.ReleaseUnit{unit})) {
+		findings := goreleaserfacts.VerifyArtifactContract(
+			config,
+			integrationDoctorGoReleaserExpectations(config, []releaseconfig.ReleaseUnit{unit}),
+		)
+		if integrationDoctorDiagnosticsContainErrors(mapIntegrationDoctorGoReleaserFindings(workflowPath, configPath, findings)) {
 			add(unit.ID, "PUBLICATION_ARTIFACT_IDENTITY_MISMATCH", "Published archives, binaries, checksums, or release IDs conflict with the configured unit identity.", "Align the supported GoReleaser build, archive, checksum, and release IDs with the release unit.")
 		}
 		if !integrationDoctorPublicationCommandForUnit(unit, publishJobs) {

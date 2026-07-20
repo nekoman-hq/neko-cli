@@ -3,6 +3,7 @@ package release
 import (
 	"strings"
 
+	goreleaserfacts "github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool/goreleaser"
 	"gopkg.in/yaml.v3"
 )
 
@@ -204,23 +205,7 @@ func integrationDoctorGoReleaserStepPublishes(step integrationDoctorWorkflowStep
 		return false
 	}
 	args := workflowScalar(workflowMappingValue(workflowMappingValue(step.node, "with"), "args"))
-	fields := strings.Fields(args)
-	if len(fields) == 0 || fields[0] != "release" {
-		return false
-	}
-	for index, field := range fields {
-		field = strings.Trim(field, "'\"")
-		if field == "--snapshot" || field == "--snapshot=true" {
-			return false
-		}
-		if strings.HasPrefix(field, "--skip=") && integrationDoctorCommaListContains(strings.TrimPrefix(field, "--skip="), "publish") {
-			return false
-		}
-		if field == "--skip" && index+1 < len(fields) && integrationDoctorCommaListContains(fields[index+1], "publish") {
-			return false
-		}
-	}
-	return true
+	return goreleaserfacts.ClassifyArguments(args).RealPublication
 }
 
 func integrationDoctorRunPublishesGitHubRelease(command string) bool {
@@ -272,15 +257,6 @@ func integrationDoctorListContainsGitHubContainer(value string) bool {
 	})
 	for _, field := range fields {
 		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(field)), "ghcr.io/") {
-			return true
-		}
-	}
-	return false
-}
-
-func integrationDoctorCommaListContains(value, want string) bool {
-	for _, item := range strings.Split(strings.Trim(value, "'\""), ",") {
-		if item == want {
 			return true
 		}
 	}

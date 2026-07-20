@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	goreleaserfacts "github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool/goreleaser"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 	"gopkg.in/yaml.v3"
 )
@@ -101,48 +102,50 @@ func TestIntegrationDoctorGoReleaserIdentityRejectsFocusedMismatches(t *testing.
 	if err != nil {
 		t.Fatalf("read GoReleaser config: %v", err)
 	}
-	var valid integrationDoctorGoReleaserConfig
-	if err := yaml.Unmarshal(content, &valid); err != nil {
+	valid, err := goreleaserfacts.ParseConfig(content)
+	if err != nil {
 		t.Fatalf("parse GoReleaser config: %v", err)
 	}
 
 	tests := []struct {
 		name   string
-		mutate func(*integrationDoctorGoReleaserConfig)
+		mutate func(*goreleaserfacts.Config)
 		code   string
 	}{
-		{name: "unknown build id", mutate: func(config *integrationDoctorGoReleaserConfig) {
+		{name: "unknown build id", mutate: func(config *goreleaserfacts.Config) {
 			config.Builds[0].ID = "other"
 		}, code: "GORELEASER_BUILD_ID_MISMATCH"},
-		{name: "binary mismatch", mutate: func(config *integrationDoctorGoReleaserConfig) {
+		{name: "binary mismatch", mutate: func(config *goreleaserfacts.Config) {
 			config.Builds[0].Binary = "other"
 		}, code: "GORELEASER_BINARY_MISMATCH"},
-		{name: "archive mismatch", mutate: func(config *integrationDoctorGoReleaserConfig) {
+		{name: "archive mismatch", mutate: func(config *goreleaserfacts.Config) {
 			config.Archives[0].NameTemplate = "other_{{ .Os }}_{{ .Arch }}"
 		}, code: "GORELEASER_ARCHIVE_MISMATCH"},
-		{name: "checksum missing", mutate: func(config *integrationDoctorGoReleaserConfig) {
+		{name: "checksum missing", mutate: func(config *goreleaserfacts.Config) {
 			config.Checksum = nil
 		}, code: "GORELEASER_CHECKSUM_MISSING"},
-		{name: "release id mismatch", mutate: func(config *integrationDoctorGoReleaserConfig) {
+		{name: "release id mismatch", mutate: func(config *goreleaserfacts.Config) {
 			config.Release.IDs = []string{"other"}
 		}, code: "GORELEASER_RELEASE_ID_MISMATCH"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			config := valid
-			config.Builds = append([]integrationDoctorGoReleaserBuild(nil), valid.Builds...)
-			config.Archives = append([]integrationDoctorGoReleaserArchive(nil), valid.Archives...)
+			config.Builds = append([]goreleaserfacts.Build(nil), valid.Builds...)
+			config.Archives = append([]goreleaserfacts.Archive(nil), valid.Archives...)
 			config.Release.IDs = append([]string(nil), valid.Release.IDs...)
 			if valid.Checksum != nil {
 				checksum := *valid.Checksum
 				config.Checksum = &checksum
 			}
 			test.mutate(&config)
-			diagnostics := inspectIntegrationDoctorGoReleaserConfig(
+			diagnostics := mapIntegrationDoctorGoReleaserFindings(
 				pluginUnit.Workflow,
 				".goreleaser.plugin-release.yaml",
-				config,
-				[]releaseconfig.ReleaseUnit{pluginUnit},
+				goreleaserfacts.VerifyArtifactContract(
+					config,
+					integrationDoctorGoReleaserExpectations(config, []releaseconfig.ReleaseUnit{pluginUnit}),
+				),
 			)
 			assertIntegrationDoctorCodes(t, diagnostics, test.code)
 		})

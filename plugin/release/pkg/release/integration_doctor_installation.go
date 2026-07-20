@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	goreleaserfacts "github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool/goreleaser"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 	"gopkg.in/yaml.v3"
 )
@@ -233,7 +234,7 @@ func integrationDoctorFindCLIArtifactConfig(
 	units []releaseconfig.ReleaseUnit,
 	archivePrefix string,
 	files integrationDoctorRepositoryFileReader,
-) (releaseconfig.ReleaseUnit, integrationDoctorGoReleaserConfig, string, bool) {
+) (releaseconfig.ReleaseUnit, goreleaserfacts.Config, string, bool) {
 	for _, unit := range units {
 		if unit.IsPlugin {
 			continue
@@ -243,21 +244,21 @@ func integrationDoctorFindCLIArtifactConfig(
 			return unit, config, configPath, true
 		}
 	}
-	return releaseconfig.ReleaseUnit{}, integrationDoctorGoReleaserConfig{}, "", false
+	return releaseconfig.ReleaseUnit{}, goreleaserfacts.Config{}, "", false
 }
 
 func integrationDoctorLoadUnitGoReleaserConfig(
 	repositoryRoot string,
 	unit releaseconfig.ReleaseUnit,
 	files integrationDoctorRepositoryFileReader,
-) (integrationDoctorGoReleaserConfig, string, bool) {
+) (goreleaserfacts.Config, string, bool) {
 	workflowContent, err := files.ReadFile(repositoryRoot, unit.Workflow)
 	if err != nil {
-		return integrationDoctorGoReleaserConfig{}, "", false
+		return goreleaserfacts.Config{}, "", false
 	}
 	var document yaml.Node
 	if yaml.Unmarshal(workflowContent, &document) != nil {
-		return integrationDoctorGoReleaserConfig{}, "", false
+		return goreleaserfacts.Config{}, "", false
 	}
 	root := workflowDocumentRoot(&document)
 	invocations := integrationDoctorGoReleaserInvocations(root, integrationDoctorWorkflowJobs(root))
@@ -269,27 +270,27 @@ func integrationDoctorLoadUnitGoReleaserConfig(
 		if readErr != nil {
 			continue
 		}
-		var config integrationDoctorGoReleaserConfig
-		if yaml.Unmarshal(content, &config) == nil {
+		config, parseErr := goreleaserfacts.ParseConfig(content)
+		if parseErr == nil {
 			return config, invocation.ConfigPath, true
 		}
 	}
-	return integrationDoctorGoReleaserConfig{}, "", false
+	return goreleaserfacts.Config{}, "", false
 }
 
 func integrationDoctorCLIArchiveMatchesInstaller(
-	config integrationDoctorGoReleaserConfig,
+	config goreleaserfacts.Config,
 	archivePrefix string,
 ) bool {
-	archive, ok := integrationDoctorGoReleaserArchiveByID(config.Archives, archivePrefix)
-	if !ok || !integrationDoctorStringSliceContains(archive.Formats, "tar.gz") ||
+	archive, ok := goreleaserfacts.ArchiveByID(config.Archives, archivePrefix)
+	if !ok || !goreleaserfacts.Contains(archive.Formats, "tar.gz") ||
 		!strings.Contains(archive.NameTemplate, archivePrefix+"_") ||
 		!strings.Contains(archive.NameTemplate, ".Os") ||
 		!strings.Contains(archive.NameTemplate, ".Arch") {
 		return false
 	}
 	for _, override := range archive.FormatOverrides {
-		if override.Goos == "windows" && integrationDoctorStringSliceContains(override.Formats, "zip") {
+		if override.Goos == "windows" && goreleaserfacts.Contains(override.Formats, "zip") {
 			return true
 		}
 	}
@@ -297,14 +298,14 @@ func integrationDoctorCLIArchiveMatchesInstaller(
 }
 
 func integrationDoctorPluginArchiveMatchesInstaller(
-	config integrationDoctorGoReleaserConfig,
+	config goreleaserfacts.Config,
 	unit releaseconfig.ReleaseUnit,
 ) bool {
-	build, buildOK := integrationDoctorGoReleaserBuildByID(config.Builds, unit.PluginBinaryName)
-	archive, archiveOK := integrationDoctorGoReleaserArchiveByID(config.Archives, unit.PluginAssetPrefix)
+	build, buildOK := goreleaserfacts.BuildByID(config.Builds, unit.PluginBinaryName)
+	archive, archiveOK := goreleaserfacts.ArchiveByID(config.Archives, unit.PluginAssetPrefix)
 	return buildOK && archiveOK && build.Binary == unit.PluginBinaryName &&
-		integrationDoctorStringSliceContains(archive.IDs, build.ID) &&
-		integrationDoctorStringSliceContains(archive.Formats, "tar.gz") &&
+		goreleaserfacts.Contains(archive.IDs, build.ID) &&
+		goreleaserfacts.Contains(archive.Formats, "tar.gz") &&
 		strings.Contains(archive.NameTemplate, unit.PluginAssetPrefix+"_") &&
 		strings.Contains(archive.NameTemplate, ".Os") && strings.Contains(archive.NameTemplate, ".Arch")
 }

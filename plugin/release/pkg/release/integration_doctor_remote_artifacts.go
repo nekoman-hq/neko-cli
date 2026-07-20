@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	goreleaserfacts "github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool/goreleaser"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
@@ -265,7 +266,7 @@ func integrationDoctorPublicationRemoteContract(
 	if unit.IsPlugin {
 		prefix = unit.PluginAssetPrefix
 	}
-	assets := integrationDoctorGoReleaserPublicationAssets(config, prefix, unit.Version, unit.IsPlugin)
+	assets := goreleaserfacts.PublicationAssets(config, prefix, unit.Version, unit.IsPlugin)
 	if len(assets) == 0 {
 		return integrationDoctorRemoteArtifactContract{}, false
 	}
@@ -285,42 +286,6 @@ func integrationDoctorPluginInstallerAssets(prefix, version string) []string {
 		"Darwin": "tar.gz", "Linux": "tar.gz", "Windows": "tar.gz",
 	})
 	assets = append(assets, prefix+"_"+version+"_checksums.txt")
-	sort.Strings(assets)
-	return assets
-}
-
-func integrationDoctorGoReleaserPublicationAssets(
-	config integrationDoctorGoReleaserConfig,
-	prefix string,
-	version string,
-	plugin bool,
-) []string {
-	formats := map[string]string{"Darwin": "tar.gz", "Linux": "tar.gz", "Windows": "tar.gz"}
-	archive, present := integrationDoctorGoReleaserArchiveByID(config.Archives, prefix)
-	if !present {
-		return nil
-	}
-	for _, override := range archive.FormatOverrides {
-		if len(override.Formats) == 0 {
-			continue
-		}
-		switch override.Goos {
-		case "darwin":
-			formats["Darwin"] = override.Formats[0]
-		case "linux":
-			formats["Linux"] = override.Formats[0]
-		case "windows":
-			formats["Windows"] = override.Formats[0]
-		}
-	}
-	nameVersion := ""
-	if plugin {
-		nameVersion = version
-	}
-	assets := integrationDoctorPlatformArchiveAssets(prefix, nameVersion, formats)
-	if config.Checksum != nil {
-		assets = append(assets, prefix+"_"+version+"_checksums.txt")
-	}
 	sort.Strings(assets)
 	return assets
 }

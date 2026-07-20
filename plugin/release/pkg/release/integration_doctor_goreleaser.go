@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	goreleaserfacts "github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool/goreleaser"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 	"gopkg.in/yaml.v3"
 )
@@ -18,44 +19,6 @@ type integrationDoctorGoReleaserInvocation struct {
 	Snapshot    bool
 	SkipPublish bool
 	Publishes   bool
-}
-
-type integrationDoctorGoReleaserBuild struct {
-	ID     string   `yaml:"id"`
-	Binary string   `yaml:"binary"`
-	Main   string   `yaml:"main"`
-	Goos   []string `yaml:"goos"`
-}
-
-type integrationDoctorGoReleaserFormatOverride struct {
-	Goos    string   `yaml:"goos"`
-	Formats []string `yaml:"formats"`
-}
-
-type integrationDoctorGoReleaserArchive struct {
-	ID              string                                      `yaml:"id"`
-	IDs             []string                                    `yaml:"ids"`
-	Formats         []string                                    `yaml:"formats"`
-	NameTemplate    string                                      `yaml:"name_template"`
-	FormatOverrides []integrationDoctorGoReleaserFormatOverride `yaml:"format_overrides"`
-}
-
-type integrationDoctorGoReleaserChecksum struct {
-	NameTemplate string `yaml:"name_template"`
-}
-
-type integrationDoctorGoReleaserRelease struct {
-	IDs []string `yaml:"ids"`
-}
-
-//nolint:govet // Field order mirrors the focused GoReleaser YAML contract.
-type integrationDoctorGoReleaserConfig struct {
-	Version     int                                  `yaml:"version"`
-	ProjectName string                               `yaml:"project_name"`
-	Builds      []integrationDoctorGoReleaserBuild   `yaml:"builds"`
-	Archives    []integrationDoctorGoReleaserArchive `yaml:"archives"`
-	Checksum    *integrationDoctorGoReleaserChecksum `yaml:"checksum"`
-	Release     integrationDoctorGoReleaserRelease   `yaml:"release"`
 }
 
 type integrationDoctorGoReleaserInspection struct {
@@ -115,8 +78,8 @@ func inspectIntegrationDoctorGoReleaser(
 			))
 			continue
 		}
-		var config integrationDoctorGoReleaserConfig
-		if err := yaml.Unmarshal(content, &config); err != nil {
+		config, err := goreleaserfacts.ParseConfig(content)
+		if err != nil {
 			inspection.Diagnostics = append(inspection.Diagnostics, newIntegrationDoctorWorkflowDiagnostic(
 				integrationDoctorError,
 				workflowPath,
@@ -129,7 +92,11 @@ func inspectIntegrationDoctorGoReleaser(
 		}
 		inspection.Diagnostics = append(
 			inspection.Diagnostics,
-			inspectIntegrationDoctorGoReleaserConfig(workflowPath, configPath, config, units)...,
+			mapIntegrationDoctorGoReleaserFindings(
+				workflowPath,
+				configPath,
+				goreleaserfacts.VerifyArtifactContract(config, integrationDoctorGoReleaserExpectations(config, units)),
+			)...,
 		)
 	}
 	inspection.Verified = len(paths) > 0 && !integrationDoctorDiagnosticsContainErrors(inspection.Diagnostics)
@@ -154,35 +121,18 @@ func integrationDoctorGoReleaserInvocations(
 			if !strings.HasPrefix(strings.ToLower(step.uses), "goreleaser/goreleaser-action@") {
 				continue
 			}
-			args := workflowScalar(workflowMappingValue(workflowMappingValue(step.node, "with"), "args"))
-			normalizedArgs := strings.NewReplacer(
-				"${{ ", "${{",
-				" }}", "}}",
-				"'", "",
-				"\"", "",
-			).Replace(args)
-			fields := strings.Fields(normalizedArgs)
-			invocation := integrationDoctorGoReleaserInvocation{JobID: job.id, StepName: step.name}
-			if len(fields) > 0 {
-				invocation.Command = fields[0]
+			classified := goreleaserfacts.ClassifyArguments(
+				workflowScalar(workflowMappingValue(workflowMappingValue(step.node, "with"), "args")),
+			)
+			invocation := integrationDoctorGoReleaserInvocation{
+				JobID:       job.id,
+				StepName:    step.name,
+				Command:     classified.Command,
+				ConfigPath:  integrationDoctorResolveWorkflowValue(classified.ConfigReference, root, job, step),
+				Snapshot:    classified.Snapshot,
+				SkipPublish: classified.SkipPublication,
+				Publishes:   classified.RealPublication,
 			}
-			for index, field := range fields {
-				switch {
-				case field == "--snapshot" || field == "--snapshot=true":
-					invocation.Snapshot = true
-				case strings.HasPrefix(field, "--skip=") && integrationDoctorCommaListContains(strings.TrimPrefix(field, "--skip="), "publish"):
-					invocation.SkipPublish = true
-				case field == "--skip" && index+1 < len(fields) && integrationDoctorCommaListContains(fields[index+1], "publish"):
-					invocation.SkipPublish = true
-				case strings.HasPrefix(field, "--config="):
-					invocation.ConfigPath = integrationDoctorResolveWorkflowValue(
-						strings.TrimPrefix(field, "--config="), root, job, step,
-					)
-				case field == "--config" && index+1 < len(fields):
-					invocation.ConfigPath = integrationDoctorResolveWorkflowValue(fields[index+1], root, job, step)
-				}
-			}
-			invocation.Publishes = integrationDoctorGoReleaserStepPublishes(step)
 			invocations = append(invocations, invocation)
 		}
 	}
@@ -220,22 +170,11 @@ func integrationDoctorResolveWorkflowValue(
 	return ""
 }
 
-func inspectIntegrationDoctorGoReleaserConfig(
-	workflowPath string,
-	configPath string,
-	config integrationDoctorGoReleaserConfig,
+func integrationDoctorGoReleaserExpectations(
+	config goreleaserfacts.Config,
 	units []releaseconfig.ReleaseUnit,
-) []integrationDoctorDiagnostic {
-	diagnostics := make([]integrationDoctorDiagnostic, 0)
-	add := func(unit, code, message, remediation string) {
-		diagnostics = append(diagnostics, newIntegrationDoctorWorkflowDiagnostic(
-			integrationDoctorError, workflowPath, unit, code, message, remediation,
-		))
-	}
-	if config.Version != 2 || config.ProjectName == "" {
-		add("", "GORELEASER_CONFIGURATION_UNSUPPORTED", fmt.Sprintf("GoReleaser configuration %q is not the supported version-2 project shape.", configPath), "Use a version-2 configuration with an explicit project_name, build, archive, and release identity.")
-		return diagnostics
-	}
+) []goreleaserfacts.ArtifactExpectation {
+	expectations := make([]goreleaserfacts.ArtifactExpectation, 0, len(units))
 	for _, unit := range units {
 		expectedID := config.ProjectName
 		expectedBinary := config.ProjectName
@@ -243,80 +182,49 @@ func inspectIntegrationDoctorGoReleaserConfig(
 			expectedID = unit.PluginBinaryName
 			expectedBinary = unit.PluginBinaryName
 		}
-		build, buildOK := integrationDoctorGoReleaserBuildByID(config.Builds, expectedID)
-		if !buildOK {
-			add(unit.ID, "GORELEASER_BUILD_ID_MISMATCH", fmt.Sprintf("GoReleaser configuration %q has no build id %q for unit %q.", configPath, expectedID, unit.ID), "Align the supported GoReleaser build id with the unit artifact identity.")
-			continue
-		}
-		if build.Binary != expectedBinary || strings.TrimSpace(build.Main) == "" {
-			add(unit.ID, "GORELEASER_BINARY_MISMATCH", fmt.Sprintf("GoReleaser build %q does not declare expected binary %q and a local main package.", expectedID, expectedBinary), "Align the build binary and main package with the configured release unit.")
-		}
-		if !integrationDoctorStringSetContainsAll(build.Goos, "darwin", "linux", "windows") {
-			add(unit.ID, "GORELEASER_PLATFORM_MISMATCH", fmt.Sprintf("GoReleaser build %q does not cover Darwin, Linux, and Windows.", expectedID), "Declare the supported installer and publication operating systems explicitly.")
-		}
-		archive, archiveOK := integrationDoctorGoReleaserArchiveByID(config.Archives, expectedID)
-		if !archiveOK || !integrationDoctorStringSliceContains(archive.IDs, expectedID) {
-			add(unit.ID, "GORELEASER_ARCHIVE_ID_MISMATCH", fmt.Sprintf("GoReleaser configuration %q does not archive build %q under the same artifact id.", configPath, expectedID), "Align archive id and ids with the expected build identity.")
-			continue
-		}
-		if !integrationDoctorStringSliceContains(archive.Formats, "tar.gz") ||
-			!strings.Contains(archive.NameTemplate, expectedID+"_") ||
-			!strings.Contains(archive.NameTemplate, ".Os") ||
-			!strings.Contains(archive.NameTemplate, ".Arch") {
-			add(unit.ID, "GORELEASER_ARCHIVE_MISMATCH", fmt.Sprintf("GoReleaser archive %q is incompatible with the expected artifact prefix and platform identity.", expectedID), "Use the configured artifact prefix with explicit OS and architecture naming and tar.gz support.")
-		}
-		if unit.IsPlugin {
-			if config.Checksum == nil || !strings.Contains(config.Checksum.NameTemplate, unit.PluginAssetPrefix+"_") || !strings.Contains(config.Checksum.NameTemplate, "checksums.txt") {
-				add(unit.ID, "GORELEASER_CHECKSUM_MISSING", fmt.Sprintf("GoReleaser configuration %q does not declare the expected plugin checksum identity.", configPath), "Declare a unit-prefixed checksums.txt name for published plugin artifacts.")
-			}
-		}
-		if !integrationDoctorStringSliceContains(config.Release.IDs, expectedID) {
-			add(unit.ID, "GORELEASER_RELEASE_ID_MISMATCH", fmt.Sprintf("GoReleaser release configuration does not include archive id %q.", expectedID), "Publish only the expected unit archive id.")
+		expectations = append(expectations, goreleaserfacts.ArtifactExpectation{
+			UnitID:         unit.ID,
+			BuildID:        expectedID,
+			Binary:         expectedBinary,
+			ChecksumPrefix: unit.PluginAssetPrefix,
+			Plugin:         unit.IsPlugin,
+		})
+	}
+	return expectations
+}
+
+func mapIntegrationDoctorGoReleaserFindings(
+	workflowPath string,
+	configPath string,
+	findings []goreleaserfacts.Finding,
+) []integrationDoctorDiagnostic {
+	diagnostics := make([]integrationDoctorDiagnostic, 0)
+	add := func(unit, code, message, remediation string) {
+		diagnostics = append(diagnostics, newIntegrationDoctorWorkflowDiagnostic(
+			integrationDoctorError, workflowPath, unit, code, message, remediation,
+		))
+	}
+	for _, finding := range findings {
+		switch finding.Kind {
+		case goreleaserfacts.FindingConfigurationUnsupported:
+			add("", "GORELEASER_CONFIGURATION_UNSUPPORTED", fmt.Sprintf("GoReleaser configuration %q is not the supported version-2 project shape.", configPath), "Use a version-2 configuration with an explicit project_name, build, archive, and release identity.")
+		case goreleaserfacts.FindingBuildIdentityMismatch:
+			add(finding.UnitID, "GORELEASER_BUILD_ID_MISMATCH", fmt.Sprintf("GoReleaser configuration %q has no build id %q for unit %q.", configPath, finding.ExpectedID, finding.UnitID), "Align the supported GoReleaser build id with the unit artifact identity.")
+		case goreleaserfacts.FindingBinaryMismatch:
+			add(finding.UnitID, "GORELEASER_BINARY_MISMATCH", fmt.Sprintf("GoReleaser build %q does not declare expected binary %q and a local main package.", finding.ExpectedID, finding.ExpectedBinary), "Align the build binary and main package with the configured release unit.")
+		case goreleaserfacts.FindingPlatformMismatch:
+			add(finding.UnitID, "GORELEASER_PLATFORM_MISMATCH", fmt.Sprintf("GoReleaser build %q does not cover Darwin, Linux, and Windows.", finding.ExpectedID), "Declare the supported installer and publication operating systems explicitly.")
+		case goreleaserfacts.FindingArchiveIdentityMismatch:
+			add(finding.UnitID, "GORELEASER_ARCHIVE_ID_MISMATCH", fmt.Sprintf("GoReleaser configuration %q does not archive build %q under the same artifact id.", configPath, finding.ExpectedID), "Align archive id and ids with the expected build identity.")
+		case goreleaserfacts.FindingArchiveMismatch:
+			add(finding.UnitID, "GORELEASER_ARCHIVE_MISMATCH", fmt.Sprintf("GoReleaser archive %q is incompatible with the expected artifact prefix and platform identity.", finding.ExpectedID), "Use the configured artifact prefix with explicit OS and architecture naming and tar.gz support.")
+		case goreleaserfacts.FindingChecksumMissing:
+			add(finding.UnitID, "GORELEASER_CHECKSUM_MISSING", fmt.Sprintf("GoReleaser configuration %q does not declare the expected plugin checksum identity.", configPath), "Declare a unit-prefixed checksums.txt name for published plugin artifacts.")
+		case goreleaserfacts.FindingReleaseIdentityMismatch:
+			add(finding.UnitID, "GORELEASER_RELEASE_ID_MISMATCH", fmt.Sprintf("GoReleaser release configuration does not include archive id %q.", finding.ExpectedID), "Publish only the expected unit archive id.")
 		}
 	}
 	return diagnostics
-}
-
-func integrationDoctorGoReleaserBuildByID(
-	builds []integrationDoctorGoReleaserBuild,
-	id string,
-) (integrationDoctorGoReleaserBuild, bool) {
-	for _, build := range builds {
-		if build.ID == id {
-			return build, true
-		}
-	}
-	return integrationDoctorGoReleaserBuild{}, false
-}
-
-func integrationDoctorGoReleaserArchiveByID(
-	archives []integrationDoctorGoReleaserArchive,
-	id string,
-) (integrationDoctorGoReleaserArchive, bool) {
-	for _, archive := range archives {
-		if archive.ID == id {
-			return archive, true
-		}
-	}
-	return integrationDoctorGoReleaserArchive{}, false
-}
-
-func integrationDoctorStringSliceContains(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
-}
-
-func integrationDoctorStringSetContainsAll(values []string, wants ...string) bool {
-	for _, want := range wants {
-		if !integrationDoctorStringSliceContains(values, want) {
-			return false
-		}
-	}
-	return true
 }
 
 func integrationDoctorDiagnosticsContainErrors(diagnostics []integrationDoctorDiagnostic) bool {

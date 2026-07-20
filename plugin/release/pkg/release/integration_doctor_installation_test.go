@@ -3,9 +3,11 @@ package release
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
+	goreleaserfacts "github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool/goreleaser"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 	"gopkg.in/yaml.v3"
 )
@@ -18,7 +20,7 @@ func TestRepositoryDoctorVerifiesInstallationArtifactIdentity(t *testing.T) {
 			t.Errorf("%s installation fact = %#v, present=%t", behavior.path, fact, ok)
 		}
 		for _, reference := range []string{"install.sh", "pkg/plugin/manager.go", "pkg/plugin/registry.go"} {
-			if !integrationDoctorStringSliceContains(fact.References, reference) {
+			if !slices.Contains(fact.References, reference) {
 				t.Errorf("%s installation references = %v, missing %q", behavior.path, fact.References, reference)
 			}
 		}
@@ -44,16 +46,16 @@ func TestIntegrationDoctorCLIInstallerContractMatrix(t *testing.T) {
 }
 
 func TestIntegrationDoctorCLIArchiveContractMatrix(t *testing.T) {
-	valid := integrationDoctorGoReleaserConfig{Archives: []integrationDoctorGoReleaserArchive{{
+	valid := goreleaserfacts.Config{Archives: []goreleaserfacts.Archive{{
 		ID: "neko-cli", IDs: []string{"neko-cli"}, Formats: []string{"tar.gz"},
 		NameTemplate:    "neko-cli_{{ .Os }}_{{ .Arch }}",
-		FormatOverrides: []integrationDoctorGoReleaserFormatOverride{{Goos: "windows", Formats: []string{"zip"}}},
+		FormatOverrides: []goreleaserfacts.FormatOverride{{Goos: "windows", Formats: []string{"zip"}}},
 	}}}
 	if !integrationDoctorCLIArchiveMatchesInstaller(valid, "neko-cli") {
 		t.Fatal("valid CLI archive contract was rejected")
 	}
 	invalid := valid
-	invalid.Archives = append([]integrationDoctorGoReleaserArchive(nil), valid.Archives...)
+	invalid.Archives = append([]goreleaserfacts.Archive(nil), valid.Archives...)
 	invalid.Archives[0].NameTemplate = "other_{{ .Os }}_{{ .Arch }}"
 	if integrationDoctorCLIArchiveMatchesInstaller(invalid, "neko-cli") {
 		t.Fatal("CLI archive prefix mismatch was accepted")
@@ -65,9 +67,9 @@ func TestIntegrationDoctorReleasePluginArtifactContractMatrix(t *testing.T) {
 		ID: "plugin-release", IsPlugin: true, PluginName: "release",
 		PluginBinaryName: "plugin-release", PluginAssetPrefix: "plugin-release",
 	}
-	valid := integrationDoctorGoReleaserConfig{
-		Builds: []integrationDoctorGoReleaserBuild{{ID: "plugin-release", Binary: "plugin-release"}},
-		Archives: []integrationDoctorGoReleaserArchive{{
+	valid := goreleaserfacts.Config{
+		Builds: []goreleaserfacts.Build{{ID: "plugin-release", Binary: "plugin-release"}},
+		Archives: []goreleaserfacts.Archive{{
 			ID: "plugin-release", IDs: []string{"plugin-release"}, Formats: []string{"tar.gz"},
 			NameTemplate: "plugin-release_{{ .Os }}_{{ .Arch }}",
 		}},
@@ -75,20 +77,20 @@ func TestIntegrationDoctorReleasePluginArtifactContractMatrix(t *testing.T) {
 	if !integrationDoctorPluginArchiveMatchesInstaller(valid, unit) {
 		t.Fatal("valid Release plugin archive contract was rejected")
 	}
-	for name, mutate := range map[string]func(integrationDoctorGoReleaserConfig, releaseconfig.ReleaseUnit) (integrationDoctorGoReleaserConfig, releaseconfig.ReleaseUnit){
-		"binary mismatch": func(config integrationDoctorGoReleaserConfig, unit releaseconfig.ReleaseUnit) (integrationDoctorGoReleaserConfig, releaseconfig.ReleaseUnit) {
+	for name, mutate := range map[string]func(goreleaserfacts.Config, releaseconfig.ReleaseUnit) (goreleaserfacts.Config, releaseconfig.ReleaseUnit){
+		"binary mismatch": func(config goreleaserfacts.Config, unit releaseconfig.ReleaseUnit) (goreleaserfacts.Config, releaseconfig.ReleaseUnit) {
 			config.Builds[0].Binary = "other"
 			return config, unit
 		},
-		"asset-prefix mismatch": func(config integrationDoctorGoReleaserConfig, unit releaseconfig.ReleaseUnit) (integrationDoctorGoReleaserConfig, releaseconfig.ReleaseUnit) {
+		"asset-prefix mismatch": func(config goreleaserfacts.Config, unit releaseconfig.ReleaseUnit) (goreleaserfacts.Config, releaseconfig.ReleaseUnit) {
 			unit.PluginAssetPrefix = "other"
 			return config, unit
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			config := valid
-			config.Builds = append([]integrationDoctorGoReleaserBuild(nil), valid.Builds...)
-			config.Archives = append([]integrationDoctorGoReleaserArchive(nil), valid.Archives...)
+			config.Builds = append([]goreleaserfacts.Build(nil), valid.Builds...)
+			config.Archives = append([]goreleaserfacts.Archive(nil), valid.Archives...)
 			config, mutatedUnit := mutate(config, unit)
 			if integrationDoctorPluginArchiveMatchesInstaller(config, mutatedUnit) {
 				t.Fatal("mismatched plugin artifact was accepted")
@@ -118,7 +120,7 @@ func TestIntegrationDoctorInstallationRejectsUnpinnedAndLateInstallations(t *tes
 	}}, 1, func(_ integrationDoctorSeverity, code, _, _ string) {
 		codes = append(codes, code)
 	})
-	if !integrationDoctorStringSliceContains(codes, "INSTALL_ORDER_INVALID") {
+	if !slices.Contains(codes, "INSTALL_ORDER_INVALID") {
 		t.Fatalf("late installation codes = %v", codes)
 	}
 }

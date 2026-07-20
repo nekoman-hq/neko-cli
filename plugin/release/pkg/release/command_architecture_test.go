@@ -293,6 +293,31 @@ func TestIntegrationDoctorKeepsTypedCommandAndResponseBoundaries(t *testing.T) {
 	}
 }
 
+func TestIntegrationDoctorUsesCanonicalGoReleaserFacts(t *testing.T) {
+	source := readCommandBoundarySource(t, "integration_doctor_goreleaser.go")
+	for _, required := range []string{
+		"internal/releasetool/goreleaser",
+		"goreleaserfacts.ParseConfig",
+		"goreleaserfacts.ClassifyArguments",
+		"goreleaserfacts.VerifyArtifactContract",
+		"mapIntegrationDoctorGoReleaserFindings",
+	} {
+		if !strings.Contains(source, required) {
+			t.Fatalf("Doctor GoReleaser boundary omits canonical fact %q", required)
+		}
+	}
+	for _, forbidden := range []string{
+		"type integrationDoctorGoReleaserBuild",
+		"type integrationDoctorGoReleaserArchive",
+		"type integrationDoctorGoReleaserConfig",
+		"yaml.Unmarshal(content, &config)",
+	} {
+		if strings.Contains(source, forbidden) {
+			t.Fatalf("Doctor retains reusable GoReleaser ownership %q", forbidden)
+		}
+	}
+}
+
 func TestIntegrationDoctorAvoidsGenericDiagnosticArchitecture(t *testing.T) {
 	for _, path := range []string{
 		"integration_doctor_consumer.go",
