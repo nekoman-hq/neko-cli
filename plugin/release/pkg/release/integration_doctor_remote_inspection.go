@@ -207,9 +207,7 @@ func (inspector integrationDoctorGitHubRemoteInspector) inspectActionsPolicy(
 	)
 	var diagnostic *integrationDoctorDiagnostic
 	if outcome.State == integrationDoctorVerified {
-		if policy.Enabled {
-			fact.Evidence = "Repository Actions policy is enabled."
-		} else {
+		if !policy.Enabled {
 			fact.State = integrationDoctorMismatch
 			fact.Evidence = "Repository Actions policy is disabled."
 			diagnostic = integrationDoctorRemoteDiagnostic(
@@ -217,6 +215,16 @@ func (inspector integrationDoctorGitHubRemoteInspector) inspectActionsPolicy(
 				"GitHub Actions is disabled for the repository.",
 				"Enable GitHub Actions before relying on Release V2 workflow dispatch.",
 			)
+		} else if !integrationDoctorActionsPolicySupported(policy.AllowedActions) {
+			fact.State = integrationDoctorUnsupported
+			fact.Evidence = "Repository Actions policy returned an enabled but unsupported allowed-actions state."
+			diagnostic = integrationDoctorRemoteDiagnostic(
+				integrationDoctorNotVerifiable, "REMOTE_ACTIONS_POLICY_UNSUPPORTED", "", "",
+				"Repository Actions policy uses an allowed-actions state this Doctor does not claim to understand.",
+				"Inspect the exact repository Actions policy without mutating it.",
+			)
+		} else {
+			fact.Evidence = "Repository Actions policy is enabled."
 		}
 	} else {
 		diagnostic = integrationDoctorDiagnosticForRemoteOutcome(
@@ -224,6 +232,15 @@ func (inspector integrationDoctorGitHubRemoteInspector) inspectActionsPolicy(
 		)
 	}
 	inspection.append(fact, diagnostic)
+}
+
+func integrationDoctorActionsPolicySupported(allowedActions string) bool {
+	switch allowedActions {
+	case "all", "local_only", "selected":
+		return true
+	default:
+		return false
+	}
 }
 
 func (inspector integrationDoctorGitHubRemoteInspector) inspectWorkflow(

@@ -209,6 +209,40 @@ func TestIntegrationDoctorGitHubReadClientBoundsBodiesAndHonorsCancellation(t *t
 	}
 }
 
+func TestIntegrationDoctorGitHubReadClientRefusesRedirectsAndSanitizesRateLimitHeaders(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		requests++
+		if request.URL.Path == "/redirect-target" {
+			t.Fatal("read client followed a redirect")
+		}
+		writer.Header().Set("Location", "/redirect-target")
+		writer.WriteHeader(http.StatusFound)
+	}))
+	defer server.Close()
+	client := newIntegrationDoctorGitHubReadClientForTest(t, server.URL)
+	_, outcome := client.Repository(
+		context.Background(), integrationDoctorRepositoryIdentity{Owner: "acme", Repository: "example"},
+		GitHubActionsDispatchToken{},
+	)
+	if requests != 1 || outcome.State != integrationDoctorUnavailable {
+		t.Fatalf("requests=%d outcome=%#v", requests, outcome)
+	}
+
+	server.Config.Handler = http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("Retry-After", "private-header\nvalue")
+		writer.Header().Set("X-RateLimit-Reset", "not-a-timestamp")
+		writer.WriteHeader(http.StatusTooManyRequests)
+	})
+	_, outcome = client.Repository(
+		context.Background(), integrationDoctorRepositoryIdentity{Owner: "acme", Repository: "example"},
+		GitHubActionsDispatchToken{},
+	)
+	if outcome.State != integrationDoctorRateLimited || outcome.RetryAfter != "" || outcome.RateLimitReset != "" {
+		t.Fatalf("unsafe rate-limit metadata=%#v", outcome)
+	}
+}
+
 func TestIntegrationDoctorGitHubReadClientRejectsMalformedSuccessfulResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		_, _ = fmt.Fprint(writer, `{"name":"example","owner":{"login":"acme"}}`)
@@ -222,6 +256,7 @@ func TestIntegrationDoctorGitHubReadClientRejectsMalformedSuccessfulResponse(t *
 }
 
 func TestIntegrationDoctorGitHubReadClientClassifiesExactWorkflowRunLookups(t *testing.T) {
+	//nolint:govet // Table fields follow lookup input then expected classification.
 	for _, test := range []struct {
 		name      string
 		status    int

@@ -314,6 +314,49 @@ func TestIntegrationDoctorDefiniteAuthenticatedRepositoryNotFoundIsMissing(t *te
 	}
 }
 
+func TestIntegrationDoctorRemoteRepositoryIdentityMismatchAndUnavailableAreDistinct(t *testing.T) {
+	//nolint:govet // Table fields follow remote response input then expected result.
+	tests := []struct {
+		name      string
+		status    int
+		payload   string
+		wantCode  string
+		readiness integrationDoctorReadiness
+		remote    integrationDoctorRemoteStatus
+	}{
+		{
+			name: "identity mismatch", status: http.StatusOK,
+			payload:  `{"name":"other","owner":{"login":"acme"},"default_branch":"main","visibility":"public","private":false}`,
+			wantCode: "REMOTE_REPOSITORY_IDENTITY_MISMATCH", readiness: integrationDoctorNotReady,
+			remote: integrationDoctorRemotePartial,
+		},
+		{
+			name: "unavailable", status: http.StatusServiceUnavailable,
+			payload:  `{"message":"private service body"}`,
+			wantCode: "REMOTE_REPOSITORY_UNAVAILABLE", readiness: integrationDoctorReady,
+			remote: integrationDoctorRemoteUnavailable,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := repositoryInspectionRoot(t)
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+				writer.WriteHeader(test.status)
+				_, _ = fmt.Fprint(writer, test.payload)
+			}))
+			defer server.Close()
+			result := runIntegrationDoctorRemoteAgainstServer(
+				t, root.Path(), server.URL,
+				integrationDoctorRecordingTokenResolver{value: "repository-read-token"}, "cli",
+			)
+			if result.Readiness != test.readiness || result.RemoteVerification.Status != test.remote ||
+				!integrationDoctorHasCode(result.Diagnostics, test.wantCode) {
+				t.Fatalf("readiness=%q remote=%#v diagnostics=%#v", result.Readiness, result.RemoteVerification, result.Diagnostics)
+			}
+		})
+	}
+}
+
 func TestIntegrationDoctorQueriesOnlyRecognizedVersionVariables(t *testing.T) {
 	workflow := integrationDoctorRemoteWorkflowFromYAML(t, ".github/workflows/release.yml", `
 jobs:
@@ -346,6 +389,7 @@ jobs:
 		{name: "invalid", variable: "NEKO_VERSION", status: http.StatusOK, value: "latest", wantState: integrationDoctorMismatch, wantCode: "REMOTE_REPOSITORY_VARIABLE_INVALID"},
 		{name: "unauthorized", variable: "NEKO_VERSION", status: http.StatusForbidden, wantState: integrationDoctorUnauthorized, wantCode: "REMOTE_REPOSITORY_VARIABLE_UNAUTHORIZED"},
 		{name: "rate limited", variable: "NEKO_VERSION", status: http.StatusTooManyRequests, wantState: integrationDoctorRateLimited, wantCode: "REMOTE_REPOSITORY_VARIABLE_RATE_LIMITED", rateLimitHeader: true},
+		{name: "unavailable", variable: "NEKO_VERSION", status: http.StatusServiceUnavailable, wantState: integrationDoctorUnavailable, wantCode: "REMOTE_REPOSITORY_VARIABLE_UNAVAILABLE"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -476,6 +520,26 @@ func TestIntegrationDoctorActionsPolicyDisabledIsIndependentRemoteError(t *testi
 	}
 }
 
+func TestIntegrationDoctorActionsPolicyUnsupportedRemainsUnresolved(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprint(writer, `{"enabled":true,"allowed_actions":"future_policy"}`)
+	}))
+	defer server.Close()
+	client := newIntegrationDoctorGitHubReadClientForTest(t, server.URL)
+	inspection := integrationDoctorRemoteInspection{}
+	inspector := integrationDoctorGitHubRemoteInspector{reader: client}
+	remote := &integrationDoctorRemoteContext{
+		identity:  integrationDoctorRepositoryIdentity{Owner: "acme", Repository: "example"},
+		protected: &integrationDoctorRemoteTokenAccess{resolver: integrationDoctorRecordingTokenResolver{value: "policy-token"}},
+	}
+	inspector.inspectActionsPolicy(context.Background(), remote, &inspection)
+	if len(inspection.Verifications) != 1 || inspection.Verifications[0].State != integrationDoctorUnsupported ||
+		!integrationDoctorHasCode(inspection.Diagnostics, "REMOTE_ACTIONS_POLICY_UNSUPPORTED") ||
+		inspection.Diagnostics[0].Severity != integrationDoctorNotVerifiable {
+		t.Fatalf("inspection=%#v", inspection)
+	}
+}
+
 func TestIntegrationDoctorMissingInstallationAssetReplacesAvailabilityLimitationWithError(t *testing.T) {
 	root := repositoryInspectionRoot(t)
 	server, _ := newSuccessfulIntegrationDoctorGitHubServerWithOverrides(t, root.Path(), false, func(writer http.ResponseWriter, request *http.Request) bool {
@@ -495,6 +559,76 @@ func TestIntegrationDoctorMissingInstallationAssetReplacesAvailabilityLimitation
 		!integrationDoctorHasCode(result.Diagnostics, "REMOTE_INSTALLATION_ASSET_MISSING") ||
 		integrationDoctorHasCode(result.Diagnostics, "INSTALLATION_ARTIFACTS_NOT_VERIFIABLE") {
 		t.Fatalf("readiness=%q diagnostics=%#v", result.Readiness, result.Diagnostics)
+	}
+}
+
+func TestIntegrationDoctorReleasePluginInstallationRequiresExactArchiveAndChecksumAssets(t *testing.T) {
+	//nolint:govet // Table fields follow the fixture label then its mutation predicate.
+	for _, test := range []struct {
+		name   string
+		remove func(string) bool
+	}{
+		{name: "plugin archive missing", remove: func(asset string) bool { return strings.Contains(asset, "Darwin_arm64") }},
+		{name: "plugin checksum missing", remove: func(asset string) bool { return strings.HasSuffix(asset, "_checksums.txt") }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := repositoryInspectionRoot(t)
+			fixtures := integrationDoctorRemoteReleaseFixtures(t, root.Path())
+			assets := make([]string, 0, len(fixtures["plugin-release/v4.2.0"]))
+			for _, asset := range fixtures["plugin-release/v4.2.0"] {
+				if !test.remove(asset) {
+					assets = append(assets, asset)
+				}
+			}
+			server, _ := newSuccessfulIntegrationDoctorGitHubServerWithOverrides(t, root.Path(), false, func(writer http.ResponseWriter, request *http.Request) bool {
+				if strings.HasSuffix(request.URL.Path, "/releases/tags/plugin-release/v4.2.0") {
+					writeIntegrationDoctorReleaseFixture(writer, "plugin-release/v4.2.0", assets)
+					return true
+				}
+				return false
+			})
+			defer server.Close()
+			result := runIntegrationDoctorRemoteAgainstServer(
+				t, root.Path(), server.URL,
+				integrationDoctorRecordingTokenResolver{value: "plugin-asset-token"}, "plugin-release",
+			)
+			if result.Readiness != integrationDoctorNotReady ||
+				!integrationDoctorHasCode(result.Diagnostics, "REMOTE_INSTALLATION_ASSET_MISSING") {
+				t.Fatalf("readiness=%q diagnostics=%#v", result.Readiness, result.Diagnostics)
+			}
+		})
+	}
+}
+
+func TestIntegrationDoctorDefiniteRemoteReleaseAndTagFailuresAreActionable(t *testing.T) {
+	tests := []struct {
+		name     string
+		pathEnds string
+		wantCode string
+	}{
+		{name: "installation release missing", pathEnds: "/releases/tags/v3.0.4", wantCode: "REMOTE_INSTALLATION_RELEASE_MISSING"},
+		{name: "publication release missing", pathEnds: "/releases/tags/v3.0.4", wantCode: "REMOTE_PUBLICATION_RELEASE_MISSING"},
+		{name: "publication tag missing", pathEnds: "/git/ref/tags/v3.0.4", wantCode: "REMOTE_PUBLICATION_TAG_MISSING"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := repositoryInspectionRoot(t)
+			server, _ := newSuccessfulIntegrationDoctorGitHubServerWithOverrides(t, root.Path(), false, func(writer http.ResponseWriter, request *http.Request) bool {
+				if strings.HasSuffix(request.URL.Path, test.pathEnds) {
+					writer.WriteHeader(http.StatusNotFound)
+					return true
+				}
+				return false
+			})
+			defer server.Close()
+			result := runIntegrationDoctorRemoteAgainstServer(
+				t, root.Path(), server.URL,
+				integrationDoctorRecordingTokenResolver{value: "artifact-token"}, "cli",
+			)
+			if result.Readiness != integrationDoctorNotReady || !integrationDoctorHasCode(result.Diagnostics, test.wantCode) {
+				t.Fatalf("readiness=%q diagnostics=%#v", result.Readiness, result.Diagnostics)
+			}
+		})
 	}
 }
 
@@ -537,6 +671,29 @@ func TestIntegrationDoctorRemoteWorkflowMissingDisabledAndUnsupportedStates(t *t
 				return false
 			},
 			wantCode: "REMOTE_WORKFLOW_STATE_UNSUPPORTED",
+		},
+		{
+			name: "unauthorized",
+			override: func(writer http.ResponseWriter, request *http.Request) bool {
+				if strings.Contains(request.URL.Path, "/contents/.github/workflows/release-neko-cli.yml") {
+					writer.WriteHeader(http.StatusForbidden)
+					return true
+				}
+				return false
+			},
+			wantCode: "REMOTE_WORKFLOW_CONTENT_UNAUTHORIZED",
+		},
+		{
+			name: "rate limited",
+			override: func(writer http.ResponseWriter, request *http.Request) bool {
+				if strings.Contains(request.URL.Path, "/contents/.github/workflows/release-neko-cli.yml") {
+					writer.Header().Set("Retry-After", "20")
+					writer.WriteHeader(http.StatusTooManyRequests)
+					return true
+				}
+				return false
+			},
+			wantCode: "REMOTE_WORKFLOW_CONTENT_RATE_LIMITED",
 		},
 	}
 	for _, test := range tests {
@@ -856,6 +1013,53 @@ func integrationDoctorHasCode(diagnostics []integrationDoctorDiagnostic, code st
 
 var _ integrationDoctorRemoteInspector = integrationDoctorRecordingRemoteInspector{}
 var _ GitHubActionsDispatchTokenResolver = integrationDoctorRecordingTokenResolver{}
+
+func TestIntegrationDoctorExplicitRemoteCommandBoundaryUsesFakeServer(t *testing.T) {
+	root := repositoryInspectionRoot(t)
+	server, requests := newSuccessfulIntegrationDoctorGitHubServer(t, root.Path(), false)
+	defer server.Close()
+	client := newIntegrationDoctorGitHubReadClientForTest(t, server.URL)
+	//nolint:govet // Table fields follow command input then expected scope.
+	for _, test := range []struct {
+		name  string
+		flags map[string]any
+		units int
+	}{
+		{name: "repository wide", flags: map[string]any{"verify-remote": true}, units: 3},
+		{name: "unit scoped", flags: map[string]any{"verify-remote": true, "unit": "cli"}, units: 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			handler := integrationDoctorCommandHandler{
+				inspector: productionIntegrationDoctorUseCaseForTest(t, integrationDoctorGitHubRemoteInspector{
+					reader: client,
+					tokens: integrationDoctorRecordingTokenResolver{value: "command-boundary-token"},
+				}),
+				clock: fixedReleaseClock{},
+				root:  root,
+			}
+			response, err := handler.Handle(context.Background(), plugin.Request{
+				Command: integrationDoctorCommandName,
+				Flags:   test.flags,
+			})
+			if err != nil || response.ExitCode != 0 {
+				t.Fatalf("response=%#v err=%v", response, err)
+			}
+			remote, ok := response.Data["remote_verification"].(integrationDoctorRemoteSummary)
+			if !ok || !remote.Requested || remote.Status != integrationDoctorRemoteComplete {
+				t.Fatalf("remote summary=%#v", response.Data["remote_verification"])
+			}
+			units, ok := response.Data["units"].([]integrationDoctorUnit)
+			if !ok || len(units) != test.units {
+				t.Fatalf("units=%#v", response.Data["units"])
+			}
+		})
+	}
+	for _, request := range requests.snapshot() {
+		if request.method != http.MethodGet {
+			t.Fatalf("command boundary emitted %s %s", request.method, request.uri)
+		}
+	}
+}
 
 func TestIntegrationDoctorManifestRemoteFlagRoutesThroughCommand(t *testing.T) {
 	root := repositoryInspectionRoot(t)

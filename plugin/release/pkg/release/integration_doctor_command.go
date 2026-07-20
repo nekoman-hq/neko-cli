@@ -76,7 +76,8 @@ func HandleDoctor(request plugin.Request) (*plugin.Response, error) {
 }
 
 // HandleDoctorAt reports Release V2 GitHub Actions integration readiness at
-// an explicit repository root without mutation, tokens, Git, or network use.
+// an explicit repository root. It remains offline unless the request explicitly
+// enables the focused read-only remote verifier.
 func HandleDoctorAt(root workspace.RepositoryRoot, request plugin.Request) (*plugin.Response, error) {
 	readClient, err := newIntegrationDoctorGitHubReadClient()
 	if err != nil {
