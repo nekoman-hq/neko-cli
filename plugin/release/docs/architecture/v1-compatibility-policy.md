@@ -7,6 +7,11 @@ Release Plugin V1 compatibility surfaces. It is evidence-based: V1 compatibility
 remove public symbols, and retired-path cleanup removed only candidates whose repository consumer
 evidence, replacement, and policy gates were satisfied.
 
+The July 2026 code-quality refactor did not change these decisions. It moved
+reusable release-tool and legacy-requirements facts behind internal canonical
+owners while preserving every listed facade and executor behavior. See
+[compatibility-notes.md](compatibility-notes.md) for the concise current summary.
+
 - Latest cleanup record: **retired-path cleanup - Retire superseded and inactive release paths**
 - Initial decision date: 2026-07-16
 - retired-path cleanup completion date: 2026-07-17

@@ -1,6 +1,10 @@
 version: "2"
 linters:
   default: standard
+  enable:
+    - funlen
+    - gocognit
+    - nestif
   settings:
     errcheck:
       # Report about not checking of errors in type assertions: `a := b.(MyStruct)`.
@@ -32,3 +36,111 @@ linters:
       # Check escaping variables of type error, may cause false positives.
       # Default: false
       check-escaping-errors: true
+    funlen:
+      # New or materially changed functions are reviewed at 60 lines and must
+      # remain below the 80-line ceiling unless a documented exception applies.
+      lines: 80
+      statements: 60
+    gocognit:
+      # Apply this threshold to changed code with --new-from-rev in CI/reviews.
+      min-complexity: 25
+    nestif:
+      min-complexity: 5
+  exclusions:
+    rules:
+      # The additional complexity policy is scoped to the Release Plugin. The
+      # standard linter set above remains repository-wide.
+      - path-except: ^plugin/release/
+        linters:
+          - funlen
+          - gocognit
+          - nestif
+      # Test tables and architecture walkers are reviewed for fixture cohesion,
+      # not production control-flow metrics.
+      - path: _test\.go
+        linters:
+          - funlen
+          - gocognit
+          - nestif
+      # Cohesive static presentation and diagnostic mappings.
+      - path: ^plugin/release/internal/doctor/integration_doctor_(consumer|credentials|installation|publication|workflow_inspection)\.go$
+        text: "(Function 'inspectIntegrationDoctorWorkflow'|cognitive complexity .*func `(inspectIntegrationDoctorConsumerReleaseStructure|integrationDoctorHasPublicationNoOp|integrationDoctorCredentialReferencesInNode|inspectIntegrationDoctorInstallation|inspectIntegrationDoctorPublication)`|`if dispatch == nil` has complex nested blocks)"
+        linters:
+          - funlen
+          - gocognit
+          - nestif
+      - path: ^plugin/release/internal/doctor/integration_doctor_(consumer|installation|publication)\.go$
+        text: "Function 'inspectIntegrationDoctor(ConsumerReleaseStructure|Installation|Publication)'"
+        linters:
+          - funlen
+      - path: ^plugin/release/pkg/init/options_handler\.go$
+        text: "Function 'GetAvailableOptions'"
+        linters:
+          - funlen
+      - path: ^plugin/release/pkg/release/release_progress_terminal\.go$
+        text: "Function 'renderReleaseProgressEvent'"
+        linters:
+          - funlen
+      # Authoritative safety transactions and compatibility transactions stay
+      # straight-line so their ordering remains locally auditable.
+      - path: ^plugin/release/pkg/config/v2_pair_persister\.go$
+        text: "Function 'Persist'"
+        linters:
+          - funlen
+      - path: ^plugin/release/pkg/config/v2_pair_persister\.go$
+        text: "V2ReleasePairPersister"
+        linters:
+          - gocognit
+      - path: ^plugin/release/pkg/config/v2_validation\.go$
+        text: "validateV2ConfigAndState"
+        linters:
+          - gocognit
+      - path: ^plugin/release/pkg/config/v2_validation\.go$
+        text: "repositoryRoot"
+        linters:
+          - nestif
+      - path: ^plugin/release/pkg/migrate/planner\.go$
+        text: "Function 'constructMigrationPlan'"
+        linters:
+          - funlen
+      - path: ^plugin/release/pkg/migrate/execution_adapters\.go$
+        text: "paths.backup"
+        linters:
+          - nestif
+      - path: ^plugin/release/pkg/migrate/migration_plan_resolver\.go$
+        text: "`if activeSourceExists` has complex nested blocks"
+        linters:
+          - nestif
+      - path: ^plugin/release/pkg/release/release_execution_journal\.go$
+        text: "applyOnceOnlyUpdate"
+        linters:
+          - gocognit
+      - path: ^plugin/release/pkg/release/v1_compensation_evidence\.go$
+        text: "V1CompensationEvidence"
+        linters:
+          - gocognit
+      - path: ^plugin/release/pkg/release/v1_git_adapters\.go$
+        text: "V1ReleaseRollback"
+        linters:
+          - gocognit
+      - path: ^plugin/release/pkg/release/v1_git_adapters\.go$
+        text: "state.ReleaseHead"
+        linters:
+          - nestif
+      - path: ^plugin/release/pkg/release/tool/jreleaser/jreleaser\.go$
+        text: "Function 'runJReleaserInit'"
+        linters:
+          - funlen
+      # Focused protocol and path-safety decision trees.
+      - path: ^plugin/release/internal/githubdispatch/response\.go$
+        text: "bytes.TrimSpace"
+        linters:
+          - nestif
+      - path: ^plugin/release/pkg/pluginindex/output_path\.go$
+        text: "`if err == nil` has complex nested blocks"
+        linters:
+          - nestif
+      - path: ^plugin/release/pkg/workspace/project_root\.go$
+        text: "`if err != nil` has complex nested blocks"
+        linters:
+          - nestif

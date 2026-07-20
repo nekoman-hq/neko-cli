@@ -76,6 +76,20 @@ Active production bypasses mutable registry lookup. Registry-backed release entr
 - Compatibility registries, version-evidence globals, cwd facades, and broad public wrappers remain only as documented compatibility surfaces.
 - Plugin-index output policy remains intentionally undecided until generated-output path semantics are designed.
 
+## July 2026 code-quality consolidation
+
+A later ten-commit structural pass preserved the behavior above while tightening
+ownership. It characterized architecture boundaries, centralized shared tool
+identity and configuration facts, extracted reusable GoReleaser facts, isolated
+workflow facts and dispatch HTTP, moved Doctor and supporting command
+capabilities into focused internal packages, made the active release operation
+order visible through named files, split mixed files by subject, and finalized
+documentation, lint, and architecture controls.
+
+No workflow YAML, GoReleaser configuration, journal schema, command contract,
+public release behavior, or active lifecycle order changed. The concise final
+architecture is recorded in [post-refactor-review.md](post-refactor-review.md).
+
 ## Validation baseline
 
 The refactor used focused package tests while iterating and the repository validation set described in `plugin/release/RULES.md`: Release Plugin tests, full Go tests, lint, and diff checks where applicable.
