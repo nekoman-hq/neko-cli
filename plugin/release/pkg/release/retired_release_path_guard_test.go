@@ -11,7 +11,7 @@ func TestRetiredReleasePathsStayRemoved(t *testing.T) {
 		forbidden []string
 	}{
 		{
-			path: "handler.go",
+			path: "release_start.go",
 			forbidden: []string{
 				"func " + "startLegacyRelease(",
 			},
@@ -29,7 +29,7 @@ func TestRetiredReleasePathsStayRemoved(t *testing.T) {
 			},
 		},
 		{
-			path: "git_release_coordinator.go",
+			path: "release_git_coordinator.go",
 			forbidden: []string{
 				"func (coordinator *GitReleaseCoordinator) " + "Coordinate(",
 			},

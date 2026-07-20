@@ -326,7 +326,7 @@ func validateV2Unit(repositoryRoot string, unit V2Unit) error {
 			return err
 		}
 	}
-	if err := validateTagPrefix(unit.ID, unit.TagPrefix); err != nil {
+	if err := ValidateV2TagPrefix(unit.ID, unit.TagPrefix); err != nil {
 		return err
 	}
 	if err := validateV2UnitPluginMetadata(repositoryRoot, unit); err != nil {
@@ -527,7 +527,9 @@ func validatePathPattern(unitID, pattern string) error {
 	return nil
 }
 
-func validateTagPrefix(unitID, tagPrefix string) error {
+// ValidateV2TagPrefix applies the canonical Release V2 tag-prefix policy for
+// one unit without requiring a synthetic full unit configuration.
+func ValidateV2TagPrefix(unitID, tagPrefix string) error {
 	if strings.TrimSpace(tagPrefix) == "" {
 		return fmt.Errorf("v2 config unit %q tagPrefix must not be empty", unitID)
 	}

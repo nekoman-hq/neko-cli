@@ -29,7 +29,7 @@ func TestV1ApplicationAndPlannerRemainInfrastructureFree(t *testing.T) {
 }
 
 func TestActiveReleaseSelectionDoesNotUseMixedV1Orchestration(t *testing.T) {
-	source := readCommandBoundarySource(t, "handler.go")
+	source := readCommandBoundarySources(t, "release_start.go", "release_start_v2.go")
 	for _, forbidden := range []string{
 		"repository.SourceFormat ==",
 		"BuildReleaseExecutionContext(repository",
@@ -37,7 +37,7 @@ func TestActiveReleaseSelectionDoesNotUseMixedV1Orchestration(t *testing.T) {
 		"return startLegacyRelease",
 	} {
 		if strings.Contains(source, forbidden) {
-			t.Fatalf("handler.go retains mixed active orchestration %q", forbidden)
+			t.Fatalf("release start retains mixed active orchestration %q", forbidden)
 		}
 	}
 	if !strings.Contains(source, "BuildV2ReleaseExecutionContext") {
@@ -221,7 +221,10 @@ func TestV1CompensationCompositionOnlyWiresConcreteCapabilities(t *testing.T) {
 func TestV2AndMigrationDoNotDependOnV1CompensationInternals(t *testing.T) {
 	for _, path := range []string{
 		"github_actions_release_use_case.go",
-		"github_actions_release_operations.go",
+		"release_operation_plan.go",
+		"release_operation_local_files.go",
+		"release_operation_workflow.go",
+		"release_composition.go",
 		"release_execution_journal.go",
 		"resume.go",
 		"resume_operations.go",

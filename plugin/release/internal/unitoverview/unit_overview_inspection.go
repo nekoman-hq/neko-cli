@@ -119,7 +119,7 @@ func applyUnitOverviewTagFacts(row *unitOverviewRow) {
 	if hasUnitOverviewIssue(row.Issues, "UNIT_TAG_PREFIX_INVALID") {
 		return
 	}
-	tagSpec, err := canonicalUnitOverviewTagSpec(row.TagPrefix)
+	tagSpec, err := canonicalUnitOverviewTagSpec(row.ID, row.TagPrefix)
 	if err != nil {
 		appendUnitOverviewIssue(row, unitOverviewIssueError, "UNIT_TAG_PREFIX_INVALID", "The configured tag prefix is not canonical.", "Use a safe, non-empty repository-relative tag prefix.")
 		return
@@ -130,7 +130,10 @@ func applyUnitOverviewTagFacts(row *unitOverviewRow) {
 	}
 }
 
-func canonicalUnitOverviewTagSpec(prefix string) (releaseconfig.TagSpec, error) {
+func canonicalUnitOverviewTagSpec(unitID, prefix string) (releaseconfig.TagSpec, error) {
+	if err := releaseconfig.ValidateV2TagPrefix(unitID, prefix); err != nil {
+		return releaseconfig.TagSpec{}, err
+	}
 	return releaseconfig.NewTagSpec(prefix)
 }
 

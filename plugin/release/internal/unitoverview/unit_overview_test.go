@@ -131,6 +131,27 @@ func TestUnitOverviewClassifiesInvalidUnitFacts(t *testing.T) {
 	}
 }
 
+func TestUnitOverviewValidatesTagPolicyIndependentlyOfOtherUnitErrors(t *testing.T) {
+	root := newUnitOverviewRepository(t)
+	unit := unitOverviewConfigUnit("API", "API", "../unsafe", ".github/workflows/release-api.yml")
+	writeUnitOverviewPair(t, root.Path(),
+		releaseconfig.V2ReleaseConfig{SchemaVersion: 2, Units: []releaseconfig.V2Unit{unit}},
+		releaseconfig.V2ReleaseState{SchemaVersion: 2, Units: map[string]releaseconfig.V2UnitState{"API": {Version: "1.2.3"}}},
+	)
+
+	result := unitOverviewResponseResult(t, runUnitOverview(t, root))
+	if len(result.units) != 1 {
+		t.Fatalf("units = %#v", result.units)
+	}
+	assertUnitOverviewRow(t, result.units[0], unitOverviewInvalid, "UNIT_TAG_PREFIX_INVALID")
+	if _, present := result.units[0]["tag_shape"]; present {
+		t.Fatalf("unsafe tag shape leaked: %#v", result.units[0])
+	}
+	if _, present := result.units[0]["configured_tag"]; present {
+		t.Fatalf("unsafe configured tag leaked: %#v", result.units[0])
+	}
+}
+
 func TestUnitOverviewClassifiesOverlappingTagPrefixesForEveryUnit(t *testing.T) {
 	root := newUnitOverviewRepository(t)
 	config := releaseconfig.V2ReleaseConfig{SchemaVersion: 2, Units: []releaseconfig.V2Unit{

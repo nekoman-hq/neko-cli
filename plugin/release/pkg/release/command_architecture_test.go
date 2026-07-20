@@ -29,7 +29,7 @@ func TestCommandHandlersRemainPresentationBoundaries(t *testing.T) {
 }
 
 func TestCommandApplicationOperationsDoNotConstructPluginResponses(t *testing.T) {
-	for _, path := range []string{"handler.go", "resume.go", "github_actions_release_runner.go", "github_actions_release_use_case.go"} {
+	for _, path := range []string{"release_start.go", "release_start_v2.go", "resume.go", "github_actions_release_runner.go", "github_actions_release_use_case.go"} {
 		source := readCommandBoundarySource(t, path)
 		if strings.Contains(source, "github.com/nekoman-hq/neko-cli/pkg/plugin") || strings.Contains(source, "plugin.Response") {
 			t.Fatalf("%s depends on plugin response presentation", path)
@@ -104,7 +104,12 @@ func TestActiveV2BuildersAndRecoveryDoNotConstructGitInfrastructure(t *testing.T
 }
 
 func TestActiveV2TokenBoundaryHasNoStaticResolverAdapter(t *testing.T) {
-	source := readCommandBoundarySource(t, "github_actions_release_operations.go")
+	source := readCommandBoundarySources(t,
+		"release_operation_plan.go",
+		"release_operation_local_files.go",
+		"release_operation_workflow.go",
+		"release_composition.go",
+	)
 	if strings.Contains(source, "staticGitHubActionsDispatchTokenResolver") {
 		t.Fatal("active V2 dispatch wraps its token in a second resolver boundary")
 	}
@@ -112,13 +117,22 @@ func TestActiveV2TokenBoundaryHasNoStaticResolverAdapter(t *testing.T) {
 
 func TestActiveV2ProgressDoesNotImportGlobalTerminalLogger(t *testing.T) {
 	for _, path := range []string{
-		"handler.go",
+		"release_start.go",
+		"release_start_v2.go",
 		"github_actions_release_runner.go",
 		"github_actions_release_use_case.go",
-		"github_actions_release_operations.go",
+		"release_operation_plan.go",
+		"release_operation_local_files.go",
+		"release_operation_workflow.go",
+		"release_composition.go",
 		"github_actions_dispatcher.go",
 		"git_release_preflight.go",
-		"git_release_coordinator.go",
+		"release_git_coordinator.go",
+		"release_git_staging.go",
+		"release_git_commit.go",
+		"release_git_tag.go",
+		"release_git_push.go",
+		"release_git_queries.go",
 	} {
 		source := readCommandBoundarySource(t, path)
 		for _, forbidden := range []string{
@@ -707,4 +721,14 @@ func readCommandBoundarySource(t *testing.T, path string) string {
 		t.Fatalf("read %s: %v", path, err)
 	}
 	return string(data)
+}
+
+func readCommandBoundarySources(t *testing.T, paths ...string) string {
+	t.Helper()
+	var source strings.Builder
+	for _, path := range paths {
+		_, _ = source.WriteString(readCommandBoundarySource(t, path))
+		_ = source.WriteByte('\n')
+	}
+	return source.String()
 }

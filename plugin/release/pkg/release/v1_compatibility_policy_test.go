@@ -22,7 +22,7 @@ func TestReleaseEntryPointsKeepProductionOffMutableRegistry(t *testing.T) {
 		}
 	}
 
-	start := readCommandBoundarySource(t, "handler.go")
+	start := readCommandBoundarySource(t, "release_start.go")
 	if !strings.Contains(start, "return newReleaseStartOperationWithV1ExecutorsAt(root, registeredV1ReleaseExecutorCatalog{})") {
 		t.Fatal("registry-backed release startup is no longer confined to the compatibility HandleRelease path")
 	}
@@ -53,21 +53,21 @@ func TestReleaseEntryPointsKeepProductionOffMutableRegistry(t *testing.T) {
 
 func TestRegistryAndVersionGlobalsRemainCompatibilityOnly(t *testing.T) {
 	assertCompatibilityProductionReferences(t, "Register(", []string{
-		"registry.go",
+		"v1_registry_compatibility.go",
 		"tool/register.go",
 	})
 	assertCompatibilityProductionReferences(t, "func Get(", []string{
-		"registry.go",
+		"v1_registry_compatibility.go",
 	})
 	assertCompatibilityProductionReferences(t, "Get(name)", []string{
 		"v1_release_adapters.go",
 	})
 	assertCompatibilityProductionReferences(t, "refreshVersionTags", []string{
-		"version_guard.go",
+		"v1_version_guard_compatibility.go",
 		"v1_release_adapters.go",
 	})
 	assertCompatibilityProductionReferences(t, "latestVersionTag", []string{
-		"version_guard.go",
+		"v1_version_guard_compatibility.go",
 		"v1_release_adapters.go",
 	})
 }
@@ -147,12 +147,12 @@ func TestDocsRecommendExplicitReleaseExecutorComposition(t *testing.T) {
 
 func TestDeprecationMarkersMatchCompatibilityPolicy(t *testing.T) {
 	required := map[string][]string{
-		"service.go": {
+		"v1_service_compatibility.go": {
 			"// Deprecated: use HandleReleaseWithV1Executors with explicit V1Executor values\n// for release execution, or PlanV1Release for version planning.",
 			"// Deprecated: use HandleReleaseWithV1Executors with explicit V1Executor values\n// instead.",
 			"// Deprecated: use PlanV1Release with explicit latest-tag evidence instead.",
 		},
-		"registry.go": {
+		"v1_registry_compatibility.go": {
 			"// Deprecated: use HandleReleaseWithV1Executors with explicit V1Executor values\n// instead.",
 			"// Deprecated: use caller-owned V1Executor selection with\n// HandleReleaseWithV1Executors instead.",
 		},
@@ -162,7 +162,7 @@ func TestDeprecationMarkersMatchCompatibilityPolicy(t *testing.T) {
 		"execution_context.go": {
 			"// Deprecated: use BuildV2ReleaseExecutionContext for V2 release contexts, or\n// PlanV1Release for V1 planning.",
 		},
-		"version_guard.go": {
+		"v1_version_guard_compatibility.go": {
 			"// Deprecated: use PlanV1Release with explicit latest-tag evidence instead.",
 		},
 		"../config/v1_loader.go": {
@@ -193,14 +193,14 @@ func TestDeprecationMarkersMatchCompatibilityPolicy(t *testing.T) {
 	}
 
 	notDeprecated := map[string][]string{
-		"command_handler.go":            {"func HandleRelease(", "func HandleReleaseWithV1Executors("},
-		"preflight.go":                  {"func Preflight("},
-		"tool.go":                       {"type Tool interface", "type ToolBase struct"},
-		"version_guard.go":              {"func EnsureVersionIsValid("},
-		"../config/v1_loader.go":        {"func V1ConfigExistsAt(", "func V1LoadConfigAt(", "func V1SaveConfigAt("},
-		"tool/goreleaser/goreleaser.go": {"func (g *GoReleaser) Rollback() error"},
-		"tool/jreleaser/jreleaser.go":   {"func (j *JReleaser) Rollback() error"},
-		"tool/releaseit/release_it.go":  {"func (r *ReleaseIt) Rollback() error"},
+		"command_handler.go":                {"func HandleRelease(", "func HandleReleaseWithV1Executors("},
+		"v1_preflight_compatibility.go":     {"func Preflight("},
+		"v1_tool_compatibility.go":          {"type Tool interface", "type ToolBase struct"},
+		"v1_version_guard_compatibility.go": {"func EnsureVersionIsValid("},
+		"../config/v1_loader.go":            {"func V1ConfigExistsAt(", "func V1LoadConfigAt(", "func V1SaveConfigAt("},
+		"tool/goreleaser/goreleaser.go":     {"func (g *GoReleaser) Rollback() error"},
+		"tool/jreleaser/jreleaser.go":       {"func (j *JReleaser) Rollback() error"},
+		"tool/releaseit/release_it.go":      {"func (r *ReleaseIt) Rollback() error"},
 	}
 	for path, signatures := range notDeprecated {
 		source := readCommandBoundarySource(t, path)

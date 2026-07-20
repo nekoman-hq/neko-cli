@@ -356,7 +356,11 @@ func TestGitReleaseTagPushFailureDoesNotRollbackCommit(t *testing.T) {
 }
 
 func TestGitReleaseCoordinatorSourceContainsNoDestructiveRollbackOrRemoteDelete(t *testing.T) {
-	for _, file := range []string{"git_release_coordinator.go", "git_release_preflight.go"} {
+	for _, file := range []string{
+		"release_git_coordinator.go", "release_git_staging.go", "release_git_commit.go",
+		"release_git_tag.go", "release_git_push.go", "release_git_queries.go",
+		"git_release_preflight.go",
+	} {
 		source := mustReadString(t, filepath.Join(file))
 		for _, forbidden := range []string{"reset --hard", "clean -fd", "--delete", "push origin --delete"} {
 			if strings.Contains(source, forbidden) {

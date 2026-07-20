@@ -115,7 +115,7 @@ func TestReleaseTransactionBlocksGitHubActionsBeforeExecutor(t *testing.T) {
 }
 
 func TestReleaseTransactionSourceContainsNoDestructiveRollback(t *testing.T) {
-	source := mustReadString(t, filepath.Join("release_transaction.go"))
+	source := mustReadString(t, filepath.Join("v2_local_transaction_compatibility.go"))
 	if strings.Contains(source, "reset --hard") || strings.Contains(source, "clean -fd") {
 		t.Fatal("V2 transaction source must not contain destructive rollback commands")
 	}
