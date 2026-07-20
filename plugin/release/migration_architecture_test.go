@@ -116,8 +116,8 @@ func TestMigrationExecutionReusesPairPersistenceAndRetainsSafeCleanupOrder(t *te
 		t.Fatal("init must retain the shared pair persister")
 	}
 
-	migration := readQueryArchitectureFile(t, "pkg/migrate/migration.go")
-	if !strings.Contains(migration, "releaseconfig.V2PairRecoveryPath(root)") {
+	migrationPaths := readQueryArchitectureFile(t, "pkg/migrate/migration_paths.go")
+	if !strings.Contains(migrationPaths, "releaseconfig.V2PairRecoveryPath(root)") {
 		t.Fatal("migration planning must explicitly detect unresolved V2 pair recovery evidence")
 	}
 	for _, forbidden := range []string{
@@ -127,7 +127,7 @@ func TestMigrationExecutionReusesPairPersistenceAndRetainsSafeCleanupOrder(t *te
 		"ConfirmStateReplacement",
 		"restoreV2File(",
 	} {
-		if strings.Contains(migration, forbidden) || strings.Contains(adapters, forbidden) {
+		if strings.Contains(migrationPaths, forbidden) || strings.Contains(adapters, forbidden) {
 			t.Fatalf("migration must not own pair recovery mechanics %q", forbidden)
 		}
 	}
@@ -137,7 +137,12 @@ func TestMigrationRefactorIntroducesNoGenericWorkflowFramework(t *testing.T) {
 	for _, path := range []string{
 		"pkg/config/v2_pair_recovery.go",
 		"pkg/config/v2_pair_persister.go",
-		"pkg/migrate/model.go",
+		"pkg/migrate/migration_plan.go",
+		"pkg/migrate/migration_failure.go",
+		"pkg/migrate/migration_journal.go",
+		"pkg/migrate/migration_paths.go",
+		"pkg/migrate/migration_root.go",
+		"pkg/migrate/migration_plan_resolver.go",
 		"pkg/migrate/policy.go",
 		"pkg/migrate/planner.go",
 		"pkg/migrate/usecase.go",

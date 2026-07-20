@@ -11,6 +11,7 @@ import (
 
 	coreconfig "github.com/nekoman-hq/neko-cli/pkg/config"
 	"github.com/nekoman-hq/neko-cli/pkg/log"
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/legacyrequirements"
 	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
@@ -40,17 +41,7 @@ func ValidateRequirements(cfg *releaseconfig.V1ReleaseConfig) error {
 // ValidateRequirementsAt checks V1 release requirements at an explicit
 // repository root without reading process cwd.
 func ValidateRequirementsAt(repositoryRoot string, cfg *releaseconfig.V1ReleaseConfig) error {
-	if cfg == nil {
-		return fmt.Errorf("release configuration is missing")
-	}
-
-	log.PluginV(
-		log.Config,
-		"Validating release requirements for %s",
-		log.ColorText(log.ColorCyan, string(cfg.ReleaseSystem)),
-	)
-
-	return validateRequirementsForExecutor(string(cfg.ReleaseSystem), repositoryRoot, true)
+	return legacyrequirements.Validate(repositoryRoot, cfg)
 }
 
 // ValidateRequirementsForContext checks executor requirements relative to the

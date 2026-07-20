@@ -5,7 +5,6 @@ package validate
 
 import (
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
-	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/release"
 )
 
 const missingConfigurationHint = "Run 'neko release init' to create V2 config/state, or 'neko release migrate' to convert an existing V1 config"
@@ -144,23 +143,4 @@ func (useCase validationQueryUseCase) queryV1Validation(repository *config.Relea
 
 func validationFailure(code string, err error) *validationQueryFailure {
 	return &validationQueryFailure{Cause: err, Code: code, Message: err.Error()}
-}
-
-type validationReleaseRepositoryReader struct{}
-
-func (validationReleaseRepositoryReader) Read(root string) (*config.ReleaseRepository, bool, error) {
-	repository, err := config.LoadReleaseRepository(root)
-	if err == nil {
-		return repository, true, nil
-	}
-	present := config.V2ConfigExists(root) || config.V1ConfigExistsAt(root)
-	return nil, present, err
-}
-
-type legacyReleaseRequirementsValidator struct {
-	repositoryRoot string
-}
-
-func (validator legacyReleaseRequirementsValidator) Validate(cfg *config.V1ReleaseConfig) error {
-	return release.ValidateRequirementsAt(validator.repositoryRoot, cfg)
 }

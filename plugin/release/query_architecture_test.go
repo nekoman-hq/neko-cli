@@ -110,6 +110,23 @@ func TestReadOnlyQueryExtractionIntroducesNoGenericManager(t *testing.T) {
 	}
 }
 
+func TestValidatePackageDoesNotDependOnRootReleaseOrchestration(t *testing.T) {
+	entries, err := os.ReadDir("pkg/validate")
+	if err != nil {
+		t.Fatalf("read validate package: %v", err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+			continue
+		}
+		path := "pkg/validate/" + entry.Name()
+		source := readQueryArchitectureFile(t, path)
+		if strings.Contains(source, `"github.com/nekoman-hq/neko-cli/plugin/release/pkg/release"`) {
+			t.Fatalf("%s depends on root Release orchestration", path)
+		}
+	}
+}
+
 func TestPluginIndexDiscoveryBuildingAndPersistenceRemainSeparated(t *testing.T) {
 	handler := readQueryArchitectureFile(t, "pkg/pluginindex/handler.go")
 	for _, required := range []string{

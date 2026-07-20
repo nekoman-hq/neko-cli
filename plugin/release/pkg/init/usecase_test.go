@@ -274,13 +274,15 @@ func TestAddV2ReleaseUnitUseCaseStopsAtLoadAndDuplicateFailures(t *testing.T) {
 }
 
 func TestInitAndUnitAddHandlersContainOnlyCommandBoundaryDependencies(t *testing.T) {
-	source, err := os.ReadFile("handler.go")
-	if err != nil {
-		t.Fatalf("read handler.go: %v", err)
-	}
-	for _, forbidden := range []string{"CanonicalV2", "LoadV2", "ValidateV2", "AtomicWrite", "os.", "req.Flags["} {
-		if strings.Contains(string(source), forbidden) {
-			t.Fatalf("handler.go contains workflow dependency %q", forbidden)
+	for _, path := range []string{"init_handler.go", "unit_add_handler.go"} {
+		source, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		for _, forbidden := range []string{"CanonicalV2", "LoadV2", "ValidateV2", "AtomicWrite", "os.", "req.Flags["} {
+			if strings.Contains(string(source), forbidden) {
+				t.Fatalf("%s contains workflow dependency %q", path, forbidden)
+			}
 		}
 	}
 }
