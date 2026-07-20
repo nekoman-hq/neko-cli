@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releasesource"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
 )
 
@@ -42,7 +43,7 @@ func HandleUnits(request plugin.Request) (*plugin.Response, error) {
 // HandleUnitsAt returns the Release V2 unit inventory at an explicit root.
 func HandleUnitsAt(root workspace.RepositoryRoot, request plugin.Request) (*plugin.Response, error) {
 	handler := unitOverviewCommandHandler{
-		inspector: unitOverviewInspectionUseCase{sources: filesystemLocalV2SourceReader{}},
+		inspector: unitOverviewInspectionUseCase{sources: releasesource.FilesystemReader{}},
 		clock:     systemReleaseClock{},
 		root:      root,
 	}

@@ -3,11 +3,12 @@ package release
 import (
 	"context"
 
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releasesource"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
 type unitOverviewSourceReader interface {
-	Read(string) localV2SourceSnapshot
+	Read(string) releasesource.Snapshot
 }
 
 type unitOverviewInspector interface {
@@ -58,7 +59,7 @@ func (useCase unitOverviewInspectionUseCase) Inspect(
 	return result
 }
 
-func classifyUnitOverviewSource(snapshot localV2SourceSnapshot) *unitOverviewIssue {
+func classifyUnitOverviewSource(snapshot releasesource.Snapshot) *unitOverviewIssue {
 	switch {
 	case snapshot.InspectionErr != nil:
 		return newUnitOverviewSourceIssue(
@@ -131,7 +132,7 @@ func classifyUnitOverviewSource(snapshot localV2SourceSnapshot) *unitOverviewIss
 	}
 }
 
-func unitOverviewSourceCanProduceRows(snapshot localV2SourceSnapshot) bool {
+func unitOverviewSourceCanProduceRows(snapshot releasesource.Snapshot) bool {
 	if snapshot.InspectionErr != nil || snapshot.V1Present || snapshot.ConfigError != nil || snapshot.StateError != nil {
 		return false
 	}
@@ -154,5 +155,5 @@ func newUnitOverviewSourceIssue(code, message, remediation string) *unitOverview
 	}
 }
 
-var _ unitOverviewSourceReader = filesystemLocalV2SourceReader{}
+var _ unitOverviewSourceReader = releasesource.FilesystemReader{}
 var _ unitOverviewInspector = unitOverviewInspectionUseCase{}

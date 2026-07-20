@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"os"
 	"path"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -507,7 +508,7 @@ func TestIntegrationDoctorDefaultPathGuardsRemoteAndTokenAccess(t *testing.T) {
 	}
 	command := readCommandBoundarySource(t, "integration_doctor_command.go")
 	if !strings.Contains(command, `request.Flags["verify-remote"]`) ||
-		!strings.Contains(command, "EnvironmentGitHubActionsDispatchTokenResolver") {
+		!strings.Contains(command, "environmentGitHubReadTokenResolver") {
 		t.Fatal("Doctor command does not own explicit remote request and token composition")
 	}
 	for _, path := range []string{
@@ -579,7 +580,7 @@ func TestIntegrationDoctorPresentationKeepsCoreDomainNeutral(t *testing.T) {
 
 func TestUnitOverviewApplicationHasNoMutationWorkflowParserDoctorGitNetworkTokenOrStoreDependencies(t *testing.T) {
 	for _, path := range []string{
-		"local_v2_source.go",
+		"../../internal/releasesource/source.go",
 		"unit_overview_source.go",
 		"unit_overview_inspection.go",
 	} {
@@ -651,7 +652,7 @@ func TestUnitOverviewDoesNotReachDoctorWorkflowInspection(t *testing.T) {
 
 func TestUnitOverviewAvoidsGenericInventoryArchitecture(t *testing.T) {
 	for _, path := range []string{
-		"local_v2_source.go",
+		"../../internal/releasesource/source.go",
 		"unit_overview_command.go",
 		"unit_overview_source.go",
 		"unit_overview_inspection.go",
@@ -691,6 +692,9 @@ func TestReleaseProgressReporterIsInfallible(t *testing.T) {
 
 func readCommandBoundarySource(t *testing.T, path string) string {
 	t.Helper()
+	if strings.HasPrefix(path, "integration_doctor_") {
+		path = filepath.Join("..", "..", "internal", "doctor", path)
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)

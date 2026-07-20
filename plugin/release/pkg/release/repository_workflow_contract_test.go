@@ -92,16 +92,14 @@ func TestRepositoryDogfoodDoctorUnitScopesHaveNoErrors(t *testing.T) {
 }
 
 func TestRepositoryDogfoodPermissionDiagnosticsAcceptPublishingJobs(t *testing.T) {
+	root := repositoryInspectionRoot(t)
 	for _, behavior := range repositoryWorkflowBehaviors() {
 		t.Run(behavior.unit, func(t *testing.T) {
-			_, root := readRepositoryWorkflow(t, behavior.path)
-			diagnostics := make([]string, 0)
-			inspectIntegrationDoctorPermissions(root, func(_ integrationDoctorSeverity, code, _, _ string) {
-				diagnostics = append(diagnostics, code)
-			})
-			if len(diagnostics) != 0 {
-				t.Fatalf("%s permission diagnostics = %v, want none", behavior.path, diagnostics)
-			}
+			result := integrationDoctorResultFromResponse(t, runIntegrationDoctor(
+				t, root, map[string]any{"unit": behavior.unit},
+			))
+			assertIntegrationDoctorCodeAbsent(t, result.Diagnostics, "PERMISSIONS_BROAD")
+			assertIntegrationDoctorCodeAbsent(t, result.Diagnostics, "PERMISSIONS_IMPLICIT")
 		})
 	}
 }

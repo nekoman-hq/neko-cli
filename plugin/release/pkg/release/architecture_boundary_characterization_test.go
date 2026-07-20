@@ -207,21 +207,24 @@ type parsedReleaseProductionFile struct {
 
 func parseReleaseProductionFiles(t *testing.T) []parsedReleaseProductionFile {
 	t.Helper()
-	entries, err := os.ReadDir(".")
-	if err != nil {
-		t.Fatalf("read release package: %v", err)
-	}
 	fileSet := token.NewFileSet()
-	files := make([]parsedReleaseProductionFile, 0, len(entries))
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
-			continue
+	files := make([]parsedReleaseProductionFile, 0)
+	for _, directory := range []string{".", "../../internal/doctor"} {
+		entries, err := os.ReadDir(directory)
+		if err != nil {
+			t.Fatalf("read Release production directory %s: %v", directory, err)
 		}
-		parsed, parseErr := parser.ParseFile(fileSet, entry.Name(), nil, 0)
-		if parseErr != nil {
-			t.Fatalf("parse %s: %v", entry.Name(), parseErr)
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+				continue
+			}
+			fullPath := filepath.Join(directory, entry.Name())
+			parsed, parseErr := parser.ParseFile(fileSet, fullPath, nil, 0)
+			if parseErr != nil {
+				t.Fatalf("parse %s: %v", fullPath, parseErr)
+			}
+			files = append(files, parsedReleaseProductionFile{path: filepath.ToSlash(entry.Name()), file: parsed})
 		}
-		files = append(files, parsedReleaseProductionFile{path: filepath.ToSlash(entry.Name()), file: parsed})
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].path < files[j].path })
 	return files
