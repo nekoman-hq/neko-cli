@@ -27,6 +27,7 @@ const (
 type integrationDoctorRequest struct {
 	RepositoryRoot string
 	UnitID         string
+	VerifyRemote   bool
 }
 
 type integrationDoctorSummary struct {
@@ -43,9 +44,30 @@ const (
 	integrationDoctorVerified     integrationDoctorVerificationState = "verified"
 	integrationDoctorMissing      integrationDoctorVerificationState = "missing"
 	integrationDoctorMismatch     integrationDoctorVerificationState = "mismatch"
+	integrationDoctorNotAttempted integrationDoctorVerificationState = "not_attempted"
+	integrationDoctorUnavailable  integrationDoctorVerificationState = "unavailable"
+	integrationDoctorUnauthorized integrationDoctorVerificationState = "unauthorized"
+	integrationDoctorRateLimited  integrationDoctorVerificationState = "rate_limited"
 	integrationDoctorUnsupported  integrationDoctorVerificationState = "unsupported"
 	integrationDoctorUnverifiable integrationDoctorVerificationState = "not_verifiable"
 )
+
+type integrationDoctorRemoteStatus string
+
+const (
+	integrationDoctorRemoteNotRequested integrationDoctorRemoteStatus = "not_requested"
+	integrationDoctorRemoteComplete     integrationDoctorRemoteStatus = "complete"
+	integrationDoctorRemotePartial      integrationDoctorRemoteStatus = "partial"
+	integrationDoctorRemoteUnavailable  integrationDoctorRemoteStatus = "unavailable"
+)
+
+type integrationDoctorRemoteSummary struct {
+	Status     integrationDoctorRemoteStatus `json:"status"`
+	Requested  bool                          `json:"requested"`
+	Verified   int                           `json:"verified"`
+	Unresolved int                           `json:"unresolved"`
+	Failed     int                           `json:"failed"`
+}
 
 type integrationDoctorLimitationClass string
 
@@ -97,12 +119,13 @@ type integrationDoctorDiagnostic struct {
 
 //nolint:govet // Field order preserves the stable JSON contract.
 type integrationDoctorResult struct {
-	Readiness     integrationDoctorReadiness      `json:"readiness"`
-	Summary       integrationDoctorSummary        `json:"summary"`
-	Units         []integrationDoctorUnit         `json:"units"`
-	Workflows     []integrationDoctorWorkflow     `json:"workflows"`
-	Verifications []integrationDoctorVerification `json:"verifications"`
-	Diagnostics   []integrationDoctorDiagnostic   `json:"diagnostics"`
+	Readiness          integrationDoctorReadiness      `json:"readiness"`
+	Summary            integrationDoctorSummary        `json:"summary"`
+	RemoteVerification integrationDoctorRemoteSummary  `json:"remote_verification"`
+	Units              []integrationDoctorUnit         `json:"units"`
+	Workflows          []integrationDoctorWorkflow     `json:"workflows"`
+	Verifications      []integrationDoctorVerification `json:"verifications"`
+	Diagnostics        []integrationDoctorDiagnostic   `json:"diagnostics"`
 }
 
 func newIntegrationDoctorDiagnostic(
