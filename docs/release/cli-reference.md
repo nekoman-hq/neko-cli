@@ -195,8 +195,12 @@ executorStart
 integration inspection. By default it checks all configured units and unique
 workflow paths; selecting a unit still retains every unit sharing that
 workflow. It returns `ready`, `ready_with_warnings`, or `not_ready`, with exit
-code `1` for `not_ready`. JSON exposes `readiness`, severity counts, ordered
-unit/workflow facts, and ordered diagnostics. The doctor does not use tokens,
+code `1` for `not_ready`. JSON exposes `readiness`, severity and verified
+counts, ordered unit/workflow facts, additive ordered `verifications`, and
+ordered diagnostics. Verification states are `verified`, `missing`, `mismatch`,
+`unsupported`, and `not_verifiable`; optional limitation classes are `remote`,
+`runtime`, and `mutation_required`. References are repository-relative and
+collections are not `null`. The doctor does not use tokens,
 network clients, Git commands, journal stores, Evidence writers, or filesystem
 writers. Source validation only reads the local V2 pair-recovery readiness
 marker already owned by the strict config/state contract.
@@ -215,8 +219,20 @@ and `not_verifiable`. Their stable fields are `severity`, `scope`, optional
 deterministic by severity, scope, unit, workflow, code, and message. A generated
 canonical workflow is recognized byte-for-byte but remains `not_ready` while
 its deliberately failing consumer placeholder is present. A structurally
-equivalent manual workflow is supported; custom build/publication correctness
-remains explicitly not verifiable.
+equivalent manual workflow is supported; unsupported custom build/publication
+shapes remain explicitly limited.
+
+Supported repository workflows expose five verified fact categories per
+workflow: `consumer_structure`, `goreleaser_configuration`,
+`installation_wiring`, `credential_wiring`, and `publication_identity`.
+Boundary facts retain `remote_workflow_identity`,
+`repository_variable_values`, and `dispatch_authorization` as not verifiable.
+Credential names are classified and scoped without reading values. Focused
+installation/publication checks read only supported local workflow,
+GoReleaser, installer, manifest, registry, manager, and plugin-index contracts;
+no commands are executed. Local facts do not prove future runner success,
+remote asset availability, credential validity, target acceptance, or exact
+dispatch authorization.
 
 Permission diagnostics distinguish workflow defaults from job overrides. An
 omitted job declaration inherits the workflow permission set; an explicit job

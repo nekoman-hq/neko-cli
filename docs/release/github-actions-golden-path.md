@@ -609,19 +609,29 @@ point. The generated canonical workflow is recognized byte-for-byte, but it
 remains `not_ready` until its deliberately failing consumer placeholder is
 replaced.
 
+For supported workflows it also emits five verified local facts for consumer/
+GoReleaser structure, installation/artifact identity, credential wiring, and
+publication/registry identity. JSON exposes them in deterministic
+`verifications` with repository-relative references. Three additional boundary
+facts retain remote workflow identity, repository-variable values, and exact
+dispatch authorization. Successful local evidence narrows uncertainty without
+claiming future runner or remote success.
+
 Diagnostics use `error`, `warning`, `recommendation`, and `not_verifiable`.
 Any error yields `not_ready` and exit code `1`; warnings without errors yield
 `ready_with_warnings` and exit code `0`; recommendations and not-verifiable
-facts alone yield `ready` and exit code `0`. Remote default-branch content,
-repository variables, install artifacts, credentials, dispatch authorization,
-custom build correctness, and publication-target acceptance remain explicitly
-not verifiable from local files.
+facts alone yield `ready` and exit code `0`. The seven residual limitations
+cover only future runner/test/binary outcomes, remote installation/runtime,
+credential validity, publication acceptance, remote default-branch identity,
+remote variable values, and mutation-required dispatch authorization.
 
 The doctor reads no token, contacts no network, runs no Git command, and
 receives no config/state writer, workflow writer, journal store, Evidence
 writer, dispatcher, release runner, or executor. It reads only local source
-facts, the existing V2 pair-recovery readiness marker, and configured workflow
-files.
+facts, the existing V2 pair-recovery readiness marker, configured workflow
+files, referenced focused GoReleaser/installer/manifest/registry contracts, and
+the two repository-confined plugin-index scripts. It never executes those
+contracts.
 
 ## Release plan and dry-run
 

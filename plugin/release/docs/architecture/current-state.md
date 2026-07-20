@@ -44,7 +44,7 @@ The public command contract is duplicated between `manifest.json` and the switch
 | `pkg/git` | Legacy Git queries and the underlying compatibility operations used by focused V1 adapters | `IsClean`, `LatestTag`, `UnitTagsInHistory`, `Current`, `Contributors`, `ContributorsForPaths` | Direct process details remain below release-owned V1 ports; active V1 application code does not import retired raw retired-path cleanup helpers. |
 | `pkg/release` planning | Version bump, execution context, delivery/capability descriptions, materialization plan | `PlanUnitVersionBump`, `BuildReleaseExecutionContext`, `ResolveDelivery`, `ResolveExecutorCapabilities`, `ResolveVersionMaterializer` | `github-actions` is the supported V2 delivery mode; `local` is retained only for V1 compatibility and invalid V2 reporting. |
 | `pkg/release` plan inspection | Token-free read-only local release-plan inspection for one selected source and unit | `HandlePlanAt`, `releasePlanInspectionUseCase`, `ReleasePlanInspection`, `planV2ReleaseFacts` | Reuses canonical V1/V2 planning facts, maps responses only at the command boundary, and does not inspect journals, remotes, tokens, or recovery evidence. |
-| `pkg/release` integration doctor | Strictly local Release V2 config/state and GitHub Actions workflow readiness inspection | `HandleDoctorAt`, `integrationDoctorInspectionUseCase`, `filesystemIntegrationDoctorSourceReader`, `filesystemIntegrationDoctorWorkflowReader` | Uses typed diagnostics and deterministic aggregation; no token/network/Git command, writer, journal store, Evidence writer, state machine, registry, workflow DSL, or provider abstraction. |
+| `pkg/release` integration doctor | Strictly local Release V2 config/state and GitHub Actions readiness plus focused local contract evidence | `HandleDoctorAt`, `integrationDoctorInspectionUseCase`, source/workflow/file/origin readers, focused consumer/GoReleaser/installer/credential/publication/boundary inspectors | Uses typed facts/diagnostics and deterministic aggregation; no token/network/Git command, writer, journal store, Evidence writer, state machine, check/provider registry, workflow DSL, shell interpreter, or provider abstraction. |
 | `pkg/release` unit overview | Strictly local Release V2 config/state inventory with current version, tag shape, metadata, alignment, and concise issues | `HandleUnits`, `HandleUnitsAt`, `unitOverviewInspectionUseCase`, `filesystemLocalV2SourceReader`, `mapUnitOverviewResult` | Reuses strict/canonical V2 owners; no workflow parser, Doctor orchestration, Git/network/token/store/writer/planner capability, state machine, registry, or generic inventory framework. |
 | `pkg/release` GitHub workflow scaffolding | Typed V2 source/selection, canonical contract rendering, read-only create/unchanged/conflict planning, narrow atomic creation, and command-owned responses | `HandleGitHubWorkflowInitAt`, `RenderCanonicalGitHubActionsReleaseWorkflow`, `GitHubActionsReleaseWorkflowContractVersion` | GitHub-Actions-only create semantics; no provider registry, YAML editor, token/network/Git capability, implicit update, or publication policy. |
 | `pkg/release` V1 | Typed V1 intent/planning/preview/execution/failures, focused requirements/preflight/materialization/Git/rollback adapters, and explicit executor selection | `V1ReleaseIntent`, `PlanV1Release`, `v1ReleasePreviewUseCase`, `v1ReleaseExecutionUseCase`, `V1Executor` | Production uses a fixed executor catalog. `Service`, `Preflight`, `Tool`, `ToolBase`, and `Register/Get` are bounded compatibility facades. |
@@ -200,9 +200,14 @@ The public command contract is duplicated between `manifest.json` and the switch
 - Workflow inspection: focused functions own dispatch inputs/triggers,
   permissions, concurrency, checkout, installation ordering and pins,
   context-validator arguments/output wiring, validator step identity, and the
-  consumer extension point. Optional extra inputs and unrelated verification
-  triggers are not rejected blindly. No build-system heuristic claims custom
-  consumer commands are correct.
+  consumer extension point. Additional focused inspectors verify supported
+  consumer operations and GoReleaser fields, generic origin/installer/registry
+  identity, CLI and Release Plugin artifacts, secret-reference classification
+  and permission/output safety, and GitHub release/plugin-index target identity
+  and ordering. Optional extra inputs and unrelated verification triggers are
+  not rejected blindly. Unsupported shapes remain limited; no build-system
+  heuristic, full shell parser, general GoReleaser schema, or remote fact is
+  invented.
 - Permission inspection: one focused Doctor file parses the supported GitHub
   permission scalar/mapping forms, applies workflow inheritance and explicit
   job replacement, and accepts a job write only when a same-job direct
@@ -212,16 +217,29 @@ The public command contract is duplicated between `manifest.json` and the switch
   forms, OIDC, unrelated scopes, and unsupported job writes remain
   `PERMISSIONS_BROAD`; missing explicit coverage remains
   `PERMISSIONS_IMPLICIT`. The inspection does not evaluate expressions, parse
-  shell programs, inspect invoked scripts, infer from names/paths/secrets, or
-  prove remote publication.
+  shell programs, infer success from names/secret presence, or prove remote
+  publication. The publication inspector reads only the two repository-confined
+  plugin-index scripts and known literal arguments.
+- Verification model: one small typed fact contains subject, category, state,
+  evidence, repository-relative references, optional unit/workflow, and optional
+  limitation class. States are `verified`, `missing`, `mismatch`, `unsupported`,
+  and `not_verifiable`; limitation classes are `remote`, `runtime`, and
+  `mutation_required`. This is not an Evidence store, diagnostics engine,
+  registry, state machine, or provider abstraction.
+- Boundary mapping: remote-workflow, repository-variable, and exact-dispatch
+  limitations are emitted only when their local predicates exist. The former
+  unconditional limitation loop no longer exists. Consumer, installation,
+  credential, and publication limitations come from their corresponding
+  focused inspector after a verified or explicitly unsupported local shape.
 - Result: diagnostics use the closed severities `error`, `warning`,
   `recommendation`, and `not_verifiable`. Stable ordering is severity, scope,
   unit, workflow, code, and message. Any error yields `not_ready`; otherwise a
   warning yields `ready_with_warnings`; recommendations and not-verifiable
   facts alone yield `ready`.
 - Output: `mapIntegrationDoctorResult` alone constructs the plugin response.
-  JSON contains `readiness`, severity counts, ordered units, ordered workflows,
-  and ordered diagnostics. Transport-only presentation metadata composes a
+  JSON contains `readiness`, severity/verified counts, ordered units, ordered
+  workflows, additive ordered verifications, and ordered diagnostics.
+  Transport-only presentation metadata composes a
   titled readiness/count summary, a titled severity/code index with optional
   target and scope, and complete ordered property records headed by severity and
   code. The mapper assigns closed semantic roles to readiness, positive counts,
@@ -599,7 +617,7 @@ The following are current behavior. They are not statements that every behavior 
 | INV-32 | GoReleaser, JReleaser, and release-it preserve their distinct command/config/push/publication ownership and warning-only dry-run behavior through replaceable ports. Executor outputs/errors redact the legacy token while preserving underlying causes. | concrete `Run` methods, executor system adapters, `RedactV1ProcessResult` | command-order/failure/ownership tests, injected adapter tests, clock test, and sentinel secret tests |
 | INV-33 | Migration reads canonical V1 data but cannot import V1 execution, executor, Git mutation, or rollback internals. V1 executors do not implement the inactive V2-local transaction or inspect source format. | migrate imports, concrete executor orchestration | migration-direction and executor-orchestration architecture tests |
 | INV-34 | Dispatched V2 context validation is strictly local and read-only: it requires one valid unblocked V2 pair, exact unit/version/tag/commit/HEAD/tag-target agreement, performs no token/network/mutation/fetch, and maps output only at the command boundary. | `releaseContextValidationUseCase`, `filesystemReleaseContextSourceReader`, `releaseContextGitAdapter`, `MapValidatedReleaseContext` | application/real-Git/command/output tests plus architecture guards |
-| INV-35 | Release V2 integration diagnostics are local and read-only: relaxed inspection-root discovery exists only so invalid sources can be reported; the doctor structurally inspects canonical source/workflow facts, preserves shared-workflow scope, never receives mutation/token/network/Git/store capabilities, and maps stable readiness/diagnostics only at the command boundary. | `ResolveInspectionRepositoryRoot`, `integrationDoctorInspectionUseCase`, focused source/workflow readers and inspectors, `mapIntegrationDoctorResult` | command/source/parser/safety/presentation/explicit-root tests plus architecture and naming guards |
+| INV-35 | Release V2 integration diagnostics and local verification facts are offline, token-free, and read-only: relaxed inspection-root discovery exists only so invalid sources can be reported; the doctor inspects canonical source/workflow facts plus supported consumer, GoReleaser, installation, credential, publication, and boundary contracts, preserves shared-workflow scope, never receives mutation/token/network/Git/store/process-execution capabilities, and maps stable readiness/facts/diagnostics only at the command boundary. | `ResolveInspectionRepositoryRoot`, `integrationDoctorInspectionUseCase`, focused source/workflow/file/origin readers and inspectors, `mapIntegrationDoctorResult` | command/source/parser/GoReleaser/installer/credential/publication/dogfood/safety/presentation/explicit-root tests plus architecture and naming guards |
 | INV-36 | Release V2 unit inventory is local and read-only: every config/state unit remains visible in deterministic order, current versions come only from state, canonical version/tag/unit policies are reused, expected source and row findings use structured exit `1`, and no workflow parser, Doctor orchestration, Git/network/token/store/writer/planner capability reaches the use case. | `HandleUnitsAt`, `unitOverviewInspectionUseCase`, `filesystemLocalV2SourceReader`, `mapUnitOverviewResult` | source/unit/tag/exit/presentation/root/isolation/no-mutation tests plus architecture and naming guards |
 
 ## Architecture strengths

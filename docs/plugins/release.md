@@ -205,7 +205,13 @@ for `not_ready`, and never reads tokens, contacts the network, runs Git, reads
 journals, constructs Evidence stores, or mutates files. It only checks the
 existing local V2 pair-recovery readiness marker required by the source
 contract. JSON contains stable `readiness`, `summary`, `units`, `workflows`,
-and `diagnostics` fields.
+and `diagnostics` fields plus the additive deterministic `verifications`
+array. `summary.verified` counts facts in state `verified`; collections remain
+empty arrays rather than `null`. Facts contain `subject`, `category`, `state`,
+`evidence`, repository-relative `references`, optional unit/workflow, and an
+optional `limitation_class`. States are `verified`, `missing`, `mismatch`,
+`unsupported`, and `not_verifiable`; limitation classes are `remote`,
+`runtime`, and `mutation_required`.
 
 Human output starts with the `Release Integration Doctor` title, readiness,
 severity counts, and inspected unit and workflow counts. A `Diagnostics`
@@ -238,10 +244,32 @@ Checks cover strict V2 source presence, JSON/schema/alignment/recovery safety,
 canonical unit executor/delivery/version/tag/workflow facts, workflow path and
 YAML safety, dispatch triggers and inputs, permissions, concurrency, checkout,
 pinned installation order, context-validator flags and GitHub output wiring,
-and the consumer extension point. Remote workflow content, repository
-variables, install artifacts, credentials, dispatch authorization, custom
-consumer build correctness, and publication-target acceptance are reported as
-not verifiable instead of inferred.
+and the consumer extension point. Supported workflows receive five locally
+verified categories: consumer validation/test/build/publication structure,
+focused GoReleaser configuration, installation/artifact identity, credential
+wiring, and publication/registry identity. Three additional facts retain the
+remote-workflow, repository-variable, and exact-dispatch boundaries.
+
+GoReleaser inspection reads only the supported action arguments and focused
+version/project/build/archive/checksum/release fields. Installer inspection
+cross-checks generic local origin and installer identities, CLI platform/archive/
+binary/install-directory rules, and Release Plugin unit/manifest/version/binary/
+asset-prefix rules. Credential inspection classifies each `secrets.*` reference
+as built-in `GITHUB_TOKEN` or custom, records its job/step, requires
+publication-only scope and compatible permissions, and rejects visible echo or
+workflow-output exposure without resolving a value. Publication inspection
+recognizes real GoReleaser and explicit `gh release` forms, validated tag/SHA
+flow, artifact/checksum identity, and release → plugin-index generation → index
+publication order. Unsupported shapes remain limited; this is not a general
+shell or GoReleaser parser.
+
+The seven stable limitation codes remain, but now describe only future runner/
+test/binary outcome; remote installer and asset availability plus extraction/
+loading; runtime credential issuance, validity, expiry, and authorization;
+remote target acceptance; remote default-branch workflow identity; remote
+repository-variable existence/value; and mutation-required exact dispatch
+authorization. The Doctor does not download, install, build, dispatch, publish,
+query GitHub, or claim local workflow content equals remote content.
 
 Permission inspection follows GitHub Actions scope replacement directly. An
 omitted job declaration inherits the workflow declaration; an explicit job
@@ -259,10 +287,12 @@ only by a same-job GoReleaser `release` action that is not snapshot/skip-publish
 or a direct `gh release create`/`gh release upload` command. `packages: write`
 is justified only by a direct `docker push ghcr.io/...` command or a
 `docker/build-push-action` step with `push: true` and a literal `ghcr.io/...`
-tag. Job or step names, paths, secret presence, echo commands, and a job named
-`publish` are not evidence. No OIDC publication form is currently recognized,
-so `id-token: write` remains conservative. The Doctor does not inspect invoked
-scripts or prove that a recognized command succeeds remotely.
+tag. Job or step names, paths, secret presence, and a job named `publish` are
+not evidence; credential echo/output paths are inspected only to reject
+exposure. No OIDC publication form is currently recognized, so
+`id-token: write` remains conservative. The Doctor reads only the two known
+repository-confined plugin-index scripts and local installer/registry contracts;
+it does not execute them or prove remote success.
 
 ---
 

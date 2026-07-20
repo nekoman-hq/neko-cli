@@ -156,7 +156,7 @@ Workflow files are generated only by the explicit create-only scaffolding comman
 `neko release doctor [--unit <unit-id>]` is the read-only local readiness
 check for this delivery contract. It loads the strict V2 config/state pair,
 deduplicates configured workflow paths, parses workflow YAML structurally, and
-reports ordered unit, workflow, and diagnostic facts. Selecting one unit keeps
+reports ordered unit, workflow, verification, and diagnostic facts. Selecting one unit keeps
 all units sharing its workflow in the workflow scope.
 
 The workflow checks cover `workflow_dispatch`, the exact four required string
@@ -182,18 +182,45 @@ write grants supported only by names, paths, secrets, or non-mutating commands
 remain warnings. This is local structural evidence, not remote publication
 proof.
 
+For the supported GoReleaser workflows the Doctor proves five local categories:
+
+1. consumer validation, tests, build/snapshot, real publication, manifest, and
+   plugin-index structure;
+2. focused GoReleaser build/archive/checksum/release identity;
+3. pinned CLI/Release Plugin installation and expected local artifacts;
+4. built-in/custom credential references, publication-only scope, effective
+   permission compatibility, and absence of visible echo/output exposure;
+5. GitHub/current-repository target, validated tag/SHA flow, archive, checksum,
+   plugin asset, and registry publication identity/order.
+
+The implementation recognizes only supported GoReleaser action arguments,
+real `gh release create`/upload predicates, canonical installer/registry
+contracts, and the two repository-confined plugin-index scripts. Snapshot or
+skip-publish commands do not prove publication, `/releases/latest` and tag-list
+fallbacks are rejected, and a normal unit cannot enter the plugin index.
+Unsupported dynamic commands remain limited instead of being guessed. No shell
+interpreter, general GoReleaser schema, provider registry, or remote client is
+part of Doctor.
+
 Readiness is `not_ready` with exit code `1` when any error exists,
 `ready_with_warnings` with exit code `0` when only warnings remain, and `ready`
 with exit code `0` when findings are recommendations or locally not verifiable.
 JSON exposes stable `readiness`, `summary`, `units`, `workflows`, and
-`diagnostics` fields. Each diagnostic contains severity, scope, optional unit
+`diagnostics` fields plus additive `verifications` and `summary.verified`.
+Facts contain typed state/evidence/repository-relative references and optional
+`remote`, `runtime`, or `mutation_required` limitation class. Each diagnostic contains severity, scope, optional unit
 and workflow identity, stable code, message, and remediation.
 
 The doctor is token-free, network-free, Git-command-free, and mutation-free.
-It cannot prove the remote default-branch workflow, repository-variable values,
-remote install artifacts, publication credentials, workflow-dispatch
-authorization, custom consumer build correctness, or publication-target
-version acceptance.
+It locally identifies or verifies structure before retaining seven residual
+limitations per supported workflow. They cover only future runner/test/binary
+outcome; remote installer/artifact availability, download, extraction,
+execution, and plugin loading; runtime credential issuance/validity/expiry/
+authorization; remote target state and acceptance; remote default-branch
+workflow identity/enabled state; remote repository-variable existence/value;
+and exact dispatch authorization, which requires a real remote decision. Local
+workflow inspection never claims remote content identity, and Doctor never
+dispatches.
 
 ## Nekocli Production Workflows
 
@@ -242,10 +269,10 @@ GitHub Actions cannot grant token permissions at step scope, so the separate
 publication job is the narrowest boundary that preserves real GitHub Release
 and registry publication. The local Doctor accepts these three scoped
 publication grants: the repository result is `ready` with zero errors,
-warnings, and recommendations. It retains seven honest `not_verifiable` facts
-per workflow (21 total) for remote workflow state, repository variables,
-installation artifacts, publication credentials, dispatch authorization,
-consumer build correctness, and publication-target acceptance.
+warnings, and recommendations. It reports five verified and three explicit
+boundary facts per workflow, plus seven narrowly scoped `not_verifiable`
+diagnostics per workflow (21 total). A unit-scoped result has five verified
+facts, three boundary facts, and seven limitations.
 
 For prefixed plugin tags, the workflow does not run `goreleaser release` as the publisher because the free GoReleaser release command parses the full current tag as SemVer. Instead, GoReleaser packages archives and checksums with the dedicated plugin config, and `gh release create "$RELEASE_TAG"` creates the GitHub Release for the exact `plugin-release/vX.Y.Z` or `plugin-ui/vX.Y.Z` tag.
 
