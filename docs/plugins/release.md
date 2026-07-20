@@ -197,21 +197,32 @@ select one unit while retaining checks for every unit sharing its workflow:
 ```bash
 neko release doctor [--unit <unit-id>]
 neko release doctor --output json
+neko release doctor --verify-remote
+neko release doctor --unit <unit-id> --verify-remote
+neko release doctor --output json --verify-remote
 ```
 
-The command reads only local V2 config/state and configured workflow files. It
-reports `ready`, `ready_with_warnings`, or `not_ready`, uses exit code `1` only
-for `not_ready`, and never reads tokens, contacts the network, runs Git, reads
-journals, constructs Evidence stores, or mutates files. It only checks the
-existing local V2 pair-recovery readiness marker required by the source
-contract. JSON contains stable `readiness`, `summary`, `units`, `workflows`,
-and `diagnostics` fields plus the additive deterministic `verifications`
-array. `summary.verified` counts facts in state `verified`; collections remain
-empty arrays rather than `null`. Facts contain `subject`, `category`, `state`,
-`evidence`, repository-relative `references`, optional unit/workflow, and an
-optional `limitation_class`. States are `verified`, `missing`, `mismatch`,
-`unsupported`, and `not_verifiable`; limitation classes are `remote`,
-`runtime`, and `mutation_required`.
+Without `--verify-remote`, the command reads only local V2 config/state and
+configured workflow files. The default remains offline, token-free,
+deterministic, and mutation-free. Explicit remote verification adds only
+bounded GitHub `GET` requests; it never dispatches, uploads, publishes, writes
+repository settings, or mutates Git or local files. Public repository,
+workflow, tag, and release facts are read anonymously first. A token is
+resolved only for a private-repository retry or protected variable, secret-name,
+or Actions-policy metadata.
+
+It reports `ready`, `ready_with_warnings`, or `not_ready`, uses exit code `1` only
+for `not_ready`, and never runs Git, reads journals, constructs Evidence
+stores, or mutates files. JSON contains stable `readiness`, `summary`, `units`,
+`workflows`, `diagnostics`, and additive deterministic `verifications` plus
+`remote_verification`. The remote summary records `requested`, `status`
+(`not_requested`, `complete`, `partial`, or `unavailable`), and verified,
+unresolved, and failed counts. Verification states additionally include
+`not_attempted`, `unavailable`, `unauthorized`, and `rate_limited` so an access
+failure is not misreported as a missing integration. Collections remain empty
+arrays rather than `null`; tokens, authorization headers, secret values,
+arbitrary variables, raw private response bodies, and absolute paths never
+enter output.
 
 Human output starts with the `Release Integration Doctor` title, readiness,
 severity counts, and inspected unit and workflow counts. A `Diagnostics`
@@ -263,13 +274,28 @@ flow, artifact/checksum identity, and release → plugin-index generation → in
 publication order. Unsupported shapes remain limited; this is not a general
 shell or GoReleaser parser.
 
-The seven stable limitation codes remain, but now describe only future runner/
-test/binary outcome; remote installer and asset availability plus extraction/
-loading; runtime credential issuance, validity, expiry, and authorization;
-remote target acceptance; remote default-branch workflow identity; remote
-repository-variable existence/value; and mutation-required exact dispatch
-authorization. The Doctor does not download, install, build, dispatch, publish,
-query GitHub, or claim local workflow content equals remote content.
+Offline mode retains the seven stable limitation codes. Successful explicit
+remote checks replace the remote-workflow and repository-variable limitations,
+narrow installation uncertainty to download/extraction/execution/loading, and
+narrow publication uncertainty to future acceptance. Secret-name metadata
+never proves issuance, value validity, expiry, authorization, or service
+acceptance. Exact dispatch authorization remains mutation-required, and future
+runner/build and publication outcomes remain runtime- or mutation-dependent.
+Definite missing workflows, byte mismatches, disabled Actions/workflows,
+missing or invalid recognized variables, missing custom-secret metadata, and
+missing exact installation releases/assets become focused errors. Unauthorized,
+rate-limited, unavailable, unsupported, and ambiguous private-resource results
+remain honest partial evidence and do not create false structural errors.
+
+Remote workflow content is compared byte-for-byte on the repository default
+branch. Only locally recognized `NEKO_VERSION` and
+`NEKO_RELEASE_PLUGIN_VERSION` pins and locally referenced custom secret names
+are queried; built-in `GITHUB_TOKEN` is never queried as a repository secret.
+Release and asset checks use exact locally derived tags and names—never
+`/releases/latest`, tag-prefix discovery, newest-run selection, or fuzzy asset
+matching. Workflow runs are not queried because Doctor currently owns no exact
+durable run ID. See [Remote Doctor verification](../release/integration-doctor-remote-verification.md)
+for endpoints, authentication, classifications, and remaining boundaries.
 
 Permission inspection follows GitHub Actions scope replacement directly. An
 omitted job declaration inherits the workflow declaration; an explicit job

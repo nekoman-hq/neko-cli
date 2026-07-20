@@ -44,7 +44,7 @@ The public command contract is duplicated between `manifest.json` and the switch
 | `pkg/git` | Legacy Git queries and the underlying compatibility operations used by focused V1 adapters | `IsClean`, `LatestTag`, `UnitTagsInHistory`, `Current`, `Contributors`, `ContributorsForPaths` | Direct process details remain below release-owned V1 ports; active V1 application code does not import retired raw retired-path cleanup helpers. |
 | `pkg/release` planning | Version bump, execution context, delivery/capability descriptions, materialization plan | `PlanUnitVersionBump`, `BuildReleaseExecutionContext`, `ResolveDelivery`, `ResolveExecutorCapabilities`, `ResolveVersionMaterializer` | `github-actions` is the supported V2 delivery mode; `local` is retained only for V1 compatibility and invalid V2 reporting. |
 | `pkg/release` plan inspection | Token-free read-only local release-plan inspection for one selected source and unit | `HandlePlanAt`, `releasePlanInspectionUseCase`, `ReleasePlanInspection`, `planV2ReleaseFacts` | Reuses canonical V1/V2 planning facts, maps responses only at the command boundary, and does not inspect journals, remotes, tokens, or recovery evidence. |
-| `pkg/release` integration doctor | Strictly local Release V2 config/state and GitHub Actions readiness plus focused local contract evidence | `HandleDoctorAt`, `integrationDoctorInspectionUseCase`, source/workflow/file/origin readers, focused consumer/GoReleaser/installer/credential/publication/boundary inspectors | Uses typed facts/diagnostics and deterministic aggregation; no token/network/Git command, writer, journal store, Evidence writer, state machine, check/provider registry, workflow DSL, shell interpreter, or provider abstraction. |
+| `pkg/release` integration doctor | Default-offline Release V2 config/state and GitHub Actions readiness, focused local contract evidence, and explicit bounded GitHub read verification | `HandleDoctorAt`, `integrationDoctorInspectionUseCase`, source/workflow/file/origin readers, `integrationDoctorGitHubRemoteInspector`, package-private GitHub read client, focused consumer/GoReleaser/installer/credential/publication/boundary inspectors | Uses typed facts/diagnostics and deterministic aggregation. The default path has no token/network capability; `--verify-remote` injects only exact GitHub GET reads and lazy token resolution at the command boundary. No Git command, writer, journal store, Evidence writer, state machine, check/provider registry, generic remote framework, workflow DSL, shell interpreter, or provider abstraction is introduced. |
 | `pkg/release` unit overview | Strictly local Release V2 config/state inventory with current version, tag shape, metadata, alignment, and concise issues | `HandleUnits`, `HandleUnitsAt`, `unitOverviewInspectionUseCase`, `filesystemLocalV2SourceReader`, `mapUnitOverviewResult` | Reuses strict/canonical V2 owners; no workflow parser, Doctor orchestration, Git/network/token/store/writer/planner capability, state machine, registry, or generic inventory framework. |
 | `pkg/release` GitHub workflow scaffolding | Typed V2 source/selection, canonical contract rendering, read-only create/unchanged/conflict planning, narrow atomic creation, and command-owned responses | `HandleGitHubWorkflowInitAt`, `RenderCanonicalGitHubActionsReleaseWorkflow`, `GitHubActionsReleaseWorkflowContractVersion` | GitHub-Actions-only create semantics; no provider registry, YAML editor, token/network/Git capability, implicit update, or publication policy. |
 | `pkg/release` V1 | Typed V1 intent/planning/preview/execution/failures, focused requirements/preflight/materialization/Git/rollback adapters, and explicit executor selection | `V1ReleaseIntent`, `PlanV1Release`, `v1ReleasePreviewUseCase`, `v1ReleaseExecutionUseCase`, `V1Executor` | Production uses a fixed executor catalog. `Service`, `Preflight`, `Tool`, `ToolBase`, and `Register/Get` are bounded compatibility facades. |
@@ -178,7 +178,9 @@ The public command contract is duplicated between `manifest.json` and the switch
 - Entry: `main.main` resolves `workspace.ResolveInspectionRepositoryRoot` only
   for the read-only `doctor` and `units` source-inspection commands. Doctor then
   routes through `HandleDoctorAt`, the typed command handler,
-  and one `integrationDoctorInspectionUseCase`.
+  and one `integrationDoctorInspectionUseCase`. The handler alone parses the
+  optional `--verify-remote` boolean. An absent flag preserves the offline
+  request; a wrong raw type becomes `INVALID_DOCTOR_REQUEST`.
 - Root boundary: inspection root resolution selects the enclosing Git root
   without requiring V2 config and state to be mutually valid. All other
   commands retain strict `ResolveRepositoryRoot`; missing, partial, V1-only,
@@ -220,25 +222,54 @@ The public command contract is duplicated between `manifest.json` and the switch
   shell programs, infer success from names/secret presence, or prove remote
   publication. The publication inspector reads only the two repository-confined
   plugin-index scripts and known literal arguments.
+- Explicit remote inspection: only a request with `VerifyRemote` invokes the
+  injected `integrationDoctorRemoteInspector`. The focused GitHub reader owns
+  exact repository, default-branch workflow content, workflow metadata,
+  recognized variable, referenced custom-secret name, Actions policy, exact
+  release/tag/asset, and exact durable-run reads. Production targets
+  `https://api.github.com`; every possible request is `GET`, redirects are
+  refused, timeout is 12 seconds, response bodies are capped at 1 MiB, and
+  there is no automatic retry or list/latest/fuzzy discovery. Doctor owns no
+  durable run ID and therefore makes no workflow-run request.
+- Authentication boundary: repository identity is anonymous-first. A missing
+  or unauthorized anonymous identity may resolve `GITHUB_TOKEN` once for one
+  authenticated identity lookup, which disambiguates a private repository.
+  Public workflow/release/tag reads remain anonymous; protected Actions-policy,
+  recognized-variable, and custom-secret-name reads reuse the same lazily
+  resolved token. Secret values, token text, authorization headers, raw private
+  response bodies, and arbitrary variables or secret names do not enter the
+  result.
 - Verification model: one small typed fact contains subject, category, state,
   evidence, repository-relative references, optional unit/workflow, and optional
   limitation class. States are `verified`, `missing`, `mismatch`, `unsupported`,
-  and `not_verifiable`; limitation classes are `remote`, `runtime`, and
-  `mutation_required`. This is not an Evidence store, diagnostics engine,
-  registry, state machine, or provider abstraction.
-- Boundary mapping: remote-workflow, repository-variable, and exact-dispatch
-  limitations are emitted only when their local predicates exist. The former
-  unconditional limitation loop no longer exists. Consumer, installation,
-  credential, and publication limitations come from their corresponding
-  focused inspector after a verified or explicitly unsupported local shape.
+  `not_verifiable`, `not_attempted`, `unavailable`, `unauthorized`, and
+  `rate_limited`; limitation classes are `remote`, `runtime`, and
+  `mutation_required`. An additive remote summary records `not_requested`,
+  `complete`, `partial`, or `unavailable` plus verified/unresolved/failed
+  counts. This is not an Evidence store, diagnostics engine, registry, state
+  machine, or provider abstraction.
+- Boundary mapping: offline remote-workflow, repository-variable, and
+  exact-dispatch limitations are emitted only when their local predicates
+  exist. Successful explicit reads replace the first two, narrow installation
+  and publication limitations, and append focused remote facts. Exact dispatch
+  authorization remains `mutation_required`; runtime execution, secret-value
+  validity, future target acceptance, and future consumer behavior remain
+  honest limitations. The former unconditional limitation loop does not
+  return. Consumer, installation, credential, and publication limitations come
+  from their corresponding focused inspector after a verified or explicitly
+  unsupported local shape.
 - Result: diagnostics use the closed severities `error`, `warning`,
   `recommendation`, and `not_verifiable`. Stable ordering is severity, scope,
   unit, workflow, code, and message. Any error yields `not_ready`; otherwise a
   warning yields `ready_with_warnings`; recommendations and not-verifiable
-  facts alone yield `ready`.
+  facts alone yield `ready`. Definite remote missing, mismatch, disabled, or
+  invalid facts are errors. Unauthorized, rate-limited, unavailable,
+  unsupported, and ambiguous private-resource outcomes remain unresolved
+  evidence and cannot erase successful independent facts.
 - Output: `mapIntegrationDoctorResult` alone constructs the plugin response.
   JSON contains `readiness`, severity/verified counts, ordered units, ordered
-  workflows, additive ordered verifications, and ordered diagnostics.
+  workflows, additive ordered verifications, additive `remote_verification`,
+  and ordered diagnostics.
   Transport-only presentation metadata composes a
   titled readiness/count summary, a titled severity/code index with optional
   target and scope, and complete ordered property records headed by severity and
@@ -251,16 +282,23 @@ The public command contract is duplicated between `manifest.json` and the switch
   JSON, and GitHub output exclude the presentation projection and remain
   ANSI-free. `not_ready` requests exit code `1`; the two ready states request
   exit code `0`.
-- Side effects: no config/state/workflow writer, Git command or mutator,
-  network client, token resolver, dispatcher, journal store, Evidence writer,
-  release runner, executor, or publication adapter reaches the use case. It
-  does not call or own the unit overview and does not implement pipeline
-  inspection.
+- Side effects: the default path never invokes the optional remote inspector or
+  token resolver. Explicit remote mode injects only the focused GitHub reader
+  and token resolver; no config/state/workflow writer, Git command or mutator,
+  dispatcher, journal store, Evidence writer, release runner, executor, or
+  publication adapter reaches the use case. Neither mode reads journals,
+  executes a process, dispatches, uploads, publishes, repairs, or mutates local
+  or remote state. Doctor does not call or own the unit overview and does not
+  implement pipeline inspection.
 - Tests: strict source variants, structural workflow checks, canonical and
   custom workflow classification, shared scope, readiness/exit policy,
   deterministic diagnostics, token and secret absence, exact file metadata
   preservation, explicit-root/cwd isolation, responsive human output, JSON
-  isolation, and static no-capability/no-framework guards.
+  isolation, default no-network/no-token behavior, exact fake-server endpoints,
+  anonymous/private authentication, partial failures, rate limits, repository,
+  workflow, variable, secret-name, Actions-policy, release/tag/asset and exact
+  run classifications, output redaction, and static no-mutation/no-framework/
+  exact-identity guards.
 
 #### Release V2 unit overview
 
@@ -570,8 +608,8 @@ V2 pair recovery has a separate focused record at `.neko/release.pair-recovery.j
 | Working directory | production `handleRequestAt` receives `workspace.RepositoryRoot`; compatibility `workspace.ChangeToProjectRoot`, `ToolBase.InUnitRoot`, and cwd facades remain | explicit-root isolation tests plus retained cwd compatibility tests | Production command routing no longer mutates cwd. Compatibility facades still expose process-global cwd semantics when callers choose them. |
 | Filesystem | shared config pair persistence; focused init, plugin-index, migration, V1 materialization, compensation evidence/config, preflight, and executor config/file boundaries | pair replacement seams; V1 evidence-store/config ports; command-owned file/config ports; temporary directories | V1 uses its canonical single-file writer plus a private `0700` common-dir evidence directory and atomically replaced `0600` record; it intentionally does not share the V2 pair transaction. Inactive paths retain some direct `os.*`. |
 | Git | active V2 release/resume use one `GitReleaseCoordinator`; active V1 uses `SystemV1GitWriter`, root-aware named compensation adapters, and a preflight repository port; direct compatibility callers may still use `V1ReleaseRollback`; queries retain command-owned read ports | fake V1 Git/evidence capabilities, coordinator runner, query capabilities, and real temp repositories | V1 destructive compensation uses a fixed V1-only evidence contract and remains intentionally isolated from V2 recovery. |
-| Environment/token | V1-owned legacy token/environment ports; V2 `EnvironmentGitHubActionsDispatchTokenResolver` returning `GitHubActionsDispatchToken` | sentinel fake token/environment/process adapters | V1 and V2 intentionally retain different token types, variable injection, messages, and behavior. |
-| Network | bounded, root-aware V1 GitHub Release client; injected V2 dispatch transport | fake V1 remover/client and local HTTP transport; V2 `RoundTripper` | The active V1 client has a finite timeout, bounded response reads, explicit repository root, a narrow typed-token boundary, and verified GET/DELETE/not-found behavior. |
+| Environment/token | V1-owned legacy token/environment ports; V2 `EnvironmentGitHubActionsDispatchTokenResolver` returning `GitHubActionsDispatchToken`; explicit Doctor remote verification lazily reuses that typed read identity | sentinel fake token/environment/process adapters plus Doctor no-token/default and recording-resolver tests | V1 and V2 intentionally retain different token types, variable injection, messages, and behavior. Default Doctor never resolves a token; explicit Doctor resolves at most once and never exposes the value. |
+| Network | bounded, root-aware V1 GitHub Release client; injected V2 dispatch transport; package-private explicit Doctor GitHub GET client | fake V1 remover/client, V2 `RoundTripper`, and Doctor local `httptest` servers | The active V1 client has a finite timeout, bounded response reads, explicit repository root, a narrow typed-token boundary, and verified GET/DELETE/not-found behavior. Doctor additionally refuses redirects, limits reads to 1 MiB/12 seconds, performs no automatic retry, and exposes only sanitized result classifications. |
 | Time | `ReleaseClock` for release/resume responses, active V2 persistence, and V1 compensation evidence; command-owned query clocks; JReleaser init `v1Clock` | injected fixed clocks and persisted timestamp tests | V1 evidence timestamps support auditability but do not infer completion; direct compatibility model fallbacks remain. |
 | External executables | V1-owned Git/executor process and binary-locator adapters; `du` and inactive paths retain direct execution | fake per-executor runners plus local fake processes | Exact V1 command order, environment, outputs, warnings, failures, and ownership are isolated and characterized. |
 | Progress and logging | active V2 progress uses `ReleaseProgress` plus terminal/diagnostic adapters; V1 and legacy tooling retain package logging; `main` still sets package-global verbose mode | progress characterization, terminal-adapter tests, architecture source assertions, and output inspection | Active V2 application/operation files no longer import the terminal logger. V1 logging redesign and process-global verbose mode remain outside typed release progress reporting. |
@@ -617,7 +655,7 @@ The following are current behavior. They are not statements that every behavior 
 | INV-32 | GoReleaser, JReleaser, and release-it preserve their distinct command/config/push/publication ownership and warning-only dry-run behavior through replaceable ports. Executor outputs/errors redact the legacy token while preserving underlying causes. | concrete `Run` methods, executor system adapters, `RedactV1ProcessResult` | command-order/failure/ownership tests, injected adapter tests, clock test, and sentinel secret tests |
 | INV-33 | Migration reads canonical V1 data but cannot import V1 execution, executor, Git mutation, or rollback internals. V1 executors do not implement the inactive V2-local transaction or inspect source format. | migrate imports, concrete executor orchestration | migration-direction and executor-orchestration architecture tests |
 | INV-34 | Dispatched V2 context validation is strictly local and read-only: it requires one valid unblocked V2 pair, exact unit/version/tag/commit/HEAD/tag-target agreement, performs no token/network/mutation/fetch, and maps output only at the command boundary. | `releaseContextValidationUseCase`, `filesystemReleaseContextSourceReader`, `releaseContextGitAdapter`, `MapValidatedReleaseContext` | application/real-Git/command/output tests plus architecture guards |
-| INV-35 | Release V2 integration diagnostics and local verification facts are offline, token-free, and read-only: relaxed inspection-root discovery exists only so invalid sources can be reported; the doctor inspects canonical source/workflow facts plus supported consumer, GoReleaser, installation, credential, publication, and boundary contracts, preserves shared-workflow scope, never receives mutation/token/network/Git/store/process-execution capabilities, and maps stable readiness/facts/diagnostics only at the command boundary. | `ResolveInspectionRepositoryRoot`, `integrationDoctorInspectionUseCase`, focused source/workflow/file/origin readers and inspectors, `mapIntegrationDoctorResult` | command/source/parser/GoReleaser/installer/credential/publication/dogfood/safety/presentation/explicit-root tests plus architecture and naming guards |
+| INV-35 | Release V2 integration diagnostics are read-only. Default Doctor is offline/token-free and never invokes the optional remote capability. Explicit `--verify-remote` injects only a package-private, exact-identity GitHub GET reader plus lazy typed token resolution at the command boundary; it preserves local/shared-workflow scope, distinguishes definite failure from unresolved access, never reads journals or receives mutation/Git/store/process/dispatch/publication capabilities, and maps stable readiness/facts/remote-summary/diagnostics only at the command boundary. | `ResolveInspectionRepositoryRoot`, `integrationDoctorInspectionUseCase`, focused source/workflow/file/origin readers and inspectors, `integrationDoctorGitHubRemoteInspector`, `integrationDoctorGitHubReadClient`, `mapIntegrationDoctorResult` | command/source/parser/local-inspector/dogfood/safety/presentation/explicit-root tests; fake-server repository/workflow/variable/secret/policy/release/tag/asset/run/auth/rate/partial/redaction tests; architecture, exact-identity, no-mutation, and naming guards |
 | INV-36 | Release V2 unit inventory is local and read-only: every config/state unit remains visible in deterministic order, current versions come only from state, canonical version/tag/unit policies are reused, expected source and row findings use structured exit `1`, and no workflow parser, Doctor orchestration, Git/network/token/store/writer/planner capability reaches the use case. | `HandleUnitsAt`, `unitOverviewInspectionUseCase`, `filesystemLocalV2SourceReader`, `mapUnitOverviewResult` | source/unit/tag/exit/presentation/root/isolation/no-mutation tests plus architecture and naming guards |
 
 ## Architecture strengths

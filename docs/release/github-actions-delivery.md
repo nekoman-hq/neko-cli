@@ -153,8 +153,10 @@ Workflow files are generated only by the explicit create-only scaffolding comman
 
 ## Integration doctor
 
-`neko release doctor [--unit <unit-id>]` is the read-only local readiness
-check for this delivery contract. It loads the strict V2 config/state pair,
+`neko release doctor [--unit <unit-id>]` is the default offline, token-free,
+read-only readiness check for this delivery contract. Adding
+`--verify-remote` explicitly enables only bounded GitHub `GET` reads. The
+command loads the strict V2 config/state pair,
 deduplicates configured workflow paths, parses workflow YAML structurally, and
 reports ordered unit, workflow, verification, and diagnostic facts. Selecting one unit keeps
 all units sharing its workflow in the workflow scope.
@@ -199,8 +201,8 @@ contracts, and the two repository-confined plugin-index scripts. Snapshot or
 skip-publish commands do not prove publication, `/releases/latest` and tag-list
 fallbacks are rejected, and a normal unit cannot enter the plugin index.
 Unsupported dynamic commands remain limited instead of being guessed. No shell
-interpreter, general GoReleaser schema, provider registry, or remote client is
-part of Doctor.
+interpreter, general GoReleaser schema, provider registry, or generic remote
+framework is part of Doctor.
 
 Readiness is `not_ready` with exit code `1` when any error exists,
 `ready_with_warnings` with exit code `0` when only warnings remain, and `ready`
@@ -211,16 +213,28 @@ Facts contain typed state/evidence/repository-relative references and optional
 `remote`, `runtime`, or `mutation_required` limitation class. Each diagnostic contains severity, scope, optional unit
 and workflow identity, stable code, message, and remediation.
 
-The doctor is token-free, network-free, Git-command-free, and mutation-free.
-It locally identifies or verifies structure before retaining seven residual
+Default Doctor is token-free, network-free, Git-command-free, and
+mutation-free. It locally identifies or verifies structure before retaining seven residual
 limitations per supported workflow. They cover only future runner/test/binary
 outcome; remote installer/artifact availability, download, extraction,
 execution, and plugin loading; runtime credential issuance/validity/expiry/
 authorization; remote target state and acceptance; remote default-branch
 workflow identity/enabled state; remote repository-variable existence/value;
 and exact dispatch authorization, which requires a real remote decision. Local
-workflow inspection never claims remote content identity, and Doctor never
-dispatches.
+workflow inspection never claims remote content identity.
+
+Explicit remote mode verifies the GitHub repository/default branch, exact
+default-branch workflow bytes and active state, recognized version-pin
+variables, referenced custom-secret name metadata, Actions policy when
+authorized, and exact locally derived releases/tags/assets. Public facts are
+anonymous-first; protected reads resolve a token once. Built-in `GITHUB_TOKEN`
+is not queried as a repository secret, secret values are never requested, and
+arbitrary variable/secret collections are never listed. There is no automatic
+retry, latest release lookup, fuzzy asset matching, newest-run inference, or
+SHA-only run selection. Remote access failures remain partial not-verifiable
+facts; definite missing/mismatched/disabled configuration is an error. The
+Doctor still never dispatches, publishes, uploads, repairs, or mutates local or
+remote state. See [Remote Doctor verification](integration-doctor-remote-verification.md).
 
 ## Nekocli Production Workflows
 

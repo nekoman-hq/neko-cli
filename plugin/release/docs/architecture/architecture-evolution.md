@@ -151,10 +151,11 @@ V1 inspection is supported as a local planning subset: it reports the legacy sou
 
 ### Release V2 integration doctor
 
-`neko release doctor` is a local, read-only GitHub Actions integration
-inspection rather than an execution mode, validation alias, diagnostics
-framework, unit overview, or pipeline inspector. The flat command accepts only
-optional `--unit` and supports human or JSON output.
+`neko release doctor` is a read-only GitHub Actions integration inspection
+rather than an execution mode, validation alias, diagnostics framework, unit
+overview, or pipeline inspector. The flat command accepts optional `--unit`
+and explicit `--verify-remote`, and supports human or JSON output. Without the
+remote flag it remains offline and token-free.
 
 The executable uses a doctor-specific inspection-root resolver so incomplete
 or conflicting source files can be diagnosed. The typed handler parses one
@@ -180,6 +181,36 @@ authorization is `mutation_required`. Consumer execution, installation,
 credential issuance, and publication acceptance retain only genuine runtime or
 remote uncertainty. Every limitation belongs to a focused predicate; there is
 no unconditional limitation registry or loop.
+
+The explicit remote decision adds one optional inspector port to the existing
+use case. Production composition supplies a package-private GitHub reader and
+the existing typed dispatch-token resolver at the command boundary; the use
+case invokes neither unless `VerifyRemote` is true. The reader is deliberately
+not a provider abstraction or general REST framework: it owns only exact
+repository, default-branch workflow, workflow-state, recognized-variable,
+referenced custom-secret-name, Actions-policy, exact release/tag/asset, and
+exact durable workflow-run GET operations. There are no collection/latest/
+fuzzy discovery operations, no redirects, no automatic retries, a 12-second
+timeout, and a 1 MiB response cap. Because Doctor currently owns no durable run
+ID, the run operation is not invoked.
+
+Repository identity is anonymous-first. Only an ambiguous missing or
+unauthorized repository identity can trigger one authenticated identity lookup;
+protected Actions metadata then reuses the same token resolved at most once.
+Public workflow, release, and tag observations remain anonymous. The result
+never contains a token, authorization header, response body, secret value, or
+arbitrary variable/secret collection. Exact remote workflow bytes are compared
+with the repository-confined local bytes, and release/tag/asset identities come
+only from focused locally verified installation and publication contracts.
+
+The additive remote summary closes explicit observation as `not_requested`,
+`complete`, `partial`, or `unavailable`. Fact states additionally distinguish
+`not_attempted`, `unavailable`, `unauthorized`, and `rate_limited`. Definite
+missing, mismatched, disabled, or invalid configuration is an error; access and
+service uncertainty remains unresolved evidence. Successful remote facts
+replace or narrow their matching offline limitations without claiming future
+runner success, credential-value validity, publication acceptance, or exact
+dispatch authorization.
 
 The result closes severity and readiness policy without a generic state
 machine: any error is `not_ready`; warnings without errors are
@@ -211,11 +242,14 @@ Doctor terminology, diagnostic renderer, document model, layout DSL, theme
 engine, registry, provider abstraction, or state machine.
 Public JSON and raw JSON already exclude the complete `presentation.Table` declaration.
 
-No writer, Git command or mutator, network client, token resolver, dispatcher,
-journal store, Evidence writer, release runner, executor, registry, workflow
-DSL, provider abstraction, or repair capability reaches the use case. The only
-recovery-related read is the existing V2 pair-recovery readiness check required
-to decide whether local config/state facts are trustworthy.
+No writer, Git command or mutator, dispatcher, journal store, Evidence writer,
+release runner, executor, registry, workflow DSL, provider abstraction, generic
+remote framework, or repair capability reaches the use case. Default Doctor
+does not invoke its optional network/token port. Explicit Doctor receives only
+the focused GET reader and lazy token resolver; it cannot dispatch, publish,
+upload, write settings, execute a process, or mutate local or remote state. The
+only recovery-related read is the existing V2 pair-recovery readiness check
+required to decide whether local config/state facts are trustworthy.
 
 ### Release V2 unit overview
 

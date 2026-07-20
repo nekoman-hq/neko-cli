@@ -191,19 +191,30 @@ executorStart
 
 `neko release plan --change <patch|minor|major> [--unit <unit>]` is a dedicated local plan inspection command. It reports the selected release source and unit, current version, requested change, next version, tag, planned materialized files, known release files, local readiness, local blockers, and explicit limitations. Human-readable output gives every limitation its own semantic label instead of one pipe-delimited value. At a known width, property labels are bounded and long values wrap with aligned continuation lines; very narrow or width-unknown output uses vertical properties. The typed plan facts and established JSON `data.items` projection are unchanged. The command does not read tokens, inspect remotes, inspect execution or dispatch journals, write files, mutate Git, dispatch workflows, publish releases, or start executors. It is separate from `--dry-run`: dry-run keeps the existing release preview contract, while `plan` is for stable local planning facts.
 
-`neko release doctor [--unit <unit-id>]` is a strictly local Release V2
-integration inspection. By default it checks all configured units and unique
+`neko release doctor [--unit <unit-id>] [--verify-remote]` is a Release V2
+integration inspection. By default it remains strictly local, offline, and
+token-free. It checks all configured units and unique
 workflow paths; selecting a unit still retains every unit sharing that
 workflow. It returns `ready`, `ready_with_warnings`, or `not_ready`, with exit
 code `1` for `not_ready`. JSON exposes `readiness`, severity and verified
 counts, ordered unit/workflow facts, additive ordered `verifications`, and
-ordered diagnostics. Verification states are `verified`, `missing`, `mismatch`,
-`unsupported`, and `not_verifiable`; optional limitation classes are `remote`,
-`runtime`, and `mutation_required`. References are repository-relative and
-collections are not `null`. The doctor does not use tokens,
-network clients, Git commands, journal stores, Evidence writers, or filesystem
-writers. Source validation only reads the local V2 pair-recovery readiness
-marker already owned by the strict config/state contract.
+ordered diagnostics. Additive `remote_verification` records whether remote
+verification was requested, whether it was complete, partial, or unavailable,
+and verified/unresolved/failed counts. Remote states distinguish `missing`,
+`mismatch`, `not_attempted`, `unavailable`, `unauthorized`, `rate_limited`, and
+`unsupported`. References are repository-relative and collections are not
+`null`.
+
+`--verify-remote` enables only exact GitHub `GET` reads. Repository metadata is
+anonymous-first; a token is resolved only for a private-resource retry or
+protected Actions variable, secret-name, or policy metadata. The Doctor checks
+repository/default-branch identity, exact workflow bytes and enabled state,
+only recognized version variables, only referenced custom-secret names,
+Actions policy, and exact locally derived tags, releases, and assets. It does
+not list arbitrary variables or secrets, query secret values, use latest/fuzzy
+discovery, automatically retry, or select workflow runs without a durable exact
+run ID. It never dispatches, uploads, publishes, writes settings, mutates Git,
+or changes config/state/workflows/journals/Evidence.
 
 Human-readable output presents readiness and counts first, followed by a compact
 diagnostic index and complete responsive details. `Severity` and `Code` are
@@ -225,14 +236,17 @@ shapes remain explicitly limited.
 Supported repository workflows expose five verified fact categories per
 workflow: `consumer_structure`, `goreleaser_configuration`,
 `installation_wiring`, `credential_wiring`, and `publication_identity`.
-Boundary facts retain `remote_workflow_identity`,
+Offline boundary facts retain `remote_workflow_identity`,
 `repository_variable_values`, and `dispatch_authorization` as not verifiable.
+Successful explicit remote verification resolves the first two; exact dispatch
+authorization remains mutation-required.
 Credential names are classified and scoped without reading values. Focused
 installation/publication checks read only supported local workflow,
 GoReleaser, installer, manifest, registry, manager, and plugin-index contracts;
-no commands are executed. Local facts do not prove future runner success,
-remote asset availability, credential validity, target acceptance, or exact
-dispatch authorization.
+no commands are executed. Remote success still does not prove future runner
+success, runtime installation/loading, credential value validity, future
+publication acceptance, or exact dispatch authorization. See
+[Remote Doctor verification](integration-doctor-remote-verification.md).
 
 Permission diagnostics distinguish workflow defaults from job overrides. An
 omitted job declaration inherits the workflow permission set; an explicit job
