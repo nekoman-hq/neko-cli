@@ -40,6 +40,10 @@ func TestPipelineRuntimeCorrelatesDispatchByExactIdentity(t *testing.T) {
 		if response.ExitCode != 0 || fmt.Sprint(response.Data["status"]) != "rejected" {
 			t.Fatalf("response = %#v", response)
 		}
+		recovery := pipelineJSONView(t, response.Data["recovery"])
+		if recovery["resume_eligible"] != false || recovery["retry_safety"] != "automatic_retry_prohibited" {
+			t.Fatalf("recovery = %#v", recovery)
+		}
 		assertPipelineStageRuntime(t, response, "workflow-request-submission", "rejected")
 	})
 
@@ -50,6 +54,10 @@ func TestPipelineRuntimeCorrelatesDispatchByExactIdentity(t *testing.T) {
 		response := inspectPipelineRuntimeForTest(t, fixture.root)
 		if response.ExitCode != 0 || fmt.Sprint(response.Data["status"]) != "uncertain" {
 			t.Fatalf("response = %#v", response)
+		}
+		recovery := pipelineJSONView(t, response.Data["recovery"])
+		if recovery["resume_eligible"] != false || recovery["retry_safety"] != "automatic_retry_prohibited" {
+			t.Fatalf("recovery = %#v", recovery)
 		}
 		assertPipelineStageRuntime(t, response, "workflow-request-submission", "unknown")
 	})

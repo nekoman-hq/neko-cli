@@ -22,6 +22,7 @@ func inspectPipelineRuntime(repositoryRoot string) pipelineinspection.RuntimeSna
 	inspectPipelineRepositoryGit(repositoryRoot, coordinator, &snapshot)
 	inspectPipelineExecutionJournals(repositoryRoot, coordinator, &snapshot)
 	inspectPipelineDispatchJournals(repositoryRoot, &snapshot)
+	applyPipelineDispatchResumeSafety(&snapshot)
 	return snapshot
 }
 

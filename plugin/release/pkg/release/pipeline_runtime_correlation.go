@@ -68,6 +68,26 @@ func observePipelineDispatchJournal(filename, reference string, journal *Dispatc
 	return observation
 }
 
+func applyPipelineDispatchResumeSafety(snapshot *pipelineinspection.RuntimeSnapshot) {
+	dispatches := make(map[string]pipelineinspection.RuntimeDispatchObservation, len(snapshot.Dispatches))
+	for _, dispatch := range snapshot.Dispatches {
+		if dispatch.Valid {
+			dispatches[dispatch.Identity] = dispatch
+		}
+	}
+	for index := range snapshot.Executions {
+		execution := &snapshot.Executions[index]
+		if !execution.Recovery.ResumeEligible || execution.DispatchJournalIdentity == "" {
+			continue
+		}
+		dispatch, found := dispatches[execution.DispatchJournalIdentity]
+		if !found || dispatch.ManualIntervention {
+			execution.Recovery.ResumeEligible = false
+			execution.Recovery.ManualIntervention = execution.Recovery.ManualIntervention || dispatch.ManualIntervention
+		}
+	}
+}
+
 func validatePipelineDispatchJournal(filename string, journal *DispatchJournal) error {
 	if journal.SchemaVersion != dispatchJournalSchemaVersion || !journal.State.Valid() {
 		return fmt.Errorf("dispatch journal is structurally invalid")
