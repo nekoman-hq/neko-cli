@@ -28,9 +28,12 @@ inactive V2 local transaction remain compatibility debt. Production composition
 does not use the registry. The authoritative per-symbol decisions and removal
 preconditions remain in [v1-compatibility-policy.md](v1-compatibility-policy.md).
 
-The V1 requirements behavior is shared through `internal/legacyrequirements` so
-release execution and Validate use one owner. Token lookup order, required tools,
-required files, error text, and redaction are unchanged.
+The source-format V1 requirements behavior is shared through
+`internal/legacyrequirements`, so `ValidateRequirementsAt` and Validate use one
+owner. Active V1/V2 execution-context validation remains a separate unit-root
+contract in `ValidateRequirementsForContext`; it has different dry-run token
+semantics by design. Token lookup order, required files, error text, and
+redaction are unchanged on both characterized paths.
 
 ## V2 compatibility
 

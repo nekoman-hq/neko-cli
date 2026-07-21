@@ -87,6 +87,12 @@ and focused characterization tests. See
 [compatibility-notes.md](compatibility-notes.md) and
 [v1-compatibility-policy.md](v1-compatibility-policy.md).
 
+Every `*_compatibility.go` production file is an explicit quarantine. It may
+contain only classified legacy, deprecated, alias, wrapper, or forwarding
+declarations. Active planning, orchestration, policy, or adapters must have an
+active subject-qualified owner. The compatibility architecture inventory must be
+updated deliberately whenever a compatibility declaration is added or removed.
+
 ## Test and isolation policy
 
 - Keep tool fixtures with the owning tool package and lifecycle tests with the

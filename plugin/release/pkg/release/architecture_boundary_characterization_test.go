@@ -196,7 +196,15 @@ func TestActiveV2CoordinatorRemainsDirectAndCompatibilityTransactionStaysQuarant
 		return true
 	})
 
-	assertCompatibilityTypesConfinedToDeclarations(t, files, "ReleaseTransaction", "MutationTracker")
+	assertCompatibilityTypesConfinedToDeclarations(
+		t,
+		files,
+		"ExecutionPhase",
+		"MutationTracker",
+		"ReleaseTransactionResult",
+		"transactionExecutor",
+		"ReleaseTransaction",
+	)
 	assertGitReleaseCoordinatorPushUnused(t, files)
 }
 

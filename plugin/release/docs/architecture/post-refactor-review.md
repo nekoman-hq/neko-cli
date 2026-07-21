@@ -12,7 +12,7 @@ preserved surfaces.
 
 The architecture is a pragmatic hybrid. Stable public packages and compatibility
 facades remain in place, independent command capabilities live in focused
-`internal` packages, shared facts live in infrastructure-free leaf packages,
+`internal` packages, shared neutral facts live in infrastructure-free leaf packages,
 and the active V2 lifecycle remains an explicit straight-line use case in
 `pkg/release`. It is deliberately not a universal layer tree, service framework,
 pipeline, or second state machine.
@@ -34,9 +34,11 @@ concrete filesystem, Git, process, and HTTP adapters
 
 Composition happens at `plugin/release/main.go`, public compatibility facades,
 or command boundaries. Canonical facts never depend upward on Doctor,
-presentation, journals, or HTTP. Extracted command capabilities never import
-root release orchestration. Response mapping receives typed outcomes and owns no
-lifecycle decision.
+presentation, journals, or HTTP. The JReleaser and release-it configuration
+owners additionally provide focused local config-file load/save codecs; that
+intentional filesystem I/O contains no lifecycle, HTTP, journal, or presentation
+policy. Extracted command capabilities never import root release orchestration.
+Response mapping receives typed outcomes and owns no lifecycle decision.
 
 ## Responsibility map
 
@@ -44,9 +46,9 @@ lifecycle decision.
 | --- | --- | --- |
 | `plugin/release` | Decode/encode the plugin protocol, resolve one repository root, construct fresh V1 executors, and route commands | Composition only; no domain model, lifecycle, or persistence |
 | `internal/releasetool` | Canonical identity, display, command, configuration-candidate, and V1 behavior facts for supported release tools | Pure leaf facts |
-| `internal/releasetool/goreleaser` | GoReleaser config parsing, artifact-contract parsing, and invocation facts | Pure/local reads; no Doctor, HTTP, journals, or presentation |
-| `internal/releasetool/jreleaser` | Canonical JReleaser configuration parsing/rewriting and version normalization | Pure/local reads |
-| `internal/releasetool/releaseit` | Canonical release-it configuration parsing | Pure/local reads |
+| `internal/releasetool/goreleaser` | GoReleaser config parsing, artifact-contract parsing, and invocation facts | Pure byte/model facts; no filesystem, Doctor, HTTP, journals, or presentation |
+| `internal/releasetool/jreleaser` | Canonical JReleaser configuration model, local load/save codec, rewriting, and version normalization | Focused local config reads/writes; no HTTP or lifecycle policy |
+| `internal/releasetool/releaseit` | Canonical release-it configuration model, local load/save codec, and defaults | Focused local config reads/writes; no HTTP or lifecycle policy |
 | `internal/releaseworkflow` | Canonical workflow name/file/ref/inputs and repository-target facts | Pure leaf facts |
 | `internal/githubdispatch` | One bounded GitHub workflow-dispatch POST transport and response sanitization | HTTP mutation leaf; no lifecycle policy |
 | `internal/releasesource` | Tolerant, local, read-only V1/V2 source classification | Read-only leaf |
@@ -54,7 +56,7 @@ lifecycle decision.
 | `internal/unitoverview` | Local V2 unit inventory and its response presentation | Read-only command capability |
 | `internal/contextvalidation` | Local/CI release-context validation and response presentation | Read-only command capability |
 | `internal/workflowinit` | Canonical workflow preview and create-only persistence | One focused filesystem mutation |
-| `internal/legacyrequirements` | V1 token, tool, and required-file validation retained for release and Validate | Compatibility leaf |
+| `internal/legacyrequirements` | Source-format V1 token and configuration-file validation retained for the public V1 facade and Validate | Compatibility leaf; execution-context requirements remain distinct |
 | `pkg/config` | V1/V2 models, loading, normalization, validation, path rules, atomic writes, and V2 pair persistence/recovery | Canonical configuration/state owner |
 | `pkg/release` | V1 planning/compatibility, V2 planning, explicit release orchestration, journals, Git coordination, dispatch handoff, resume, and public facades | Authoritative release lifecycle owner |
 | `pkg/release/tool/*` | Behavior-preserving V1 GoReleaser, JReleaser, and release-it executor adapters | Process/filesystem/Git compatibility adapters |
@@ -68,6 +70,105 @@ lifecycle decision.
 | `pkg/workspace` | Resolve and validate explicit roots; retain isolated cwd compatibility helpers | Root/path boundary |
 | `pkg/git` | Retained legacy and read-only Git helpers used below focused ports | Compatibility infrastructure |
 | `pkg/metadata` | Plugin identity and version | Static facts |
+
+## Refactor metrics
+
+The baseline is `cd2e590`, immediately before the eleven-commit code-quality
+sequence. Production files and lines count direct non-test Go files in
+`plugin/release/pkg/release`; internal packages count Go packages below
+`plugin/release/internal`; moved files are Git-detected production Go renames.
+
+| Measure | Before | After |
+| --- | ---: | ---: |
+| `pkg/release` production files | 110 | 88 |
+| `pkg/release` production lines | 18,939 | 11,440 |
+| Release internal packages | 0 | 12 |
+| Moved production files | 0 | 47 |
+
+## Responsibilities moved to `plugin/release/internal`
+
+The following is the complete responsibility transfer made by this refactor:
+
+1. shared release-tool identity, display, configuration-candidate, command, and
+   V1-behavior facts moved to `internal/releasetool`;
+2. reusable GoReleaser config/artifact parsing and invocation facts moved to
+   `internal/releasetool/goreleaser`;
+3. canonical JReleaser config load/save, rewriting, and version facts moved to
+   `internal/releasetool/jreleaser`;
+4. canonical release-it config load/save and defaults moved to
+   `internal/releasetool/releaseit`;
+5. workflow names, files, refs, canonical inputs, and repository-target facts
+   moved to `internal/releaseworkflow`;
+6. the bounded GitHub workflow-dispatch POST and response sanitization moved to
+   `internal/githubdispatch`;
+7. tolerant local V1/V2 source inspection moved to `internal/releasesource`;
+8. Doctor inspection, diagnostics, presentation, optional GET-only remote
+   verification, and its white-box tests moved to `internal/doctor`;
+9. Unit Overview inspection and presentation moved to `internal/unitoverview`;
+10. dispatched Context Validation inspection, Git reads, diagnostics, and
+    presentation moved to `internal/contextvalidation`;
+11. Workflow Init source selection, canonical rendering, create-only policy,
+    filesystem persistence, and presentation moved to `internal/workflowinit`;
+12. the source-format V1 token/config-file requirement contract shared by the
+    public requirements facade and Validate moved to `internal/legacyrequirements`.
+
+## Responsibilities intentionally retained in `pkg/release`
+
+| Retained responsibility | Why it belongs here |
+| --- | --- |
+| V1/V2 source selection and release command start | It selects the authoritative release application exactly once and establishes the release identity. |
+| immutable V2 execution context and active `ReleasePlan` construction | These are the canonical inputs and facts consumed by the lifecycle, journal identity, and command result. |
+| V2 preflight and exact named mutation ordering | `githubActionsReleaseUseCase.Run` is the sole active coordinator and must keep the safety order locally auditable. |
+| known-file materialization and state transactions | They define the exact local mutations and bounded restoration allowed before commit uncertainty. |
+| release Git coordination and verification | Commit, tag, targeted staging, ordered pushes, and evidence checks are lifecycle operations reused by execution and resume. |
+| execution and dispatch journal application policy | Pending/confirmed transitions, immutable identities, and terminal classifications are authoritative lifecycle state. |
+| workflow-request preparation, typed token boundary, result classification, and handoff | These surround the internal POST transport with lifecycle identity, evidence, and accepted-handoff policy. |
+| resume assessment, recovery policy, and named continuation operations | Resume must reuse the same authoritative operations rather than implement a second state machine. |
+| V1 intent, planning, execution coordination, and compensation | V1 remains a supported release lifecycle with its own characterized safety/evidence contract. |
+| release command request/outcome/progress and response mapping | These are the supported public release boundary; mapping remains policy-free and adjacent to the lifecycle result it exposes. |
+| public Doctor, Units, Context Validation, and Workflow Init facades | These are compatibility aliases/forwarders only; their implementations and policy live in the focused internal packages. |
+| deprecated V1 and inactive V2-local compatibility surfaces | They preserve supported historical Go contracts, are explicitly quarantined, and are not selected by active production composition. |
+
+No retained root responsibility owns reusable tool parsing, Doctor diagnostics,
+Unit Overview inspection, Context Validation inspection, Workflow Init policy,
+workflow static facts, or dispatch HTTP.
+
+## Final `pkg/release` cohesion assessment
+
+The assessment examined declarations, imports, direct I/O, mutation capability,
+and call direction rather than accepting filenames as evidence:
+
+- `github_actions_release_use_case.go` contains only the authoritative ordered
+  V2 coordinator and its consumer-owned ports; named planning, local-file, Git,
+  and workflow effects live in their subject files;
+- `v2_release_plan.go` owns only the active immutable `ReleasePlan` derivation;
+  no active planning declaration remains in a compatibility file;
+- execution-journal model/transitions, store I/O, recovery assessment, and
+  dispatch-journal model/store remain separate subjects even where the model is
+  necessarily large because its transition validation is authoritative;
+- materialization and state transactions each own one bounded local mutation and
+  restoration contract; Git staging, commit, tag, push, and query behavior are
+  separated by operation subject;
+- resume discovery/policy and named continuation operations remain lifecycle
+  code because they consume authoritative evidence and reuse active operations;
+- V1 planning, execution, adapters, compensation evidence, compensation store,
+  compensation policy, and named compensation operations are separate by safety
+  responsibility while remaining in the supported V1 lifecycle owner;
+- request parsing, typed command outcomes, response mapping, progress facts, and
+  terminal rendering are distinct; response code imports no journal, Git, or
+  HTTP mutation policy;
+- Doctor, Unit Overview, Workflow Init, and Context Validation root files contain
+  only direct internal calls, type aliases, constant aliases, or mapping
+  forwarders, enforced structurally;
+- every `*_compatibility.go` declaration is explicitly inventoried as legacy,
+  deprecated, alias, wrapper, or forwarding code; active declarations fail the
+  compatibility architecture guard.
+
+The remaining large production files are cohesive lifecycle schemas,
+authoritative transition owners, safety stores, or explicit use cases. They are
+reviewed by complexity and function-length controls; none is retained merely to
+avoid a file move, and no maximum-file-count guard substitutes for responsibility
+review.
 
 ## Root release responsibility
 
@@ -154,8 +255,11 @@ dispatch evidence, applies one pure continuation policy, and reuses the same
 named operations as active execution. Transition, retry, and uncertainty policy
 is not copied into response mapping or transports.
 
-`ExecutionPhase` and `MutationTracker` remain quarantined compatibility types and
-are not used by active production composition. There is no operation registry,
+`ExecutionPhase`, `MutationTracker`, and `ReleaseTransactionResult` remain
+quarantined compatibility types in `v2_local_transaction_compatibility.go` and
+are not used by active production composition. `ReleasePlan` and
+`BuildReleasePlan` are active planning declarations owned by
+`v2_release_plan.go`. There is no operation registry,
 middleware chain, event loop, mutable pipeline context, dynamic step graph, or
 generic pipeline executor. No Pipeline Inspection capability was added.
 

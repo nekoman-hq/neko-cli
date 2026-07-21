@@ -239,7 +239,7 @@ func newGitReleaseResult(ctx *ReleaseExecutionContext, files KnownReleaseFiles) 
 		Unit:              ctx.Unit.ID,
 		Version:           ctx.NextVersion,
 		Tag:               ctx.Tag,
-		ReachedPhase:      string(ExecutionPhasePlanned),
+		ReachedPhase:      "planned",
 		KnownReleaseFiles: files.RelativePaths(),
 		RecoveryGuidance:  recoveryGuidanceBeforeCommit(),
 	}
