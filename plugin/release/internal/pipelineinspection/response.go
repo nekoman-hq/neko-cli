@@ -9,13 +9,11 @@ import (
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata"
 )
 
-var pipelineStageColumns = []presentation.Column{
-	{Key: "label", Label: "Stage", Essential: true},
-	{Key: "runtime_status", Label: "Runtime", Essential: true},
-	{Key: "owner", Label: "Owner", Essential: true},
-	{Key: "configuration_status", Label: "Configured"},
-	{Key: "location", Label: "Location"},
-	{Key: "mutation", Label: "Mutation"},
+var pipelineVerificationColumns = []presentation.Column{
+	{Key: "category", Label: "Category", Essential: true},
+	{Key: "status", Label: "Status", RoleKey: "status_role", Essential: true},
+	{Key: "subject", Label: "Subject", Essential: true},
+	{Key: "class", Label: "Class"},
 	{Key: "source", Label: "Source"},
 }
 
@@ -28,8 +26,8 @@ func mapPipelineResult(result *pipelineResult) *plugin.Response {
 		RendererHint:           "table",
 		PresentationProperties: pipelineSummaryProperties(result),
 		PresentationTable: &presentation.Table{
-			Title: "Stages", Columns: append([]presentation.Column(nil), pipelineStageColumns...),
-			Rows:    pipelineStageRows(result.Stages),
+			Title: "Verification Facts", Columns: append([]presentation.Column(nil), pipelineVerificationColumns...),
+			Rows:    pipelineVerificationRows(result.Verification.Facts),
 			Details: &presentation.Properties{Title: "Runtime and Limitations", Properties: pipelineResultDetails(result)},
 		},
 	}
@@ -37,6 +35,18 @@ func mapPipelineResult(result *pipelineResult) *plugin.Response {
 		response.ExitCode = 1
 	}
 	return response
+}
+
+func pipelineVerificationRows(facts []VerificationFact) []map[string]any {
+	rows := make([]map[string]any, 0, len(facts))
+	for _, fact := range facts {
+		rows = append(rows, map[string]any{
+			"id": fact.ID, "category": fact.Category, "class": fact.Class,
+			"status": fact.Status, "status_role": string(pipelineVerificationStatusRole(fact.Status)),
+			"subject": fact.Subject, "source": fact.Source,
+		})
+	}
+	return rows
 }
 
 func pipelineStageRows(stages []LifecycleStage) []map[string]any {
@@ -70,7 +80,13 @@ func pipelineStageRows(stages []LifecycleStage) []map[string]any {
 }
 
 func pipelineResultDetails(result *pipelineResult) []presentation.Property {
-	details := make([]presentation.Property, 0, len(result.Limitations)+6)
+	details := make([]presentation.Property, 0, len(result.Stages)+len(result.Limitations)+6)
+	for index, stage := range result.Stages {
+		details = append(details, presentation.Property{
+			Label: "Stage " + strconv.Itoa(index+1),
+			Value: stage.Label + " (" + string(stage.RuntimeStatus) + ", " + string(stage.Owner) + ")",
+		})
+	}
 	if result.Execution.Present {
 		details = append(details, presentation.Property{Label: "Execution Evidence", Value: result.Execution.Identity + " (" + result.Execution.State + ")"})
 	}
@@ -104,6 +120,7 @@ func pipelineResponseData(result *pipelineResult) map[string]any {
 		"local_git":           result.LocalGit,
 		"recovery":            result.Recovery,
 		"manual_intervention": result.ManualIntervention,
+		"verification":        result.Verification,
 		"limitations":         append(make([]string, 0, len(result.Limitations)), result.Limitations...),
 	}
 }
@@ -124,6 +141,11 @@ func pipelineSummaryProperties(result *pipelineResult) *presentation.Properties 
 			{Label: "Recovery", Value: pipelineDisplayValue(result.Recovery.Classification, "not_evaluated")},
 			{Label: "Resume Eligible", Value: strconv.FormatBool(result.Recovery.ResumeEligible)},
 			{Label: "Manual Intervention", Value: strconv.FormatBool(result.ManualIntervention.Required)},
+			{Label: "Verification", Value: string(result.Verification.Summary.Status), Role: pipelineVerificationSummaryRole(result.Verification.Summary.Status)},
+			{Label: "Verified Facts", Value: strconv.Itoa(result.Verification.Summary.Verified)},
+			{Label: "Unresolved Facts", Value: strconv.Itoa(result.Verification.Summary.Unresolved)},
+			{Label: "Not Checked Facts", Value: strconv.Itoa(result.Verification.Summary.NotChecked)},
+			{Label: "Remote Verification", Value: result.Verification.Summary.RemoteStatus},
 		},
 	}
 }
@@ -164,7 +186,37 @@ func normalizePipelineArrays(result *pipelineResult) *pipelineResult {
 	if result.Limitations == nil {
 		result.Limitations = make([]string, 0)
 	}
+	if result.Verification.Facts == nil {
+		result.Verification.Facts = make([]VerificationFact, 0)
+	}
 	return result
+}
+
+func pipelineVerificationStatusRole(status VerificationStatus) presentation.StyleRole {
+	switch status {
+	case VerificationVerified:
+		return presentation.StyleSuccess
+	case VerificationFailed:
+		return presentation.StyleError
+	case VerificationNotChecked, VerificationUnresolved, VerificationUnavailable,
+		VerificationUnauthorized, VerificationRateLimited:
+		return presentation.StyleWarning
+	default:
+		return presentation.StyleDefault
+	}
+}
+
+func pipelineVerificationSummaryRole(status verificationSummaryStatus) presentation.StyleRole {
+	switch status {
+	case verificationSummaryVerified:
+		return presentation.StyleSuccess
+	case verificationSummaryFailed:
+		return presentation.StyleError
+	case verificationSummaryPartial, verificationSummaryUnresolved, verificationSummaryNotChecked:
+		return presentation.StyleWarning
+	default:
+		return presentation.StyleDefault
+	}
 }
 
 func mapPipelineFailure(failure *commandFailure) *plugin.Response {

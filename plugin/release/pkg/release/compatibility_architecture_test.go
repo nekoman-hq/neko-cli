@@ -92,12 +92,14 @@ func TestExtractedCommandRootFacadesRemainThin(t *testing.T) {
 func TestPipelineRootFacadeContainsOnlyRuntimeInspectionComposition(t *testing.T) {
 	parsed := parseCompatibilityArchitectureFile(t, "pipeline.go")
 	allowed := map[string]bool{
-		"ResolveInspectionRepositoryRoot":  true,
-		"HandlePipelineAt":                 true,
-		"inspectPipelineRuntime":           true,
-		"configuredReleaseLifecycleStages": true,
-		"HandlePipelineRuntimeAt":          true,
-		"Path":                             true,
+		"ResolveInspectionRepositoryRoot":     true,
+		"HandlePipelineAt":                    true,
+		"inspectLocalPipelineVerification":    true,
+		"inspectPipelineRuntime":              true,
+		"configuredReleaseLifecycleStages":    true,
+		"HandlePipelineRuntimeAt":             true,
+		"HandlePipelineRuntimeVerificationAt": true,
+		"Path":                                true,
 	}
 	ast.Inspect(parsed, func(node ast.Node) bool {
 		call, ok := node.(*ast.CallExpr)

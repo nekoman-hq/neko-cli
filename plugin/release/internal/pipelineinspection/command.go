@@ -11,9 +11,10 @@ import (
 )
 
 type pipelineCommandHandler struct {
-	root    workspace.RepositoryRoot
-	stages  []LifecycleStage
-	runtime RuntimeSnapshot
+	root         workspace.RepositoryRoot
+	stages       []LifecycleStage
+	runtime      RuntimeSnapshot
+	verification VerificationSnapshot
 }
 
 func parsePipelineRequest(root workspace.RepositoryRoot, request plugin.Request) (pipelineRequest, *commandFailure) {
@@ -46,7 +47,7 @@ func (handler pipelineCommandHandler) Handle(_ context.Context, request plugin.R
 	if failure != nil {
 		return mapPipelineFailure(failure), nil
 	}
-	result, failure := inspectConfiguredPipeline(typedRequest, handler.stages, handler.runtime)
+	result, failure := inspectConfiguredPipeline(typedRequest, handler.stages, handler.runtime, handler.verification)
 	if failure != nil {
 		return mapPipelineFailure(failure), nil
 	}
@@ -78,6 +79,23 @@ func HandlePipelineRuntimeAt(root workspace.RepositoryRoot, request plugin.Reque
 	handler := pipelineCommandHandler{
 		root: root, stages: append([]LifecycleStage(nil), stages...),
 		runtime: cloneRuntimeSnapshot(runtime),
+	}
+	return handler.Handle(context.Background(), request)
+}
+
+// HandlePipelineRuntimeVerificationAt projects one Release V2 pipeline with
+// immutable authoritative runtime and verification facts supplied by
+// pkg/release.
+func HandlePipelineRuntimeVerificationAt(
+	root workspace.RepositoryRoot,
+	request plugin.Request,
+	stages []LifecycleStage,
+	runtime RuntimeSnapshot,
+	verification VerificationSnapshot,
+) (*plugin.Response, error) {
+	handler := pipelineCommandHandler{
+		root: root, stages: append([]LifecycleStage(nil), stages...),
+		runtime: cloneRuntimeSnapshot(runtime), verification: cloneVerificationSnapshot(verification),
 	}
 	return handler.Handle(context.Background(), request)
 }

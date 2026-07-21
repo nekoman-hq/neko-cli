@@ -13,7 +13,12 @@ import (
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
-func inspectConfiguredPipeline(request pipelineRequest, stages []LifecycleStage, runtime RuntimeSnapshot) (*pipelineResult, *commandFailure) {
+func inspectConfiguredPipeline(
+	request pipelineRequest,
+	stages []LifecycleStage,
+	runtime RuntimeSnapshot,
+	verification VerificationSnapshot,
+) (*pipelineResult, *commandFailure) {
 	snapshot := (releasesource.FilesystemReader{}).Read(request.RepositoryRoot)
 	if failure := classifyPipelineSource(snapshot); failure != nil {
 		return nil, failure
@@ -43,6 +48,7 @@ func inspectConfiguredPipeline(request pipelineRequest, stages []LifecycleStage,
 	}
 	result := newConfiguredPipelineResult(*unit, identity, tagSpec, stages, consumerFacts)
 	applyPipelineRuntime(result, runtime)
+	result.Verification = projectPipelineVerification(verification)
 	return result, nil
 }
 

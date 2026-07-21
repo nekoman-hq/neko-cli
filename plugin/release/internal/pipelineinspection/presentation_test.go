@@ -11,10 +11,10 @@ import (
 	"github.com/nekoman-hq/neko-cli/pkg/renderer"
 )
 
-func TestPipelinePresentationKeepsEssentialAndOptionalStageColumnsResponsive(t *testing.T) {
+func TestPipelinePresentationKeepsEssentialAndOptionalVerificationColumnsResponsive(t *testing.T) {
 	response := mapPipelineResult(pipelinePresentationFixture())
 	normal := ansi.Strip(renderPipelineForTest(t, response, pipelineTestWidth{width: 120, available: true}, false))
-	for _, want := range []string{"Release Pipeline Inspection", "Stages", "Stage", "Runtime", "Owner", "Configured", "Location", "Mutation", "Source", "Resolve release source", "not_observed", "configured", "Neko CLI"} {
+	for _, want := range []string{"Release Pipeline Inspection", "Verification Facts", "Category", "Status", "Subject", "Class", "Source", "consumer_structure", "verified", "release-service.yml", "doctor", "Resolve release source", "not_observed", "Neko CLI"} {
 		if !strings.Contains(normal, want) {
 			t.Fatalf("normal output omitted %q:\n%s", want, normal)
 		}
@@ -22,7 +22,7 @@ func TestPipelinePresentationKeepsEssentialAndOptionalStageColumnsResponsive(t *
 
 	narrow := renderPipelineForTest(t, response, pipelineTestWidth{width: 30, available: true}, false)
 	narrowPlain := ansi.Strip(narrow)
-	for _, want := range []string{"Stage", "Runtime", "Owner", "Resolve release", "not_observed", "Neko CLI", "Limitations"} {
+	for _, want := range []string{"Category", "Status", "Subject", "consumer", "verified", "Resolve release", "not_observed", "Limitations"} {
 		if !strings.Contains(narrowPlain, want) {
 			t.Fatalf("narrow output omitted %q:\n%s", want, narrowPlain)
 		}
@@ -38,7 +38,7 @@ func TestPipelinePresentationIsDeterministicAtUnknownWidth(t *testing.T) {
 		t.Fatalf("unknown-width output changed:\nfirst=%q\nsecond=%q", first, second)
 	}
 	plain := ansi.Strip(first)
-	for _, want := range []string{"Stage: Resolve release source", "Runtime: not_observed", "Owner: Neko CLI", "Configured: configured", "Execution journals were not inspected."} {
+	for _, want := range []string{"Category: consumer_structure", "Status: verified", "Subject: .github/workflows/release-service.yml", "Stage 1", "Resolve release source (not_observed, Neko CLI)", "Execution journals were not inspected."} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("unknown-width output omitted %q:\n%s", want, plain)
 		}
@@ -126,6 +126,14 @@ func pipelinePresentationFixture() *pipelineResult {
 			Mutation: MutationNone, ConfigurationStatus: StageConfigured,
 			Source: "pkg/release/release_start_v2.go",
 		}},
+		Verification: projectPipelineVerification(VerificationSnapshot{
+			RemoteStatus: "not_requested",
+			Facts: []VerificationFact{{
+				Category: "consumer_structure", Class: VerificationLocal, Status: VerificationVerified,
+				Subject: ".github/workflows/release-service.yml", Evidence: "Consumer structure is locally verified.",
+				Source: "doctor", Scope: "workflow", References: []string{".github/workflows/release-service.yml"},
+			}},
+		}),
 		Limitations: []string{"Execution journals were not inspected."},
 	}
 }

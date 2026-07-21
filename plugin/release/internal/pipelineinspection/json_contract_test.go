@@ -39,7 +39,7 @@ func TestPipelineJSONSchemaVersionOneIsStableAndPresentationFree(t *testing.T) {
 	if err := json.Unmarshal(first.Bytes(), &envelope); err != nil {
 		t.Fatal(err)
 	}
-	wantKeys := []string{"dispatch", "execution", "limitations", "local_git", "manual_intervention", "progress_inspection", "recovery", "release", "repository", "schema_version", "stages", "status", "unit", "workflow"}
+	wantKeys := []string{"dispatch", "execution", "limitations", "local_git", "manual_intervention", "progress_inspection", "recovery", "release", "repository", "schema_version", "stages", "status", "unit", "verification", "workflow"}
 	gotKeys := make([]string, 0, len(envelope.Data))
 	for key := range envelope.Data {
 		gotKeys = append(gotKeys, key)
@@ -49,7 +49,7 @@ func TestPipelineJSONSchemaVersionOneIsStableAndPresentationFree(t *testing.T) {
 		t.Fatalf("schema keys = %#v, want %#v", gotKeys, wantKeys)
 	}
 	text := first.String()
-	for _, required := range []string{`"schema_version": 1`, `"stages": [`, `"limitations": [`, `"materialized_files": []`, `"consumer_operations": []`, `"execution_progress": "not_inspected"`, `"runtime_status": "not_observed"`, `"observations": []`} {
+	for _, required := range []string{`"schema_version": 1`, `"stages": [`, `"verification": {`, `"facts": []`, `"limitations": [`, `"materialized_files": []`, `"consumer_operations": []`, `"execution_progress": "not_inspected"`, `"runtime_status": "not_observed"`, `"observations": []`} {
 		if !strings.Contains(text, required) {
 			t.Errorf("JSON omitted %s:\n%s", required, text)
 		}
@@ -108,6 +108,15 @@ func TestPipelineRuntimeJSONSectionsHaveExactAdditiveKeys(t *testing.T) {
 		"classification", "evaluated", "manual_intervention_required", "reasons", "resume_eligible", "retry_safety", "safe_to_continue",
 	})
 	assertPipelineJSONKeys(t, data["manual_intervention"], []string{"reasons", "required"})
+	assertPipelineJSONKeys(t, data["verification"], []string{"facts", "summary"})
+	var verification map[string]json.RawMessage
+	if err := json.Unmarshal(data["verification"], &verification); err != nil {
+		t.Fatal(err)
+	}
+	assertPipelineJSONKeys(t, verification["summary"], []string{
+		"failed", "local_status", "not_checked", "partial", "remote_attempted", "remote_requested",
+		"remote_status", "status", "unresolved", "verified",
+	})
 	assertPipelineJSONKeys(t, data["local_git"], []string{
 		"branch", "commit_content_verified", "commit_exists", "consistent", "expected_commit", "expected_tag", "head",
 		"head_contains_expected_commit", "index_contains_recovery_evidence", "index_state", "remote_freshness", "scope",

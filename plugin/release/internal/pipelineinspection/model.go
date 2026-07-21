@@ -380,6 +380,7 @@ type pipelineResult struct {
 	LocalGit           pipelineLocalGit           `json:"local_git"`
 	Recovery           pipelineRecovery           `json:"recovery"`
 	ManualIntervention pipelineManualIntervention `json:"manual_intervention"`
+	Verification       pipelineVerification       `json:"verification"`
 	Limitations        []string                   `json:"limitations"`
 	InvalidEvidence    bool                       `json:"-"`
 }
