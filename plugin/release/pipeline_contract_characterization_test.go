@@ -51,6 +51,7 @@ func TestPipelineInspectionUnitSelectionPolicyCharacterization(t *testing.T) {
 }
 
 func TestPipelineInspectionV1SourceCharacterization(t *testing.T) {
+	//nolint:staticcheck // This characterization intentionally locks the legacy V1 boundary.
 	repository := releaseconfig.NormalizeV1Repository("/repository", &releaseconfig.V1ReleaseConfig{
 		ProjectName: "legacy", Version: "1.2.3",
 	})

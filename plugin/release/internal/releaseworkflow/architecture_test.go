@@ -12,6 +12,7 @@ import (
 )
 
 func TestReleaseWorkflowFactsHaveNoHTTPCapabilityOrLifecycleOwnership(t *testing.T) {
+	const neutralReleaseToolFacts = "github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool"
 	for _, file := range parseReleaseWorkflowProductionFiles(t) {
 		for _, specification := range file.Imports {
 			importPath, err := strconv.Unquote(specification.Path.Value)
@@ -19,7 +20,7 @@ func TestReleaseWorkflowFactsHaveNoHTTPCapabilityOrLifecycleOwnership(t *testing
 				t.Fatalf("unquote import: %v", err)
 			}
 			if importPath == "net/http" || importPath == "os" || importPath == "os/exec" ||
-				strings.HasPrefix(importPath, "github.com/nekoman-hq/neko-cli/plugin/release/") {
+				(importPath != neutralReleaseToolFacts && strings.HasPrefix(importPath, "github.com/nekoman-hq/neko-cli/plugin/release/")) {
 				t.Errorf("static release workflow facts import prohibited capability %q", importPath)
 			}
 		}

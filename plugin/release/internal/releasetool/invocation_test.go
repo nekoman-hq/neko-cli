@@ -1,4 +1,4 @@
-package goreleaser
+package releasetool
 
 import "testing"
 

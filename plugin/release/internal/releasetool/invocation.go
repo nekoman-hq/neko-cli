@@ -1,8 +1,9 @@
-package goreleaser
+package releasetool
 
 import "strings"
 
-// Invocation is the neutral classification of one GoReleaser argument string.
+// Invocation is the neutral classification of one configured release-tool
+// argument string.
 type Invocation struct {
 	Command         string
 	ConfigReference string
@@ -11,8 +12,8 @@ type Invocation struct {
 	RealPublication bool
 }
 
-// ClassifyArguments classifies the focused GoReleaser command and flags used
-// by Release Plugin workflows. It does not resolve workflow environment values.
+// ClassifyArguments classifies the focused command and flags used by Release
+// Plugin workflows. It does not resolve workflow environment values.
 func ClassifyArguments(arguments string) Invocation {
 	realPublication := classifiesAsRealPublication(arguments)
 	normalized := strings.NewReplacer(
@@ -45,9 +46,7 @@ func ClassifyArguments(arguments string) Invocation {
 }
 
 // classifiesAsRealPublication intentionally preserves the existing Doctor
-// classifier's treatment of raw workflow arguments. In particular, a quoted
-// command token is not considered a publication even though the normalized
-// command fact is still useful to workflow inspection.
+// classifier's treatment of raw workflow arguments.
 func classifiesAsRealPublication(arguments string) bool {
 	fields := strings.Fields(arguments)
 	if len(fields) == 0 || fields[0] != "release" {

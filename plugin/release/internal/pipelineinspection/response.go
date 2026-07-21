@@ -19,6 +19,7 @@ var pipelineStageColumns = []presentation.Column{
 }
 
 func mapPipelineResult(result *pipelineResult) *plugin.Response {
+	result = normalizePipelineArrays(result)
 	rows := make([]map[string]any, 0, len(result.Stages))
 	for _, stage := range result.Stages {
 		row := map[string]any{
@@ -68,6 +69,28 @@ func mapPipelineResult(result *pipelineResult) *plugin.Response {
 			Details: &presentation.Properties{Title: "Limitations", Properties: limitations},
 		},
 	}
+}
+
+func normalizePipelineArrays(result *pipelineResult) *pipelineResult {
+	if result == nil {
+		return result
+	}
+	if result.Release.MaterializedFiles == nil {
+		result.Release.MaterializedFiles = make([]pipelineMaterializedFile, 0)
+	}
+	if result.Workflow.RequiredInputs == nil {
+		result.Workflow.RequiredInputs = make([]string, 0)
+	}
+	if result.Workflow.ConsumerOperations == nil {
+		result.Workflow.ConsumerOperations = make([]string, 0)
+	}
+	if result.Stages == nil {
+		result.Stages = make([]LifecycleStage, 0)
+	}
+	if result.Limitations == nil {
+		result.Limitations = make([]string, 0)
+	}
+	return result
 }
 
 func mapPipelineFailure(failure *commandFailure) *plugin.Response {

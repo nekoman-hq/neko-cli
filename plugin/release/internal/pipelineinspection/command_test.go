@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
 )
@@ -25,19 +26,31 @@ func TestPipelineCommandProjectsConfiguredIdentityWithoutRuntimeClaims(t *testin
 	if response.Data["schema_version"] != 1 || response.Data["status"] != pipelineReady {
 		t.Fatalf("schema/status = %#v", response.Data)
 	}
-	unit := response.Data["unit"].(pipelineUnit)
+	unit, ok := response.Data["unit"].(pipelineUnit)
+	if !ok {
+		t.Fatalf("unit type = %T", response.Data["unit"])
+	}
 	if unit.ID != "service" || unit.ConfiguredVersion != "1.2.3" || unit.WorkingDirectory != "." || unit.Kind != "release" {
 		t.Fatalf("unit = %#v", unit)
 	}
-	release := response.Data["release"].(pipelineRelease)
+	release, ok := response.Data["release"].(pipelineRelease)
+	if !ok {
+		t.Fatalf("release type = %T", response.Data["release"])
+	}
 	if release.ConfiguredTag != "service/v1.2.3" || release.MaterializedFiles == nil {
 		t.Fatalf("release = %#v", release)
 	}
-	workflow := response.Data["workflow"].(pipelineWorkflow)
+	workflow, ok := response.Data["workflow"].(pipelineWorkflow)
+	if !ok {
+		t.Fatalf("workflow type = %T", response.Data["workflow"])
+	}
 	if !reflect.DeepEqual(workflow.RequiredInputs, []string{"unit", "version", "tag", "release_sha"}) || workflow.ConsumerOperations == nil {
 		t.Fatalf("workflow = %#v", workflow)
 	}
-	progress := response.Data["progress_inspection"].(pipelineProgressInspection)
+	progress, ok := response.Data["progress_inspection"].(pipelineProgressInspection)
+	if !ok {
+		t.Fatalf("progress type = %T", response.Data["progress_inspection"])
+	}
 	if progress.ExecutionProgress != "not_inspected" || progress.JournalsInspected || progress.ResumeEligibilityEvaluated || progress.RemoteStateInspected {
 		t.Fatalf("progress = %#v", progress)
 	}
@@ -54,7 +67,7 @@ func TestPipelineCommandUsesCanonicalUnitSelection(t *testing.T) {
 	unknown := runPipelineAt(t, root, plugin.Request{Command: pipelineCommandName, Flags: map[string]any{"unit": "missing"}})
 	assertPipelineFailure(t, unknown, "PIPELINE_UNIT_INVALID")
 	selected := runPipelineAt(t, root, plugin.Request{Command: pipelineCommandName, Flags: map[string]any{"unit": "worker"}})
-	if selected.Status != "success" || selected.Data["unit"].(pipelineUnit).ID != "worker" {
+	if selected.Status != "success" || pipelineResponseUnit(t, selected).ID != "worker" {
 		t.Fatalf("selected response = %#v", selected)
 	}
 }
@@ -75,6 +88,7 @@ func TestPipelineCommandRejectsMalformedAndUnsupportedRequests(t *testing.T) {
 
 func TestPipelineCommandReturnsTypedV1UnsupportedFailure(t *testing.T) {
 	directory := t.TempDir()
+	//nolint:staticcheck // The command must preserve a typed V1 unsupported contract.
 	writePipelineFile(t, filepath.Join(directory, releaseconfig.V1FileName), `{"project-name":"legacy","project-owner":"owner","project-type":"backend","release-system":"goreleaser","version":"1.2.3"}`)
 	root, err := workspace.ValidateRepositoryRoot(directory)
 	if err != nil {
@@ -96,11 +110,58 @@ func TestPipelineCommandKeepsExplicitRootsAndProcessStateIsolated(t *testing.T) 
 	}
 	firstResponse := runPipelineAt(t, first, plugin.Request{Command: pipelineCommandName})
 	secondResponse := runPipelineAt(t, second, plugin.Request{Command: pipelineCommandName})
-	if firstResponse.Data["unit"].(pipelineUnit).ID != "first" || secondResponse.Data["unit"].(pipelineUnit).ID != "second" {
+	if pipelineResponseUnit(t, firstResponse).ID != "first" || pipelineResponseUnit(t, secondResponse).ID != "second" {
 		t.Fatalf("root isolation failed: first=%#v second=%#v", firstResponse.Data, secondResponse.Data)
 	}
 	if current, err := os.Getwd(); err != nil || current != workingDirectory {
 		t.Fatalf("cwd = %q, %v; want %q", current, err, workingDirectory)
+	}
+}
+
+func TestPipelineCommandReturnsTypedExecutorDeliveryAndWorkflowFailures(t *testing.T) {
+	t.Run("executor", func(t *testing.T) {
+		root := writePipelineRepository(t, []pipelineFixtureUnit{{ID: "service", Version: "1.2.3"}})
+		configPath := releaseconfig.V2ConfigPath(root.Path())
+		content, err := os.ReadFile(configPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		writePipelineFile(t, configPath, strings.Replace(string(content), `"type":"goreleaser"`, `"type":"unknown"`, 1))
+		assertPipelineFailure(t, runPipelineAt(t, root, plugin.Request{Command: pipelineCommandName}), "PIPELINE_EXECUTOR_UNSUPPORTED")
+	})
+	t.Run("delivery", func(t *testing.T) {
+		root := writePipelineRepository(t, []pipelineFixtureUnit{{ID: "service", Version: "1.2.3"}})
+		configPath := releaseconfig.V2ConfigPath(root.Path())
+		content, err := os.ReadFile(configPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		writePipelineFile(t, configPath, strings.Replace(string(content), `"delivery":"github-actions"`, `"delivery":"local"`, 1))
+		assertPipelineFailure(t, runPipelineAt(t, root, plugin.Request{Command: pipelineCommandName}), "PIPELINE_DELIVERY_UNSUPPORTED")
+	})
+	t.Run("workflow", func(t *testing.T) {
+		root := writePipelineRepository(t, []pipelineFixtureUnit{{ID: "service", Version: "1.2.3"}})
+		writePipelineFile(t, filepath.Join(root.Path(), ".github/workflows/release-service.yml"), "jobs: [")
+		assertPipelineFailure(t, runPipelineAt(t, root, plugin.Request{Command: pipelineCommandName}), "PIPELINE_WORKFLOW_INVALID")
+	})
+}
+
+func TestConfiguredMaterializedFilesFollowExecutorAndUnitKind(t *testing.T) {
+	pluginUnit := releaseconfig.ReleaseUnit{
+		IsPlugin: true, PluginManifestPath: "plugin/example/manifest.json", WorkingDirectory: "tools/release",
+	}
+	tests := []struct {
+		identity releasetool.Identity
+		want     []pipelineMaterializedFile
+	}{
+		{identity: releasetool.GoReleaser, want: []pipelineMaterializedFile{{Path: "plugin/example/manifest.json", Reason: "synchronize configured plugin manifest version during release execution"}}},
+		{identity: releasetool.JReleaser, want: []pipelineMaterializedFile{{Path: "tools/release/jreleaser.yml", Reason: "synchronize JReleaser project version during release execution"}}},
+		{identity: releasetool.ReleaseIt, want: []pipelineMaterializedFile{}},
+	}
+	for _, test := range tests {
+		if got := configuredMaterializedFiles(pluginUnit, test.identity); !reflect.DeepEqual(got, test.want) {
+			t.Errorf("%s materialized files = %#v, want %#v", test.identity, got, test.want)
+		}
 	}
 }
 
@@ -168,4 +229,13 @@ func assertPipelineFailure(t *testing.T, response *plugin.Response, code string)
 	if response == nil || response.Status != "error" || response.ExitCode != 1 || response.Error == nil || response.Error.Code != code {
 		t.Fatalf("failure = %#v, want %s", response, code)
 	}
+}
+
+func pipelineResponseUnit(t *testing.T, response *plugin.Response) pipelineUnit {
+	t.Helper()
+	unit, ok := response.Data["unit"].(pipelineUnit)
+	if !ok {
+		t.Fatalf("unit type = %T", response.Data["unit"])
+	}
+	return unit
 }

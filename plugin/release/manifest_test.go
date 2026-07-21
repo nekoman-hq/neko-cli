@@ -257,6 +257,24 @@ func TestUnitOverviewManifestContract(t *testing.T) {
 	}
 }
 
+func TestPipelineManifestContract(t *testing.T) {
+	command, present := loadManifestCommands(t)["pipeline"]
+	if !present {
+		t.Fatal("pipeline command is missing")
+	}
+	if !reflect.DeepEqual(command.Outputs, []string{"table", "json"}) {
+		t.Fatalf("outputs = %#v", command.Outputs)
+	}
+	if len(command.Flags) != 1 || command.Flags[0].Name != "unit" || command.Flags[0].Type != "string" || command.Flags[0].Required {
+		t.Fatalf("pipeline flags = %#v", command.Flags)
+	}
+	for _, forbidden := range []string{"all", "verify-remote", "journal", "resume", "output"} {
+		if _, present := flagDescriptions(command)[forbidden]; present {
+			t.Fatalf("pipeline manifest exposes unsupported flag %q", forbidden)
+		}
+	}
+}
+
 func TestManifestClarifiesReleaseAndPluginUnitFlagDescriptions(t *testing.T) {
 	commands := loadManifestCommands(t)
 	initDescriptions := flagDescriptions(commands["init"])

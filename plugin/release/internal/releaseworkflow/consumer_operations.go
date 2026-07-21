@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	goreleaserfacts "github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool/goreleaser"
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool"
 	"gopkg.in/yaml.v3"
 )
 
@@ -123,7 +123,7 @@ func classifyConsumerStep(root *yaml.Node, jobID string, job, step *yaml.Node, p
 	}
 
 	if strings.HasPrefix(uses, "goreleaser/goreleaser-action@") {
-		invocation := goreleaserfacts.ClassifyArguments(workflowScalarValue(workflowValue(workflowValue(step, "with"), "args")))
+		invocation := releasetool.ClassifyArguments(workflowScalarValue(workflowValue(workflowValue(step, "with"), "args")))
 		operation := ConsumerOperation{
 			JobID: jobID, StepName: name, ToolCommand: invocation.Command,
 			ConfigReference: resolveWorkflowValue(invocation.ConfigReference, root, job, step),

@@ -5,6 +5,11 @@ import "github.com/nekoman-hq/neko-cli/plugin/release/internal/pipelineinspectio
 // configuredReleaseLifecycleStages returns a fresh immutable description of
 // the direct-call root lifecycle. It is descriptive only and owns no handlers.
 func configuredReleaseLifecycleStages() []pipelineinspection.LifecycleStage {
+	stages := configuredReleasePreparationStages()
+	return append(stages, configuredReleaseHandoffStages()...)
+}
+
+func configuredReleasePreparationStages() []pipelineinspection.LifecycleStage {
 	return []pipelineinspection.LifecycleStage{
 		{
 			ID: "source-unit-resolution", Label: "Resolve release source and unit",
@@ -46,6 +51,11 @@ func configuredReleaseLifecycleStages() []pipelineinspection.LifecycleStage {
 			Owner: "Neko CLI", Location: "local repository", Mutation: "release state",
 			ConfigurationStatus: "configured", Source: "pkg/release/github_actions_release_use_case.go",
 		},
+	}
+}
+
+func configuredReleaseHandoffStages() []pipelineinspection.LifecycleStage {
+	return []pipelineinspection.LifecycleStage{
 		{
 			ID: "known-release-file-staging", Label: "Stage known release files",
 			Owner: "local Git", Location: "local Git", Mutation: "Git index",

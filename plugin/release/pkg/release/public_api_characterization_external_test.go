@@ -20,6 +20,8 @@ func TestIndependentCommandCompatibilitySurface(t *testing.T) {
 		doctorAt               func(workspace.RepositoryRoot, plugin.Request) (*plugin.Response, error)                                                                                                                                        = release.HandleDoctorAt
 		units                  func(plugin.Request) (*plugin.Response, error)                                                                                                                                                                  = release.HandleUnits
 		unitsAt                func(workspace.RepositoryRoot, plugin.Request) (*plugin.Response, error)                                                                                                                                        = release.HandleUnitsAt
+		pipeline               func(plugin.Request) (*plugin.Response, error)                                                                                                                                                                  = release.HandlePipeline
+		pipelineAt             func(workspace.RepositoryRoot, plugin.Request) (*plugin.Response, error)                                                                                                                                        = release.HandlePipelineAt
 		workflowInit           func(plugin.Request) (*plugin.Response, error)                                                                                                                                                                  = release.HandleGitHubWorkflowInit
 		workflowInitAt         func(workspace.RepositoryRoot, plugin.Request) (*plugin.Response, error)                                                                                                                                        = release.HandleGitHubWorkflowInitAt
 		contextValidation      func(plugin.Request) (*plugin.Response, error)                                                                                                                                                                  = release.HandleReleaseContextValidation
@@ -42,6 +44,8 @@ func TestIndependentCommandCompatibilitySurface(t *testing.T) {
 		"doctor-at":                 doctorAt != nil,
 		"units":                     units != nil,
 		"units-at":                  unitsAt != nil,
+		"pipeline":                  pipeline != nil,
+		"pipeline-at":               pipelineAt != nil,
 		"workflow-init":             workflowInit != nil,
 		"workflow-init-at":          workflowInitAt != nil,
 		"context-validation":        contextValidation != nil,

@@ -102,6 +102,7 @@ type pipelineRepository struct {
 	Tracking         string `json:"tracking"`
 }
 
+//nolint:govet // Field order follows the stable machine contract.
 type pipelineWorkflow struct {
 	Path               string   `json:"path"`
 	Delivery           string   `json:"delivery"`

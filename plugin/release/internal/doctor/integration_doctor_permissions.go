@@ -3,7 +3,7 @@ package doctor
 import (
 	"strings"
 
-	goreleaserfacts "github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool/goreleaser"
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool"
 	"gopkg.in/yaml.v3"
 )
 
@@ -205,7 +205,7 @@ func integrationDoctorGoReleaserStepPublishes(step integrationDoctorWorkflowStep
 		return false
 	}
 	args := workflowScalar(workflowMappingValue(workflowMappingValue(step.node, "with"), "args"))
-	return goreleaserfacts.ClassifyArguments(args).RealPublication
+	return releasetool.ClassifyArguments(args).RealPublication
 }
 
 func integrationDoctorRunPublishesGitHubRelease(command string) bool {

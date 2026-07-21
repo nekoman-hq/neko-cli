@@ -15,11 +15,12 @@ func TestPipelineStagesReflectConfiguredRepositoryConsumers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ValidateRepositoryRoot: %v", err)
 	}
+	//nolint:govet // Field order keeps the expected stage contract readable.
 	tests := []struct {
-		unit             string
 		wantConsumer     []string
-		wantMaterialized int
+		unit             string
 		wantRegistry     string
+		wantMaterialized int
 	}{
 		{
 			unit: "cli",
@@ -58,7 +59,10 @@ func TestPipelineStagesReflectConfiguredRepositoryConsumers(t *testing.T) {
 			if response.Status != "success" {
 				t.Fatalf("response = %#v", response)
 			}
-			stages := response.Data["stages"].([]pipelineinspection.LifecycleStage)
+			stages, ok := response.Data["stages"].([]pipelineinspection.LifecycleStage)
+			if !ok {
+				t.Fatalf("stages type = %T", response.Data["stages"])
+			}
 			rootCount := len(configuredReleaseLifecycleStages())
 			gotConsumer := make([]string, 0, len(stages)-rootCount)
 			for _, stage := range stages[rootCount:] {
