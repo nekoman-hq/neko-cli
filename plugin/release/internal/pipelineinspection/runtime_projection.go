@@ -147,6 +147,12 @@ func applyLocalGitRuntime(result *pipelineResult, observation RuntimeLocalGitObs
 		Consistent:                       observation.Consistent, Problem: observation.Problem,
 	}
 	if observation.Inspected && !observation.Consistent {
+		if observation.ExpectedCommit != "" && (!observation.CommitExists || !observation.CommitContentVerified || !observation.HeadContainsExpectedCommit) {
+			markPipelineStageRuntime(result.Stages, "release-commit-creation", RuntimeInvalid, "local_git", observation.Problem)
+		}
+		if observation.ExpectedTag != "" && (!observation.TagExists || !observation.TagMatchesExpectedCommit) {
+			markPipelineStageRuntime(result.Stages, "unit-tag-creation", RuntimeInvalid, "local_git", observation.Problem)
+		}
 		result.InvalidEvidence = true
 		result.Status = pipelineInvalid
 		result.ProgressInspection.ExecutionProgress = "invalid"
@@ -169,6 +175,9 @@ func applyDispatchRuntime(result *pipelineResult, snapshot RuntimeSnapshot, sele
 		case !observation.Valid:
 			correlation = "invalid"
 			result.InvalidEvidence = true
+			if selected != nil && selected.DispatchJournalIdentity == observation.Identity {
+				markPipelineStageRuntime(result.Stages, "workflow-request-submission", RuntimeInvalid, "dispatch_journal", observation.Problem)
+			}
 		case selected != nil && selected.DispatchJournalIdentity != "" && observation.Identity == selected.DispatchJournalIdentity:
 			correlation = "exact"
 			linked = append(linked, observation)
@@ -231,6 +240,12 @@ func applyRecoveryRuntime(result *pipelineResult, observation RuntimeRecoveryObs
 	result.Recovery.Guidance = observation.Guidance
 	if observation.ResumeRefusal != "" {
 		result.Recovery.Reasons = append(result.Recovery.Reasons, "resume policy: "+observation.ResumeRefusal)
+	}
+	switch observation.ResumeRefusal {
+	case "unproven_commit_push":
+		markPipelineStageRuntime(result.Stages, "release-commit-push", RuntimeBlocked, "resume_policy", observation.ResumeRefusal)
+	case "unproven_tag_push":
+		markPipelineStageRuntime(result.Stages, "unit-tag-push", RuntimeBlocked, "resume_policy", observation.ResumeRefusal)
 	}
 	if observation.Invalid {
 		result.InvalidEvidence = true
@@ -388,4 +403,16 @@ func containsRuntimeStage(stages []string, target string) bool {
 		}
 	}
 	return false
+}
+
+func markPipelineStageRuntime(stages []LifecycleStage, stageID string, status RuntimeStatus, evidence, reason string) {
+	for index := range stages {
+		if stages[index].ID != stageID {
+			continue
+		}
+		stages[index].RuntimeStatus = status
+		stages[index].RuntimeEvidence = evidence
+		stages[index].RuntimeReason = reason
+		return
+	}
 }

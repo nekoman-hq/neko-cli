@@ -60,6 +60,26 @@ func TestPipelinePresentationUsesSemanticTTYColorOnly(t *testing.T) {
 	}
 }
 
+func TestPipelinePresentationShowsRuntimeRecoveryAndManualIntervention(t *testing.T) {
+	result := pipelinePresentationFixture()
+	result.Status = pipelineUncertain
+	result.Execution = pipelineExecution{Present: true, Identity: "execution-identity", State: "tag-pushed", Observations: []pipelineExecutionJournal{}}
+	result.Dispatch = pipelineDispatch{Present: true, Identity: "dispatch-identity", State: "unknown", Correlation: "exact", Observations: []pipelineDispatchJournal{}}
+	result.LocalGit = pipelineLocalGit{Scope: "local_only", Consistent: true}
+	result.Recovery = pipelineRecovery{Classification: "interrupted-after-tag-push", RetrySafety: "automatic_retry_prohibited", Reasons: []string{}}
+	result.ManualIntervention = pipelineManualIntervention{Required: true, Reasons: []string{"Inspect the durable dispatch outcome before retrying."}}
+	plain := ansi.Strip(renderPipelineForTest(t, mapPipelineResult(result), pipelineTestWidth{}, false))
+	for _, want := range []string{
+		"Status\n  uncertain", "Execution\n  tag-pushed", "Dispatch\n  unknown",
+		"Recovery\n  interrupted-after-tag-push", "Resume Eligible\n  false",
+		"Manual Intervention\n  true", "Execution Evidence", "Dispatch Evidence", "Manual Reason 1",
+	} {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("runtime presentation omitted %q:\n%s", want, plain)
+		}
+	}
+}
+
 func renderPipelineForTest(t *testing.T, response *plugin.Response, width renderer.OutputWidthProvider, color bool) string {
 	t.Helper()
 	var output bytes.Buffer

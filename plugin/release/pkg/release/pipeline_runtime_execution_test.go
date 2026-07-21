@@ -107,9 +107,13 @@ func TestPipelineRuntimeExecutionJournalScenarios(t *testing.T) {
 		second := mustBuildExecutionJournal(t, &other, newExecutionJournalKnownFiles(t, &other), baseSHA, remote)
 		second.CreatedAt = first.CreatedAt.Add(-24 * time.Hour)
 		second.UpdatedAt = second.CreatedAt
-		if _, err := store.Prepare(second); err != nil {
+		secondResolution, err := store.Prepare(second)
+		if err != nil {
 			t.Fatalf("Prepare second: %v", err)
 		}
+		secondResolution.Journal.CreatedAt = first.CreatedAt.Add(-24 * time.Hour)
+		secondResolution.Journal.UpdatedAt = secondResolution.Journal.CreatedAt
+		writeExecutionJournalFixture(t, secondResolution.Path, secondResolution.Journal)
 		response := inspectPipelineRuntimeForTest(t, root)
 		if response.ExitCode != 1 || fmt.Sprint(response.Data["status"]) != "invalid" {
 			t.Fatalf("response = %#v", response)
@@ -117,6 +121,15 @@ func TestPipelineRuntimeExecutionJournalScenarios(t *testing.T) {
 		execution := pipelineJSONView(t, response.Data["execution"])
 		if execution["unresolved_count"] != float64(2) || execution["identity"] != "" {
 			t.Fatalf("execution = %#v", execution)
+		}
+		observations, ok := execution["observations"].([]any)
+		if !ok || len(observations) != 2 {
+			t.Fatalf("observations = %#v", execution["observations"])
+		}
+		firstObservation, _ := observations[0].(map[string]any)
+		secondObservation, _ := observations[1].(map[string]any)
+		if fmt.Sprint(firstObservation["identity"]) > fmt.Sprint(secondObservation["identity"]) {
+			t.Fatalf("observations use non-identity ordering: %#v", observations)
 		}
 	})
 

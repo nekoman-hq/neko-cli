@@ -87,3 +87,46 @@ func TestPipelineJSONArraysNeverEncodeAsNull(t *testing.T) {
 		}
 	}
 }
+
+func TestPipelineRuntimeJSONSectionsHaveExactAdditiveKeys(t *testing.T) {
+	response := mapPipelineResult(pipelinePresentationFixture())
+	encoded, err := json.Marshal(response.Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var data map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &data); err != nil {
+		t.Fatal(err)
+	}
+	assertPipelineJSONKeys(t, data["execution"], []string{
+		"identity", "journal_count", "observations", "pending_action", "present", "state", "terminal", "unresolved_count", "validity",
+	})
+	assertPipelineJSONKeys(t, data["dispatch"], []string{
+		"correlation", "identity", "journal_count", "observations", "present", "state", "unlinked_count",
+	})
+	assertPipelineJSONKeys(t, data["recovery"], []string{
+		"classification", "evaluated", "manual_intervention_required", "reasons", "resume_eligible", "retry_safety", "safe_to_continue",
+	})
+	assertPipelineJSONKeys(t, data["manual_intervention"], []string{"reasons", "required"})
+	assertPipelineJSONKeys(t, data["local_git"], []string{
+		"branch", "commit_content_verified", "commit_exists", "consistent", "expected_commit", "expected_tag", "head",
+		"head_contains_expected_commit", "index_contains_recovery_evidence", "index_state", "remote_freshness", "scope",
+		"tag_exists", "tag_matches_expected_commit", "worktree_contains_recovery_evidence", "worktree_state",
+	})
+}
+
+func assertPipelineJSONKeys(t *testing.T, raw json.RawMessage, want []string) {
+	t.Helper()
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &object); err != nil {
+		t.Fatal(err)
+	}
+	got := make([]string, 0, len(object))
+	for key := range object {
+		got = append(got, key)
+	}
+	slices.Sort(got)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("JSON keys = %#v, want %#v", got, want)
+	}
+}
