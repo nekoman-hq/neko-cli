@@ -312,12 +312,14 @@ func TestIntegrationDoctorKeepsTypedCommandAndResponseBoundaries(t *testing.T) {
 	}
 }
 
-func TestIntegrationDoctorUsesCanonicalGoReleaserFacts(t *testing.T) {
-	const canonicalImport = "github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool/goreleaser"
-	requiredCallNames := []string{"ParseConfig", "ClassifyArguments", "VerifyArtifactContract"}
-	requiredCalls := make(map[string]bool, len(requiredCallNames))
-	for _, name := range requiredCallNames {
-		requiredCalls[name] = false
+func TestIntegrationDoctorUsesCanonicalReleaseToolFacts(t *testing.T) {
+	const (
+		canonicalToolImport       = "github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool"
+		canonicalGoReleaserImport = "github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool/goreleaser"
+	)
+	requiredCalls := map[string]map[string]bool{
+		canonicalToolImport:       {"ClassifyArguments": false},
+		canonicalGoReleaserImport: {"ParseConfig": false, "VerifyArtifactContract": false},
 	}
 	forbiddenTypes := map[string]bool{
 		"integrationDoctorGoReleaserBuild":          true,
@@ -327,7 +329,9 @@ func TestIntegrationDoctorUsesCanonicalGoReleaserFacts(t *testing.T) {
 		"integrationDoctorGoReleaserRelease":        true,
 		"integrationDoctorGoReleaserConfig":         true,
 	}
-	foundCanonicalImport := false
+	foundCanonicalImports := map[string]bool{
+		canonicalToolImport: false, canonicalGoReleaserImport: false,
+	}
 	for _, parsed := range parseReleaseProductionFiles(t) {
 		imports := make(map[string]string, len(parsed.file.Imports))
 		for _, specification := range parsed.file.Imports {
@@ -340,8 +344,8 @@ func TestIntegrationDoctorUsesCanonicalGoReleaserFacts(t *testing.T) {
 				localName = specification.Name.Name
 			}
 			imports[localName] = importPath
-			if importPath == canonicalImport {
-				foundCanonicalImport = true
+			if _, canonical := requiredCalls[importPath]; canonical {
+				foundCanonicalImports[importPath] = true
 			}
 		}
 		ast.Inspect(parsed.file, func(node ast.Node) bool {
@@ -366,21 +370,28 @@ func TestIntegrationDoctorUsesCanonicalGoReleaserFacts(t *testing.T) {
 					return true
 				}
 				identifier, ok := selector.X.(*ast.Ident)
-				if ok && imports[identifier.Name] == canonicalImport {
-					if _, required := requiredCalls[selector.Sel.Name]; required {
-						requiredCalls[selector.Sel.Name] = true
+				if ok {
+					importPath := imports[identifier.Name]
+					if calls, canonical := requiredCalls[importPath]; canonical {
+						if _, required := calls[selector.Sel.Name]; required {
+							calls[selector.Sel.Name] = true
+						}
 					}
 				}
 			}
 			return true
 		})
 	}
-	if !foundCanonicalImport {
-		t.Fatal("Release production does not import canonical GoReleaser facts")
+	for importPath, found := range foundCanonicalImports {
+		if !found {
+			t.Errorf("Release production does not import canonical facts %s", importPath)
+		}
 	}
-	for _, call := range requiredCallNames {
-		if !requiredCalls[call] {
-			t.Errorf("Release production does not consume canonical goreleaser.%s", call)
+	for importPath, calls := range requiredCalls {
+		for call, found := range calls {
+			if !found {
+				t.Errorf("Release production does not consume canonical %s.%s", path.Base(importPath), call)
+			}
 		}
 	}
 }
