@@ -323,30 +323,34 @@ neko release pipeline --unit cli --output json
 
 The command uses the existing V2 unit-selection policy: `--unit` is required
 for a multi-unit repository and may be omitted only when the repository has one
-unit. It has no `--all`, remote-verification, journal, repair, planning, resume,
-or pipeline-specific output flag. V1, unknown units, malformed requests, and
-unsupported executor, delivery, or workflow configurations return typed
-failures with exit code `1`; an inspectable V2 pipeline returns `ready` with
-exit code `0`.
+unit. It has no `--all`, remote-verification, journal-selection, repair,
+planning, resume, retry, or pipeline-specific output flag. V1, unknown units,
+malformed requests, and unsupported executor, delivery, or workflow
+configurations return typed failures with exit code `1`. Structurally invalid
+runtime evidence is returned as an `invalid` inspection result with exit code
+`1`. Valid observations, including `active`, `resumable`, `completed`,
+`blocked`, `uncertain`, and `rejected`, exit `0`.
 
 The result contains the selected unit, current configured version and tag,
 repository-relative working directory and workflow path, configured
 materialization files, canonical dispatch inputs, selected release tool,
 ordered consumer-operation facts, publication and plugin-registry summaries,
-and the full configured stage list. Repository branch, HEAD, and tracking
-fields are explicitly `not_inspected`; they are not freshness claims. The
-configured tag is derived only from the current state version and tag prefix.
-No next version, next tag, proposed commit, or future publication identity is
-calculated.
+and the full configured stage list. It adds execution-journal,
+dispatch-journal, local Git, recovery, resume-eligibility, retry-safety, and
+manual-intervention sections. Local branch and HEAD are inspected; tracking and
+all remote freshness remain explicitly `remote_not_inspected`. The configured
+tag is derived only from the current state version and tag prefix. No future
+version, next tag, proposed commit, or publication identity is calculated.
 
 Each stage has a stable ID, label, owner, execution location, strongest
-mutation class, static `configured` status, and source. The root stages describe
-the direct Release V2 coordinator. Consumer stages are derived in workflow
-order from the configured local YAML through shared neutral workflow and
-release-tool classifiers. Plugin manifest validation and plugin-index
-generation/publication appear only for plugin units when the corresponding
-workflow operations are present. A stage marked `configured` is not a claim
-that it started or completed.
+mutation class, static `configured` status, source, and separate runtime
+observation. Runtime values are `not_observed`, `not_started`, `pending`,
+`confirmed`, `blocked`, `unknown`, `rejected`, or `invalid`. Confirmation comes
+from the existing monotonic execution-journal phase order; pending operations
+come from the journal's durable pending action. Dispatch submission is mapped
+only from the exactly linked dispatch journal. Consumer-workflow stages remain
+unobserved locally because no remote workflow state is queried. A stage marked
+`configured` is never itself a runtime-completion claim.
 
 The root lifecycle IDs are ordered as executed by the production coordinator:
 
@@ -376,25 +380,38 @@ Recognized consumer IDs follow in their literal workflow order:
 workflow are included.
 
 Human output is titled `Release Pipeline Inspection`, shows the unit/version/
-status/executor/delivery/workflow summary, and uses a responsive stage table.
-`Stage`, `Status`, and `Owner` are essential; `Location`, `Mutation`, and
-`Source` are optional. Width-unknown output uses deterministic vertical
-records. Semantic color is interactive-terminal-only, and redirected output is
-ANSI-free.
+status/executor/delivery/workflow summary plus execution, dispatch, local Git,
+recovery, resume, and manual-intervention facts, and uses a responsive stage
+table. `Stage`, `Runtime`, and `Owner` are essential; `Configured`, `Location`,
+`Mutation`, and `Source` are optional. Width-unknown output uses deterministic
+vertical records. Semantic color is interactive-terminal-only, and redirected
+output is ANSI-free.
 
-JSON uses the existing response envelope and `schema_version: 1`. Its stable
-data sections are `status`, `unit`, `release`, `repository`, `workflow`,
-`stages`, `progress_inspection`, and `limitations`; arrays are never `null` and
-presentation metadata is excluded. `progress_inspection` states that execution
-progress is `not_inspected`, journals and remote state were not inspected, and
-resume eligibility was not evaluated.
+JSON keeps the existing response envelope and `schema_version: 1`. The original
+`status`, `unit`, `release`, `repository`, `workflow`, `stages`,
+`progress_inspection`, and `limitations` sections remain. Append-only sections
+are `execution`, `dispatch`, `local_git`, `recovery`, and
+`manual_intervention`; arrays are never `null`, ordering is deterministic, and
+presentation metadata, absolute paths, credentials, and raw journals are
+excluded.
 
 Inspection reads only the local V2 source pair, its recovery-readiness marker,
-and the selected repository-confined workflow file. It does not invoke Doctor
-or another command handler, inspect Git or journals, resolve a token, construct
-an HTTP client, execute a release tool or subprocess, write files, change cwd,
-mutate Git, dispatch a workflow, or publish anything. Runtime success therefore
-remains an explicit limitation.
+the selected repository-confined workflow file, execution and dispatch
+journals below the Git common directory, local Git objects/refs/index/worktree,
+and known-file recovery evidence. It runs bounded read-only local Git commands
+but does not fetch or inspect remote refs. It does not invoke Doctor or another
+command handler, resolve a token, construct an HTTP client, write a journal or
+file, change cwd, stage, commit, tag, reset, clean, push, dispatch, execute a
+release tool, resume, retry, repair, or publish.
+
+Runtime status is a read-only projection. `active` means locally recorded
+incomplete lifecycle evidence, not a live process. `resumable` is emitted only
+when the existing Resume policy permits a named continuation. `completed`
+means exact local commit/tag evidence plus an accepted workflow handoff; it
+does not mean remote publication completed. `blocked` requires manual work
+under existing recovery policy, `uncertain` preserves ambiguous external
+effects, `rejected` reflects the exactly correlated terminal dispatch, and
+`invalid` denotes malformed, contradictory, unlinked, or non-unique evidence.
 
 Unsupported or read-only boundaries:
 

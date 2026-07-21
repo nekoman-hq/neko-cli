@@ -56,6 +56,22 @@ Validate, history, contributors, and plugin-index gained typed query boundaries,
 
 Plugin-index output became `query -> build -> persist`: discovery and validation are read-only, JSON byte construction is pure, and output mode performs one atomic requested-path persistence effect.
 
+### Pipeline runtime inspection
+
+Pipeline Inspection was extended from the configured view with an immutable
+runtime snapshot composed at the authoritative lifecycle boundary. Root
+composition reads and validates local execution/dispatch journals, correlates
+their exact identities, observes bounded local Git evidence, and reuses the
+existing recovery, resume, and dispatch retry-safety decisions. The focused
+internal package remains a data projector and presenter with no journal store,
+Git client, mutation, network, token, transition, or continuation capability.
+
+The additive schema preserves version `1` while exposing execution, dispatch,
+local Git, recovery, manual-intervention, and remote-not-inspected boundaries.
+It never infers progress from timestamps, treats conflicting evidence as
+invalid structured output, and does not equate accepted dispatch handoff with
+remote publication completion.
+
 ### Migration recovery extraction
 
 Migration planning, policy, execution, journaling, target verification, source archival, and backup verification became explicit boundaries. Migration uses the shared V2 pair persister for target creation and refuses owner-ambiguous pair evidence.

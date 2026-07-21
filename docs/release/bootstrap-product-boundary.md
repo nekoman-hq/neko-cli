@@ -150,7 +150,8 @@ Current path:
    config-only, state-only, or invalid unit rows.
 8. Inspect integration for all units with `neko release doctor`, or one unit
    and its complete shared-workflow scope with `--unit <unit>`.
-9. Inspect the configured execution path with
+9. Inspect the configured execution path and any authoritative local runtime
+   evidence with
    `neko release pipeline --unit <unit>`.
 10. Inspect one future release with
     `neko release plan --change patch --unit <unit>`.
@@ -162,8 +163,9 @@ Evolving product path:
 
 1. Keep unit inventory and integration readiness as separate commands.
 2. Use pipeline inspection to explain the configured local and CI execution
-   path without folding it into `units` or `doctor`; runtime progress remains a
-   later journal-correlation capability.
+   path plus exactly correlated local journal/Git/recovery evidence without
+   folding it into `units` or `doctor`; remote workflow-run and publication
+   state remain separate future capabilities.
 
 ## Build-system-neutral consumers
 

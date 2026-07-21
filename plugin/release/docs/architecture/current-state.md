@@ -52,9 +52,10 @@ The public command contract is duplicated between `manifest.json` and the switch
 | `pkg/git` | Legacy Git queries and the underlying compatibility operations used by focused V1 adapters | `IsClean`, `LatestTag`, `UnitTagsInHistory`, `Current`, `Contributors`, `ContributorsForPaths` | Direct process details remain below release-owned V1 ports; active V1 application code does not import retired raw retired-path cleanup helpers. |
 | `pkg/release` planning | Version bump, execution context, delivery/capability descriptions, materialization plan | `PlanUnitVersionBump`, `BuildReleaseExecutionContext`, `ResolveDelivery`, `ResolveExecutorCapabilities`, `ResolveVersionMaterializer` | `github-actions` is the supported V2 delivery mode; `local` is retained only for V1 compatibility and invalid V2 reporting. |
 | `pkg/release` plan inspection | Token-free read-only local release-plan inspection for one selected source and unit | `HandlePlanAt`, `releasePlanInspectionUseCase`, `ReleasePlanInspection`, `planV2ReleaseFacts` | Reuses canonical V1/V2 planning facts, maps responses only at the command boundary, and does not inspect journals, remotes, tokens, or recovery evidence. |
+| `pkg/release` pipeline runtime composition | Authoritative read-only execution/dispatch journal discovery, exact identity correlation inputs, local Git evidence, recovery assessment, resume eligibility, and dispatch retry safety | `HandlePipelineAt`, `inspectPipelineRuntime`, `AssessReleaseExecutionRecovery`, `resolveResumeRecovery`, `resolveResumeDispatch` | Reads every relevant local journal and bounded local Git facts, maps an immutable snapshot to `internal/pipelineinspection`, and owns no new transition or mutation behavior. It never fetches, reads remote refs, resolves tokens, or calls HTTP. |
 | `internal/doctor` | Default-offline Release V2 config/state and GitHub Actions readiness, focused local contract evidence, and explicit bounded GitHub read verification | internal inspection use case, readers, diagnostics, and response mapping; root `HandleDoctorAt` facade | Uses typed facts and deterministic aggregation. `--verify-remote` injects exact GitHub GET reads only. |
 | `internal/unitoverview` | Strictly local Release V2 config/state inventory with current version, tag shape, metadata, alignment, and concise issues | internal inspection use case and response mapping; root `HandleUnitsAt` facade | Has no workflow parser, Git/network/token/store/writer/planner capability. |
-| `internal/pipelineinspection` | Local Release V2 configured-stage inspection and response presentation for one selected unit | `HandlePipelineAt`, immutable `LifecycleStage` metadata, internal typed result and mapper; root `HandlePipelineAt` facade | Reads the V2 source pair and selected confined workflow; has no Git/network/token/writer/journal/executor capability and does not import root Release. |
+| `internal/pipelineinspection` | Local Release V2 configured-stage and runtime read-model projection and response presentation for one selected unit | `HandlePipelineRuntimeAt`, immutable `LifecycleStage` and `RuntimeSnapshot` data, internal typed result and mapper; root `HandlePipelineAt` composition | Reads the V2 source pair and selected confined workflow, then projects supplied authoritative journal/Git/recovery facts. It has no Git client, journal store, recovery/resume/retry implementation, network/token/writer/executor capability, and does not import root Release. |
 | `internal/contextvalidation` | Focused release-context inspection, Git evidence, diagnostics, and presentation | internal validation use case; root `HandleReleaseContextValidationAt` facade | Does not import root Release or own release execution. |
 | `internal/workflowinit` | Typed V2 workflow source/selection, canonical rendering, create/unchanged/conflict planning, and narrow atomic creation | internal command use case; root `HandleGitHubWorkflowInitAt` facade | GitHub-Actions-only create semantics; no token/network/Git capability or implicit update. |
 | `pkg/release` V1 | Typed V1 intent/planning/preview/execution/failures, focused requirements/preflight/materialization/Git/rollback adapters, and explicit executor selection | `V1ReleaseIntent`, `PlanV1Release`, `v1ReleasePreviewUseCase`, `v1ReleaseExecutionUseCase`, `V1Executor` | Production uses a fixed executor catalog. `Service`, `Preflight`, `Tool`, `ToolBase`, and `Register/Get` are bounded compatibility facades. |
@@ -362,9 +363,10 @@ The public command contract is duplicated between `manifest.json` and the switch
 #### Release V2 pipeline inspection
 
 - Entry: `main.main` routes `pipeline` through the explicit inspection root to
-  the thin `pkg/release.HandlePipelineAt` facade and one internal typed command
-  handler. The facade supplies a fresh static projection of root lifecycle
-  metadata; inspection does not import `pkg/release`.
+  `pkg/release.HandlePipelineAt`. The root facade supplies a fresh static
+  projection of lifecycle metadata plus an immutable, read-only runtime
+  snapshot; `internal/pipelineinspection` projects that supplied data and does
+  not import `pkg/release`.
 - Source and unit policy: the capability reads the local V2 source pair,
   recovery-readiness marker, and selected repository-confined workflow. It
   reuses canonical V2 validation, unit resolution, executor identity, tag, and
@@ -376,24 +378,41 @@ The public command contract is duplicated between `manifest.json` and the switch
   `goreleaser.ClassifyArguments` fact; Doctor consumes the same workflow facts
   and focused GoReleaser classifier.
   Production execution remains straight-line calls in
-  `githubActionsReleaseUseCase.Run` and never iterates over descriptors.
-- Output: static status is only `ready` and every included stage is
-  `configured`, never completed. JSON schema version `1` contains unit,
-  release, repository, workflow, stages, progress-inspection, and limitation
-  sections with deterministic non-null arrays and no presentation metadata.
-  Repository Git facts and execution progress are explicitly `not_inspected`.
+  `githubActionsReleaseUseCase.Run` and never iterates over descriptors. The
+  runtime projection reuses the authoritative execution recovery and resume /
+  retry-safety decisions; it owns no transition table or continuation policy.
+- Runtime composition: `pkg/release` reads the repository's execution and
+  dispatch journal stores, validates canonical identities, selects without
+  timestamp or recency inference, correlates dispatches only through the
+  recorded dispatch-journal identity, and observes bounded local Git facts.
+  Local Git observation covers branch, HEAD, index/worktree state, expected
+  commit existence/content/reachability, expected tag existence/target, and
+  known-file recovery evidence. It never fetches or reads remote refs.
+- Output: top-level status is one of `ready`, `active`, `resumable`, `blocked`,
+  `uncertain`, `rejected`, `completed`, or `invalid`. `invalid` is structured
+  inspection data with exit code `1`; all other successful projections use
+  exit code `0`. `completed` means an exact accepted dispatch handoff, not
+  publication completion. JSON schema version `1` retains the configured
+  fields and additively includes execution, dispatch, local-Git, recovery, and
+  manual-intervention sections with deterministic non-null arrays and no
+  presentation metadata.
 - Presentation: the command mapper alone declares a summary plus a responsive
-  `presentation.Table`. Stage/status/owner are essential; location/mutation/
-  source are optional; Core owns terminal width, vertical fallback, and
-  semantic TTY-only color.
-- Safety: the command has no Git reader or mutator, token resolver, HTTP or
-  dispatch client, journal/Evidence store, writer, release-tool runner,
-  subprocess, cwd mutation, retry/resume policy, or runtime stage engine. It
-  calculates no future version and invokes no other command handler.
+  `presentation.Table`. Stage/runtime/owner are essential; configured/location/
+  mutation/source are optional; Core owns terminal width, vertical fallback,
+  and semantic TTY-only color.
+- Safety: root composition has read-only journal and bounded local Git query
+  capability, but no Git mutator, token resolver, HTTP or dispatch client,
+  writer, release-tool runner, cwd mutation, remote-state reader, or duplicated
+  retry/resume/transition policy. The internal inspector receives data only.
+  Neither layer calculates a future version or invokes another command
+  handler.
 - Tests: source/unit/request contracts, exact root and real-workflow order,
-  conditional plugin stages, immutable metadata ownership, two-root isolation,
-  exact JSON schema, responsive presentation, and static capability/import/
-  no-framework guards.
+  conditional plugin stages, immutable metadata ownership, all execution and
+  dispatch phases, malformed/conflicting/unlinked evidence, exact identity
+  correlation, local Git mismatch and recovery evidence, authoritative resume
+  and retry-safety outcomes, deterministic no-recency selection, read-only
+  isolation, exact additive JSON schema, responsive presentation, and static
+  no-mutation/no-network/no-framework guards.
 
 #### V2 GitHub Actions execution
 
@@ -837,7 +856,7 @@ Typed release progress reporting resolved the prior bounded presentation deviati
 - Completed stages: 9 / 9
 - Remaining stages: 0
 - Release Plugin refactor: completed
-- Completed capability records: V1 compensation interruption safety — Make V1 compensation interruption-safe; V2 pair and migration crash recovery — Make pair and migration crash recovery explicit; evidence inspection and archival — Add evidence-safe journal inspection and lifecycle support; V1 compatibility policy — Decide and deprecate V1 compatibility surfaces; retired-path cleanup — Retire superseded and inactive release paths; typed release progress reporting — Isolate release progress reporting; explicit-root composition — Make command roots explicit for embedders; generated-output path policy — Clarify generated-output path policy; release plan inspection — Add read-only release plan inspection; V2 local delivery evaluation — Evaluate V2 local delivery; GitHub Actions workflow scaffolding — Generate an idempotent create-only release workflow; Release V2 unit overview — Add deterministic read-only unit inventory; Release V2 pipeline inspection — Add local configured-stage inspection
-- Deferred pipeline capability: journal-correlated runtime progress, resume eligibility, and remote state inspection (not implemented)
+- Completed capability records: V1 compensation interruption safety — Make V1 compensation interruption-safe; V2 pair and migration crash recovery — Make pair and migration crash recovery explicit; evidence inspection and archival — Add evidence-safe journal inspection and lifecycle support; V1 compatibility policy — Decide and deprecate V1 compatibility surfaces; retired-path cleanup — Retire superseded and inactive release paths; typed release progress reporting — Isolate release progress reporting; explicit-root composition — Make command roots explicit for embedders; generated-output path policy — Clarify generated-output path policy; release plan inspection — Add read-only release plan inspection; V2 local delivery evaluation — Evaluate V2 local delivery; GitHub Actions workflow scaffolding — Generate an idempotent create-only release workflow; Release V2 unit overview — Add deterministic read-only unit inventory; Release V2 pipeline inspection — Add local configured-stage inspection; Release V2 pipeline runtime inspection — Correlate local journals, local Git evidence, recovery, and resume/retry safety without mutation
+- Deferred pipeline capability: remote publication and workflow-run state inspection (not implemented)
 
-V1 compensation interruption safety, V2 pair and migration crash recovery, evidence inspection and archival, V1 compatibility policy, retired-path cleanup, typed release progress reporting, explicit-root composition, generated-output path policy, release plan inspection, GitHub Actions workflow scaffolding, Release V2 unit overview, Release V2 pipeline inspection, and later architecture decisions are maintained in [architecture-evolution.md](architecture-evolution.md). Capability records are not refactor stages; the historical refactor ledger remains closed.
+V1 compensation interruption safety, V2 pair and migration crash recovery, evidence inspection and archival, V1 compatibility policy, retired-path cleanup, typed release progress reporting, explicit-root composition, generated-output path policy, release plan inspection, GitHub Actions workflow scaffolding, Release V2 unit overview, configured and runtime Release V2 pipeline inspection, and later architecture decisions are maintained in [architecture-evolution.md](architecture-evolution.md). Capability records are not refactor stages; the historical refactor ledger remains closed.

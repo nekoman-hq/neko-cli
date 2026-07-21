@@ -6,8 +6,8 @@ import (
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
 )
 
-// HandlePipeline returns the locally configured Release V2 pipeline without
-// executing or planning a release.
+// HandlePipeline returns the configured Release V2 pipeline and read-only
+// local runtime evidence without executing or planning a release.
 func HandlePipeline(request plugin.Request) (*plugin.Response, error) {
 	root, err := workspace.ResolveInspectionRepositoryRoot(request.Context.WorkingDir)
 	if err != nil {
@@ -16,7 +16,8 @@ func HandlePipeline(request plugin.Request) (*plugin.Response, error) {
 	return HandlePipelineAt(root, request)
 }
 
-// HandlePipelineAt returns the configured pipeline at an explicit root.
+// HandlePipelineAt returns the configured pipeline and local runtime evidence
+// at an explicit root.
 func HandlePipelineAt(root workspace.RepositoryRoot, request plugin.Request) (*plugin.Response, error) {
 	runtime := inspectPipelineRuntime(root.Path())
 	return pipelineinspection.HandlePipelineRuntimeAt(root, request, configuredReleaseLifecycleStages(), runtime)

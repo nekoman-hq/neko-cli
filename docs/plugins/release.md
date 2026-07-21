@@ -396,32 +396,39 @@ neko release pipeline --unit cli --output json
 
 The command is V2-only. Multi-unit repositories require `--unit`; omission is
 accepted only for a single-unit repository. There is no repository-wide,
-remote, journal, repair, resume, or future-version mode. Valid inspection exits
-`0` with static status `ready`; invalid requests, V1, unknown units, and
-unsupported source, executor, delivery, or workflow contracts return typed
-failures and exit `1`.
+remote, journal-selection, repair, resume, retry, or future-version mode.
+Valid `ready`, `active`, `resumable`, `completed`, `blocked`, `uncertain`, and
+`rejected` observations exit `0`. Invalid requests and sources return typed
+failures; structurally invalid local runtime evidence is projected as
+`invalid`; both exit `1`.
 
 The result reports current configured unit/version/tag facts, safe relative
 paths, configured materialization, canonical workflow inputs, release-tool and
 consumer-operation facts, publication/registry summaries, and ordered root and
-consumer stages. Every stage identifies its owner, location, strongest possible
-mutation class during real execution, static configuration status, and source.
-Plugin manifest and plugin-index stages are conditional on a plugin unit and
-corresponding local workflow operations.
+consumer stages. It correlates all relevant local execution and dispatch
+journals through their exact immutable identities, verifies expected local
+commit/tag facts, and exposes the existing recovery, resume, retry-safety, and
+manual-intervention decisions. Every stage keeps static configuration separate
+from `not_observed`, `not_started`, `pending`, `confirmed`, `blocked`,
+`unknown`, `rejected`, or `invalid` runtime evidence.
 
 Human output uses `Release Pipeline Inspection`, a responsive stage table with
-essential `Stage`, `Status`, and `Owner` columns, optional `Location`,
-`Mutation`, and `Source`, and deterministic vertical records when width is
-unknown. Redirected output and JSON are ANSI-free. JSON schema version `1`
-contains non-null ordered arrays and no presentation metadata.
+essential `Stage`, `Runtime`, and `Owner` columns, optional `Configured`,
+`Location`, `Mutation`, and `Source`, and deterministic vertical records when
+width is unknown. Runtime, recovery, and manual-intervention facts remain
+visible outside the table. Redirected output and JSON are ANSI-free. JSON
+schema version `1` remains append-only with non-null ordered arrays and no
+presentation metadata.
 
-Pipeline inspection reads only local V2 config/state, the pair-recovery
-readiness marker, and the selected repository-confined workflow file. It does
-not inspect Git, journals, Evidence, remote state, or runtime progress; calculate
-a future version; resolve a token; use HTTP; execute a subprocess or release
-tool; write config/state/workflows; mutate Git; dispatch; or publish. Repository
-Git facts and execution progress are explicitly `not_inspected`, and
-`configured` stages never claim runtime completion.
+Pipeline inspection reads only local V2 config/state, the pair-recovery marker,
+the selected repository-confined workflow, local execution/dispatch journals,
+local Git objects/refs/index/worktree, and known-file recovery evidence. It
+never reads a token, uses HTTP, fetches, reads remote refs, writes journals,
+mutates config/state/Git, dispatches, resumes, retries, repairs, executes a
+release tool, or publishes. Local push confirmations are journal facts only;
+remote freshness and publication stay `remote_not_inspected`. `active` means
+locally recorded lifecycle evidence, and `completed` means accepted handoff—not
+remote publication success.
 
 ---
 

@@ -1,3 +1,4 @@
-// Package pipelineinspection projects the locally configured Release V2
-// pipeline without executing release operations or inspecting runtime state.
+// Package pipelineinspection projects configured Release V2 stages together
+// with immutable local runtime facts supplied by the authoritative root
+// release package. It owns no journal, Git, recovery, resume, or retry policy.
 package pipelineinspection

@@ -111,9 +111,11 @@ Implemented now:
 - Strictly read-only `neko release units` inventory with current state versions,
   tag shapes, unit alignment/issues, responsive human output, stable JSON, and
   structured exit behavior.
-- Local-only `neko release pipeline --unit <unit>` inspection of the configured
-  root lifecycle and consumer workflow stages, with stable JSON schema version
-  `1` and responsive human output.
+- Local-only, read-only `neko release pipeline --unit <unit>` inspection of the
+  configured lifecycle plus exactly correlated execution/dispatch journals,
+  local Git evidence, recovery, resume eligibility, retry safety, and manual
+  intervention, with append-only JSON schema version `1` and responsive human
+  output.
 
 Not implemented yet:
 

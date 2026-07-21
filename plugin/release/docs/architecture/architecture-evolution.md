@@ -295,20 +295,22 @@ repository isolation, JSON isolation, and Doctor behavior.
 
 ### Release V2 pipeline inspection
 
-`neko release pipeline [--unit <unit>]` is now the active local-only configured
-pipeline view. It is intentionally separate from Unit Overview, Doctor, Plan,
-execution, and Resume: the command selects one valid V2 unit, describes the
-current configured identity and workflow, and projects immutable stage facts.
-It does not calculate a future version or correlate execution/dispatch
-journals.
+`neko release pipeline [--unit <unit>]` is the active local-only configured and
+runtime pipeline view. It is intentionally separate from Unit Overview,
+Doctor, Plan, execution, and Resume: the command selects one valid V2 unit,
+describes the current configured identity and workflow, and projects immutable
+stage and runtime facts. It does not calculate a future version, execute a
+continuation, or inspect remote publication state.
 
 The focused `internal/pipelineinspection` capability owns typed request/source
-classification, result construction, and response presentation. Its only root
-dependency is supplied data: `pkg/release/pipeline.go` forwards to the internal
-handler with a fresh descriptor slice from `release_lifecycle_facts.go`.
-Pipeline Inspection does not import root Release. The root lifecycle continues
-as explicit direct calls; descriptors carry no function, handler, transition,
-retry, or resume behavior and production execution never iterates over them.
+classification, runtime projection, result construction, and response
+presentation. Its root dependencies are supplied immutable data:
+`pkg/release/pipeline.go` forwards a fresh descriptor slice from
+`release_lifecycle_facts.go` and a runtime snapshot composed at the
+authoritative lifecycle boundary. Pipeline Inspection does not import root
+Release. The root lifecycle continues as explicit direct calls; descriptors
+carry no function, handler, transition, retry, or resume behavior and
+production execution never iterates over them.
 
 Consumer ordering comes from `internal/releaseworkflow`'s neutral local YAML
 facts. Its GoReleaser-action classification reuses
@@ -318,12 +320,23 @@ invocation, and artifact facts remain together in the format-specific
 subpackage. This avoids a Pipeline-owned workflow or tool parser and keeps the
 workflow facts independent of the new command.
 
-The capability reads only V2 config/state, pair-recovery readiness, and one
-repository-confined workflow. It has no Git, token, HTTP, dispatch, writer,
-journal/Evidence, release-tool execution, subprocess, or cwd-mutation
-capability. Static `ready`/`configured` terminology never asserts runtime
-completion. JSON schema version `1` makes uninspected progress, resume, journal,
-and remote boundaries explicit; human presentation delegates width and
+The internal capability reads only V2 config/state, pair-recovery readiness,
+and one repository-confined workflow; all runtime evidence is supplied data.
+Root composition additionally reads the existing execution and dispatch
+journal stores and bounded local Git facts. It validates exact canonical
+identities, correlates dispatch only through the execution's recorded dispatch
+identity, avoids timestamp/recency selection, and reuses the authoritative
+execution-recovery, resume, and retry-safety decisions. It has no Git mutation,
+token, HTTP, dispatch, writer, release-tool execution, cwd mutation, remote-ref
+read, or independently implemented transition/resume capability.
+
+Status distinguishes `ready`, `active`, `resumable`, `blocked`, `uncertain`,
+`rejected`, `completed`, and `invalid`. An accepted dispatch handoff is
+`completed`; this does not claim workflow or publication completion. Invalid
+or conflicting local evidence remains inspectable structured data and uses
+exit code `1`. JSON schema version `1` additively exposes execution, dispatch,
+local Git, recovery, resume eligibility, manual intervention, and explicit
+remote-not-inspected limitations; human presentation delegates width and
 TTY-color behavior to Core's existing presentation contract.
 
 ### V2 local delivery evaluation
@@ -340,10 +353,10 @@ The retained inactive V2 local transaction scaffold is no longer a future produc
 
 ## Pending architecture decisions
 
-Runtime pipeline progress remains a separate future capability. It must use
-authoritative execution and dispatch evidence rather than infer completion from
-the static Pipeline Inspection view or fold journal/recovery policy into Unit
-Overview or Doctor.
+Remote workflow-run and publication state remain separate future capabilities.
+Local Pipeline Inspection must continue to report that boundary explicitly and
+must not infer remote freshness or publication completion from accepted
+dispatch handoff evidence.
 
 Release V2 bootstrap planning is product capability planning, not a reopened
 architecture refactor stage. The current product boundary for GitHub Actions
