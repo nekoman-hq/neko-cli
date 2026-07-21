@@ -89,6 +89,7 @@ func cloneRuntimeSnapshot(snapshot RuntimeSnapshot) RuntimeSnapshot {
 		clone.Executions[index].ConfirmedStageIDs = append([]string(nil), snapshot.Executions[index].ConfirmedStageIDs...)
 		clone.Executions[index].CurrentStageIDs = append([]string(nil), snapshot.Executions[index].CurrentStageIDs...)
 	}
+	clone.Dispatches = append([]RuntimeDispatchObservation(nil), snapshot.Dispatches...)
 	clone.Problems = append([]RuntimeProblem(nil), snapshot.Problems...)
 	return clone
 }

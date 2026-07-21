@@ -15,39 +15,77 @@ func inspectPipelineRuntime(repositoryRoot string) pipelineinspection.RuntimeSna
 	snapshot := pipelineinspection.RuntimeSnapshot{
 		Inspected:  true,
 		Executions: make([]pipelineinspection.RuntimeExecutionObservation, 0),
+		Dispatches: make([]pipelineinspection.RuntimeDispatchObservation, 0),
 		Problems:   make([]pipelineinspection.RuntimeProblem, 0),
 	}
 	coordinator := NewGitReleaseCoordinator()
+	inspectPipelineRepositoryGit(repositoryRoot, coordinator, &snapshot)
+	inspectPipelineExecutionJournals(repositoryRoot, coordinator, &snapshot)
+	inspectPipelineDispatchJournals(repositoryRoot, &snapshot)
+	return snapshot
+}
+
+func inspectPipelineRepositoryGit(repositoryRoot string, coordinator *GitReleaseCoordinator, snapshot *pipelineinspection.RuntimeSnapshot) {
 	branch, err := coordinator.currentBranch(repositoryRoot)
 	if err != nil {
 		snapshot.Problems = append(snapshot.Problems, pipelineRuntimeProblem("local_git", "local Git branch identity could not be inspected"))
 	} else {
-		remoteName, _, upstreamErr := coordinator.upstream(repositoryRoot, branch)
+		snapshot.Repository.Branch = branch
+		remoteName, upstreamBranch, upstreamErr := coordinator.upstream(repositoryRoot, branch)
 		if upstreamErr != nil {
 			snapshot.Problems = append(snapshot.Problems, pipelineRuntimeProblem("local_git", "local Git upstream identity could not be inspected"))
 		} else {
+			snapshot.Repository.RemoteName = remoteName
+			snapshot.Repository.Tracking = remoteName + "/" + upstreamBranch
 			remoteURL, remoteErr := coordinator.gitOutput(repositoryRoot, "remote", "get-url", remoteName)
 			if remoteErr != nil || strings.TrimSpace(remoteURL) == "" {
 				snapshot.Problems = append(snapshot.Problems, pipelineRuntimeProblem("local_git", "local Git remote identity could not be inspected"))
 			} else {
 				snapshot.RepositoryRemote = strings.TrimSpace(remoteURL)
+				snapshot.Repository.RemoteURL = snapshot.RepositoryRemote
 			}
 		}
 	}
+	head, headErr := coordinator.headCommit(repositoryRoot)
+	if headErr != nil {
+		snapshot.Problems = append(snapshot.Problems, pipelineRuntimeProblem("local_git", "local Git HEAD could not be inspected"))
+	} else {
+		snapshot.Repository.Head = head
+	}
+	index, indexErr := coordinator.gitOutput(repositoryRoot, "diff", "--cached", "--name-only")
+	if indexErr != nil {
+		snapshot.Problems = append(snapshot.Problems, pipelineRuntimeProblem("local_git", "local Git index could not be inspected"))
+	} else if strings.TrimSpace(index) == "" {
+		snapshot.Repository.IndexState = "clean"
+	} else {
+		snapshot.Repository.IndexState = "changes_present"
+	}
+	worktree, worktreeErr := coordinator.gitOutput(repositoryRoot, "diff", "--name-only")
+	untracked, untrackedErr := coordinator.gitOutput(repositoryRoot, "ls-files", "--others", "--exclude-standard")
+	if worktreeErr != nil || untrackedErr != nil {
+		snapshot.Problems = append(snapshot.Problems, pipelineRuntimeProblem("local_git", "local Git worktree could not be inspected"))
+	} else if strings.TrimSpace(worktree) == "" && strings.TrimSpace(untracked) == "" {
+		snapshot.Repository.WorktreeState = "clean"
+	} else {
+		snapshot.Repository.WorktreeState = "changes_present"
+	}
+	snapshot.Repository.Inspected = len(snapshot.Problems) == 0
+}
 
+func inspectPipelineExecutionJournals(repositoryRoot string, coordinator *GitReleaseCoordinator, snapshot *pipelineinspection.RuntimeSnapshot) {
 	store := NewReleaseExecutionJournalStore(repositoryRoot)
 	directory, err := store.JournalDirectory()
 	if err != nil {
 		snapshot.Problems = append(snapshot.Problems, pipelineRuntimeProblem("execution_journal", "execution journal location could not be inspected"))
-		return snapshot
+		return
 	}
 	entries, err := os.ReadDir(directory)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return snapshot
+			return
 		}
 		snapshot.Problems = append(snapshot.Problems, pipelineRuntimeProblem("execution_journal", "execution journal directory could not be read"))
-		return snapshot
+		return
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
 	for _, entry := range entries {
@@ -64,9 +102,11 @@ func inspectPipelineRuntime(repositoryRoot string) pipelineinspection.RuntimeSna
 			continue
 		}
 		observation := observePipelineExecutionJournal(entry.Name(), reference, journal)
+		if observation.Valid {
+			observation.LocalGit = inspectPipelineExecutionGit(repositoryRoot, coordinator, journal)
+		}
 		snapshot.Executions = append(snapshot.Executions, observation)
 	}
-	return snapshot
 }
 
 func observePipelineExecutionJournal(filename, reference string, journal *ReleaseExecutionJournal) pipelineinspection.RuntimeExecutionObservation {

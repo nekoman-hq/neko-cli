@@ -39,6 +39,12 @@ func (coordinator *GitReleaseCoordinator) VerifyCommit(ctx *ReleaseExecutionCont
 	if head != commitSHA {
 		return fmt.Errorf("HEAD %s does not match release commit %s", head, commitSHA)
 	}
+	return coordinator.verifyCommitObject(ctx, files, commitSHA)
+}
+
+// verifyCommitObject verifies local immutable commit content without requiring
+// the commit to remain HEAD. It performs no Git mutation.
+func (coordinator *GitReleaseCoordinator) verifyCommitObject(ctx *ReleaseExecutionContext, files KnownReleaseFiles, commitSHA string) error {
 	changed, err := coordinator.gitOutput(ctx.RepositoryRoot, "diff-tree", "--no-commit-id", "--name-only", "-r", commitSHA)
 	if err != nil {
 		return fmt.Errorf("inspect V2 release commit files: %w", err)

@@ -5,9 +5,12 @@ const pipelineCommandName = "pipeline"
 type pipelineStatus string
 
 const (
-	pipelineReady   pipelineStatus = "ready"
-	pipelineActive  pipelineStatus = "active"
-	pipelineInvalid pipelineStatus = "invalid"
+	pipelineReady     pipelineStatus = "ready"
+	pipelineActive    pipelineStatus = "active"
+	pipelineCompleted pipelineStatus = "completed"
+	pipelineUncertain pipelineStatus = "uncertain"
+	pipelineRejected  pipelineStatus = "rejected"
+	pipelineInvalid   pipelineStatus = "invalid"
 )
 
 type pipelineRequest struct {
@@ -69,6 +72,9 @@ const (
 	RuntimeNotStarted  RuntimeStatus = "not_started"
 	RuntimePending     RuntimeStatus = "pending"
 	RuntimeConfirmed   RuntimeStatus = "confirmed"
+	RuntimeRejected    RuntimeStatus = "rejected"
+	RuntimeUnknown     RuntimeStatus = "unknown"
+	RuntimeBlocked     RuntimeStatus = "blocked"
 	RuntimeInvalid     RuntimeStatus = "invalid"
 	RuntimeNotObserved RuntimeStatus = "not_observed"
 )
@@ -146,8 +152,22 @@ type pipelineProgressInspection struct {
 type RuntimeSnapshot struct {
 	Inspected        bool
 	RepositoryRemote string
+	Repository       RuntimeRepositoryObservation
 	Executions       []RuntimeExecutionObservation
+	Dispatches       []RuntimeDispatchObservation
 	Problems         []RuntimeProblem
+}
+
+// RuntimeRepositoryObservation contains local Git facts only.
+type RuntimeRepositoryObservation struct {
+	Inspected     bool
+	Branch        string
+	Head          string
+	RemoteName    string
+	RemoteURL     string
+	Tracking      string
+	IndexState    string
+	WorktreeState string
 }
 
 // RuntimeExecutionObservation is the safe projection of one local execution
@@ -176,7 +196,52 @@ type RuntimeExecutionObservation struct {
 	ConfirmedStageIDs       []string
 	CurrentStageIDs         []string
 	PendingStageID          string
+	LocalGit                RuntimeLocalGitObservation
 	Problem                 string
+}
+
+// RuntimeDispatchObservation is the safe immutable projection of one local
+// dispatch journal.
+//
+//nolint:govet // Fields follow exact identity and durable outcome order.
+type RuntimeDispatchObservation struct {
+	Reference            string
+	Identity             string
+	RepositoryRemote     string
+	RepositoryRemoteName string
+	UnitID               string
+	Version              string
+	Tag                  string
+	ReleaseCommitSHA     string
+	WorkflowPath         string
+	Executor             string
+	Delivery             string
+	State                string
+	RunID                string
+	CreatedAt            string
+	UpdatedAt            string
+	Valid                bool
+	Problem              string
+}
+
+// RuntimeLocalGitObservation contains only read-only local object, ref, index,
+// and worktree evidence for one exact execution.
+//
+//nolint:govet // Fields follow the local verification sequence.
+type RuntimeLocalGitObservation struct {
+	Inspected                        bool
+	ExpectedCommit                   string
+	CommitExists                     bool
+	CommitContentVerified            bool
+	ExpectedTag                      string
+	TagExists                        bool
+	TagTarget                        string
+	TagMatchesExpectedCommit         bool
+	HeadContainsExpectedCommit       bool
+	IndexContainsRecoveryEvidence    bool
+	WorktreeContainsRecoveryEvidence bool
+	Consistent                       bool
+	Problem                          string
 }
 
 // RuntimeProblem is a sanitized local inspection problem.
@@ -211,6 +276,49 @@ type pipelineExecutionJournal struct {
 	Problem    string `json:"problem,omitempty"`
 }
 
+type pipelineDispatch struct {
+	Present       bool                      `json:"present"`
+	Identity      string                    `json:"identity"`
+	JournalCount  int                       `json:"journal_count"`
+	UnlinkedCount int                       `json:"unlinked_count"`
+	Correlation   string                    `json:"correlation"`
+	State         string                    `json:"state"`
+	WorkflowPath  string                    `json:"workflow_path,omitempty"`
+	RunID         string                    `json:"run_id,omitempty"`
+	Observations  []pipelineDispatchJournal `json:"observations"`
+}
+
+type pipelineDispatchJournal struct {
+	Identity    string `json:"identity"`
+	Reference   string `json:"reference"`
+	State       string `json:"state,omitempty"`
+	Correlation string `json:"correlation"`
+	Valid       bool   `json:"valid"`
+	Problem     string `json:"problem,omitempty"`
+}
+
+//nolint:govet // Fields follow local commit and tag inspection order.
+type pipelineLocalGit struct {
+	Scope                            string `json:"scope"`
+	RemoteFreshness                  string `json:"remote_freshness"`
+	Branch                           string `json:"branch"`
+	Head                             string `json:"head"`
+	IndexState                       string `json:"index_state"`
+	WorktreeState                    string `json:"worktree_state"`
+	ExpectedCommit                   string `json:"expected_commit"`
+	CommitExists                     bool   `json:"commit_exists"`
+	CommitContentVerified            bool   `json:"commit_content_verified"`
+	ExpectedTag                      string `json:"expected_tag"`
+	TagExists                        bool   `json:"tag_exists"`
+	TagTarget                        string `json:"tag_target,omitempty"`
+	TagMatchesExpectedCommit         bool   `json:"tag_matches_expected_commit"`
+	HeadContainsExpectedCommit       bool   `json:"head_contains_expected_commit"`
+	IndexContainsRecoveryEvidence    bool   `json:"index_contains_recovery_evidence"`
+	WorktreeContainsRecoveryEvidence bool   `json:"worktree_contains_recovery_evidence"`
+	Consistent                       bool   `json:"consistent"`
+	Problem                          string `json:"problem,omitempty"`
+}
+
 //nolint:govet // Field order follows the stable schema-version-one contract.
 type pipelineResult struct {
 	SchemaVersion      int                        `json:"schema_version"`
@@ -222,6 +330,8 @@ type pipelineResult struct {
 	Stages             []LifecycleStage           `json:"stages"`
 	ProgressInspection pipelineProgressInspection `json:"progress_inspection"`
 	Execution          pipelineExecution          `json:"execution"`
+	Dispatch           pipelineDispatch           `json:"dispatch"`
+	LocalGit           pipelineLocalGit           `json:"local_git"`
 	Limitations        []string                   `json:"limitations"`
 	InvalidEvidence    bool                       `json:"-"`
 }

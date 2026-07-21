@@ -71,6 +71,28 @@ func (coordinator *GitReleaseCoordinator) headCommit(repositoryRoot string) (str
 	return strings.TrimSpace(output), nil
 }
 
+func (coordinator *GitReleaseCoordinator) commitExists(repositoryRoot, commitSHA string) (bool, error) {
+	_, err := coordinator.gitOutput(repositoryRoot, "rev-parse", "--verify", "--quiet", commitSHA+"^{commit}")
+	if err != nil {
+		if isGitNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("inspect local release commit %s: %w", commitSHA, err)
+	}
+	return true, nil
+}
+
+func (coordinator *GitReleaseCoordinator) headContainsCommit(repositoryRoot, commitSHA string) (bool, error) {
+	_, err := coordinator.gitOutput(repositoryRoot, "merge-base", "--is-ancestor", commitSHA, "HEAD")
+	if err != nil {
+		if isGitNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("inspect whether HEAD contains release commit %s: %w", commitSHA, err)
+	}
+	return true, nil
+}
+
 func (coordinator *GitReleaseCoordinator) gitOutput(repositoryRoot string, args ...string) (string, error) {
 	coordinator.diagnostics.GitCommandRunning(repositoryRoot, args)
 	output, err := coordinator.runner.Run(repositoryRoot, args...)

@@ -64,6 +64,8 @@ func mapPipelineResult(result *pipelineResult) *plugin.Response {
 			"stages":              append(make([]LifecycleStage, 0, len(result.Stages)), result.Stages...),
 			"progress_inspection": result.ProgressInspection,
 			"execution":           result.Execution,
+			"dispatch":            result.Dispatch,
+			"local_git":           result.LocalGit,
 			"limitations":         append(make([]string, 0, len(result.Limitations)), result.Limitations...),
 		},
 		RendererHint: "table",
@@ -113,6 +115,9 @@ func normalizePipelineArrays(result *pipelineResult) *pipelineResult {
 	}
 	if result.Execution.Observations == nil {
 		result.Execution.Observations = make([]pipelineExecutionJournal, 0)
+	}
+	if result.Dispatch.Observations == nil {
+		result.Dispatch.Observations = make([]pipelineDispatchJournal, 0)
 	}
 	if result.Limitations == nil {
 		result.Limitations = make([]string, 0)

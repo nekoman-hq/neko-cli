@@ -39,7 +39,7 @@ func TestPipelineJSONSchemaVersionOneIsStableAndPresentationFree(t *testing.T) {
 	if err := json.Unmarshal(first.Bytes(), &envelope); err != nil {
 		t.Fatal(err)
 	}
-	wantKeys := []string{"execution", "limitations", "progress_inspection", "release", "repository", "schema_version", "stages", "status", "unit", "workflow"}
+	wantKeys := []string{"dispatch", "execution", "limitations", "local_git", "progress_inspection", "release", "repository", "schema_version", "stages", "status", "unit", "workflow"}
 	gotKeys := make([]string, 0, len(envelope.Data))
 	for key := range envelope.Data {
 		gotKeys = append(gotKeys, key)
@@ -72,12 +72,14 @@ func TestPipelineJSONArraysNeverEncodeAsNull(t *testing.T) {
 	result.Workflow.ConsumerOperations = nil
 	result.Stages = nil
 	result.Limitations = nil
+	result.Execution.Observations = nil
+	result.Dispatch.Observations = nil
 	response := mapPipelineResult(normalizePipelineArrays(result))
 	encoded, err := json.Marshal(response.Data)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, field := range []string{"materialized_files", "required_inputs", "consumer_operations", "stages", "limitations"} {
+	for _, field := range []string{"materialized_files", "required_inputs", "consumer_operations", "stages", "limitations", "observations"} {
 		if strings.Contains(string(encoded), `"`+field+`":null`) {
 			t.Fatalf("%s encoded null: %s", field, encoded)
 		}
