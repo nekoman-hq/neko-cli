@@ -1,8 +1,6 @@
 # Release CLI Reference
 ## General
 
-Use `neko release pipeline --unit <unit>` to inspect the configured Release V2 pipeline without executing a release.
-
 ```bash
 neko release init --executor goreleaser --delivery github-actions --workflow .github/workflows/release-cli.yml
 neko release init --unit plugin-release --kind plugin --plugin-name release --plugin-manifest plugin/release/manifest.json --plugin-asset-prefix plugin-release --plugin-binary-name plugin-release --executor goreleaser --delivery github-actions --workflow .github/workflows/release-plugin-release.yml --tag-prefix plugin-release/v
@@ -63,6 +61,8 @@ neko release doctor --unit api
 neko release doctor --output json
 neko release units
 neko release units --output json
+neko release pipeline --unit api
+neko release pipeline --unit api --output json
 neko release github-workflow-init --dry-run
 neko release github-workflow-init --unit api
 neko release github-workflow-init --path .github/workflows/release-api.yml
@@ -307,7 +307,94 @@ recovery readiness marker. It does not parse workflow YAML, invoke Doctor
 workflow inspection, inspect Git or tags, read tokens, contact a network, read
 journals or Evidence, inspect build files, plan releases, execute releases, or
 write anything. `release doctor` remains the workflow-readiness command;
-release pipeline inspection remains unsupported.
+`release pipeline` separately describes one configured execution path.
+
+### Pipeline inspection
+
+`neko release pipeline [--unit <unit>]` is the Release V2-only, local,
+read-only view of the configured pipeline for one unit:
+
+```bash
+neko release pipeline --unit cli
+neko release pipeline --unit plugin-release
+neko release pipeline --unit plugin-ui
+neko release pipeline --unit cli --output json
+```
+
+The command uses the existing V2 unit-selection policy: `--unit` is required
+for a multi-unit repository and may be omitted only when the repository has one
+unit. It has no `--all`, remote-verification, journal, repair, planning, resume,
+or pipeline-specific output flag. V1, unknown units, malformed requests, and
+unsupported executor, delivery, or workflow configurations return typed
+failures with exit code `1`; an inspectable V2 pipeline returns `ready` with
+exit code `0`.
+
+The result contains the selected unit, current configured version and tag,
+repository-relative working directory and workflow path, configured
+materialization files, canonical dispatch inputs, selected release tool,
+ordered consumer-operation facts, publication and plugin-registry summaries,
+and the full configured stage list. Repository branch, HEAD, and tracking
+fields are explicitly `not_inspected`; they are not freshness claims. The
+configured tag is derived only from the current state version and tag prefix.
+No next version, next tag, proposed commit, or future publication identity is
+calculated.
+
+Each stage has a stable ID, label, owner, execution location, strongest
+mutation class, static `configured` status, and source. The root stages describe
+the direct Release V2 coordinator. Consumer stages are derived in workflow
+order from the configured local YAML through shared neutral workflow and
+release-tool classifiers. Plugin manifest validation and plugin-index
+generation/publication appear only for plugin units when the corresponding
+workflow operations are present. A stage marked `configured` is not a claim
+that it started or completed.
+
+The root lifecycle IDs are ordered as executed by the production coordinator:
+
+1. `source-unit-resolution`
+2. `release-context-planning`
+3. `dispatch-token-resolution`
+4. `release-file-planning`
+5. `release-preflight`
+6. `execution-journal-preparation`
+7. `release-file-materialization`
+8. `selected-unit-state-write`
+9. `known-release-file-staging`
+10. `release-commit-creation`
+11. `unit-tag-creation`
+12. `workflow-request-preparation`
+13. `release-commit-push`
+14. `unit-tag-push`
+15. `workflow-request-submission`
+16. `handoff-confirmation`
+
+Recognized consumer IDs follow in their literal workflow order:
+`canonical-context-validation`, conditional `plugin-manifest-validation`,
+`consumer-tests`, `release-tool-configuration-validation`, `snapshot-build`,
+`consumer-worktree-validation`, `release-artifact-packaging`,
+`release-publication`, conditional `plugin-index-generation`, and conditional
+`plugin-index-publication`. Only operations actually present in the selected
+workflow are included.
+
+Human output is titled `Release Pipeline Inspection`, shows the unit/version/
+status/executor/delivery/workflow summary, and uses a responsive stage table.
+`Stage`, `Status`, and `Owner` are essential; `Location`, `Mutation`, and
+`Source` are optional. Width-unknown output uses deterministic vertical
+records. Semantic color is interactive-terminal-only, and redirected output is
+ANSI-free.
+
+JSON uses the existing response envelope and `schema_version: 1`. Its stable
+data sections are `status`, `unit`, `release`, `repository`, `workflow`,
+`stages`, `progress_inspection`, and `limitations`; arrays are never `null` and
+presentation metadata is excluded. `progress_inspection` states that execution
+progress is `not_inspected`, journals and remote state were not inspected, and
+resume eligibility was not evaluated.
+
+Inspection reads only the local V2 source pair, its recovery-readiness marker,
+and the selected repository-confined workflow file. It does not invoke Doctor
+or another command handler, inspect Git or journals, resolve a token, construct
+an HTTP client, execute a release tool or subprocess, write files, change cwd,
+mutate Git, dispatch a workflow, or publish anything. Runtime success therefore
+remains an explicit limitation.
 
 Unsupported or read-only boundaries:
 

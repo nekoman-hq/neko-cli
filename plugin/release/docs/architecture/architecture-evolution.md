@@ -293,6 +293,38 @@ repair capability reaches the use case. Runtime and static guards preserve
 source/workflow bytes, modes and mtimes, cwd/environment isolation, sequential
 repository isolation, JSON isolation, and Doctor behavior.
 
+### Release V2 pipeline inspection
+
+`neko release pipeline [--unit <unit>]` is now the active local-only configured
+pipeline view. It is intentionally separate from Unit Overview, Doctor, Plan,
+execution, and Resume: the command selects one valid V2 unit, describes the
+current configured identity and workflow, and projects immutable stage facts.
+It does not calculate a future version or correlate execution/dispatch
+journals.
+
+The focused `internal/pipelineinspection` capability owns typed request/source
+classification, result construction, and response presentation. Its only root
+dependency is supplied data: `pkg/release/pipeline.go` forwards to the internal
+handler with a fresh descriptor slice from `release_lifecycle_facts.go`.
+Pipeline Inspection does not import root Release. The root lifecycle continues
+as explicit direct calls; descriptors carry no function, handler, transition,
+retry, or resume behavior and production execution never iterates over them.
+
+Consumer ordering comes from `internal/releaseworkflow`'s neutral local YAML
+facts. Its GoReleaser-action classification reuses
+`internal/releasetool.ClassifyArguments`, which Doctor also consumes;
+GoReleaser configuration and artifact parsing remain in the format-specific
+subpackage. This avoids a Pipeline-owned workflow or tool parser and keeps the
+neutral facts independent of the new command.
+
+The capability reads only V2 config/state, pair-recovery readiness, and one
+repository-confined workflow. It has no Git, token, HTTP, dispatch, writer,
+journal/Evidence, release-tool execution, subprocess, or cwd-mutation
+capability. Static `ready`/`configured` terminology never asserts runtime
+completion. JSON schema version `1` makes uninspected progress, resume, journal,
+and remote boundaries explicit; human presentation delegates width and
+TTY-color behavior to Core's existing presentation contract.
+
 ### V2 local delivery evaluation
 
 V2 local delivery is deliberately unsupported for executable V2 releases. `github-actions` is the only supported V2 delivery mode for committed V2 release units.
@@ -307,8 +339,10 @@ The retained inactive V2 local transaction scaffold is no longer a future produc
 
 ## Pending architecture decisions
 
-Release-pipeline inspection remains a separate future capability. It must not
-be inferred from or folded into the unit overview or integration doctor.
+Runtime pipeline progress remains a separate future capability. It must use
+authoritative execution and dispatch evidence rather than infer completion from
+the static Pipeline Inspection view or fold journal/recovery policy into Unit
+Overview or Doctor.
 
 Release V2 bootstrap planning is product capability planning, not a reopened
 architecture refactor stage. The current product boundary for GitHub Actions

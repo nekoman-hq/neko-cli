@@ -52,6 +52,7 @@ The stable V2 lifecycle is:
 neko release init ...
 neko release unit-add ...
 neko release validate --show
+neko release pipeline --unit <unit>
 neko release patch --unit <unit>
 neko release history --unit <unit>
 neko release contributors --unit <unit>
@@ -103,18 +104,22 @@ Implemented now:
 - Internal V2 `GitReleaseCoordinator` for targeted staging, deterministic release commits, unit tags, and explicit commit/tag pushes.
 - Non-destructive V2 recovery boundary.
 - Public V2 dry-run Git planning.
+- Stable local/CI release-context validation.
+- Local-by-default Release V2 integration Doctor with explicit bounded remote
+  verification.
+- Opt-in create-only GitHub Actions workflow scaffolding.
 - Strictly read-only `neko release units` inventory with current state versions,
   tag shapes, unit alignment/issues, responsive human output, stable JSON, and
   structured exit behavior.
+- Local-only `neko release pipeline --unit <unit>` inspection of the configured
+  root lifecycle and consumer workflow stages, with stable JSON schema version
+  `1` and responsive human output.
 
 Not implemented yet:
 
 - Automatic multi-unit migration.
 - Workflow template generation from `neko release init`.
 - Executor scaffolding from `neko release init`.
-- Stable CI release-context validation.
-- Read-only integration doctor.
-- Release pipeline inspection.
 - Build-system adapters such as Gradle.
 - V2 local executor execution.
 - Automated cross-platform install/update smoke testing against the published plugin registry.

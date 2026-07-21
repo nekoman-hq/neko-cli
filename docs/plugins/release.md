@@ -1,7 +1,5 @@
 # Release Plugin
 
-`neko release pipeline --unit <unit>` inspects a unit's configured Release V2 pipeline locally without executing it.
-
 The **release** plugin is the core plugin for Neko CLI, providing comprehensive release management with semantic versioning support across multiple release systems.
 
 ## Overview
@@ -380,7 +378,50 @@ does not open or parse workflow YAML, call the integration doctor, inspect Git
 or tags, read tokens, contact the network, inspect build systems, plan a future
 release, read journals or Evidence, execute releases, or mutate config, state,
 workflows, Git, cwd, environment, file modes, or mtimes. Use `release doctor`
-for GitHub Actions workflow readiness; pipeline inspection is not implemented.
+for GitHub Actions workflow readiness and `release pipeline` for one unit's
+configured execution path.
+
+---
+
+### `neko release pipeline`
+
+Inspect the configured Release V2 pipeline for one unit without executing it:
+
+```bash
+neko release pipeline --unit cli
+neko release pipeline --unit plugin-release
+neko release pipeline --unit plugin-ui
+neko release pipeline --unit cli --output json
+```
+
+The command is V2-only. Multi-unit repositories require `--unit`; omission is
+accepted only for a single-unit repository. There is no repository-wide,
+remote, journal, repair, resume, or future-version mode. Valid inspection exits
+`0` with static status `ready`; invalid requests, V1, unknown units, and
+unsupported source, executor, delivery, or workflow contracts return typed
+failures and exit `1`.
+
+The result reports current configured unit/version/tag facts, safe relative
+paths, configured materialization, canonical workflow inputs, release-tool and
+consumer-operation facts, publication/registry summaries, and ordered root and
+consumer stages. Every stage identifies its owner, location, strongest possible
+mutation class during real execution, static configuration status, and source.
+Plugin manifest and plugin-index stages are conditional on a plugin unit and
+corresponding local workflow operations.
+
+Human output uses `Release Pipeline Inspection`, a responsive stage table with
+essential `Stage`, `Status`, and `Owner` columns, optional `Location`,
+`Mutation`, and `Source`, and deterministic vertical records when width is
+unknown. Redirected output and JSON are ANSI-free. JSON schema version `1`
+contains non-null ordered arrays and no presentation metadata.
+
+Pipeline inspection reads only local V2 config/state, the pair-recovery
+readiness marker, and the selected repository-confined workflow file. It does
+not inspect Git, journals, Evidence, remote state, or runtime progress; calculate
+a future version; resolve a token; use HTTP; execute a subprocess or release
+tool; write config/state/workflows; mutate Git; dispatch; or publish. Repository
+Git facts and execution progress are explicitly `not_inspected`, and
+`configured` stages never claim runtime completion.
 
 ---
 

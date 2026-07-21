@@ -47,15 +47,16 @@ Response mapping receives typed outcomes and owns no lifecycle decision.
 | Package | Responsibility | Boundary |
 | --- | --- | --- |
 | `plugin/release` | Decode/encode the plugin protocol, resolve one repository root, construct fresh V1 executors, and route commands | Composition only; no domain model, lifecycle, or persistence |
-| `internal/releasetool` | Common tool identity, ordered configuration candidates, and static V1 tool-behavior facts | Pure leaf facts |
-| `internal/releasetool/goreleaser` | GoReleaser configuration parsing, invocation classification, and artifact-contract facts | Pure byte/model facts; no filesystem, Doctor, HTTP, journals, or presentation |
+| `internal/releasetool` | Common tool identity, ordered configuration candidates, static V1 tool-behavior facts, and neutral invocation classification | Pure leaf facts |
+| `internal/releasetool/goreleaser` | GoReleaser configuration parsing and artifact-contract facts | Pure byte/model facts; no filesystem, Doctor, HTTP, journals, or presentation |
 | `internal/releasetool/jreleaser` | Canonical JReleaser configuration codec and project-version rewrite | Focused local config reads/writes; no HTTP or lifecycle policy |
 | `internal/releasetool/releaseit` | Canonical release-it configuration codec and default configuration | Focused local config reads/writes; no HTTP or lifecycle policy |
-| `internal/releaseworkflow` | Canonical workflow name/file/ref/inputs and repository-target facts | Pure leaf facts |
+| `internal/releaseworkflow` | Canonical workflow name/file/ref/inputs, repository-target facts, and ordered consumer-operation classification | Pure local byte/model facts |
 | `internal/githubdispatch` | One bounded GitHub workflow-dispatch POST transport and response sanitization | HTTP mutation leaf; no lifecycle policy |
 | `internal/releasesource` | Tolerant, local, read-only V1/V2 source classification | Read-only leaf |
 | `internal/doctor` | Doctor inspection plus Doctor-owned severity, messages, remediation, fact mapping, presentation, and optional bounded GET verification | Default local/offline; remote path GET-only |
 | `internal/unitoverview` | Local V2 unit inventory and its response presentation | Read-only command capability |
+| `internal/pipelineinspection` | Local V2 configured pipeline projection and its response presentation | Read-only command capability; consumes immutable root descriptors and neutral workflow/tool facts |
 | `internal/contextvalidation` | Local/CI release-context validation and response presentation | Read-only command capability |
 | `internal/workflowinit` | Canonical workflow preview and create-only persistence | One focused filesystem mutation |
 | `internal/legacyrequirements` | Source-format V1 token and configuration-file validation retained for the public V1 facade and Validate | Compatibility leaf; execution-context requirements remain distinct |
@@ -92,8 +93,9 @@ sequence. Production files and lines count direct non-test Go files in
 The following is the complete responsibility transfer made by this refactor:
 
 1. shared release-tool identity, ordered configuration candidates, and static
-   V1-behavior facts moved to `internal/releasetool`;
-2. reusable GoReleaser config/artifact parsing and invocation facts moved to
+   V1-behavior facts moved to `internal/releasetool`; the later neutral
+   invocation classifier also lives with this common owner;
+2. reusable GoReleaser config and artifact parsing moved to
    `internal/releasetool/goreleaser`;
 3. canonical JReleaser config load/save, rewriting, and version facts moved to
    `internal/releasetool/jreleaser`;
@@ -129,12 +131,12 @@ The following is the complete responsibility transfer made by this refactor:
 | resume assessment, recovery policy, and named continuation operations | Resume must reuse the same authoritative operations rather than implement a second state machine. |
 | V1 intent, planning, execution coordination, and compensation | V1 remains a supported release lifecycle with its own characterized safety/evidence contract. |
 | release command request/outcome/progress and response mapping | These are the supported public release boundary; mapping remains policy-free and adjacent to the lifecycle result it exposes. |
-| public Doctor, Units, Context Validation, and Workflow Init facades | These are compatibility aliases/forwarders only; their implementations and policy live in the focused internal packages. |
+| public Doctor, Units, Pipeline Inspection, Context Validation, and Workflow Init facades | These are aliases/forwarders only; their implementations and policy live in the focused internal packages. Pipeline's facade additionally supplies immutable lifecycle descriptors. |
 | deprecated V1 and inactive V2-local compatibility surfaces | They preserve supported historical Go contracts, are explicitly quarantined, and are not selected by active production composition. |
 
 No retained root responsibility owns reusable tool parsing, Doctor diagnostics,
-Unit Overview inspection, Context Validation inspection, Workflow Init policy,
-workflow static facts, or dispatch HTTP.
+Unit Overview or Pipeline Inspection policy, Context Validation inspection,
+Workflow Init policy, workflow static facts, or dispatch HTTP.
 
 ## Final `pkg/release` cohesion assessment
 
@@ -160,7 +162,7 @@ and call direction rather than accepting filenames as evidence:
 - request parsing, typed command outcomes, response mapping, progress facts, and
   terminal rendering are distinct; response code imports no journal, Git, or
   HTTP mutation policy;
-- Doctor, Unit Overview, Workflow Init, and Context Validation root files contain
+- Doctor, Unit Overview, Pipeline Inspection, Workflow Init, and Context Validation root files contain
   only direct internal calls, type aliases, constant aliases, or mapping
   forwarders, enforced structurally;
 - every `*_compatibility.go` declaration is explicitly inventoried as legacy,
@@ -186,20 +188,23 @@ The root package `pkg/release` has a bounded responsibility:
    handlers.
 
 It does not own reusable tool parsing, workflow constants, dispatch HTTP,
-Doctor diagnostics, Unit Overview inspection, Context Validation inspection, or
-workflow scaffolding. A new root production file must satisfy one of the five
+Doctor diagnostics, Unit Overview or Pipeline Inspection policy, Context
+Validation inspection, or workflow scaffolding. A new root production file
+must satisfy one of the five
 responsibilities above and pass the architecture review in
 [maintainability-policy.md](maintainability-policy.md).
 
 ## Release-tool ownership
 
 `internal/releasetool` owns common identity, ordered configuration candidates,
-and static V1 tool-behavior facts. Each format package owns only its reusable
-format-specific facts.
+static V1 tool-behavior facts, and neutral release-tool invocation
+classification. Each format package owns only its reusable format-specific
+facts.
 
-- GoReleaser configuration parsing, invocation classification, and artifact
-  contracts are canonical under `internal/releasetool/goreleaser`; GoReleaser
-  candidate paths remain with the common owner.
+- GoReleaser configuration parsing and artifact contracts are canonical under
+  `internal/releasetool/goreleaser`; invocation classification and GoReleaser
+  candidate paths remain with the common owner because workflow consumers and
+  Doctor share them without depending on format-specific parsing.
 - The JReleaser configuration codec and project-version rewrite are canonical
   under `internal/releasetool/jreleaser`.
 - The release-it configuration codec and default configuration are canonical
@@ -308,14 +313,19 @@ are not used by active production composition. `ReleasePlan` and
 `BuildReleasePlan` are active planning declarations owned by
 `v2_release_plan.go`. There is no operation registry,
 middleware chain, event loop, mutable pipeline context, dynamic step graph, or
-generic pipeline executor. No Pipeline Inspection capability was added.
+generic pipeline executor. Pipeline Inspection adds immutable descriptive
+records only; they contain no behavior and the active lifecycle does not
+execute by iterating over them.
 
 ## Read-only and mutation boundaries
 
 - Doctor is local and offline by default. Explicit remote verification injects
   a bounded GET-only reader; it cannot reach workflow dispatch.
-- Plan, Units, Validate, History, Contributors, Evidence query, and Context
-  Validation receive read capabilities only.
+- Plan, Units, Pipeline Inspection, Validate, History, Contributors, Evidence
+  query, and Context Validation receive read capabilities only. Pipeline
+  Inspection alone also reads one repository-confined configured workflow and
+  receives descriptive root lifecycle facts; it receives no Git, journal,
+  token, HTTP, writer, executor, or subprocess capability.
 - Workflow Init owns only create/unchanged/conflict behavior and cannot update an
   existing workflow.
 - GitHub dispatch owns one POST and no retry, journal, token-resolution, or

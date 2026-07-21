@@ -150,16 +150,20 @@ Current path:
    config-only, state-only, or invalid unit rows.
 8. Inspect integration for all units with `neko release doctor`, or one unit
    and its complete shared-workflow scope with `--unit <unit>`.
-9. Inspect one unit with `neko release plan --change patch --unit <unit>`.
-10. Release one unit with `neko release patch --unit <unit>`.
-11. Let the workflow pass `unit`, `version`, `tag`, and `release_sha` to
+9. Inspect the configured execution path with
+   `neko release pipeline --unit <unit>`.
+10. Inspect one future release with
+    `neko release plan --change patch --unit <unit>`.
+11. Release one unit with `neko release patch --unit <unit>`.
+12. Let the workflow pass `unit`, `version`, `tag`, and `release_sha` to
    `ci-validate-context` and consume its validated outputs.
 
 Evolving product path:
 
 1. Keep unit inventory and integration readiness as separate commands.
-2. Add pipeline inspection to explain additional local and CI readiness before
-   execution without folding it into `units` or `doctor`.
+2. Use pipeline inspection to explain the configured local and CI execution
+   path without folding it into `units` or `doctor`; runtime progress remains a
+   later journal-correlation capability.
 
 ## Build-system-neutral consumers
 
@@ -277,7 +281,6 @@ Not supported today:
 - workflow generation as an implicit side effect of `init` or `unit-add`;
 - managed workflow updates, arbitrary YAML merging, or force overwrite;
 - executor config scaffolding from `init` or `unit-add`;
-- release pipeline inspection;
 - build-system adapters in Neko CLI;
 - V2 local non-dry-run execution;
 - standalone dispatch or retry commands.
@@ -286,9 +289,8 @@ Not supported today:
 
 Future Release V2 bootstrap work should add capabilities in this order:
 
-1. Release pipeline inspection.
-2. Build-system adapter contract and a Gradle adapter.
-3. GitHub Actions packaging decision after the generated workflow contract is
+1. Build-system adapter contract and a Gradle adapter.
+2. GitHub Actions packaging decision after the generated workflow contract is
    proven in consumers.
 
 Build-system adapter work can start after the stable CI validation contract is
