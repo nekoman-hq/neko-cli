@@ -4,7 +4,11 @@ const pipelineCommandName = "pipeline"
 
 type pipelineStatus string
 
-const pipelineReady pipelineStatus = "ready"
+const (
+	pipelineReady   pipelineStatus = "ready"
+	pipelineActive  pipelineStatus = "active"
+	pipelineInvalid pipelineStatus = "invalid"
+)
 
 type pipelineRequest struct {
 	RepositoryRoot string
@@ -24,6 +28,10 @@ type MutationClass string
 // ConfigurationStatus describes static configuration presence, not runtime
 // completion or journal progress.
 type ConfigurationStatus string
+
+// RuntimeStatus describes locally observed lifecycle evidence. It never
+// drives an execution transition.
+type RuntimeStatus string
 
 const (
 	StageOwnerNekoCLI          StageOwner = "Neko CLI"
@@ -57,6 +65,14 @@ const (
 
 const StageConfigured ConfigurationStatus = "configured"
 
+const (
+	RuntimeNotStarted  RuntimeStatus = "not_started"
+	RuntimePending     RuntimeStatus = "pending"
+	RuntimeConfirmed   RuntimeStatus = "confirmed"
+	RuntimeInvalid     RuntimeStatus = "invalid"
+	RuntimeNotObserved RuntimeStatus = "not_observed"
+)
+
 // LifecycleStage is immutable descriptive metadata supplied by the
 // authoritative root release coordinator. It contains no executable behavior.
 //
@@ -70,6 +86,11 @@ type LifecycleStage struct {
 	ConfigurationStatus ConfigurationStatus `json:"configuration_status"`
 	Source              string              `json:"source"`
 	ConditionalReason   string              `json:"conditional_reason,omitempty"`
+	RuntimeStatus       RuntimeStatus       `json:"runtime_status"`
+	RuntimeEvidence     string              `json:"runtime_evidence,omitempty"`
+	RuntimeReason       string              `json:"runtime_reason,omitempty"`
+	RuntimeIdentity     string              `json:"runtime_identity,omitempty"`
+	RuntimeConfirmedAt  string              `json:"runtime_confirmed_at,omitempty"`
 }
 
 //nolint:govet // Field order follows the stable machine contract.
@@ -120,6 +141,76 @@ type pipelineProgressInspection struct {
 	RemoteStateInspected       bool   `json:"remote_state_inspected"`
 }
 
+// RuntimeSnapshot is an immutable read-only input assembled by pkg/release.
+// It contains no stores, clients, callbacks, or mutation behavior.
+type RuntimeSnapshot struct {
+	Inspected        bool
+	RepositoryRemote string
+	Executions       []RuntimeExecutionObservation
+	Problems         []RuntimeProblem
+}
+
+// RuntimeExecutionObservation is the safe projection of one local execution
+// journal. Reference is repository-independent and never an absolute path.
+//
+//nolint:govet // Fields follow inspection and identity order.
+type RuntimeExecutionObservation struct {
+	Reference               string
+	Identity                string
+	RepositoryRemote        string
+	UnitID                  string
+	CurrentVersion          string
+	NextVersion             string
+	Tag                     string
+	Executor                string
+	Delivery                string
+	WorkflowPath            string
+	State                   string
+	PendingAction           string
+	ReleaseCommitSHA        string
+	DispatchJournalIdentity string
+	CreatedAt               string
+	UpdatedAt               string
+	Valid                   bool
+	Unresolved              bool
+	ConfirmedStageIDs       []string
+	CurrentStageIDs         []string
+	PendingStageID          string
+	Problem                 string
+}
+
+// RuntimeProblem is a sanitized local inspection problem.
+type RuntimeProblem struct {
+	Kind      string
+	UnitID    string
+	Reference string
+	Reason    string
+}
+
+type pipelineExecution struct {
+	Present          bool                       `json:"present"`
+	Identity         string                     `json:"identity"`
+	JournalCount     int                        `json:"journal_count"`
+	UnresolvedCount  int                        `json:"unresolved_count"`
+	Validity         string                     `json:"validity"`
+	State            string                     `json:"state"`
+	PendingAction    string                     `json:"pending_action"`
+	Terminal         bool                       `json:"terminal"`
+	CreatedAt        string                     `json:"created_at,omitempty"`
+	UpdatedAt        string                     `json:"updated_at,omitempty"`
+	JournalReference string                     `json:"journal_reference,omitempty"`
+	Observations     []pipelineExecutionJournal `json:"observations"`
+}
+
+type pipelineExecutionJournal struct {
+	Identity   string `json:"identity"`
+	Reference  string `json:"reference"`
+	State      string `json:"state,omitempty"`
+	Unresolved bool   `json:"unresolved"`
+	Valid      bool   `json:"valid"`
+	Problem    string `json:"problem,omitempty"`
+}
+
 //nolint:govet // Field order follows the stable schema-version-one contract.
 type pipelineResult struct {
 	SchemaVersion      int                        `json:"schema_version"`
@@ -130,7 +221,9 @@ type pipelineResult struct {
 	Workflow           pipelineWorkflow           `json:"workflow"`
 	Stages             []LifecycleStage           `json:"stages"`
 	ProgressInspection pipelineProgressInspection `json:"progress_inspection"`
+	Execution          pipelineExecution          `json:"execution"`
 	Limitations        []string                   `json:"limitations"`
+	InvalidEvidence    bool                       `json:"-"`
 }
 
 type commandFailure struct {

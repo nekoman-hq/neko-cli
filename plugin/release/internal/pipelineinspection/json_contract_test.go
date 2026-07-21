@@ -39,7 +39,7 @@ func TestPipelineJSONSchemaVersionOneIsStableAndPresentationFree(t *testing.T) {
 	if err := json.Unmarshal(first.Bytes(), &envelope); err != nil {
 		t.Fatal(err)
 	}
-	wantKeys := []string{"limitations", "progress_inspection", "release", "repository", "schema_version", "stages", "status", "unit", "workflow"}
+	wantKeys := []string{"execution", "limitations", "progress_inspection", "release", "repository", "schema_version", "stages", "status", "unit", "workflow"}
 	gotKeys := make([]string, 0, len(envelope.Data))
 	for key := range envelope.Data {
 		gotKeys = append(gotKeys, key)
@@ -49,7 +49,7 @@ func TestPipelineJSONSchemaVersionOneIsStableAndPresentationFree(t *testing.T) {
 		t.Fatalf("schema keys = %#v, want %#v", gotKeys, wantKeys)
 	}
 	text := first.String()
-	for _, required := range []string{`"schema_version": 1`, `"stages": [`, `"limitations": [`, `"materialized_files": []`, `"consumer_operations": []`, `"execution_progress": "not_inspected"`} {
+	for _, required := range []string{`"schema_version": 1`, `"stages": [`, `"limitations": [`, `"materialized_files": []`, `"consumer_operations": []`, `"execution_progress": "not_inspected"`, `"runtime_status": "not_observed"`, `"observations": []`} {
 		if !strings.Contains(text, required) {
 			t.Errorf("JSON omitted %s:\n%s", required, text)
 		}

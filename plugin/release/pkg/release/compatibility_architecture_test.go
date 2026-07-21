@@ -55,7 +55,7 @@ func TestActiveReleasePlanHasAnActiveOwner(t *testing.T) {
 }
 
 func TestExtractedCommandRootFacadesRemainThin(t *testing.T) {
-	for _, path := range []string{"doctor.go", "unit_overview.go", "workflow_init.go", "context_validation.go", "pipeline.go"} {
+	for _, path := range []string{"doctor.go", "unit_overview.go", "workflow_init.go", "context_validation.go"} {
 		parsed := parseCompatibilityArchitectureFile(t, path)
 		for _, declaration := range parsed.Decls {
 			function, ok := declaration.(*ast.FuncDecl)
@@ -87,6 +87,35 @@ func TestExtractedCommandRootFacadesRemainThin(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestPipelineRootFacadeContainsOnlyRuntimeInspectionComposition(t *testing.T) {
+	parsed := parseCompatibilityArchitectureFile(t, "pipeline.go")
+	allowed := map[string]bool{
+		"ResolveInspectionRepositoryRoot":  true,
+		"HandlePipelineAt":                 true,
+		"inspectPipelineRuntime":           true,
+		"configuredReleaseLifecycleStages": true,
+		"HandlePipelineRuntimeAt":          true,
+		"Path":                             true,
+	}
+	ast.Inspect(parsed, func(node ast.Node) bool {
+		call, ok := node.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		name := ""
+		switch function := call.Fun.(type) {
+		case *ast.Ident:
+			name = function.Name
+		case *ast.SelectorExpr:
+			name = function.Sel.Name
+		}
+		if name != "" && !allowed[name] {
+			t.Errorf("pipeline root facade calls non-composition capability %s", name)
+		}
+		return true
+	})
 }
 
 func TestExtractedCommandImplementationsRemainOutsideRootRelease(t *testing.T) {

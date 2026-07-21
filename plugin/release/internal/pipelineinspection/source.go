@@ -13,7 +13,7 @@ import (
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
-func inspectConfiguredPipeline(request pipelineRequest, stages []LifecycleStage) (*pipelineResult, *commandFailure) {
+func inspectConfiguredPipeline(request pipelineRequest, stages []LifecycleStage, runtime RuntimeSnapshot) (*pipelineResult, *commandFailure) {
 	snapshot := (releasesource.FilesystemReader{}).Read(request.RepositoryRoot)
 	if failure := classifyPipelineSource(snapshot); failure != nil {
 		return nil, failure
@@ -58,7 +58,7 @@ func inspectConfiguredPipeline(request pipelineRequest, stages []LifecycleStage)
 	if kind == "" {
 		kind = "release"
 	}
-	return &pipelineResult{
+	result := &pipelineResult{
 		SchemaVersion: 1,
 		Status:        pipelineReady,
 		Unit: pipelineUnit{
@@ -93,7 +93,9 @@ func inspectConfiguredPipeline(request pipelineRequest, stages []LifecycleStage)
 			"Remote workflow and publication state were not inspected.",
 			"Runtime execution success cannot be guaranteed from local configuration.",
 		},
-	}, nil
+	}
+	applyPipelineRuntime(result, runtime)
+	return result, nil
 }
 
 func inspectPipelineConsumerWorkflow(repositoryRoot string, unit releaseconfig.ReleaseUnit) (releaseworkflow.ConsumerWorkflowFacts, *commandFailure) {

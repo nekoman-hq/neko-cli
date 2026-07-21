@@ -11,8 +11,9 @@ import (
 
 var pipelineStageColumns = []presentation.Column{
 	{Key: "label", Label: "Stage", Essential: true},
-	{Key: "configuration_status", Label: "Status", Essential: true},
+	{Key: "runtime_status", Label: "Runtime", Essential: true},
 	{Key: "owner", Label: "Owner", Essential: true},
+	{Key: "configuration_status", Label: "Configured"},
 	{Key: "location", Label: "Location"},
 	{Key: "mutation", Label: "Mutation"},
 	{Key: "source", Label: "Source"},
@@ -24,6 +25,7 @@ func mapPipelineResult(result *pipelineResult) *plugin.Response {
 	for _, stage := range result.Stages {
 		row := map[string]any{
 			"id": stage.ID, "label": stage.Label,
+			"runtime_status":       stage.RuntimeStatus,
 			"configuration_status": stage.ConfigurationStatus,
 			"owner":                stage.Owner, "location": stage.Location,
 			"mutation": stage.Mutation, "source": stage.Source,
@@ -31,13 +33,25 @@ func mapPipelineResult(result *pipelineResult) *plugin.Response {
 		if stage.ConditionalReason != "" {
 			row["conditional_reason"] = stage.ConditionalReason
 		}
+		if stage.RuntimeEvidence != "" {
+			row["runtime_evidence"] = stage.RuntimeEvidence
+		}
+		if stage.RuntimeReason != "" {
+			row["runtime_reason"] = stage.RuntimeReason
+		}
+		if stage.RuntimeIdentity != "" {
+			row["runtime_identity"] = stage.RuntimeIdentity
+		}
+		if stage.RuntimeConfirmedAt != "" {
+			row["runtime_confirmed_at"] = stage.RuntimeConfirmedAt
+		}
 		rows = append(rows, row)
 	}
 	limitations := make([]presentation.Property, 0, len(result.Limitations))
 	for index, limitation := range result.Limitations {
 		limitations = append(limitations, presentation.Property{Label: limitationLabel(index), Value: limitation, Role: presentation.StyleMuted})
 	}
-	return &plugin.Response{
+	response := &plugin.Response{
 		Status:   "success",
 		Metadata: pipelineResponseMetadata(),
 		Data: map[string]any{
@@ -49,6 +63,7 @@ func mapPipelineResult(result *pipelineResult) *plugin.Response {
 			"workflow":            result.Workflow,
 			"stages":              append(make([]LifecycleStage, 0, len(result.Stages)), result.Stages...),
 			"progress_inspection": result.ProgressInspection,
+			"execution":           result.Execution,
 			"limitations":         append(make([]string, 0, len(result.Limitations)), result.Limitations...),
 		},
 		RendererHint: "table",
@@ -69,6 +84,10 @@ func mapPipelineResult(result *pipelineResult) *plugin.Response {
 			Details: &presentation.Properties{Title: "Limitations", Properties: limitations},
 		},
 	}
+	if result.InvalidEvidence {
+		response.ExitCode = 1
+	}
+	return response
 }
 
 func normalizePipelineArrays(result *pipelineResult) *pipelineResult {
@@ -86,6 +105,14 @@ func normalizePipelineArrays(result *pipelineResult) *pipelineResult {
 	}
 	if result.Stages == nil {
 		result.Stages = make([]LifecycleStage, 0)
+	}
+	for index := range result.Stages {
+		if result.Stages[index].RuntimeStatus == "" {
+			result.Stages[index].RuntimeStatus = RuntimeNotObserved
+		}
+	}
+	if result.Execution.Observations == nil {
+		result.Execution.Observations = make([]pipelineExecutionJournal, 0)
 	}
 	if result.Limitations == nil {
 		result.Limitations = make([]string, 0)

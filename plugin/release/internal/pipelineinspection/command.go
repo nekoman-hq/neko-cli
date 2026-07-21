@@ -11,8 +11,9 @@ import (
 )
 
 type pipelineCommandHandler struct {
-	root   workspace.RepositoryRoot
-	stages []LifecycleStage
+	root    workspace.RepositoryRoot
+	stages  []LifecycleStage
+	runtime RuntimeSnapshot
 }
 
 func parsePipelineRequest(root workspace.RepositoryRoot, request plugin.Request) (pipelineRequest, *commandFailure) {
@@ -45,7 +46,7 @@ func (handler pipelineCommandHandler) Handle(_ context.Context, request plugin.R
 	if failure != nil {
 		return mapPipelineFailure(failure), nil
 	}
-	result, failure := inspectConfiguredPipeline(typedRequest, handler.stages)
+	result, failure := inspectConfiguredPipeline(typedRequest, handler.stages, handler.runtime)
 	if failure != nil {
 		return mapPipelineFailure(failure), nil
 	}
@@ -69,4 +70,25 @@ func HandlePipeline(request plugin.Request, stages []LifecycleStage) (*plugin.Re
 func HandlePipelineAt(root workspace.RepositoryRoot, request plugin.Request, stages []LifecycleStage) (*plugin.Response, error) {
 	handler := pipelineCommandHandler{root: root, stages: append([]LifecycleStage(nil), stages...)}
 	return handler.Handle(context.Background(), request)
+}
+
+// HandlePipelineRuntimeAt projects one Release V2 pipeline with immutable
+// authoritative runtime facts supplied by pkg/release.
+func HandlePipelineRuntimeAt(root workspace.RepositoryRoot, request plugin.Request, stages []LifecycleStage, runtime RuntimeSnapshot) (*plugin.Response, error) {
+	handler := pipelineCommandHandler{
+		root: root, stages: append([]LifecycleStage(nil), stages...),
+		runtime: cloneRuntimeSnapshot(runtime),
+	}
+	return handler.Handle(context.Background(), request)
+}
+
+func cloneRuntimeSnapshot(snapshot RuntimeSnapshot) RuntimeSnapshot {
+	clone := snapshot
+	clone.Executions = append([]RuntimeExecutionObservation(nil), snapshot.Executions...)
+	for index := range clone.Executions {
+		clone.Executions[index].ConfirmedStageIDs = append([]string(nil), snapshot.Executions[index].ConfirmedStageIDs...)
+		clone.Executions[index].CurrentStageIDs = append([]string(nil), snapshot.Executions[index].CurrentStageIDs...)
+	}
+	clone.Problems = append([]RuntimeProblem(nil), snapshot.Problems...)
+	return clone
 }

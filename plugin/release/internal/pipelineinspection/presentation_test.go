@@ -14,7 +14,7 @@ import (
 func TestPipelinePresentationKeepsEssentialAndOptionalStageColumnsResponsive(t *testing.T) {
 	response := mapPipelineResult(pipelinePresentationFixture())
 	normal := ansi.Strip(renderPipelineForTest(t, response, pipelineTestWidth{width: 120, available: true}, false))
-	for _, want := range []string{"Release Pipeline Inspection", "Stages", "Stage", "Status", "Owner", "Location", "Mutation", "Source", "Resolve release source", "configured", "Neko CLI"} {
+	for _, want := range []string{"Release Pipeline Inspection", "Stages", "Stage", "Runtime", "Owner", "Configured", "Location", "Mutation", "Source", "Resolve release source", "not_observed", "configured", "Neko CLI"} {
 		if !strings.Contains(normal, want) {
 			t.Fatalf("normal output omitted %q:\n%s", want, normal)
 		}
@@ -22,7 +22,7 @@ func TestPipelinePresentationKeepsEssentialAndOptionalStageColumnsResponsive(t *
 
 	narrow := renderPipelineForTest(t, response, pipelineTestWidth{width: 30, available: true}, false)
 	narrowPlain := ansi.Strip(narrow)
-	for _, want := range []string{"Stage", "Status", "Owner", "Resolve release", "configured", "Neko CLI", "Limitations"} {
+	for _, want := range []string{"Stage", "Runtime", "Owner", "Resolve release", "not_observed", "Neko CLI", "Limitations"} {
 		if !strings.Contains(narrowPlain, want) {
 			t.Fatalf("narrow output omitted %q:\n%s", want, narrowPlain)
 		}
@@ -38,7 +38,7 @@ func TestPipelinePresentationIsDeterministicAtUnknownWidth(t *testing.T) {
 		t.Fatalf("unknown-width output changed:\nfirst=%q\nsecond=%q", first, second)
 	}
 	plain := ansi.Strip(first)
-	for _, want := range []string{"Stage: Resolve release source", "Status: configured", "Owner: Neko CLI", "Execution journals were not inspected."} {
+	for _, want := range []string{"Stage: Resolve release source", "Runtime: not_observed", "Owner: Neko CLI", "Configured: configured", "Execution journals were not inspected."} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("unknown-width output omitted %q:\n%s", want, plain)
 		}
