@@ -11,19 +11,65 @@ type pipelineRequest struct {
 	UnitID         string
 }
 
+// StageOwner identifies the component that owns a configured operation.
+type StageOwner string
+
+// StageLocation identifies where a configured operation executes.
+type StageLocation string
+
+// MutationClass identifies the strongest mutation category an operation may
+// perform during a real release execution.
+type MutationClass string
+
+// ConfigurationStatus describes static configuration presence, not runtime
+// completion or journal progress.
+type ConfigurationStatus string
+
+const (
+	StageOwnerNekoCLI          StageOwner = "Neko CLI"
+	StageOwnerLocalGit         StageOwner = "local Git"
+	StageOwnerRemoteGit        StageOwner = "remote Git"
+	StageOwnerGitHubAPI        StageOwner = "GitHub API"
+	StageOwnerConsumerWorkflow StageOwner = "consumer workflow"
+	StageOwnerReleaseTool      StageOwner = "release tool"
+)
+
+const (
+	StageLocationLocalProcess        StageLocation = "local process"
+	StageLocationLocalRepository     StageLocation = "local repository"
+	StageLocationLocalGit            StageLocation = "local Git"
+	StageLocationRemoteGit           StageLocation = "remote Git"
+	StageLocationGitHubAPI           StageLocation = "GitHub API"
+	StageLocationGitHubActionsRunner StageLocation = "GitHub Actions runner"
+)
+
+const (
+	MutationNone         MutationClass = "none"
+	MutationFilesystem   MutationClass = "filesystem"
+	MutationReleaseState MutationClass = "release state"
+	MutationGitIndex     MutationClass = "Git index"
+	MutationGitObject    MutationClass = "Git object"
+	MutationGitRef       MutationClass = "Git ref"
+	MutationRemoteGit    MutationClass = "remote Git"
+	MutationRemoteAPI    MutationClass = "remote API"
+	MutationPublication  MutationClass = "publication"
+)
+
+const StageConfigured ConfigurationStatus = "configured"
+
 // LifecycleStage is immutable descriptive metadata supplied by the
 // authoritative root release coordinator. It contains no executable behavior.
 //
 //nolint:govet // Field order follows the stable machine contract.
 type LifecycleStage struct {
-	ID                  string `json:"id"`
-	Label               string `json:"label"`
-	Owner               string `json:"owner"`
-	Location            string `json:"location"`
-	Mutation            string `json:"mutation"`
-	ConfigurationStatus string `json:"configuration_status"`
-	Source              string `json:"source"`
-	ConditionalReason   string `json:"conditional_reason,omitempty"`
+	ID                  string              `json:"id"`
+	Label               string              `json:"label"`
+	Owner               StageOwner          `json:"owner"`
+	Location            StageLocation       `json:"location"`
+	Mutation            MutationClass       `json:"mutation"`
+	ConfigurationStatus ConfigurationStatus `json:"configuration_status"`
+	Source              string              `json:"source"`
+	ConditionalReason   string              `json:"conditional_reason,omitempty"`
 }
 
 //nolint:govet // Field order follows the stable machine contract.

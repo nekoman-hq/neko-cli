@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	goreleaserfacts "github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool/goreleaser"
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releaseworkflow"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 	"gopkg.in/yaml.v3"
 )
@@ -113,61 +114,25 @@ func integrationDoctorRepositoryEvidencePathValid(relativePath string) bool {
 
 func integrationDoctorGoReleaserInvocations(
 	root *yaml.Node,
-	jobs []integrationDoctorWorkflowJob,
+	_ []integrationDoctorWorkflowJob,
 ) []integrationDoctorGoReleaserInvocation {
+	facts, err := releaseworkflow.InspectConsumerWorkflowDocument(root, false)
+	if err != nil {
+		return nil
+	}
 	invocations := make([]integrationDoctorGoReleaserInvocation, 0)
-	for _, job := range jobs {
-		for _, step := range job.steps {
-			if !strings.HasPrefix(strings.ToLower(step.uses), "goreleaser/goreleaser-action@") {
-				continue
-			}
-			classified := goreleaserfacts.ClassifyArguments(
-				workflowScalar(workflowMappingValue(workflowMappingValue(step.node, "with"), "args")),
-			)
-			invocation := integrationDoctorGoReleaserInvocation{
-				JobID:       job.id,
-				StepName:    step.name,
-				Command:     classified.Command,
-				ConfigPath:  integrationDoctorResolveWorkflowValue(classified.ConfigReference, root, job, step),
-				Snapshot:    classified.Snapshot,
-				SkipPublish: classified.SkipPublication,
-				Publishes:   classified.RealPublication,
-			}
-			invocations = append(invocations, invocation)
+	for _, operation := range facts.Operations {
+		if operation.ToolCommand == "" {
+			continue
 		}
+		invocations = append(invocations, integrationDoctorGoReleaserInvocation{
+			JobID: operation.JobID, StepName: operation.StepName,
+			Command: operation.ToolCommand, ConfigPath: operation.ConfigReference,
+			Snapshot: operation.Snapshot, SkipPublish: operation.SkipPublication,
+			Publishes: operation.Publishes,
+		})
 	}
 	return invocations
-}
-
-func integrationDoctorResolveWorkflowValue(
-	value string,
-	root *yaml.Node,
-	job integrationDoctorWorkflowJob,
-	step integrationDoctorWorkflowStep,
-) string {
-	value = strings.TrimSuffix(strings.TrimSpace(value), "\\")
-	normalized := strings.NewReplacer("${{ ", "${{", " }}", "}}").Replace(value)
-	name := ""
-	switch {
-	case strings.HasPrefix(normalized, "${{env.") && strings.HasSuffix(normalized, "}}"):
-		name = strings.TrimSuffix(strings.TrimPrefix(normalized, "${{env."), "}}")
-	case strings.HasPrefix(normalized, "${") && strings.HasSuffix(normalized, "}"):
-		name = strings.TrimSuffix(strings.TrimPrefix(normalized, "${"), "}")
-	case strings.HasPrefix(normalized, "$"):
-		name = strings.TrimPrefix(normalized, "$")
-	default:
-		return normalized
-	}
-	for _, env := range []*yaml.Node{
-		workflowMappingValue(step.node, "env"),
-		job.env,
-		workflowMappingValue(root, "env"),
-	} {
-		if resolved := workflowScalar(workflowMappingValue(env, name)); resolved != "" {
-			return resolved
-		}
-	}
-	return ""
 }
 
 func integrationDoctorGoReleaserExpectations(
