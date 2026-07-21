@@ -312,10 +312,11 @@ retry, or resume behavior and production execution never iterates over them.
 
 Consumer ordering comes from `internal/releaseworkflow`'s neutral local YAML
 facts. Its GoReleaser-action classification reuses
-`internal/releasetool.ClassifyArguments`, which Doctor also consumes;
-GoReleaser configuration and artifact parsing remain in the format-specific
+`internal/releasetool/goreleaser.ClassifyArguments`, which Doctor also consumes
+where direct invocation classification is required. GoReleaser configuration,
+invocation, and artifact facts remain together in the format-specific
 subpackage. This avoids a Pipeline-owned workflow or tool parser and keeps the
-neutral facts independent of the new command.
+workflow facts independent of the new command.
 
 The capability reads only V2 config/state, pair-recovery readiness, and one
 repository-confined workflow. It has no Git, token, HTTP, dispatch, writer,

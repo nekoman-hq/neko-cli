@@ -313,13 +313,9 @@ func TestIntegrationDoctorKeepsTypedCommandAndResponseBoundaries(t *testing.T) {
 }
 
 func TestIntegrationDoctorUsesCanonicalReleaseToolFacts(t *testing.T) {
-	const (
-		canonicalToolImport       = "github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool"
-		canonicalGoReleaserImport = "github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool/goreleaser"
-	)
+	const canonicalGoReleaserImport = "github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool/goreleaser"
 	requiredCalls := map[string]map[string]bool{
-		canonicalToolImport:       {"ClassifyArguments": false},
-		canonicalGoReleaserImport: {"ParseConfig": false, "VerifyArtifactContract": false},
+		canonicalGoReleaserImport: {"ClassifyArguments": false, "ParseConfig": false, "VerifyArtifactContract": false},
 	}
 	forbiddenTypes := map[string]bool{
 		"integrationDoctorGoReleaserBuild":          true,
@@ -330,7 +326,7 @@ func TestIntegrationDoctorUsesCanonicalReleaseToolFacts(t *testing.T) {
 		"integrationDoctorGoReleaserConfig":         true,
 	}
 	foundCanonicalImports := map[string]bool{
-		canonicalToolImport: false, canonicalGoReleaserImport: false,
+		canonicalGoReleaserImport: false,
 	}
 	for _, parsed := range parseReleaseProductionFiles(t) {
 		imports := make(map[string]string, len(parsed.file.Imports))
@@ -350,6 +346,12 @@ func TestIntegrationDoctorUsesCanonicalReleaseToolFacts(t *testing.T) {
 		}
 		ast.Inspect(parsed.file, func(node ast.Node) bool {
 			switch typed := node.(type) {
+			case *ast.FuncDecl:
+				for _, forbidden := range []string{"ClassifyArguments", "classifiesAsRealPublication", "commaListContains", "integrationDoctorResolveWorkflowValue"} {
+					if typed.Name.Name == forbidden {
+						t.Errorf("%s retains duplicate GoReleaser invocation parser %s", parsed.path, forbidden)
+					}
+				}
 			case *ast.TypeSpec:
 				if forbiddenTypes[typed.Name.Name] {
 					t.Errorf("%s retains reusable GoReleaser DTO %s", parsed.path, typed.Name.Name)

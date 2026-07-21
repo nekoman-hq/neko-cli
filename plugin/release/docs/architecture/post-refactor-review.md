@@ -47,8 +47,8 @@ Response mapping receives typed outcomes and owns no lifecycle decision.
 | Package | Responsibility | Boundary |
 | --- | --- | --- |
 | `plugin/release` | Decode/encode the plugin protocol, resolve one repository root, construct fresh V1 executors, and route commands | Composition only; no domain model, lifecycle, or persistence |
-| `internal/releasetool` | Common tool identity, ordered configuration candidates, static V1 tool-behavior facts, and neutral invocation classification | Pure leaf facts |
-| `internal/releasetool/goreleaser` | GoReleaser configuration parsing and artifact-contract facts | Pure byte/model facts; no filesystem, Doctor, HTTP, journals, or presentation |
+| `internal/releasetool` | Common tool identity, ordered configuration candidates, and static shared V1 tool-behavior facts | Pure shared leaf facts; no tool-specific command model |
+| `internal/releasetool/goreleaser` | GoReleaser configuration parsing, invocation classification, and artifact-contract facts | Pure byte/model facts; no filesystem, Doctor, HTTP, journals, or presentation |
 | `internal/releasetool/jreleaser` | Canonical JReleaser configuration codec and project-version rewrite | Focused local config reads/writes; no HTTP or lifecycle policy |
 | `internal/releasetool/releaseit` | Canonical release-it configuration codec and default configuration | Focused local config reads/writes; no HTTP or lifecycle policy |
 | `internal/releaseworkflow` | Canonical workflow name/file/ref/inputs, repository-target facts, and ordered consumer-operation classification | Pure local byte/model facts |
@@ -93,9 +93,8 @@ sequence. Production files and lines count direct non-test Go files in
 The following is the complete responsibility transfer made by this refactor:
 
 1. shared release-tool identity, ordered configuration candidates, and static
-   V1-behavior facts moved to `internal/releasetool`; the later neutral
-   invocation classifier also lives with this common owner;
-2. reusable GoReleaser config and artifact parsing moved to
+   V1-behavior facts moved to `internal/releasetool`;
+2. reusable GoReleaser config, invocation, and artifact parsing moved to
    `internal/releasetool/goreleaser`;
 3. canonical JReleaser config load/save, rewriting, and version facts moved to
    `internal/releasetool/jreleaser`;
@@ -197,14 +196,13 @@ responsibilities above and pass the architecture review in
 ## Release-tool ownership
 
 `internal/releasetool` owns common identity, ordered configuration candidates,
-static V1 tool-behavior facts, and neutral release-tool invocation
-classification. Each format package owns only its reusable format-specific
-facts.
+and static shared V1 tool-behavior facts. Each format package owns its reusable
+format- and command-specific facts.
 
-- GoReleaser configuration parsing and artifact contracts are canonical under
-  `internal/releasetool/goreleaser`; invocation classification and GoReleaser
-  candidate paths remain with the common owner because workflow consumers and
-  Doctor share them without depending on format-specific parsing.
+- GoReleaser configuration parsing, invocation classification, and artifact
+  contracts are canonical under `internal/releasetool/goreleaser`; only
+  GoReleaser candidate paths remain with the common configuration-candidate
+  owner.
 - The JReleaser configuration codec and project-version rewrite are canonical
   under `internal/releasetool/jreleaser`.
 - The release-it configuration codec and default configuration are canonical
@@ -341,7 +339,7 @@ execute by iterating over them.
 | --- | --- |
 | command routing | Selecting one command at the plugin protocol boundary |
 | release orchestration | The explicit ordered composition of named release operations |
-| tool facts | Neutral identity, configuration, artifact, version, or invocation facts |
+| tool facts | Shared identity/configuration facts or format-specific configuration, invocation, artifact, and version facts |
 | tool invocation | Starting a V1 release-tool process through its compatibility executor |
 | release commit | The exact commit containing the known release files |
 | unit tag | The selected unit's canonical `TagSpec` result |

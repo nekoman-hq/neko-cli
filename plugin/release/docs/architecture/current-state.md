@@ -32,8 +32,8 @@ The public command contract is duplicated between `manifest.json` and the switch
 | Area | Current responsibility | Important symbols | Notes |
 | --- | --- | --- | --- |
 | `main` | Plugin protocol entry, explicit root resolution, command routing, fatal error fallback | `main`, `handleRequestAt` | Uses a command switch rather than a command registry. Production routing passes a resolved root instead of changing cwd. |
-| `internal/releasetool` | Canonical release-tool identity, configuration candidates, V1 behavior, and neutral invocation facts | `Identity`, `V1BehaviorFor`, `ConfigCandidates`, `Invocation`, `ClassifyArguments` | Pure facts are shared by Doctor, workflow inspection, planning, materialization, and V1 adapters. |
-| `internal/releasetool/goreleaser` | GoReleaser byte parsing and artifact contracts | `ParseConfig`, `VerifyArtifactContract` | Pure format facts; no filesystem, HTTP, journal, or presentation dependency. |
+| `internal/releasetool` | Canonical release-tool identity, configuration candidates, and shared V1 behavior | `Identity`, `V1BehaviorFor`, `ConfigCandidates` | Shared facts apply across real release-tool integrations and contain no tool-specific command model. |
+| `internal/releasetool/goreleaser` | GoReleaser config parsing, invocation classification, and artifact contracts | `ParseConfig`, `Invocation`, `ClassifyArguments`, `VerifyArtifactContract` | Pure GoReleaser format and command facts; no filesystem, HTTP, journal, or presentation dependency. |
 | `internal/releasetool/jreleaser` | Canonical JReleaser config model, local load/save codec, rewrite, and version facts | `LoadConfigAt`, `SaveConfigAt`, `RewriteProjectVersion` | Intentionally reads and writes only the selected local JReleaser config; no HTTP, journal, Doctor, or presentation policy. |
 | `internal/releasetool/releaseit` | Canonical release-it config model, local load/save codec, and defaults | `LoadConfigAt`, `SaveConfigAt`, `InitDefaultConfig` | Intentionally reads and writes only the selected local release-it config; no HTTP, journal, Doctor, or presentation policy. |
 | `internal/releaseworkflow` | Canonical workflow input, repository-target, and ordered consumer-operation facts | `DispatchInputDefinition`, `CanonicalDispatchInputContract`, `GitHubRepositoryTarget`, `ConsumerWorkflowFacts`, `InspectConsumerWorkflowDocument` | Contains no HTTP, journal, token, execution, or presentation policy. |
@@ -372,8 +372,9 @@ The public command contract is duplicated between `manifest.json` and the switch
   unsupported source/executor/delivery/workflow contracts are typed failures.
 - Stage ownership: `release_lifecycle_facts.go` describes the exact direct-call
   root operation order without functions or handlers. `releaseworkflow`
-  derives ordered consumer operations from local YAML and reuses the neutral
-  `releasetool.ClassifyArguments` fact; Doctor consumes the same classifiers.
+  derives ordered consumer operations from local YAML and reuses the focused
+  `goreleaser.ClassifyArguments` fact; Doctor consumes the same workflow facts
+  and focused GoReleaser classifier.
   Production execution remains straight-line calls in
   `githubActionsReleaseUseCase.Run` and never iterates over descriptors.
 - Output: static status is only `ready` and every included stage is

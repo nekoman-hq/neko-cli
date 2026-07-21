@@ -20,11 +20,13 @@ func TestPipelineInspectionHasReadOnlyDependencyReachability(t *testing.T) {
 			}
 			for _, forbidden := range []string{
 				"net", "net/http", "os/exec",
+				"gopkg.in/yaml.v3",
 				"github.com/nekoman-hq/neko-cli/internal/terminal",
 				"github.com/nekoman-hq/neko-cli/pkg/log",
 				"github.com/nekoman-hq/neko-cli/pkg/renderer",
 				"github.com/nekoman-hq/neko-cli/plugin/release/internal/doctor",
 				"github.com/nekoman-hq/neko-cli/plugin/release/internal/githubdispatch",
+				"github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool/goreleaser",
 				"github.com/nekoman-hq/neko-cli/plugin/release/pkg/git",
 				"github.com/nekoman-hq/neko-cli/plugin/release/pkg/release",
 			} {
@@ -51,14 +53,14 @@ func TestPipelineInspectionHasReadOnlyDependencyReachability(t *testing.T) {
 	}
 }
 
-func TestPipelineInspectionDefinesNoEngineRegistryOrTransitionBehavior(t *testing.T) {
+func TestPipelineInspectionDefinesNoEngineRegistryTransitionOrToolParserBehavior(t *testing.T) {
 	for _, file := range pipelineProductionFiles(t) {
 		for _, declaration := range file.Decls {
 			switch declaration := declaration.(type) {
 			case *ast.FuncDecl:
-				for _, forbidden := range []string{"Advance", "Transition", "ApplyEvent", "CanTransition", "Retry", "Resume"} {
+				for _, forbidden := range []string{"Advance", "Transition", "ApplyEvent", "CanTransition", "Retry", "Resume", "ClassifyArguments", "classifiesAsRealPublication", "commaListContains"} {
 					if declaration.Name.Name == forbidden {
-						t.Errorf("pipeline inspection defines prohibited transition function %s", forbidden)
+						t.Errorf("pipeline inspection defines prohibited behavior function %s", forbidden)
 					}
 				}
 			case *ast.GenDecl:
@@ -67,7 +69,7 @@ func TestPipelineInspectionDefinesNoEngineRegistryOrTransitionBehavior(t *testin
 					if !ok {
 						continue
 					}
-					for _, forbidden := range []string{"Engine", "Registry", "MutableContext"} {
+					for _, forbidden := range []string{"Engine", "Registry", "MutableContext", "Invocation"} {
 						if strings.Contains(typed.Name.Name, forbidden) {
 							t.Errorf("pipeline inspection defines prohibited framework type %s", typed.Name.Name)
 						}

@@ -70,3 +70,42 @@ func TestGoReleaserFactsRemainNeutralAndInfrastructureFree(t *testing.T) {
 		}
 	}
 }
+
+func TestGoReleaserPackageOwnsInvocationClassification(t *testing.T) {
+	parsed, err := parser.ParseFile(token.NewFileSet(), "invocation.go", nil, 0)
+	if err != nil {
+		t.Fatalf("parse canonical GoReleaser invocation owner: %v", err)
+	}
+	foundType := false
+	foundFunctions := map[string]bool{
+		"ClassifyArguments":           false,
+		"classifiesAsRealPublication": false,
+		"commaListContains":           false,
+	}
+	for _, declaration := range parsed.Decls {
+		switch typed := declaration.(type) {
+		case *ast.FuncDecl:
+			if _, required := foundFunctions[typed.Name.Name]; required {
+				foundFunctions[typed.Name.Name] = true
+			}
+		case *ast.GenDecl:
+			if typed.Tok != token.TYPE {
+				continue
+			}
+			for _, specification := range typed.Specs {
+				typeSpecification, ok := specification.(*ast.TypeSpec)
+				if ok && typeSpecification.Name.Name == "Invocation" {
+					foundType = true
+				}
+			}
+		}
+	}
+	if !foundType {
+		t.Error("GoReleaser package does not declare Invocation")
+	}
+	for name, found := range foundFunctions {
+		if !found {
+			t.Errorf("GoReleaser package does not declare %s", name)
+		}
+	}
+}

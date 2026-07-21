@@ -37,6 +37,37 @@ func TestToolConfigurationPackagesRemainIndependentLeaves(t *testing.T) {
 	}
 }
 
+func TestSharedReleaseToolFactsOwnNoGoReleaserInvocationModel(t *testing.T) {
+	for _, parsed := range parseToolConfigurationProductionFiles(t, ".") {
+		for _, declaration := range parsed.Decls {
+			switch typed := declaration.(type) {
+			case *ast.FuncDecl:
+				for _, forbidden := range []string{"ClassifyArguments", "classifiesAsRealPublication", "commaListContains"} {
+					if typed.Name.Name == forbidden {
+						t.Errorf("shared release-tool facts declare GoReleaser invocation function %s", forbidden)
+					}
+				}
+			case *ast.GenDecl:
+				if typed.Tok != token.TYPE {
+					continue
+				}
+				for _, specification := range typed.Specs {
+					typeSpecification, ok := specification.(*ast.TypeSpec)
+					if !ok {
+						t.Fatalf("shared release-tool facts contain non-type specification")
+					}
+					if typeSpecification.Name.Name == "Invocation" {
+						t.Error("shared release-tool facts declare GoReleaser Invocation")
+					}
+					if _, genericInterface := typeSpecification.Type.(*ast.InterfaceType); genericInterface {
+						t.Errorf("shared release-tool facts declare generic tool interface %s", typeSpecification.Name.Name)
+					}
+				}
+			}
+		}
+	}
+}
+
 func TestV1ToolConfigurationFilesRemainCompatibilityFacades(t *testing.T) {
 	facades := map[string]string{
 		"../../pkg/release/tool/jreleaser/config.go": "github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool/jreleaser",
