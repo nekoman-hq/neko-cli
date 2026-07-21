@@ -47,9 +47,21 @@ func mapPipelineResult(result *pipelineResult) *plugin.Response {
 		}
 		rows = append(rows, row)
 	}
-	limitations := make([]presentation.Property, 0, len(result.Limitations))
+	details := make([]presentation.Property, 0, len(result.Limitations)+6)
+	if result.Execution.Present {
+		details = append(details, presentation.Property{Label: "Execution Evidence", Value: result.Execution.Identity + " (" + result.Execution.State + ")"})
+	}
+	if result.Dispatch.Present {
+		details = append(details, presentation.Property{Label: "Dispatch Evidence", Value: result.Dispatch.Identity + " (" + result.Dispatch.State + ")"})
+	}
+	if result.Recovery.Guidance != "" {
+		details = append(details, presentation.Property{Label: "Recovery Guidance", Value: result.Recovery.Guidance})
+	}
+	for index, reason := range result.ManualIntervention.Reasons {
+		details = append(details, presentation.Property{Label: "Manual Reason " + strconv.Itoa(index+1), Value: reason})
+	}
 	for index, limitation := range result.Limitations {
-		limitations = append(limitations, presentation.Property{Label: limitationLabel(index), Value: limitation, Role: presentation.StyleMuted})
+		details = append(details, presentation.Property{Label: limitationLabel(index), Value: limitation, Role: presentation.StyleMuted})
 	}
 	response := &plugin.Response{
 		Status:   "success",
@@ -66,6 +78,8 @@ func mapPipelineResult(result *pipelineResult) *plugin.Response {
 			"execution":           result.Execution,
 			"dispatch":            result.Dispatch,
 			"local_git":           result.LocalGit,
+			"recovery":            result.Recovery,
+			"manual_intervention": result.ManualIntervention,
 			"limitations":         append(make([]string, 0, len(result.Limitations)), result.Limitations...),
 		},
 		RendererHint: "table",
@@ -74,16 +88,22 @@ func mapPipelineResult(result *pipelineResult) *plugin.Response {
 			Properties: []presentation.Property{
 				{Label: "Unit", Value: result.Unit.ID, Emphasized: true},
 				{Label: "Version", Value: result.Unit.ConfiguredVersion},
-				{Label: "Status", Value: result.Status, Role: presentation.StyleSuccess},
+				{Label: "Status", Value: result.Status, Role: pipelineStatusRole(result.Status)},
 				{Label: "Executor", Value: result.Unit.Executor},
 				{Label: "Delivery", Value: result.Unit.Delivery},
 				{Label: "Workflow", Value: result.Workflow.Path},
+				{Label: "Execution", Value: pipelineDisplayValue(result.Execution.State, "none")},
+				{Label: "Dispatch", Value: pipelineDisplayValue(result.Dispatch.State, "none")},
+				{Label: "Local Git", Value: pipelineLocalGitSummary(result.LocalGit)},
+				{Label: "Recovery", Value: pipelineDisplayValue(result.Recovery.Classification, "not_evaluated")},
+				{Label: "Resume Eligible", Value: strconv.FormatBool(result.Recovery.ResumeEligible)},
+				{Label: "Manual Intervention", Value: strconv.FormatBool(result.ManualIntervention.Required)},
 			},
 		},
 		PresentationTable: &presentation.Table{
 			Title: "Stages", Columns: append([]presentation.Column(nil), pipelineStageColumns...),
 			Rows:    rows,
-			Details: &presentation.Properties{Title: "Limitations", Properties: limitations},
+			Details: &presentation.Properties{Title: "Runtime and Limitations", Properties: details},
 		},
 	}
 	if result.InvalidEvidence {
@@ -119,6 +139,12 @@ func normalizePipelineArrays(result *pipelineResult) *pipelineResult {
 	if result.Dispatch.Observations == nil {
 		result.Dispatch.Observations = make([]pipelineDispatchJournal, 0)
 	}
+	if result.Recovery.Reasons == nil {
+		result.Recovery.Reasons = make([]string, 0)
+	}
+	if result.ManualIntervention.Reasons == nil {
+		result.ManualIntervention.Reasons = make([]string, 0)
+	}
 	if result.Limitations == nil {
 		result.Limitations = make([]string, 0)
 	}
@@ -142,4 +168,34 @@ func pipelineResponseMetadata() plugin.ResponseMetadata {
 
 func limitationLabel(index int) string {
 	return "Limitation " + strconv.Itoa(index+1)
+}
+
+func pipelineDisplayValue(value, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func pipelineLocalGitSummary(observation pipelineLocalGit) string {
+	if observation.ExpectedCommit == "" {
+		return observation.Scope
+	}
+	if observation.Consistent {
+		return "consistent (local only)"
+	}
+	return "inconsistent (local only)"
+}
+
+func pipelineStatusRole(status pipelineStatus) presentation.StyleRole {
+	switch status {
+	case pipelineReady, pipelineResumable, pipelineCompleted:
+		return presentation.StyleSuccess
+	case pipelineActive, pipelineBlocked, pipelineUncertain:
+		return presentation.StyleWarning
+	case pipelineRejected, pipelineInvalid:
+		return presentation.StyleError
+	default:
+		return presentation.StyleDefault
+	}
 }

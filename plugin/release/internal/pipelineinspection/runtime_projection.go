@@ -15,6 +15,8 @@ func applyPipelineRuntime(result *pipelineResult, snapshot RuntimeSnapshot) {
 		Observations: make([]pipelineDispatchJournal, 0),
 	}
 	result.LocalGit = pipelineLocalGit{Scope: "local_only", RemoteFreshness: "remote_not_inspected"}
+	result.Recovery = pipelineRecovery{RetrySafety: "not_evaluated", Reasons: make([]string, 0)}
+	result.ManualIntervention = pipelineManualIntervention{Reasons: make([]string, 0)}
 	if !snapshot.Inspected {
 		return
 	}
@@ -75,6 +77,7 @@ func applyPipelineRuntime(result *pipelineResult, snapshot RuntimeSnapshot) {
 		result.Execution.Validity = "conflict"
 		result.Status = pipelineInvalid
 		result.ProgressInspection.ExecutionProgress = "invalid"
+		finalizePipelineRuntimeStatus(result, nil)
 		return
 	}
 
@@ -88,6 +91,7 @@ func applyPipelineRuntime(result *pipelineResult, snapshot RuntimeSnapshot) {
 			result.Execution.Validity = "conflict"
 			result.Status = pipelineInvalid
 			result.ProgressInspection.ExecutionProgress = "invalid"
+			finalizePipelineRuntimeStatus(result, nil)
 			return
 		}
 		if len(completed) == 1 {
@@ -99,11 +103,13 @@ func applyPipelineRuntime(result *pipelineResult, snapshot RuntimeSnapshot) {
 		result.Execution.Validity = "invalid"
 		result.Status = pipelineInvalid
 		result.ProgressInspection.ExecutionProgress = "invalid"
+		finalizePipelineRuntimeStatus(result, nil)
 		return
 	}
 	if selected == nil {
 		result.Execution.Validity = "valid"
 		applyDispatchRuntime(result, snapshot, nil)
+		finalizePipelineRuntimeStatus(result, nil)
 		return
 	}
 
@@ -121,6 +127,8 @@ func applyPipelineRuntime(result *pipelineResult, snapshot RuntimeSnapshot) {
 	applyExecutionStageRuntime(result.Stages, *selected)
 	applyLocalGitRuntime(result, selected.LocalGit)
 	applyDispatchRuntime(result, snapshot, selected)
+	applyRecoveryRuntime(result, selected.Recovery)
+	finalizePipelineRuntimeStatus(result, selected)
 }
 
 func applyLocalGitRuntime(result *pipelineResult, observation RuntimeLocalGitObservation) {
@@ -207,17 +215,61 @@ func applyDispatchRuntime(result *pipelineResult, snapshot RuntimeSnapshot, sele
 	result.Dispatch.State = dispatch.State
 	result.Dispatch.WorkflowPath = dispatch.WorkflowPath
 	result.Dispatch.RunID = dispatch.RunID
+	result.Recovery.RetrySafety = dispatch.RetrySafety
 	applyDispatchStageRuntime(result.Stages, dispatch)
-	switch dispatch.State {
-	case "rejected":
-		result.Status = pipelineRejected
-	case "request-started", "unknown":
-		result.Status = pipelineUncertain
-	case "accepted":
-		if selected != nil && !selected.Unresolved {
-			result.Status = pipelineCompleted
-		}
+}
+
+func applyRecoveryRuntime(result *pipelineResult, observation RuntimeRecoveryObservation) {
+	result.ProgressInspection.ResumeEligibilityEvaluated = observation.Evaluated
+	result.Recovery.Evaluated = observation.Evaluated
+	result.Recovery.Classification = observation.Classification
+	result.Recovery.SafeToContinue = observation.SafeToContinue
+	result.Recovery.ResumeEligible = observation.ResumeEligible
+	result.Recovery.ResumeOperation = observation.ResumeOperation
+	result.Recovery.ResumeRefusal = observation.ResumeRefusal
+	result.Recovery.ManualInterventionRequired = observation.ManualIntervention
+	result.Recovery.Guidance = observation.Guidance
+	if observation.ResumeRefusal != "" {
+		result.Recovery.Reasons = append(result.Recovery.Reasons, "resume policy: "+observation.ResumeRefusal)
 	}
+	if observation.Invalid {
+		result.InvalidEvidence = true
+	}
+}
+
+func finalizePipelineRuntimeStatus(result *pipelineResult, selected *RuntimeExecutionObservation) {
+	result.ManualIntervention = pipelineManualIntervention{Reasons: make([]string, 0)}
+	switch {
+	case result.InvalidEvidence:
+		result.Status = pipelineInvalid
+		result.ManualIntervention.Required = true
+		result.ManualIntervention.Reasons = append(result.ManualIntervention.Reasons, "Local journal or Git evidence is invalid or contradictory.")
+	case result.Dispatch.State == "rejected":
+		result.Status = pipelineRejected
+		result.ManualIntervention.Required = true
+		result.ManualIntervention.Reasons = append(result.ManualIntervention.Reasons, "The exactly correlated workflow dispatch was rejected.")
+	case result.Dispatch.State == "request-started" || result.Dispatch.State == "unknown" || selected != nil && selected.Recovery.Uncertain:
+		result.Status = pipelineUncertain
+		result.ManualIntervention.Required = true
+		result.ManualIntervention.Reasons = append(result.ManualIntervention.Reasons, "A durable external-effect boundary is uncertain; automatic retry is prohibited.")
+	case selected != nil && selected.Recovery.ManualIntervention:
+		result.Status = pipelineBlocked
+		result.ManualIntervention.Required = true
+		result.ManualIntervention.Reasons = append(result.ManualIntervention.Reasons, "Existing recovery or resume policy requires manual inspection.")
+	case selected != nil && selected.Recovery.ResumeEligible:
+		result.Status = pipelineResumable
+	case selected != nil && selected.Unresolved:
+		result.Status = pipelineActive
+	case selected != nil && !selected.Unresolved && result.Dispatch.State == "accepted":
+		result.Status = pipelineCompleted
+	case selected != nil:
+		result.Status = pipelineBlocked
+		result.ManualIntervention.Required = true
+		result.ManualIntervention.Reasons = append(result.ManualIntervention.Reasons, "Completed local execution evidence lacks an exactly accepted workflow handoff.")
+	default:
+		result.Status = pipelineReady
+	}
+	result.Recovery.ManualInterventionRequired = result.ManualIntervention.Required
 }
 
 func relevantDispatchObservations(result *pipelineResult, snapshot RuntimeSnapshot) []RuntimeDispatchObservation {

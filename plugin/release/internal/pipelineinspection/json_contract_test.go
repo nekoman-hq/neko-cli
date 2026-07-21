@@ -39,7 +39,7 @@ func TestPipelineJSONSchemaVersionOneIsStableAndPresentationFree(t *testing.T) {
 	if err := json.Unmarshal(first.Bytes(), &envelope); err != nil {
 		t.Fatal(err)
 	}
-	wantKeys := []string{"dispatch", "execution", "limitations", "local_git", "progress_inspection", "release", "repository", "schema_version", "stages", "status", "unit", "workflow"}
+	wantKeys := []string{"dispatch", "execution", "limitations", "local_git", "manual_intervention", "progress_inspection", "recovery", "release", "repository", "schema_version", "stages", "status", "unit", "workflow"}
 	gotKeys := make([]string, 0, len(envelope.Data))
 	for key := range envelope.Data {
 		gotKeys = append(gotKeys, key)
@@ -56,7 +56,7 @@ func TestPipelineJSONSchemaVersionOneIsStableAndPresentationFree(t *testing.T) {
 	}
 	for _, forbidden := range []string{
 		root.Path(), "human_table", "human_properties", "presentation", "\x1b[",
-		"next_version", "next_tag", "proposed", "journal_state", "resume_eligible",
+		"next_version", "next_tag", "proposed", "journal_state",
 		"terminal_width", "credential", "secret_value",
 	} {
 		if strings.Contains(strings.ToLower(text), strings.ToLower(forbidden)) {
@@ -74,12 +74,14 @@ func TestPipelineJSONArraysNeverEncodeAsNull(t *testing.T) {
 	result.Limitations = nil
 	result.Execution.Observations = nil
 	result.Dispatch.Observations = nil
+	result.Recovery.Reasons = nil
+	result.ManualIntervention.Reasons = nil
 	response := mapPipelineResult(normalizePipelineArrays(result))
 	encoded, err := json.Marshal(response.Data)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, field := range []string{"materialized_files", "required_inputs", "consumer_operations", "stages", "limitations", "observations"} {
+	for _, field := range []string{"materialized_files", "required_inputs", "consumer_operations", "stages", "limitations", "observations", "reasons"} {
 		if strings.Contains(string(encoded), `"`+field+`":null`) {
 			t.Fatalf("%s encoded null: %s", field, encoded)
 		}

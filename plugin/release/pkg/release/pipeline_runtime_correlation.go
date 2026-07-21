@@ -64,6 +64,7 @@ func observePipelineDispatchJournal(filename, reference string, journal *Dispatc
 		return observation
 	}
 	observation.Valid = true
+	observation.RetrySafety, observation.ManualIntervention = observePipelineDispatchRetry(journal)
 	return observation
 }
 

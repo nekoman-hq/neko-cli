@@ -104,6 +104,7 @@ func inspectPipelineExecutionJournals(repositoryRoot string, coordinator *GitRel
 		observation := observePipelineExecutionJournal(entry.Name(), reference, journal)
 		if observation.Valid {
 			observation.LocalGit = inspectPipelineExecutionGit(repositoryRoot, coordinator, journal)
+			observation.Recovery = observePipelineRecovery(repositoryRoot, journal)
 		}
 		snapshot.Executions = append(snapshot.Executions, observation)
 	}

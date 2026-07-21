@@ -7,7 +7,9 @@ type pipelineStatus string
 const (
 	pipelineReady     pipelineStatus = "ready"
 	pipelineActive    pipelineStatus = "active"
+	pipelineResumable pipelineStatus = "resumable"
 	pipelineCompleted pipelineStatus = "completed"
+	pipelineBlocked   pipelineStatus = "blocked"
 	pipelineUncertain pipelineStatus = "uncertain"
 	pipelineRejected  pipelineStatus = "rejected"
 	pipelineInvalid   pipelineStatus = "invalid"
@@ -197,6 +199,7 @@ type RuntimeExecutionObservation struct {
 	CurrentStageIDs         []string
 	PendingStageID          string
 	LocalGit                RuntimeLocalGitObservation
+	Recovery                RuntimeRecoveryObservation
 	Problem                 string
 }
 
@@ -221,7 +224,26 @@ type RuntimeDispatchObservation struct {
 	CreatedAt            string
 	UpdatedAt            string
 	Valid                bool
+	RetrySafety          string
+	ManualIntervention   bool
 	Problem              string
+}
+
+// RuntimeRecoveryObservation is the immutable result of the authoritative
+// recovery and resume policies in pkg/release.
+//
+//nolint:govet // Fields follow assessment and policy resolution order.
+type RuntimeRecoveryObservation struct {
+	Evaluated          bool
+	Classification     string
+	SafeToContinue     bool
+	ResumeEligible     bool
+	ResumeOperation    string
+	ResumeRefusal      string
+	ManualIntervention bool
+	Uncertain          bool
+	Invalid            bool
+	Guidance           string
 }
 
 // RuntimeLocalGitObservation contains only read-only local object, ref, index,
@@ -319,6 +341,25 @@ type pipelineLocalGit struct {
 	Problem                          string `json:"problem,omitempty"`
 }
 
+//nolint:govet // Fields follow authoritative policy projection order.
+type pipelineRecovery struct {
+	Evaluated                  bool     `json:"evaluated"`
+	Classification             string   `json:"classification"`
+	SafeToContinue             bool     `json:"safe_to_continue"`
+	ResumeEligible             bool     `json:"resume_eligible"`
+	ResumeOperation            string   `json:"resume_operation,omitempty"`
+	ResumeRefusal              string   `json:"resume_refusal,omitempty"`
+	RetrySafety                string   `json:"retry_safety"`
+	ManualInterventionRequired bool     `json:"manual_intervention_required"`
+	Guidance                   string   `json:"guidance,omitempty"`
+	Reasons                    []string `json:"reasons"`
+}
+
+type pipelineManualIntervention struct {
+	Required bool     `json:"required"`
+	Reasons  []string `json:"reasons"`
+}
+
 //nolint:govet // Field order follows the stable schema-version-one contract.
 type pipelineResult struct {
 	SchemaVersion      int                        `json:"schema_version"`
@@ -332,6 +373,8 @@ type pipelineResult struct {
 	Execution          pipelineExecution          `json:"execution"`
 	Dispatch           pipelineDispatch           `json:"dispatch"`
 	LocalGit           pipelineLocalGit           `json:"local_git"`
+	Recovery           pipelineRecovery           `json:"recovery"`
+	ManualIntervention pipelineManualIntervention `json:"manual_intervention"`
 	Limitations        []string                   `json:"limitations"`
 	InvalidEvidence    bool                       `json:"-"`
 }
