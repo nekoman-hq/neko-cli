@@ -72,6 +72,20 @@ func TestPipelineCommandUsesCanonicalUnitSelection(t *testing.T) {
 	}
 }
 
+func TestPipelineCommandAcceptsCoreGlobalOutputFlag(t *testing.T) {
+	root := writePipelineRepository(t, []pipelineFixtureUnit{{ID: "service", Version: "1.2.3"}})
+	response := runPipelineAt(t, root, plugin.Request{
+		Command: pipelineCommandName,
+		Flags:   map[string]any{"output": "json"},
+	})
+	if response.Status != "success" || response.ExitCode != 0 {
+		t.Fatalf("response = %#v", response)
+	}
+	if _, present := response.Data["output"]; present {
+		t.Fatalf("global transport output flag entered pipeline data: %#v", response.Data)
+	}
+}
+
 func TestPipelineCommandRejectsMalformedAndUnsupportedRequests(t *testing.T) {
 	root := writePipelineRepository(t, []pipelineFixtureUnit{{ID: "service", Version: "1.2.3"}})
 	for _, request := range []plugin.Request{

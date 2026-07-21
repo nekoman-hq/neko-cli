@@ -25,7 +25,7 @@ func parsePipelineRequest(root workspace.RepositoryRoot, request plugin.Request)
 	}
 	sort.Strings(flagNames)
 	for _, name := range flagNames {
-		if name != "unit" {
+		if name != "unit" && name != "output" {
 			return pipelineRequest{}, &commandFailure{Code: "INVALID_PIPELINE_REQUEST", Message: fmt.Sprintf("pipeline inspection does not support --%s", name)}
 		}
 	}
