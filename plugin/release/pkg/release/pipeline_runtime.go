@@ -26,32 +26,45 @@ func inspectPipelineRuntime(repositoryRoot string) pipelineinspection.RuntimeSna
 }
 
 func inspectPipelineRepositoryGit(repositoryRoot string, coordinator *GitReleaseCoordinator, snapshot *pipelineinspection.RuntimeSnapshot) {
+	inspectPipelineRepositoryIdentity(repositoryRoot, coordinator, snapshot)
+	inspectPipelineRepositoryHead(repositoryRoot, coordinator, snapshot)
+	inspectPipelineRepositoryStatus(repositoryRoot, coordinator, snapshot)
+	snapshot.Repository.Inspected = len(snapshot.Problems) == 0
+}
+
+func inspectPipelineRepositoryIdentity(repositoryRoot string, coordinator *GitReleaseCoordinator, snapshot *pipelineinspection.RuntimeSnapshot) {
 	branch, err := coordinator.currentBranch(repositoryRoot)
 	if err != nil {
 		snapshot.Problems = append(snapshot.Problems, pipelineRuntimeProblem("local_git", "local Git branch identity could not be inspected"))
-	} else {
-		snapshot.Repository.Branch = branch
-		remoteName, upstreamBranch, upstreamErr := coordinator.upstream(repositoryRoot, branch)
-		if upstreamErr != nil {
-			snapshot.Problems = append(snapshot.Problems, pipelineRuntimeProblem("local_git", "local Git upstream identity could not be inspected"))
-		} else {
-			snapshot.Repository.RemoteName = remoteName
-			snapshot.Repository.Tracking = remoteName + "/" + upstreamBranch
-			remoteURL, remoteErr := coordinator.gitOutput(repositoryRoot, "remote", "get-url", remoteName)
-			if remoteErr != nil || strings.TrimSpace(remoteURL) == "" {
-				snapshot.Problems = append(snapshot.Problems, pipelineRuntimeProblem("local_git", "local Git remote identity could not be inspected"))
-			} else {
-				snapshot.RepositoryRemote = strings.TrimSpace(remoteURL)
-				snapshot.Repository.RemoteURL = snapshot.RepositoryRemote
-			}
-		}
+		return
 	}
+	snapshot.Repository.Branch = branch
+	remoteName, upstreamBranch, err := coordinator.upstream(repositoryRoot, branch)
+	if err != nil {
+		snapshot.Problems = append(snapshot.Problems, pipelineRuntimeProblem("local_git", "local Git upstream identity could not be inspected"))
+		return
+	}
+	snapshot.Repository.RemoteName = remoteName
+	snapshot.Repository.Tracking = remoteName + "/" + upstreamBranch
+	remoteURL, err := coordinator.gitOutput(repositoryRoot, "remote", "get-url", remoteName)
+	if err != nil || strings.TrimSpace(remoteURL) == "" {
+		snapshot.Problems = append(snapshot.Problems, pipelineRuntimeProblem("local_git", "local Git remote identity could not be inspected"))
+		return
+	}
+	snapshot.RepositoryRemote = strings.TrimSpace(remoteURL)
+	snapshot.Repository.RemoteURL = snapshot.RepositoryRemote
+}
+
+func inspectPipelineRepositoryHead(repositoryRoot string, coordinator *GitReleaseCoordinator, snapshot *pipelineinspection.RuntimeSnapshot) {
 	head, headErr := coordinator.headCommit(repositoryRoot)
 	if headErr != nil {
 		snapshot.Problems = append(snapshot.Problems, pipelineRuntimeProblem("local_git", "local Git HEAD could not be inspected"))
 	} else {
 		snapshot.Repository.Head = head
 	}
+}
+
+func inspectPipelineRepositoryStatus(repositoryRoot string, coordinator *GitReleaseCoordinator, snapshot *pipelineinspection.RuntimeSnapshot) {
 	index, indexErr := coordinator.gitOutput(repositoryRoot, "diff", "--cached", "--name-only")
 	if indexErr != nil {
 		snapshot.Problems = append(snapshot.Problems, pipelineRuntimeProblem("local_git", "local Git index could not be inspected"))
@@ -69,7 +82,6 @@ func inspectPipelineRepositoryGit(repositoryRoot string, coordinator *GitRelease
 	} else {
 		snapshot.Repository.WorktreeState = "changes_present"
 	}
-	snapshot.Repository.Inspected = len(snapshot.Problems) == 0
 }
 
 func inspectPipelineExecutionJournals(repositoryRoot string, coordinator *GitReleaseCoordinator, snapshot *pipelineinspection.RuntimeSnapshot) {
@@ -138,6 +150,19 @@ func validatePipelineExecutionJournal(filename string, journal *ReleaseExecution
 	if err := validateJournalForRecovery(journal); err != nil {
 		return fmt.Errorf("execution journal is structurally invalid")
 	}
+	if err := validatePipelineExecutionIdentity(filename, journal); err != nil {
+		return err
+	}
+	if journal.CreatedAt.IsZero() || journal.UpdatedAt.Before(journal.CreatedAt) {
+		return fmt.Errorf("execution journal timestamps are invalid")
+	}
+	if err := validatePipelineKnownReleaseFiles(journal.KnownReleaseFiles); err != nil {
+		return err
+	}
+	return validatePipelineExecutionPhaseEvidence(journal)
+}
+
+func validatePipelineExecutionIdentity(filename string, journal *ReleaseExecutionJournal) error {
 	identity, err := newReleaseExecutionIdentity(
 		journal.RepositoryRemote, journal.BaseCommitSHA, journal.UnitID,
 		journal.CurrentVersion, journal.NextVersion, journal.Tag,
@@ -160,20 +185,24 @@ func validatePipelineExecutionJournal(filename string, journal *ReleaseExecution
 		journal.WorkflowPath != journal.Identity.WorkflowPath {
 		return fmt.Errorf("execution identity conflicts with journal fields")
 	}
-	if journal.CreatedAt.IsZero() || journal.UpdatedAt.Before(journal.CreatedAt) {
-		return fmt.Errorf("execution journal timestamps are invalid")
-	}
-	for _, file := range journal.KnownReleaseFiles {
+	return nil
+}
+
+func validatePipelineKnownReleaseFiles(files []ReleaseExecutionFileMetadata) error {
+	for _, file := range files {
 		clean := path.Clean(file.RepositoryRelativePath)
 		if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || filepath.IsAbs(file.RepositoryRelativePath) {
 			return fmt.Errorf("execution journal contains an unsafe release file reference")
 		}
 	}
+	return nil
+}
+
+func validatePipelineExecutionPhaseEvidence(journal *ReleaseExecutionJournal) error {
 	rank := releaseExecutionStateRank(journal.State)
-	if journal.PendingAction != ReleaseExecutionPendingNone {
-		if rank+1 >= len(releaseExecutionStateOrder) || pendingActionForConfirmedPhase(releaseExecutionStateOrder[rank+1]) != journal.PendingAction {
-			return fmt.Errorf("execution journal pending action conflicts with confirmed phase")
-		}
+	if journal.PendingAction != ReleaseExecutionPendingNone &&
+		(rank+1 >= len(releaseExecutionStateOrder) || pendingActionForConfirmedPhase(releaseExecutionStateOrder[rank+1]) != journal.PendingAction) {
+		return fmt.Errorf("execution journal pending action conflicts with confirmed phase")
 	}
 	if rank >= releaseExecutionStateRank(ReleaseExecutionCommitCreated) && !fullGitSHARegexp.MatchString(journal.ReleaseCommitSHA) {
 		return fmt.Errorf("execution journal is missing its confirmed release commit identity")

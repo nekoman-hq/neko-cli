@@ -3,6 +3,7 @@ package release
 import "testing"
 
 func TestPipelineRuntimeEvidenceUsesAuthoritativeResumeRecoveryPolicy(t *testing.T) {
+	//nolint:govet // Table fields follow the policy scenario order.
 	tests := []struct {
 		name       string
 		journal    *ReleaseExecutionJournal
@@ -91,6 +92,7 @@ func TestPipelineRuntimeEvidenceUsesAuthoritativeResumeRecoveryPolicy(t *testing
 }
 
 func TestPipelineRuntimeEvidenceUsesAuthoritativeDispatchRetryPolicy(t *testing.T) {
+	//nolint:govet // Table fields follow the policy scenario order.
 	tests := []struct {
 		name      string
 		journal   *DispatchJournal

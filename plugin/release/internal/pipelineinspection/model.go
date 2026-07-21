@@ -152,17 +152,16 @@ type pipelineProgressInspection struct {
 // RuntimeSnapshot is an immutable read-only input assembled by pkg/release.
 // It contains no stores, clients, callbacks, or mutation behavior.
 type RuntimeSnapshot struct {
-	Inspected        bool
 	RepositoryRemote string
 	Repository       RuntimeRepositoryObservation
 	Executions       []RuntimeExecutionObservation
 	Dispatches       []RuntimeDispatchObservation
 	Problems         []RuntimeProblem
+	Inspected        bool
 }
 
 // RuntimeRepositoryObservation contains local Git facts only.
 type RuntimeRepositoryObservation struct {
-	Inspected     bool
 	Branch        string
 	Head          string
 	RemoteName    string
@@ -170,6 +169,7 @@ type RuntimeRepositoryObservation struct {
 	Tracking      string
 	IndexState    string
 	WorktreeState string
+	Inspected     bool
 }
 
 // RuntimeExecutionObservation is the safe projection of one local execution
@@ -274,6 +274,7 @@ type RuntimeProblem struct {
 	Reason    string
 }
 
+//nolint:govet // Field order follows the stable schema-version-one contract.
 type pipelineExecution struct {
 	Present          bool                       `json:"present"`
 	Identity         string                     `json:"identity"`
@@ -289,6 +290,7 @@ type pipelineExecution struct {
 	Observations     []pipelineExecutionJournal `json:"observations"`
 }
 
+//nolint:govet // Field order follows the stable schema-version-one contract.
 type pipelineExecutionJournal struct {
 	Identity   string `json:"identity"`
 	Reference  string `json:"reference"`
@@ -298,6 +300,7 @@ type pipelineExecutionJournal struct {
 	Problem    string `json:"problem,omitempty"`
 }
 
+//nolint:govet // Field order follows the stable schema-version-one contract.
 type pipelineDispatch struct {
 	Present       bool                      `json:"present"`
 	Identity      string                    `json:"identity"`
@@ -310,6 +313,7 @@ type pipelineDispatch struct {
 	Observations  []pipelineDispatchJournal `json:"observations"`
 }
 
+//nolint:govet // Field order follows the stable schema-version-one contract.
 type pipelineDispatchJournal struct {
 	Identity    string `json:"identity"`
 	Reference   string `json:"reference"`
@@ -355,6 +359,7 @@ type pipelineRecovery struct {
 	Reasons                    []string `json:"reasons"`
 }
 
+//nolint:govet // Field order follows the stable schema-version-one contract.
 type pipelineManualIntervention struct {
 	Required bool     `json:"required"`
 	Reasons  []string `json:"reasons"`

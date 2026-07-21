@@ -3,6 +3,7 @@ package pipelineinspection
 import "testing"
 
 func TestPipelineRuntimeStatusProjectionUsesExplicitSafetyOrder(t *testing.T) {
+	//nolint:govet // Table fields follow the scenario description order.
 	tests := []struct {
 		name     string
 		result   pipelineResult

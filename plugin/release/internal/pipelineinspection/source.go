@@ -41,6 +41,18 @@ func inspectConfiguredPipeline(request pipelineRequest, stages []LifecycleStage,
 	if failure != nil {
 		return nil, failure
 	}
+	result := newConfiguredPipelineResult(*unit, identity, tagSpec, stages, consumerFacts)
+	applyPipelineRuntime(result, runtime)
+	return result, nil
+}
+
+func newConfiguredPipelineResult(
+	unit releaseconfig.ReleaseUnit,
+	identity releasetool.Identity,
+	tagSpec releaseconfig.TagSpec,
+	stages []LifecycleStage,
+	consumerFacts releaseworkflow.ConsumerWorkflowFacts,
+) *pipelineResult {
 	consumerStages := pipelineConsumerStages(unit.Workflow, consumerFacts)
 	allStages := make([]LifecycleStage, 0, len(stages)+len(consumerStages))
 	allStages = append(allStages, stages...)
@@ -69,7 +81,7 @@ func inspectConfiguredPipeline(request pipelineRequest, stages []LifecycleStage,
 		Release: pipelineRelease{
 			ConfiguredVersion: unit.Version, TagPrefix: unit.TagPrefix,
 			ConfiguredTag:     tagSpec.Format(unit.Version),
-			MaterializedFiles: configuredMaterializedFiles(*unit, identity),
+			MaterializedFiles: configuredMaterializedFiles(unit, identity),
 		},
 		Repository: pipelineRepository{
 			SourceGeneration: "v2", LocalBranch: "not_inspected",
@@ -94,8 +106,7 @@ func inspectConfiguredPipeline(request pipelineRequest, stages []LifecycleStage,
 			"Runtime execution success cannot be guaranteed from local configuration.",
 		},
 	}
-	applyPipelineRuntime(result, runtime)
-	return result, nil
+	return result
 }
 
 func inspectPipelineConsumerWorkflow(repositoryRoot string, unit releaseconfig.ReleaseUnit) (releaseworkflow.ConsumerWorkflowFacts, *commandFailure) {

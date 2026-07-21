@@ -21,8 +21,27 @@ var pipelineStageColumns = []presentation.Column{
 
 func mapPipelineResult(result *pipelineResult) *plugin.Response {
 	result = normalizePipelineArrays(result)
-	rows := make([]map[string]any, 0, len(result.Stages))
-	for _, stage := range result.Stages {
+	response := &plugin.Response{
+		Status:                 "success",
+		Metadata:               pipelineResponseMetadata(),
+		Data:                   pipelineResponseData(result),
+		RendererHint:           "table",
+		PresentationProperties: pipelineSummaryProperties(result),
+		PresentationTable: &presentation.Table{
+			Title: "Stages", Columns: append([]presentation.Column(nil), pipelineStageColumns...),
+			Rows:    pipelineStageRows(result.Stages),
+			Details: &presentation.Properties{Title: "Runtime and Limitations", Properties: pipelineResultDetails(result)},
+		},
+	}
+	if result.InvalidEvidence {
+		response.ExitCode = 1
+	}
+	return response
+}
+
+func pipelineStageRows(stages []LifecycleStage) []map[string]any {
+	rows := make([]map[string]any, 0, len(stages))
+	for _, stage := range stages {
 		row := map[string]any{
 			"id": stage.ID, "label": stage.Label,
 			"runtime_status":       stage.RuntimeStatus,
@@ -47,6 +66,10 @@ func mapPipelineResult(result *pipelineResult) *plugin.Response {
 		}
 		rows = append(rows, row)
 	}
+	return rows
+}
+
+func pipelineResultDetails(result *pipelineResult) []presentation.Property {
 	details := make([]presentation.Property, 0, len(result.Limitations)+6)
 	if result.Execution.Present {
 		details = append(details, presentation.Property{Label: "Execution Evidence", Value: result.Execution.Identity + " (" + result.Execution.State + ")"})
@@ -63,53 +86,46 @@ func mapPipelineResult(result *pipelineResult) *plugin.Response {
 	for index, limitation := range result.Limitations {
 		details = append(details, presentation.Property{Label: limitationLabel(index), Value: limitation, Role: presentation.StyleMuted})
 	}
-	response := &plugin.Response{
-		Status:   "success",
-		Metadata: pipelineResponseMetadata(),
-		Data: map[string]any{
-			"schema_version":      result.SchemaVersion,
-			"status":              result.Status,
-			"unit":                result.Unit,
-			"release":             result.Release,
-			"repository":          result.Repository,
-			"workflow":            result.Workflow,
-			"stages":              append(make([]LifecycleStage, 0, len(result.Stages)), result.Stages...),
-			"progress_inspection": result.ProgressInspection,
-			"execution":           result.Execution,
-			"dispatch":            result.Dispatch,
-			"local_git":           result.LocalGit,
-			"recovery":            result.Recovery,
-			"manual_intervention": result.ManualIntervention,
-			"limitations":         append(make([]string, 0, len(result.Limitations)), result.Limitations...),
-		},
-		RendererHint: "table",
-		PresentationProperties: &presentation.Properties{
-			Title: "Release Pipeline Inspection",
-			Properties: []presentation.Property{
-				{Label: "Unit", Value: result.Unit.ID, Emphasized: true},
-				{Label: "Version", Value: result.Unit.ConfiguredVersion},
-				{Label: "Status", Value: result.Status, Role: pipelineStatusRole(result.Status)},
-				{Label: "Executor", Value: result.Unit.Executor},
-				{Label: "Delivery", Value: result.Unit.Delivery},
-				{Label: "Workflow", Value: result.Workflow.Path},
-				{Label: "Execution", Value: pipelineDisplayValue(result.Execution.State, "none")},
-				{Label: "Dispatch", Value: pipelineDisplayValue(result.Dispatch.State, "none")},
-				{Label: "Local Git", Value: pipelineLocalGitSummary(result.LocalGit)},
-				{Label: "Recovery", Value: pipelineDisplayValue(result.Recovery.Classification, "not_evaluated")},
-				{Label: "Resume Eligible", Value: strconv.FormatBool(result.Recovery.ResumeEligible)},
-				{Label: "Manual Intervention", Value: strconv.FormatBool(result.ManualIntervention.Required)},
-			},
-		},
-		PresentationTable: &presentation.Table{
-			Title: "Stages", Columns: append([]presentation.Column(nil), pipelineStageColumns...),
-			Rows:    rows,
-			Details: &presentation.Properties{Title: "Runtime and Limitations", Properties: details},
+	return details
+}
+
+func pipelineResponseData(result *pipelineResult) map[string]any {
+	return map[string]any{
+		"schema_version":      result.SchemaVersion,
+		"status":              result.Status,
+		"unit":                result.Unit,
+		"release":             result.Release,
+		"repository":          result.Repository,
+		"workflow":            result.Workflow,
+		"stages":              append(make([]LifecycleStage, 0, len(result.Stages)), result.Stages...),
+		"progress_inspection": result.ProgressInspection,
+		"execution":           result.Execution,
+		"dispatch":            result.Dispatch,
+		"local_git":           result.LocalGit,
+		"recovery":            result.Recovery,
+		"manual_intervention": result.ManualIntervention,
+		"limitations":         append(make([]string, 0, len(result.Limitations)), result.Limitations...),
+	}
+}
+
+func pipelineSummaryProperties(result *pipelineResult) *presentation.Properties {
+	return &presentation.Properties{
+		Title: "Release Pipeline Inspection",
+		Properties: []presentation.Property{
+			{Label: "Unit", Value: result.Unit.ID, Emphasized: true},
+			{Label: "Version", Value: result.Unit.ConfiguredVersion},
+			{Label: "Status", Value: result.Status, Role: pipelineStatusRole(result.Status)},
+			{Label: "Executor", Value: result.Unit.Executor},
+			{Label: "Delivery", Value: result.Unit.Delivery},
+			{Label: "Workflow", Value: result.Workflow.Path},
+			{Label: "Execution", Value: pipelineDisplayValue(result.Execution.State, "none")},
+			{Label: "Dispatch", Value: pipelineDisplayValue(result.Dispatch.State, "none")},
+			{Label: "Local Git", Value: pipelineLocalGitSummary(result.LocalGit)},
+			{Label: "Recovery", Value: pipelineDisplayValue(result.Recovery.Classification, "not_evaluated")},
+			{Label: "Resume Eligible", Value: strconv.FormatBool(result.Recovery.ResumeEligible)},
+			{Label: "Manual Intervention", Value: strconv.FormatBool(result.ManualIntervention.Required)},
 		},
 	}
-	if result.InvalidEvidence {
-		response.ExitCode = 1
-	}
-	return response
 }
 
 func normalizePipelineArrays(result *pipelineResult) *pipelineResult {

@@ -3,6 +3,33 @@ package pipelineinspection
 import "sort"
 
 func applyPipelineRuntime(result *pipelineResult, snapshot RuntimeSnapshot) {
+	resetPipelineRuntime(result)
+	if !snapshot.Inspected {
+		return
+	}
+	applyPipelineRepositoryRuntime(result, snapshot.Repository)
+	relevant := applyPipelineExecutionObservations(result, snapshot)
+	selected, conflict := selectPipelineExecution(result, relevant)
+	if conflict {
+		invalidatePipelineExecution(result, "conflict")
+		finalizePipelineRuntimeStatus(result, nil)
+		return
+	}
+	if result.InvalidEvidence {
+		invalidatePipelineExecution(result, "invalid")
+		finalizePipelineRuntimeStatus(result, nil)
+		return
+	}
+	if selected == nil {
+		result.Execution.Validity = "valid"
+		applyDispatchRuntime(result, snapshot, nil)
+		finalizePipelineRuntimeStatus(result, nil)
+		return
+	}
+	applySelectedPipelineExecution(result, snapshot, selected)
+}
+
+func resetPipelineRuntime(result *pipelineResult) {
 	for index := range result.Stages {
 		result.Stages[index].RuntimeStatus = RuntimeNotObserved
 	}
@@ -17,10 +44,9 @@ func applyPipelineRuntime(result *pipelineResult, snapshot RuntimeSnapshot) {
 	result.LocalGit = pipelineLocalGit{Scope: "local_only", RemoteFreshness: "remote_not_inspected"}
 	result.Recovery = pipelineRecovery{RetrySafety: "not_evaluated", Reasons: make([]string, 0)}
 	result.ManualIntervention = pipelineManualIntervention{Reasons: make([]string, 0)}
-	if !snapshot.Inspected {
-		return
-	}
+}
 
+func applyPipelineRepositoryRuntime(result *pipelineResult, repository RuntimeRepositoryObservation) {
 	result.ProgressInspection.ExecutionProgress = "not_started"
 	result.ProgressInspection.JournalsInspected = true
 	result.Limitations = []string{
@@ -28,14 +54,16 @@ func applyPipelineRuntime(result *pipelineResult, snapshot RuntimeSnapshot) {
 		"Workflow execution and publication state were not inspected remotely.",
 		"Runtime inspection is read-only and does not resume, retry, repair, or clean a release.",
 	}
-	result.Repository.LocalBranch = snapshot.Repository.Branch
-	result.Repository.LocalHead = snapshot.Repository.Head
+	result.Repository.LocalBranch = repository.Branch
+	result.Repository.LocalHead = repository.Head
 	result.Repository.Tracking = "remote_not_inspected"
-	result.LocalGit.Branch = snapshot.Repository.Branch
-	result.LocalGit.Head = snapshot.Repository.Head
-	result.LocalGit.IndexState = snapshot.Repository.IndexState
-	result.LocalGit.WorktreeState = snapshot.Repository.WorktreeState
+	result.LocalGit.Branch = repository.Branch
+	result.LocalGit.Head = repository.Head
+	result.LocalGit.IndexState = repository.IndexState
+	result.LocalGit.WorktreeState = repository.WorktreeState
+}
 
+func applyPipelineExecutionObservations(result *pipelineResult, snapshot RuntimeSnapshot) []RuntimeExecutionObservation {
 	relevant := relevantExecutionObservations(result, snapshot)
 	result.Execution.JournalCount = len(relevant)
 	for _, observation := range relevant {
@@ -70,49 +98,35 @@ func applyPipelineRuntime(result *pipelineResult, snapshot RuntimeSnapshot) {
 		}
 		return left.Identity < right.Identity
 	})
+	return relevant
+}
 
+func selectPipelineExecution(result *pipelineResult, relevant []RuntimeExecutionObservation) (*RuntimeExecutionObservation, bool) {
 	unresolved := validUnresolvedExecutions(relevant)
 	if len(unresolved) > 1 {
-		result.InvalidEvidence = true
-		result.Execution.Validity = "conflict"
-		result.Status = pipelineInvalid
-		result.ProgressInspection.ExecutionProgress = "invalid"
-		finalizePipelineRuntimeStatus(result, nil)
-		return
+		return nil, true
 	}
-
-	var selected *RuntimeExecutionObservation
 	if len(unresolved) == 1 {
-		selected = &unresolved[0]
-	} else {
-		completed := currentCompletedExecutions(result, relevant)
-		if len(completed) > 1 {
-			result.InvalidEvidence = true
-			result.Execution.Validity = "conflict"
-			result.Status = pipelineInvalid
-			result.ProgressInspection.ExecutionProgress = "invalid"
-			finalizePipelineRuntimeStatus(result, nil)
-			return
-		}
-		if len(completed) == 1 {
-			selected = &completed[0]
-		}
+		return &unresolved[0], false
 	}
+	completed := currentCompletedExecutions(result, relevant)
+	if len(completed) > 1 {
+		return nil, true
+	}
+	if len(completed) == 1 {
+		return &completed[0], false
+	}
+	return nil, false
+}
 
-	if result.InvalidEvidence {
-		result.Execution.Validity = "invalid"
-		result.Status = pipelineInvalid
-		result.ProgressInspection.ExecutionProgress = "invalid"
-		finalizePipelineRuntimeStatus(result, nil)
-		return
-	}
-	if selected == nil {
-		result.Execution.Validity = "valid"
-		applyDispatchRuntime(result, snapshot, nil)
-		finalizePipelineRuntimeStatus(result, nil)
-		return
-	}
+func invalidatePipelineExecution(result *pipelineResult, validity string) {
+	result.InvalidEvidence = true
+	result.Execution.Validity = validity
+	result.Status = pipelineInvalid
+	result.ProgressInspection.ExecutionProgress = "invalid"
+}
 
+func applySelectedPipelineExecution(result *pipelineResult, snapshot RuntimeSnapshot, selected *RuntimeExecutionObservation) {
 	result.Execution.Present = true
 	result.Execution.Identity = selected.Identity
 	result.Execution.Validity = "valid"

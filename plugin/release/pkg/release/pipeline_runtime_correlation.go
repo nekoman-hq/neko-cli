@@ -113,49 +113,81 @@ func inspectPipelineExecutionGit(repositoryRoot string, coordinator *GitReleaseC
 		ExpectedTag: journal.Tag, Consistent: true,
 	}
 	known := knownReleaseFilesFromJournal(repositoryRoot, journal)
+	if err := inspectPipelineRecoveryFileGit(repositoryRoot, coordinator, known, &observation); err != nil {
+		return inconsistentPipelineGit(observation, "local Git recovery evidence could not be inspected")
+	}
+	if journal.ReleaseCommitSHA != "" {
+		var stop bool
+		observation, stop = inspectPipelineReleaseCommitGit(repositoryRoot, coordinator, journal, known, observation)
+		if stop {
+			return observation
+		}
+	}
+	return inspectPipelineUnitTagGit(repositoryRoot, coordinator, journal, observation)
+}
+
+func inspectPipelineRecoveryFileGit(
+	repositoryRoot string,
+	coordinator *GitReleaseCoordinator,
+	known KnownReleaseFiles,
+	observation *pipelineinspection.RuntimeLocalGitObservation,
+) error {
 	index, indexErr := coordinator.gitOutput(repositoryRoot, "diff", "--cached", "--name-only")
 	worktree, worktreeErr := coordinator.gitOutput(repositoryRoot, "diff", "--name-only")
 	untracked, untrackedErr := coordinator.gitOutput(repositoryRoot, "ls-files", "--others", "--exclude-standard")
 	if indexErr != nil || worktreeErr != nil || untrackedErr != nil {
-		observation.Consistent = false
-		observation.Problem = "local Git recovery evidence could not be inspected"
-		return observation
+		return fmt.Errorf("local Git recovery evidence could not be inspected")
 	}
 	observation.IndexContainsRecoveryEvidence = outputContainsKnownReleaseFile(index, known)
 	observation.WorktreeContainsRecoveryEvidence = outputContainsKnownReleaseFile(worktree+"\n"+untracked, known)
+	return nil
+}
 
-	if journal.ReleaseCommitSHA != "" {
-		exists, err := coordinator.commitExists(repositoryRoot, journal.ReleaseCommitSHA)
-		if err != nil {
-			return inconsistentPipelineGit(observation, "expected local release commit could not be inspected")
+func inspectPipelineReleaseCommitGit(
+	repositoryRoot string,
+	coordinator *GitReleaseCoordinator,
+	journal *ReleaseExecutionJournal,
+	known KnownReleaseFiles,
+	observation pipelineinspection.RuntimeLocalGitObservation,
+) (pipelineinspection.RuntimeLocalGitObservation, bool) {
+	exists, err := coordinator.commitExists(repositoryRoot, journal.ReleaseCommitSHA)
+	if err != nil {
+		return inconsistentPipelineGit(observation, "expected local release commit could not be inspected"), true
+	}
+	observation.CommitExists = exists
+	if exists {
+		ctx := &ReleaseExecutionContext{
+			RepositoryRoot: repositoryRoot, Unit: releaseconfig.ReleaseUnit{ID: journal.UnitID},
+			NextVersion: journal.NextVersion,
 		}
-		observation.CommitExists = exists
-		if exists {
-			ctx := &ReleaseExecutionContext{
-				RepositoryRoot: repositoryRoot, Unit: releaseconfig.ReleaseUnit{ID: journal.UnitID},
-				NextVersion: journal.NextVersion,
-			}
-			if err := coordinator.verifyCommitObject(ctx, known, journal.ReleaseCommitSHA); err == nil {
-				observation.CommitContentVerified = true
-			} else {
-				observation.Problem = "local release commit content does not match journal evidence"
-				observation.Consistent = false
-			}
-			contains, containsErr := coordinator.headContainsCommit(repositoryRoot, journal.ReleaseCommitSHA)
-			if containsErr != nil {
-				return inconsistentPipelineGit(observation, "HEAD containment of the release commit could not be inspected")
-			}
-			observation.HeadContainsExpectedCommit = contains
-		}
-		if releaseExecutionStateRank(journal.State) >= releaseExecutionStateRank(ReleaseExecutionCommitCreated) &&
-			(!observation.CommitExists || !observation.CommitContentVerified || !observation.HeadContainsExpectedCommit) {
-			if observation.Problem == "" {
-				observation.Problem = "confirmed release commit is missing or inconsistent in local Git"
-			}
+		if err := coordinator.verifyCommitObject(ctx, known, journal.ReleaseCommitSHA); err == nil {
+			observation.CommitContentVerified = true
+		} else {
+			observation.Problem = "local release commit content does not match journal evidence"
 			observation.Consistent = false
 		}
+		contains, containsErr := coordinator.headContainsCommit(repositoryRoot, journal.ReleaseCommitSHA)
+		if containsErr != nil {
+			return inconsistentPipelineGit(observation, "HEAD containment of the release commit could not be inspected"), true
+		}
+		observation.HeadContainsExpectedCommit = contains
 	}
+	if releaseExecutionStateRank(journal.State) >= releaseExecutionStateRank(ReleaseExecutionCommitCreated) &&
+		(!observation.CommitExists || !observation.CommitContentVerified || !observation.HeadContainsExpectedCommit) {
+		if observation.Problem == "" {
+			observation.Problem = "confirmed release commit is missing or inconsistent in local Git"
+		}
+		observation.Consistent = false
+	}
+	return observation, false
+}
 
+func inspectPipelineUnitTagGit(
+	repositoryRoot string,
+	coordinator *GitReleaseCoordinator,
+	journal *ReleaseExecutionJournal,
+	observation pipelineinspection.RuntimeLocalGitObservation,
+) pipelineinspection.RuntimeLocalGitObservation {
 	tagTarget, tagErr := coordinator.tagCommit(repositoryRoot, journal.Tag)
 	if tagErr != nil {
 		return inconsistentPipelineGit(observation, "expected local unit tag could not be inspected")
