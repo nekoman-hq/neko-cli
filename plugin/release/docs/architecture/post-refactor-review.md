@@ -2,9 +2,11 @@
 
 ## Status
 
-This document describes the architecture established by the ten-commit Release
-Plugin code-quality refactor completed in July 2026. It is the concise review
-entry point. [current-state.md](current-state.md) remains the detailed command,
+This document describes the architecture established by the Release Plugin
+code-quality refactor completed in July 2026: ten planned structural commits,
+corrective follow-up Commit 11, and final corrective follow-up Commit 12. The
+final sequence contains twelve commits. This is the concise review entry point.
+[current-state.md](current-state.md) remains the detailed command,
 disk, and wire-contract reference;
 [maintainability-policy.md](maintainability-policy.md) defines the controls for
 future changes; and [compatibility-notes.md](compatibility-notes.md) records the
@@ -45,21 +47,21 @@ Response mapping receives typed outcomes and owns no lifecycle decision.
 | Package | Responsibility | Boundary |
 | --- | --- | --- |
 | `plugin/release` | Decode/encode the plugin protocol, resolve one repository root, construct fresh V1 executors, and route commands | Composition only; no domain model, lifecycle, or persistence |
-| `internal/releasetool` | Canonical identity, display, command, configuration-candidate, and V1 behavior facts for supported release tools | Pure leaf facts |
-| `internal/releasetool/goreleaser` | GoReleaser config parsing, artifact-contract parsing, and invocation facts | Pure byte/model facts; no filesystem, Doctor, HTTP, journals, or presentation |
-| `internal/releasetool/jreleaser` | Canonical JReleaser configuration model, local load/save codec, rewriting, and version normalization | Focused local config reads/writes; no HTTP or lifecycle policy |
-| `internal/releasetool/releaseit` | Canonical release-it configuration model, local load/save codec, and defaults | Focused local config reads/writes; no HTTP or lifecycle policy |
+| `internal/releasetool` | Common tool identity, ordered configuration candidates, and static V1 tool-behavior facts | Pure leaf facts |
+| `internal/releasetool/goreleaser` | GoReleaser configuration parsing, invocation classification, and artifact-contract facts | Pure byte/model facts; no filesystem, Doctor, HTTP, journals, or presentation |
+| `internal/releasetool/jreleaser` | Canonical JReleaser configuration codec and project-version rewrite | Focused local config reads/writes; no HTTP or lifecycle policy |
+| `internal/releasetool/releaseit` | Canonical release-it configuration codec and default configuration | Focused local config reads/writes; no HTTP or lifecycle policy |
 | `internal/releaseworkflow` | Canonical workflow name/file/ref/inputs and repository-target facts | Pure leaf facts |
 | `internal/githubdispatch` | One bounded GitHub workflow-dispatch POST transport and response sanitization | HTTP mutation leaf; no lifecycle policy |
 | `internal/releasesource` | Tolerant, local, read-only V1/V2 source classification | Read-only leaf |
-| `internal/doctor` | Doctor inspection, diagnostic policy, presentation, and optional bounded GET verification | Default local/offline; remote path GET-only |
+| `internal/doctor` | Doctor inspection plus Doctor-owned severity, messages, remediation, fact mapping, presentation, and optional bounded GET verification | Default local/offline; remote path GET-only |
 | `internal/unitoverview` | Local V2 unit inventory and its response presentation | Read-only command capability |
 | `internal/contextvalidation` | Local/CI release-context validation and response presentation | Read-only command capability |
 | `internal/workflowinit` | Canonical workflow preview and create-only persistence | One focused filesystem mutation |
 | `internal/legacyrequirements` | Source-format V1 token and configuration-file validation retained for the public V1 facade and Validate | Compatibility leaf; execution-context requirements remain distinct |
 | `pkg/config` | V1/V2 models, loading, normalization, validation, path rules, atomic writes, and V2 pair persistence/recovery | Canonical configuration/state owner |
 | `pkg/release` | V1 planning/compatibility, V2 planning, explicit release orchestration, journals, Git coordination, dispatch handoff, resume, and public facades | Authoritative release lifecycle owner |
-| `pkg/release/tool/*` | Behavior-preserving V1 GoReleaser, JReleaser, and release-it executor adapters | Process/filesystem/Git compatibility adapters |
+| `pkg/release/tool/*` | Behavior-preserving V1 execution adapters and compatibility surfaces for GoReleaser, JReleaser, and release-it | Process/filesystem/Git compatibility adapters |
 | `pkg/init` | Initialize a V2 pair, add a unit, and expose static init options | Focused config mutation |
 | `pkg/migrate` | Discover, plan, journal, execute, verify, and recover V1-to-V2 migration | Separate migration lifecycle |
 | `pkg/evidence` | Query redacted journals/evidence and archive completed evidence | Read-only query plus guarded archive mutation |
@@ -73,7 +75,7 @@ Response mapping receives typed outcomes and owns no lifecycle decision.
 
 ## Refactor metrics
 
-The baseline is `cd2e590`, immediately before the eleven-commit code-quality
+The baseline is `cd2e590`, immediately before the twelve-commit code-quality
 sequence. Production files and lines count direct non-test Go files in
 `plugin/release/pkg/release`; internal packages count Go packages below
 `plugin/release/internal`; moved files are Git-detected production Go renames.
@@ -81,7 +83,7 @@ sequence. Production files and lines count direct non-test Go files in
 | Measure | Before | After |
 | --- | ---: | ---: |
 | `pkg/release` production files | 110 | 88 |
-| `pkg/release` production lines | 18,939 | 11,440 |
+| `pkg/release` production lines | 18,939 | 11,486 |
 | Release internal packages | 0 | 12 |
 | Moved production files | 0 | 47 |
 
@@ -89,7 +91,7 @@ sequence. Production files and lines count direct non-test Go files in
 
 The following is the complete responsibility transfer made by this refactor:
 
-1. shared release-tool identity, display, configuration-candidate, command, and
+1. shared release-tool identity, ordered configuration candidates, and static
    V1-behavior facts moved to `internal/releasetool`;
 2. reusable GoReleaser config/artifact parsing and invocation facts moved to
    `internal/releasetool/goreleaser`;
@@ -102,8 +104,9 @@ The following is the complete responsibility transfer made by this refactor:
 6. the bounded GitHub workflow-dispatch POST and response sanitization moved to
    `internal/githubdispatch`;
 7. tolerant local V1/V2 source inspection moved to `internal/releasesource`;
-8. Doctor inspection, diagnostics, presentation, optional GET-only remote
-   verification, and its white-box tests moved to `internal/doctor`;
+8. Doctor inspection, severity, messages, remediation, fact mapping,
+   presentation, optional GET-only remote verification, and its white-box tests
+   moved to `internal/doctor`;
 9. Unit Overview inspection and presentation moved to `internal/unitoverview`;
 10. dispatched Context Validation inspection, Git reads, diagnostics, and
     presentation moved to `internal/contextvalidation`;
@@ -190,18 +193,22 @@ responsibilities above and pass the architecture review in
 
 ## Release-tool ownership
 
-`internal/releasetool` is the shared identity owner. Each concrete fact package
-owns exactly the format-specific facts reusable by Doctor, planning, validation,
-and the V1 executor compatibility adapter.
+`internal/releasetool` owns common identity, ordered configuration candidates,
+and static V1 tool-behavior facts. Each format package owns only its reusable
+format-specific facts.
 
-- GoReleaser: candidate paths, YAML parsing, artifact shapes, and invocation
-  arguments are canonical under `internal/releasetool/goreleaser`.
-- JReleaser: config interpretation, version normalization, and V2 rewriting are
-  canonical under `internal/releasetool/jreleaser`.
-- release-it: config interpretation is canonical under
-  `internal/releasetool/releaseit`.
-- `pkg/release/tool/*` retains execution, environment, compensation, and legacy
-  public method shapes; it delegates configuration facts inward.
+- GoReleaser configuration parsing, invocation classification, and artifact
+  contracts are canonical under `internal/releasetool/goreleaser`; GoReleaser
+  candidate paths remain with the common owner.
+- The JReleaser configuration codec and project-version rewrite are canonical
+  under `internal/releasetool/jreleaser`.
+- The release-it configuration codec and default configuration are canonical
+  under `internal/releasetool/releaseit`.
+- `pkg/release/tool/*` retains V1 execution adapters, environment/process/Git
+  effects, compensation integration, and compatibility surfaces; it delegates
+  reusable configuration facts inward.
+- `internal/doctor` alone owns diagnostic severity, messages, remediation, and
+  mapping of shared facts into Doctor results.
 
 Production composition constructs the three V1 executors explicitly. The
 mutable global registry is retained only for direct compatibility callers and
@@ -236,6 +243,46 @@ operations. `github_actions_release_use_case.go` alone orders them.
 Dry-run stops after planning and resolves no token, creates no journal, writes no
 state, mutates no Git, invokes no release tool, and calls no HTTP. Active V2
 never invokes GoReleaser, JReleaser, or release-it locally.
+
+## V2 restoration boundary
+
+The State transaction first writes `.neko/release.state.json` only after the
+execution journal has confirmed materialization. At that point zero or more
+planned version files may contain their postimages; the State snapshot and every
+materialization preimage have already been captured.
+
+Before a Git commit can be attempted, failure handling uses the existing
+`StateTransaction` and `MaterializationTransaction` directly:
+
+- a materialization-confirmation failure restores materialized files;
+- a State write or State-confirmation failure restores State and materialized
+  files;
+- a staging pending/store, staging, or staging-confirmation failure restores
+  State and materialized files and unstages the known release files;
+- failure to persist the pending commit action restores the same local files and
+  index because Git commit execution has not started.
+
+Cleanup failures are joined to the original operation error, so callers retain
+the original cause and receive every failed restoration detail. The unresolved
+execution journal remains durable; restored preimages intentionally conflict
+with its postimage evidence, so recovery fails closed rather than treating a
+rolled-back attempt as resumable.
+
+Once `create-release-commit` is durably pending and
+`GitReleaseCoordinator.Commit` has started, automatic rollback stops. A commit
+command error can be ambiguous, and a later HEAD or commit-content verification
+error can occur after Git has created the commit. State, materialized files, and
+index/commit evidence are therefore preserved. Without a confirmed
+`ReleaseCommitSHA`, Resume refuses automatic continuation and a new Release is
+blocked by the preserved index and/or unresolved journal. Read-only Plan or
+Doctor may observe the persisted filesystem version, but they cannot authorize
+mutation or clear the evidence.
+
+After the commit is confirmed, tag preparation/creation and every remote or
+dispatch failure also preserve the committed State. Resume reuses the confirmed
+commit path; no post-commit rollback exists. Focused real-repository tests assert
+State and materialized bytes, index state, HEAD/commit/tag objects, journal
+state, recovery assessment, and resume selection at each boundary.
 
 ## Lifecycle and state-machine review
 

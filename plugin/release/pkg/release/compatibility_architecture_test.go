@@ -4,70 +4,29 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
 )
 
 func TestCompatibilityFilesContainOnlyClassifiedCompatibilityDeclarations(t *testing.T) {
-	inventory := map[string]map[string]string{
-		"v1_preflight_compatibility.go": compatibilityDeclarations("legacy-forwarder",
-			"Preflight", "checkV1ReleasePreflight"),
-		"v1_registry_compatibility.go": compatibilityDeclarations("legacy-registry",
-			"tools", "Register", "Get"),
-		"v1_service_compatibility.go": compatibilityDeclarations("deprecated-wrapper",
-			"Service", "NewReleaseService", "NewReleaseServiceWithContext", "Run", "GetNewVersion", "repositoryRoot"),
-		"v1_tool_compatibility.go": compatibilityDeclarations("legacy-wrapper",
-			"Tool", "ToolBase", "ValidateRequirements", "ResolveFiles", "InUnitRoot", "RequireBinary",
-			"GitReleaseState", "hasMutatingStep", "RevertGitRelease", "DeleteGitHubRelease",
-			"CreateReleaseCommit", "CreateGitTag", "PushCommits", "PushGitTag"),
-		"v1_version_guard_compatibility.go": compatibilityDeclarations("deprecated-wrapper",
-			"VersionGuardOptions", "refreshVersionTags", "latestVersionTag", "VersionGuard",
-			"VersionGuardWithOptions", "EnsureVersionIsValid"),
-		"v2_local_transaction_compatibility.go": compatibilityDeclarations("deprecated-wrapper",
-			"ExecutionPhase", "ExecutionPhasePlanned", "ExecutionPhasePreflightValidated",
-			"ExecutionPhaseMaterializationPrepared", "ExecutionPhaseMaterializationApplied",
-			"ExecutionPhaseStatePrepared", "ExecutionPhaseReleaseFilesStaged",
-			"ExecutionPhaseCommitOrTagStarted", "ExecutionPhaseRemoteSideEffectStarted",
-			"ExecutionPhaseCompleted", "ExecutionPhaseFailed", "MutationTracker", "NewMutationTracker",
-			"Mark", "TrackFile", "TrackStagedFile", "ReleaseTransactionResult", "transactionExecutor",
-			"ReleaseTransaction", "NewReleaseTransaction", "Execute"),
+	files := compatibilityProductionFiles(t)
+	if len(files) == 0 {
+		t.Fatal("no Release Plugin compatibility production files found")
 	}
-
-	entries, err := os.ReadDir(".")
-	if err != nil {
-		t.Fatal(err)
-	}
-	seen := make(map[string]bool, len(inventory))
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), "_compatibility.go") {
-			continue
-		}
-		expected, ok := inventory[entry.Name()]
-		if !ok {
-			t.Errorf("compatibility file %s has no explicit declaration classification", entry.Name())
-			continue
-		}
-		seen[entry.Name()] = true
-		for _, declaration := range topLevelDeclarationNames(t, entry.Name()) {
-			category, classified := expected[declaration]
-			if !classified {
-				t.Errorf("%s declaration %s is not classified as compatibility code", entry.Name(), declaration)
+	for _, path := range files {
+		parsed := parseCompatibilityArchitectureFile(t, path)
+		classifiedReceiverTypes := classifiedCompatibilityReceiverTypes(parsed)
+		for _, declaration := range parsed.Decls {
+			if compatibilityDeclarationClassified(declaration, classifiedReceiverTypes) {
 				continue
 			}
-			if category == "" {
-				t.Errorf("%s declaration %s has an empty compatibility category", entry.Name(), declaration)
+			for _, name := range declarationNames(declaration) {
+				t.Errorf("%s declaration %s lacks a Legacy, Deprecated, Alias, Wrapper, Forwarding, or Compatibility classification", path, name)
 			}
-			delete(expected, declaration)
-		}
-		for _, missing := range sortedCompatibilityNames(expected) {
-			t.Errorf("%s classified compatibility declaration %s is missing", entry.Name(), missing)
-		}
-	}
-	for file := range inventory {
-		if !seen[file] {
-			t.Errorf("classified compatibility file %s is missing", file)
 		}
 	}
 }
@@ -86,17 +45,10 @@ func TestActiveReleasePlanHasAnActiveOwner(t *testing.T) {
 		t.Errorf("active V2 release-plan owner is missing %s", missing)
 	}
 
-	entries, err := os.ReadDir(".")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), "_compatibility.go") {
-			continue
-		}
-		for _, declaration := range topLevelDeclarationNames(t, entry.Name()) {
+	for _, path := range compatibilityProductionFiles(t) {
+		for _, declaration := range topLevelDeclarationNames(t, path) {
 			if declaration == "ReleasePlan" || declaration == "BuildReleasePlan" || declaration == "ownershipSummary" {
-				t.Errorf("active release-plan declaration %s remains in %s", declaration, entry.Name())
+				t.Errorf("active release-plan declaration %s remains in %s", declaration, path)
 			}
 		}
 	}
@@ -171,21 +123,100 @@ func TestExtractedCommandImplementationsRemainOutsideRootRelease(t *testing.T) {
 	}
 }
 
-func compatibilityDeclarations(category string, names ...string) map[string]string {
-	declarations := make(map[string]string, len(names))
-	for _, name := range names {
-		declarations[name] = category
+func compatibilityProductionFiles(t *testing.T) []string {
+	t.Helper()
+	root := filepath.Clean("..")
+	var files []string
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), "_compatibility.go") {
+			files = append(files, path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk Release Plugin compatibility files: %v", err)
 	}
-	return declarations
+	sort.Strings(files)
+	return files
 }
 
-func sortedCompatibilityNames(declarations map[string]string) []string {
-	names := make([]string, 0, len(declarations))
-	for name := range declarations {
-		names = append(names, name)
+func classifiedCompatibilityReceiverTypes(parsed *ast.File) map[string]bool {
+	types := make(map[string]bool)
+	for _, declaration := range parsed.Decls {
+		generated, ok := declaration.(*ast.GenDecl)
+		if !ok || generated.Tok != token.TYPE || !hasCompatibilityClassification(generated.Doc) {
+			continue
+		}
+		for _, specification := range generated.Specs {
+			if typed, ok := specification.(*ast.TypeSpec); ok {
+				types[typed.Name.Name] = true
+			}
+		}
 	}
-	sort.Strings(names)
-	return names
+	return types
+}
+
+func compatibilityDeclarationClassified(declaration ast.Decl, receiverTypes map[string]bool) bool {
+	switch declaration := declaration.(type) {
+	case *ast.FuncDecl:
+		return hasCompatibilityClassification(declaration.Doc) || receiverTypes[compatibilityReceiverTypeName(declaration)]
+	case *ast.GenDecl:
+		return declaration.Tok == token.IMPORT || hasCompatibilityClassification(declaration.Doc)
+	default:
+		return false
+	}
+}
+
+func hasCompatibilityClassification(comments *ast.CommentGroup) bool {
+	if comments == nil {
+		return false
+	}
+	for _, marker := range []string{"Legacy:", "Deprecated:", "Alias:", "Wrapper:", "Forwarding:", "Compatibility:"} {
+		if strings.Contains(comments.Text(), marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func compatibilityReceiverTypeName(function *ast.FuncDecl) string {
+	if function.Recv == nil || len(function.Recv.List) != 1 {
+		return ""
+	}
+	switch receiver := function.Recv.List[0].Type.(type) {
+	case *ast.Ident:
+		return receiver.Name
+	case *ast.StarExpr:
+		if identifier, ok := receiver.X.(*ast.Ident); ok {
+			return identifier.Name
+		}
+	}
+	return ""
+}
+
+func declarationNames(declaration ast.Decl) []string {
+	switch declaration := declaration.(type) {
+	case *ast.FuncDecl:
+		return []string{declaration.Name.Name}
+	case *ast.GenDecl:
+		var names []string
+		for _, specification := range declaration.Specs {
+			switch specification := specification.(type) {
+			case *ast.TypeSpec:
+				names = append(names, specification.Name.Name)
+			case *ast.ValueSpec:
+				for _, name := range specification.Names {
+					names = append(names, name.Name)
+				}
+			}
+		}
+		return names
+	default:
+		return []string{"<unknown>"}
+	}
 }
 
 func topLevelDeclarationNames(t *testing.T, path string) []string {
@@ -214,7 +245,7 @@ func topLevelDeclarationNames(t *testing.T, path string) []string {
 
 func parseCompatibilityArchitectureFile(t *testing.T, path string) *ast.File {
 	t.Helper()
-	parsed, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	parsed, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ParseComments)
 	if err != nil {
 		t.Fatalf("parse %s: %v", path, err)
 	}

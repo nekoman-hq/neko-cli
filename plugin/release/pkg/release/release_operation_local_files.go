@@ -1,6 +1,7 @@
 package release
 
 import (
+	"errors"
 	"fmt"
 
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
@@ -104,8 +105,9 @@ func (operation applyGitHubActionsReleaseMaterialization) Apply(execution prepar
 	}
 	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressPendingActionFinished, PendingAction: string(ReleaseExecutionPendingApplyMaterialization)})
 	if _, err := operation.journal.ConfirmPhase(execution.Identity, ReleaseExecutionMaterializationApplied, ReleaseExecutionJournalUpdate{}); err != nil {
-		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
-		return nil, err
+		failure := restoreMaterializationAfterReleaseFailure(err, transaction)
+		_, _ = operation.journal.RecordLastError(execution.Identity, failure.Error())
+		return nil, failure
 	}
 	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressExecutionPhaseConfirmed, Phase: string(ReleaseExecutionMaterializationApplied)})
 	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressMaterializedFilesApplied, Files: []string{materializedFilesValue(plan)}})
@@ -122,29 +124,29 @@ func (operation writeGitHubActionsReleaseState) Write(execCtx *ReleaseExecutionC
 	transaction := operation.transactions.New(execCtx.RepositoryRoot)
 	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressStateSnapshotCapturing})
 	if err := transaction.CaptureSnapshot(); err != nil {
-		_ = materialization.Restore()
-		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
-		return nil, err
+		failure := restoreMaterializationAfterReleaseFailure(err, materialization)
+		_, _ = operation.journal.RecordLastError(execution.Identity, failure.Error())
+		return nil, failure
 	}
 	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressStateSnapshotCaptured, Path: releaseconfig.V2StatePath(execCtx.RepositoryRoot)})
 	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressStateUpdateWriting, UnitID: execCtx.Unit.ID, NextVersion: execCtx.NextVersion})
 	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressPendingActionStarting, PendingAction: string(ReleaseExecutionPendingWriteState)})
 	if _, err := operation.journal.BeginPending(execution.Identity, ReleaseExecutionPendingWriteState); err != nil {
-		_ = materialization.Restore()
-		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
-		return nil, err
+		failure := restoreMaterializationAfterReleaseFailure(err, materialization)
+		_, _ = operation.journal.RecordLastError(execution.Identity, failure.Error())
+		return nil, failure
 	}
 	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressPendingActionRecorded, PendingAction: string(ReleaseExecutionPendingWriteState)})
 	if err := transaction.WriteUnitVersion(execCtx.Unit.ID, execCtx.NextVersion); err != nil {
-		_ = materialization.Restore()
-		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
-		return nil, err
+		failure := restoreLocalReleaseFilesAfterFailure(err, transaction, materialization)
+		_, _ = operation.journal.RecordLastError(execution.Identity, failure.Error())
+		return nil, failure
 	}
 	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressPendingActionFinished, PendingAction: string(ReleaseExecutionPendingWriteState)})
 	if _, err := operation.journal.ConfirmPhase(execution.Identity, ReleaseExecutionStateWritten, ReleaseExecutionJournalUpdate{}); err != nil {
-		_ = materialization.Restore()
-		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
-		return nil, err
+		failure := restoreLocalReleaseFilesAfterFailure(err, transaction, materialization)
+		_, _ = operation.journal.RecordLastError(execution.Identity, failure.Error())
+		return nil, failure
 	}
 	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressExecutionPhaseConfirmed, Phase: string(ReleaseExecutionStateWritten)})
 	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressStateUpdateWritten})
@@ -161,27 +163,21 @@ func (operation stageGitHubActionsReleaseFiles) Stage(execCtx *ReleaseExecutionC
 	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressStagingTargetedFiles, Files: files.RelativePaths()})
 	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressPendingActionStarting, PendingAction: string(ReleaseExecutionPendingStageReleaseFiles)})
 	if _, err := operation.journal.BeginPending(execution.Identity, ReleaseExecutionPendingStageReleaseFiles); err != nil {
-		_ = state.RestoreSnapshot()
-		_ = materialization.Restore()
-		_ = operation.git.UnstageKnown(files)
-		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
-		return err
+		failure := restoreStagedReleaseFilesAfterFailure(err, state, materialization, operation.git, files)
+		_, _ = operation.journal.RecordLastError(execution.Identity, failure.Error())
+		return failure
 	}
 	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressPendingActionRecorded, PendingAction: string(ReleaseExecutionPendingStageReleaseFiles)})
 	if err := operation.git.Stage(execCtx, files); err != nil {
-		_ = state.RestoreSnapshot()
-		_ = materialization.Restore()
-		_ = operation.git.UnstageKnown(files)
-		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
-		return err
+		failure := restoreStagedReleaseFilesAfterFailure(err, state, materialization, operation.git, files)
+		_, _ = operation.journal.RecordLastError(execution.Identity, failure.Error())
+		return failure
 	}
 	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressPendingActionFinished, PendingAction: string(ReleaseExecutionPendingStageReleaseFiles)})
 	if _, err := operation.journal.ConfirmPhase(execution.Identity, ReleaseExecutionReleaseFilesStaged, ReleaseExecutionJournalUpdate{}); err != nil {
-		_ = state.RestoreSnapshot()
-		_ = materialization.Restore()
-		_ = operation.git.UnstageKnown(files)
-		_, _ = operation.journal.RecordLastError(execution.Identity, err.Error())
-		return err
+		failure := restoreStagedReleaseFilesAfterFailure(err, state, materialization, operation.git, files)
+		_, _ = operation.journal.RecordLastError(execution.Identity, failure.Error())
+		return failure
 	}
 	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressExecutionPhaseConfirmed, Phase: string(ReleaseExecutionReleaseFilesStaged)})
 	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressTargetedFilesStaged})
@@ -194,9 +190,11 @@ type createGitHubActionsReleaseCommit struct {
 	progress ReleaseProgress
 }
 
-func (operation createGitHubActionsReleaseCommit) Create(execCtx *ReleaseExecutionContext, execution preparedGitHubActionsReleaseExecution, files KnownReleaseFiles) (string, error) {
+func (operation createGitHubActionsReleaseCommit) Create(execCtx *ReleaseExecutionContext, execution preparedGitHubActionsReleaseExecution, files KnownReleaseFiles, state releaseStateRollback, materialization releaseMaterializationRollback) (string, error) {
 	if _, err := operation.journal.BeginPending(execution.Identity, ReleaseExecutionPendingCreateReleaseCommit); err != nil {
-		return "", err
+		failure := restoreStagedReleaseFilesAfterFailure(err, state, materialization, operation.git, files)
+		_, _ = operation.journal.RecordLastError(execution.Identity, failure.Error())
+		return "", failure
 	}
 	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressPendingActionRecorded, PendingAction: string(ReleaseExecutionPendingCreateReleaseCommit)})
 	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressReleaseCommitCreating, CommitMessage: ReleaseCommitMessage(execCtx)})
@@ -211,6 +209,29 @@ func (operation createGitHubActionsReleaseCommit) Create(execCtx *ReleaseExecuti
 	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressExecutionPhaseConfirmed, Phase: string(ReleaseExecutionCommitCreated)})
 	reportReleaseProgress(operation.progress, ReleaseProgressEvent{Kind: ReleaseProgressReleaseCommitCreated, CommitSHA: commitSHA})
 	return commitSHA, nil
+}
+
+func restoreMaterializationAfterReleaseFailure(cause error, materialization releaseMaterializationRollback) error {
+	if restoreErr := materialization.Restore(); restoreErr != nil {
+		return errors.Join(cause, fmt.Errorf("restore materialized release files: %w", restoreErr))
+	}
+	return cause
+}
+
+func restoreLocalReleaseFilesAfterFailure(cause error, state releaseStateRollback, materialization releaseMaterializationRollback) error {
+	failure := cause
+	if restoreErr := state.RestoreSnapshot(); restoreErr != nil {
+		failure = errors.Join(failure, fmt.Errorf("restore V2 release state: %w", restoreErr))
+	}
+	return restoreMaterializationAfterReleaseFailure(failure, materialization)
+}
+
+func restoreStagedReleaseFilesAfterFailure(cause error, state releaseStateRollback, materialization releaseMaterializationRollback, git knownReleaseFileUnstager, files KnownReleaseFiles) error {
+	failure := restoreLocalReleaseFilesAfterFailure(cause, state, materialization)
+	if unstageErr := git.UnstageKnown(files); unstageErr != nil {
+		failure = errors.Join(failure, fmt.Errorf("unstage known release files: %w", unstageErr))
+	}
+	return failure
 }
 
 type createGitHubActionsReleaseTag struct {

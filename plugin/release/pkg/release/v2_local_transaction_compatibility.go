@@ -6,8 +6,10 @@ import (
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
+// Deprecated: active V2 execution uses ReleaseExecutionJournalState.
 type ExecutionPhase string
 
+// Deprecated: active V2 execution uses the release execution journal states.
 const (
 	ExecutionPhasePlanned                 ExecutionPhase = "planned"
 	ExecutionPhasePreflightValidated      ExecutionPhase = "preflight-validated"
@@ -21,6 +23,7 @@ const (
 	ExecutionPhaseFailed                  ExecutionPhase = "failed"
 )
 
+// Deprecated: active V2 mutations are tracked by durable execution journals.
 type MutationTracker struct {
 	Phase             ExecutionPhase
 	KnownChangedFiles []string
@@ -28,6 +31,7 @@ type MutationTracker struct {
 	Irreversible      bool
 }
 
+// Deprecated: active V2 execution constructs its explicit journaled use case.
 func NewMutationTracker() *MutationTracker {
 	return &MutationTracker{Phase: ExecutionPhasePlanned}
 }
@@ -58,6 +62,7 @@ func (mt *MutationTracker) TrackStagedFile(path string) {
 	mt.KnownStagedFiles = append(mt.KnownStagedFiles, path)
 }
 
+// Deprecated: use GitHubActionsReleaseResult from the active V2 lifecycle.
 type ReleaseTransactionResult struct {
 	Phase             ExecutionPhase
 	UnitID            string
@@ -68,6 +73,8 @@ type ReleaseTransactionResult struct {
 	RolledBackState   bool
 }
 
+// Legacy: transactionExecutor preserves the rejected local-transaction
+// constructor shape without enabling local V2 execution.
 type transactionExecutor interface {
 	Name() string
 }

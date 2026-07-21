@@ -90,8 +90,11 @@ and focused characterization tests. See
 Every `*_compatibility.go` production file is an explicit quarantine. It may
 contain only classified legacy, deprecated, alias, wrapper, or forwarding
 declarations. Active planning, orchestration, policy, or adapters must have an
-active subject-qualified owner. The compatibility architecture inventory must be
-updated deliberately whenever a compatibility declaration is added or removed.
+active subject-qualified owner. The architecture guard discovers every matching
+production file below `plugin/release/pkg` across package boundaries and requires
+an explicit compatibility classification on every top-level declaration; methods
+inherit the classification of their receiver type. It does not rely on a list of
+known filenames.
 
 ## Test and isolation policy
 

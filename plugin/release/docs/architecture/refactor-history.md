@@ -78,13 +78,18 @@ Active production bypasses mutable registry lookup. Registry-backed release entr
 
 ## July 2026 code-quality consolidation
 
-A later ten-commit structural pass preserved the behavior above while tightening
-ownership. It characterized architecture boundaries, centralized shared tool
+A later code-quality sequence preserved the behavior above while tightening
+ownership. Ten planned structural commits characterized architecture boundaries,
+centralized shared tool
 identity and configuration facts, extracted reusable GoReleaser facts, isolated
 workflow facts and dispatch HTTP, moved Doctor and supporting command
 capabilities into focused internal packages, made the active release operation
 order visible through named files, split mixed files by subject, and finalized
-documentation, lint, and architecture controls.
+documentation, lint, and architecture controls. Corrective follow-up Commit 11
+fixed active/compatibility ownership and documentation boundaries; final
+corrective follow-up Commit 12 completed the package-wide compatibility guard
+and pre-commit restoration boundaries. The final sequence contains twelve
+commits.
 
 No workflow YAML, GoReleaser configuration, journal schema, command contract,
 public release behavior, or active lifecycle order changed. The concise final

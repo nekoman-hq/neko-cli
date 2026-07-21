@@ -179,6 +179,69 @@ func TestGitHubActionsReleaseRunnerBlocksUnresolvedExecutionBeforeMutation(t *te
 	}
 }
 
+func TestGitHubActionsReleaseRunnerRestoresMaterializationAndStateWhenStagingFails(t *testing.T) {
+	root, _, ctx := newActivePluginGitHubActionsReleaseRepository(t)
+	baseSHA := strings.TrimSpace(gitOutput(t, root, "rev-parse", "HEAD"))
+	stateBefore := mustReadString(t, releaseconfig.V2StatePath(root))
+	manifestBefore := mustReadString(t, filepath.Join(root, pluginReleaseManifestPath))
+	client := &recordingWorkflowDispatchClient{response: GitHubActionsDispatchResponse{State: DispatchJournalAccepted}}
+	runner := NewGitHubActionsReleaseRunner(
+		WithGitHubActionsReleaseTokenResolver(staticDispatchTokenResolver{token: "test-token"}),
+		WithGitHubActionsReleaseDispatchClient(client),
+	)
+	runner.coordinator = newGitReleaseCoordinatorWithRunner(failingReleaseStagingGitRunner{})
+
+	result, err := runner.Run(context.Background(), ctx)
+
+	if err == nil || result != nil || !strings.Contains(err.Error(), "simulated release staging failure") {
+		t.Fatalf("expected injected staging failure, result=%#v err=%v", result, err)
+	}
+	if got := mustReadString(t, releaseconfig.V2StatePath(root)); got != stateBefore {
+		t.Fatalf("staging failure did not restore release state:\n%s", got)
+	}
+	if got := mustReadString(t, filepath.Join(root, pluginReleaseManifestPath)); got != manifestBefore {
+		t.Fatalf("staging failure did not restore materialized manifest:\n%s", got)
+	}
+	if head := strings.TrimSpace(gitOutput(t, root, "rev-parse", "HEAD")); head != baseSHA {
+		t.Fatalf("staging failure changed HEAD: got %s want %s", head, baseSHA)
+	}
+	if status := strings.TrimSpace(gitOutput(t, root, "status", "--porcelain")); status != "" {
+		t.Fatalf("staging failure left worktree or index changes: %q", status)
+	}
+	if tags := strings.TrimSpace(gitOutput(t, root, "tag", "--list", ctx.Tag)); tags != "" {
+		t.Fatalf("staging failure created a tag: %q", tags)
+	}
+	journal := soleUnresolvedExecutionJournal(t, root, ctx.Unit.ID).Journal
+	if journal.State != ReleaseExecutionStateWritten || journal.PendingAction != ReleaseExecutionPendingStageReleaseFiles {
+		t.Fatalf("staging failure lost its journal boundary: %#v", journal)
+	}
+	assessment, assessErr := AssessReleaseExecutionRecovery(root, journal, resumeGitAdapter{coordinator: NewGitReleaseCoordinator()})
+	if assessErr != nil {
+		t.Fatalf("AssessReleaseExecutionRecovery: %v", assessErr)
+	}
+	if assessment.Status != ReleaseExecutionRecoveryConflicted || !assessment.RequiresManualIntervention {
+		t.Fatalf("restored staging failure assessment = %#v", assessment)
+	}
+	if resolution := resolveResumeRecovery(journal, assessment); resolution.Refusal == nil || resolution.Refusal.Kind != resumeRecoveryRefusalConflicted {
+		t.Fatalf("restored staging failure resume resolution = %#v", resolution)
+	}
+	repository, loadErr := releaseconfig.LoadV2Repository(root)
+	if loadErr != nil {
+		t.Fatalf("LoadV2Repository after staging failure: %v", loadErr)
+	}
+	planned, planErr := BuildReleaseExecutionContext(repository, repository.Units[0], Patch, false)
+	if planErr != nil {
+		t.Fatalf("BuildReleaseExecutionContext after staging failure: %v", planErr)
+	}
+	if planned.CurrentVersion != ctx.CurrentVersion || planned.NextVersion != ctx.NextVersion {
+		t.Fatalf("restored state planned %s -> %s, want %s -> %s", planned.CurrentVersion, planned.NextVersion, ctx.CurrentVersion, ctx.NextVersion)
+	}
+	assertNewReleaseCannotAdvance(t, root)
+	if client.calls != 0 {
+		t.Fatalf("staging failure reached dispatch: %d calls", client.calls)
+	}
+}
+
 func TestGitHubActionsReleaseRunnerPersistsPendingCommitCreationAfterFailure(t *testing.T) {
 	root, _, ctx := newActiveGitHubActionsReleaseRepository(t)
 	baseSHA := strings.TrimSpace(gitOutput(t, root, "rev-parse", "HEAD"))
@@ -208,8 +271,86 @@ func TestGitHubActionsReleaseRunnerPersistsPendingCommitCreationAfterFailure(t *
 	if staged := strings.TrimSpace(gitOutput(t, root, "diff", "--cached", "--name-only")); staged != ".neko/release.state.json" {
 		t.Fatalf("commit failure did not preserve the staged recovery state: %q", staged)
 	}
+	assertReleaseStateVersion(t, root, ctx.Unit.ID, ctx.NextVersion)
+	assessment, assessErr := AssessReleaseExecutionRecovery(root, journal, resumeGitAdapter{coordinator: NewGitReleaseCoordinator()})
+	if assessErr != nil {
+		t.Fatalf("AssessReleaseExecutionRecovery: %v", assessErr)
+	}
+	if assessment.Status != ReleaseExecutionRecoveryInterruptedBeforePush || !assessment.RequiresManualIntervention {
+		t.Fatalf("commit failure assessment = %#v", assessment)
+	}
+	if resolution := resolveResumeRecovery(journal, assessment); resolution.Refusal == nil || resolution.Refusal.Kind != resumeRecoveryRefusalBeforeCommit {
+		t.Fatalf("commit failure resume resolution = %#v", resolution)
+	}
+	repository, loadErr := releaseconfig.LoadV2Repository(root)
+	if loadErr != nil {
+		t.Fatalf("LoadV2Repository after commit failure: %v", loadErr)
+	}
+	planned, planErr := BuildReleaseExecutionContext(repository, repository.Units[0], Patch, false)
+	if planErr != nil {
+		t.Fatalf("BuildReleaseExecutionContext after commit failure: %v", planErr)
+	}
+	if planned.CurrentVersion != ctx.NextVersion {
+		t.Fatalf("preserved ambiguous State planned from %s, want %s", planned.CurrentVersion, ctx.NextVersion)
+	}
+	assertNewReleaseCannotAdvance(t, root)
 	if client.calls != 0 {
 		t.Fatalf("commit failure reached dispatch: %d calls", client.calls)
+	}
+}
+
+func TestGitHubActionsReleaseRunnerPreservesCommittedFilesWhenCommitVerificationFails(t *testing.T) {
+	root, _, ctx := newActivePluginGitHubActionsReleaseRepository(t)
+	baseSHA := strings.TrimSpace(gitOutput(t, root, "rev-parse", "HEAD"))
+	client := &recordingWorkflowDispatchClient{response: GitHubActionsDispatchResponse{State: DispatchJournalAccepted}}
+	runner := NewGitHubActionsReleaseRunner(
+		WithGitHubActionsReleaseTokenResolver(staticDispatchTokenResolver{token: "test-token"}),
+		WithGitHubActionsReleaseDispatchClient(client),
+	)
+	runner.coordinator = newGitReleaseCoordinatorWithRunner(failingReleaseCommitVerificationGitRunner{})
+
+	result, err := runner.Run(context.Background(), ctx)
+
+	if err == nil || result != nil || !strings.Contains(err.Error(), "release commit contains unexpected files") {
+		t.Fatalf("expected injected commit verification failure, result=%#v err=%v", result, err)
+	}
+	journal := soleUnresolvedExecutionJournal(t, root, ctx.Unit.ID).Journal
+	if journal.State != ReleaseExecutionReleaseFilesStaged || journal.PendingAction != ReleaseExecutionPendingCreateReleaseCommit {
+		t.Fatalf("commit verification failure lost its recovery boundary: %#v", journal)
+	}
+	if journal.ReleaseCommitSHA != "" || journal.TagTargetSHA != "" {
+		t.Fatalf("commit verification failure persisted unconfirmed commit metadata: %#v", journal)
+	}
+	head := strings.TrimSpace(gitOutput(t, root, "rev-parse", "HEAD"))
+	if head == baseSHA {
+		t.Fatalf("commit verification failure did not preserve the created commit")
+	}
+	assertReleaseStateVersion(t, root, ctx.Unit.ID, ctx.NextVersion)
+	if manifest := mustReadString(t, filepath.Join(root, pluginReleaseManifestPath)); !strings.Contains(manifest, `"version": "`+ctx.NextVersion+`"`) {
+		t.Fatalf("commit verification failure lost materialized manifest version:\n%s", manifest)
+	}
+	if committedState := gitOutput(t, root, "show", head+":"+releaseconfig.V2Directory+"/"+releaseconfig.V2StateFileName); !strings.Contains(committedState, `"version": "`+ctx.NextVersion+`"`) && !strings.Contains(committedState, `"version":"`+ctx.NextVersion+`"`) {
+		t.Fatalf("created commit does not contain next release state: %s", committedState)
+	}
+	if status := strings.TrimSpace(gitOutput(t, root, "status", "--porcelain")); status != "" {
+		t.Fatalf("commit verification failure changed committed files after uncertainty: %q", status)
+	}
+	if tags := strings.TrimSpace(gitOutput(t, root, "tag", "--list", ctx.Tag)); tags != "" {
+		t.Fatalf("commit verification failure reached tag creation: %q", tags)
+	}
+	assessment, assessErr := AssessReleaseExecutionRecovery(root, journal, resumeGitAdapter{coordinator: NewGitReleaseCoordinator()})
+	if assessErr != nil {
+		t.Fatalf("AssessReleaseExecutionRecovery: %v", assessErr)
+	}
+	if assessment.Status != ReleaseExecutionRecoveryInterruptedBeforePush || !assessment.RequiresManualIntervention {
+		t.Fatalf("commit verification failure assessment = %#v", assessment)
+	}
+	if resolution := resolveResumeRecovery(journal, assessment); resolution.Refusal == nil || resolution.Refusal.Kind != resumeRecoveryRefusalBeforeCommit {
+		t.Fatalf("commit verification failure resume resolution = %#v", resolution)
+	}
+	assertNewReleaseCannotAdvance(t, root)
+	if client.calls != 0 {
+		t.Fatalf("commit verification failure reached dispatch: %d calls", client.calls)
 	}
 }
 
@@ -234,6 +375,17 @@ func TestGitHubActionsReleaseRunnerPersistsCommitBeforeTagCreationFailure(t *tes
 	head := strings.TrimSpace(gitOutput(t, root, "rev-parse", "HEAD"))
 	if journal.ReleaseCommitSHA != head || journal.TagTargetSHA != "" {
 		t.Fatalf("tag failure did not retain only the confirmed commit SHA: %#v", journal)
+	}
+	assertReleaseStateVersion(t, root, ctx.Unit.ID, ctx.NextVersion)
+	if committedState := gitOutput(t, root, "show", head+":"+releaseconfig.V2Directory+"/"+releaseconfig.V2StateFileName); !strings.Contains(committedState, ctx.NextVersion) {
+		t.Fatalf("tag failure release commit lost next state: %s", committedState)
+	}
+	assessment, assessErr := AssessReleaseExecutionRecovery(root, journal, resumeGitAdapter{coordinator: NewGitReleaseCoordinator()})
+	if assessErr != nil {
+		t.Fatalf("AssessReleaseExecutionRecovery: %v", assessErr)
+	}
+	if resolution := resolveResumeRecovery(journal, assessment); resolution.Refusal != nil || resolution.Operation != resumeReleaseFromCommitCreated {
+		t.Fatalf("tag failure resume resolution = %#v", resolution)
 	}
 	if tags := strings.TrimSpace(gitOutput(t, root, "tag", "--list", ctx.Tag)); tags != "" {
 		t.Fatalf("tag failure left an unconfirmed tag: %q", tags)
@@ -385,6 +537,24 @@ func (failingReleaseCommitGitRunner) Run(repositoryRoot string, args ...string) 
 	return execGitRunner{}.Run(repositoryRoot, args...)
 }
 
+type failingReleaseStagingGitRunner struct{}
+
+func (failingReleaseStagingGitRunner) Run(repositoryRoot string, args ...string) (string, error) {
+	if len(args) > 0 && args[0] == "add" {
+		return "", fmt.Errorf("simulated release staging failure")
+	}
+	return execGitRunner{}.Run(repositoryRoot, args...)
+}
+
+type failingReleaseCommitVerificationGitRunner struct{}
+
+func (failingReleaseCommitVerificationGitRunner) Run(repositoryRoot string, args ...string) (string, error) {
+	if len(args) > 0 && args[0] == "diff-tree" {
+		return "unexpected.txt\n", nil
+	}
+	return execGitRunner{}.Run(repositoryRoot, args...)
+}
+
 type failingUnitTagCreationGitRunner struct{}
 
 func (failingUnitTagCreationGitRunner) Run(repositoryRoot string, args ...string) (string, error) {
@@ -409,6 +579,80 @@ func newActiveGitHubActionsReleaseRepository(t *testing.T) (string, string, *Rel
 		t.Fatalf("BuildReleaseExecutionContext: %v", err)
 	}
 	return root, bare, ctx
+}
+
+func newActivePluginGitHubActionsReleaseRepository(t *testing.T) (string, string, *ReleaseExecutionContext) {
+	t.Helper()
+	root := newPluginReleaseMaterializationRepository(t)
+	gitCmd(t, root, "init")
+	gitCmd(t, root, "config", "user.email", "test@example.com")
+	gitCmd(t, root, "config", "user.name", "Test User")
+	gitCmd(t, root, "add", ".")
+	gitCmd(t, root, "commit", "-m", "initial")
+	gitCmd(t, root, "remote", "add", "origin", "https://github.com/nekoman/repo.git")
+	branch := strings.TrimSpace(gitOutput(t, root, "symbolic-ref", "--short", "HEAD"))
+	gitCmd(t, root, "config", "branch."+branch+".remote", "origin")
+	gitCmd(t, root, "config", "branch."+branch+".merge", "refs/heads/"+branch)
+	bare := filepath.Join(t.TempDir(), "origin.git")
+	gitCmd(t, root, "init", "--bare", bare)
+	gitCmd(t, root, "remote", "set-url", "--push", "origin", bare)
+	repository, err := releaseconfig.LoadV2Repository(root)
+	if err != nil {
+		t.Fatalf("LoadV2Repository: %v", err)
+	}
+	ctx, err := BuildReleaseExecutionContext(repository, repository.Units[0], Patch, false)
+	if err != nil {
+		t.Fatalf("BuildReleaseExecutionContext: %v", err)
+	}
+	return root, bare, ctx
+}
+
+func assertReleaseStateVersion(t *testing.T, root, unitID, want string) {
+	t.Helper()
+	state, err := releaseconfig.LoadV2State(releaseconfig.V2StatePath(root))
+	if err != nil {
+		t.Fatalf("LoadV2State: %v", err)
+	}
+	if got := state.Units[unitID].Version; got != want {
+		t.Fatalf("release state unit %s version = %q, want %q", unitID, got, want)
+	}
+}
+
+func assertNewReleaseCannotAdvance(t *testing.T, root string) {
+	t.Helper()
+	repository, err := releaseconfig.LoadV2Repository(root)
+	if err != nil {
+		t.Fatalf("LoadV2Repository before blocked release: %v", err)
+	}
+	ctx, err := BuildReleaseExecutionContext(repository, repository.Units[0], Patch, false)
+	if err != nil {
+		t.Fatalf("BuildReleaseExecutionContext before blocked release: %v", err)
+	}
+	stateBefore := mustReadString(t, releaseconfig.V2StatePath(root))
+	headBefore := strings.TrimSpace(gitOutput(t, root, "rev-parse", "HEAD"))
+	statusBefore := strings.TrimSpace(gitOutput(t, root, "status", "--porcelain"))
+	client := &recordingWorkflowDispatchClient{response: GitHubActionsDispatchResponse{State: DispatchJournalAccepted}}
+	runner := NewGitHubActionsReleaseRunner(
+		WithGitHubActionsReleaseTokenResolver(staticDispatchTokenResolver{token: "test-token"}),
+		WithGitHubActionsReleaseDispatchClient(client),
+	)
+	result, runErr := runner.Run(context.Background(), ctx)
+	blockedByEvidence := runErr != nil && (strings.Contains(runErr.Error(), "neko release resume --unit") || strings.Contains(runErr.Error(), "require a clean worktree and index"))
+	if !blockedByEvidence || result != nil {
+		t.Fatalf("preserved recovery evidence did not block a new release: result=%#v err=%v", result, runErr)
+	}
+	if got := mustReadString(t, releaseconfig.V2StatePath(root)); got != stateBefore {
+		t.Fatalf("blocked release changed State:\n%s", got)
+	}
+	if got := strings.TrimSpace(gitOutput(t, root, "rev-parse", "HEAD")); got != headBefore {
+		t.Fatalf("blocked release changed HEAD: got %s want %s", got, headBefore)
+	}
+	if got := strings.TrimSpace(gitOutput(t, root, "status", "--porcelain")); got != statusBefore {
+		t.Fatalf("blocked release changed worktree/index status: got %q want %q", got, statusBefore)
+	}
+	if client.calls != 0 {
+		t.Fatalf("blocked release reached dispatch: %d calls", client.calls)
+	}
 }
 
 func soleUnresolvedExecutionJournal(t *testing.T, root, unitID string) ReleaseExecutionJournalResolution {

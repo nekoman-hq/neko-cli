@@ -59,7 +59,7 @@ type githubActionsReleaseFileStager interface {
 }
 
 type githubActionsReleaseCommitCreator interface {
-	Create(execCtx *ReleaseExecutionContext, execution preparedGitHubActionsReleaseExecution, files KnownReleaseFiles) (string, error)
+	Create(execCtx *ReleaseExecutionContext, execution preparedGitHubActionsReleaseExecution, files KnownReleaseFiles, state releaseStateRollback, materialization releaseMaterializationRollback) (string, error)
 }
 
 type githubActionsReleaseTagCreator interface {
@@ -138,7 +138,7 @@ func (useCase *githubActionsReleaseUseCase) Run(ctx context.Context, execCtx *Re
 	if stageErr := useCase.fileStager.Stage(execCtx, execution, planned.KnownFiles, state, materialization); stageErr != nil {
 		return nil, stageErr
 	}
-	commitSHA, err := useCase.commitCreator.Create(execCtx, execution, planned.KnownFiles)
+	commitSHA, err := useCase.commitCreator.Create(execCtx, execution, planned.KnownFiles, state, materialization)
 	if err != nil {
 		return nil, err
 	}

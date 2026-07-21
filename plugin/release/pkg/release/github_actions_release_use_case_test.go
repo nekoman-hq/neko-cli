@@ -278,7 +278,7 @@ type recordingReleaseCommitCreator struct {
 	recording *recordingGitHubActionsReleaseUseCase
 }
 
-func (operation recordingReleaseCommitCreator) Create(*ReleaseExecutionContext, preparedGitHubActionsReleaseExecution, KnownReleaseFiles) (string, error) {
+func (operation recordingReleaseCommitCreator) Create(*ReleaseExecutionContext, preparedGitHubActionsReleaseExecution, KnownReleaseFiles, releaseStateRollback, releaseMaterializationRollback) (string, error) {
 	if err := operation.recording.call("create-commit"); err != nil {
 		return "", err
 	}

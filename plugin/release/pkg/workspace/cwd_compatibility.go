@@ -9,6 +9,9 @@ import (
 
 // ChangeToProjectRoot switches the process working directory to the resolved
 // project root so relative config and tool files work from nested subfolders.
+//
+// Deprecated: resolve a RepositoryRoot and pass it explicitly to root-aware
+// command boundaries instead.
 func ChangeToProjectRoot(startDir string) error {
 	root, err := ResolveRepositoryRoot(startDir)
 	if err != nil {

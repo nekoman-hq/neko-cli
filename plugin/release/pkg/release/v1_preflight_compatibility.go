@@ -12,6 +12,7 @@ import (
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
+// Legacy: Preflight preserves the fatal V1 preflight compatibility behavior.
 func Preflight(cfg *config.V1ReleaseConfig) {
 	failure := checkV1ReleasePreflight(cfg)
 	if failure != nil {
@@ -19,6 +20,8 @@ func Preflight(cfg *config.V1ReleaseConfig) {
 	}
 }
 
+// Legacy: checkV1ReleasePreflight forwards the former package-level check to
+// the explicit V1 preflight owner.
 func checkV1ReleasePreflight(cfg *config.V1ReleaseConfig) *V1ReleaseFailure {
 	root := currentV1RepositoryRoot()
 	return legacyV1Preflight{

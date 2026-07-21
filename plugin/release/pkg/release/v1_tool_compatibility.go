@@ -17,6 +17,7 @@ import (
 @Since      18.12.2025
 */
 
+// Legacy: Tool preserves the former V1 executor contract for compatibility.
 type Tool interface {
 	Name() string
 	Init(cfg *config2.V1ReleaseConfig) error
@@ -27,6 +28,7 @@ type Tool interface {
 	RevertRelease() error
 }
 
+// Legacy: ToolBase forwards former helper methods to focused V1 adapters.
 type ToolBase struct{}
 
 func (tb *ToolBase) ValidateRequirements(ctx *ReleaseExecutionContext) error {
@@ -61,6 +63,8 @@ func (tb *ToolBase) RequireBinary(name string) error {
 	return NewSystemV1BinaryLocator().Require(name)
 }
 
+// Legacy: GitReleaseState preserves the V1 executor compatibility evidence
+// shape used by the retained adapters.
 type GitReleaseState struct {
 	PreHead              string
 	ReleaseHead          string

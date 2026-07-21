@@ -43,6 +43,12 @@ func TestGitHubActionsReleaseMutationOperationsStopWhenPendingCannotPersist(t *t
 			assertReleaseOperationTraceContains(t, trace.calls, "pending:"+string(test.pending))
 			assertReleaseOperationTraceOmits(t, trace.calls, "effect:"+test.effect)
 			assertReleaseOperationTraceOmitsPrefix(t, trace.calls, "confirm:")
+			switch test.name {
+			case "write-state":
+				assertReleaseOperationTraceOrder(t, trace.calls, "pending:"+string(test.pending), "cleanup:materialization", "record-error")
+			case "stage-files", "create-commit":
+				assertReleaseOperationTraceOrder(t, trace.calls, "pending:"+string(test.pending), "cleanup:state", "cleanup:materialization", "cleanup:unstage-files", "record-error")
+			}
 			if journal.state != test.previous || journal.pending != ReleaseExecutionPendingNone {
 				t.Fatalf("journal changed after pending persistence failure: state=%s pending=%s", journal.state, journal.pending)
 			}
@@ -66,7 +72,7 @@ func TestGitHubActionsReleaseMutationOperationsLeavePendingWhenSideEffectFails(t
 			assertReleaseOperationTraceOmitsPrefix(t, trace.calls, "confirm:")
 			switch test.name {
 			case "write-state":
-				assertReleaseOperationTraceOrder(t, trace.calls, "effect:write-state", "cleanup:materialization", "record-error")
+				assertReleaseOperationTraceOrder(t, trace.calls, "effect:write-state", "cleanup:state", "cleanup:materialization", "record-error")
 			case "stage-files":
 				assertReleaseOperationTraceOrder(t, trace.calls, "effect:stage-files", "cleanup:state", "cleanup:materialization", "cleanup:unstage-files", "record-error")
 			}
@@ -91,12 +97,51 @@ func TestGitHubActionsReleaseMutationOperationsExposeConfirmationFailures(t *tes
 				"effect:"+test.effect,
 				"confirm:"+string(test.confirmed),
 			)
+			switch test.name {
+			case "apply-materialization":
+				assertReleaseOperationTraceOrder(t, trace.calls, "confirm:"+string(test.confirmed), "cleanup:materialization", "record-error")
+			case "write-state":
+				assertReleaseOperationTraceOrder(t, trace.calls, "confirm:"+string(test.confirmed), "cleanup:state", "cleanup:materialization", "record-error")
+			case "stage-files":
+				assertReleaseOperationTraceOrder(t, trace.calls, "confirm:"+string(test.confirmed), "cleanup:state", "cleanup:materialization", "cleanup:unstage-files", "record-error")
+			}
 			if journal.state != test.previous || journal.pending != test.pending {
 				t.Fatalf("journal state=%s pending=%s, want state=%s pending=%s", journal.state, journal.pending, test.previous, test.pending)
 			}
 		})
 	}
 }
+
+func TestPreCommitRestorationReportsCleanupFailuresWithoutLosingCause(t *testing.T) {
+	cause := errors.New("stage failed")
+	stateErr := errors.New("state restore failed")
+	materializationErr := errors.New("materialization restore failed")
+	unstageErr := errors.New("unstage failed")
+	failure := restoreStagedReleaseFilesAfterFailure(
+		cause,
+		failingOperationStateRollback{err: stateErr},
+		failingOperationMaterializationRollback{err: materializationErr},
+		failingOperationUnstager{err: unstageErr},
+		KnownReleaseFiles{},
+	)
+	for _, expected := range []error{cause, stateErr, materializationErr, unstageErr} {
+		if !errors.Is(failure, expected) {
+			t.Fatalf("failure %q lost cause %q", failure, expected)
+		}
+	}
+}
+
+type failingOperationStateRollback struct{ err error }
+
+func (rollback failingOperationStateRollback) RestoreSnapshot() error { return rollback.err }
+
+type failingOperationMaterializationRollback struct{ err error }
+
+func (rollback failingOperationMaterializationRollback) Restore() error { return rollback.err }
+
+type failingOperationUnstager struct{ err error }
+
+func (unstager failingOperationUnstager) UnstageKnown(KnownReleaseFiles) error { return unstager.err }
 
 type githubActionsReleaseMutationOperationCase struct {
 	run       func(journal *recordingReleaseOperationJournal, effects *recordingReleaseOperationEffects) error
@@ -159,7 +204,7 @@ func githubActionsReleaseMutationOperationCases() []githubActionsReleaseMutation
 			previous:  ReleaseExecutionReleaseFilesStaged,
 			confirmed: ReleaseExecutionCommitCreated,
 			run: func(journal *recordingReleaseOperationJournal, effects *recordingReleaseOperationEffects) error {
-				_, err := (createGitHubActionsReleaseCommit{journal: journal, git: recordingReleaseOperationGit{effects}}).Create(execCtx, execution, files)
+				_, err := (createGitHubActionsReleaseCommit{journal: journal, git: recordingReleaseOperationGit{effects}}).Create(execCtx, execution, files, recordingOperationStateRollback{effects.trace}, recordingOperationMaterializationRollback{effects.trace})
 				return err
 			},
 		},
@@ -284,7 +329,10 @@ func (transaction recordingMaterializationTransaction) Apply() (*AppliedMaterial
 	return &AppliedMaterialization{}, transaction.effects.run("apply-materialization")
 }
 
-func (recordingMaterializationTransaction) Restore() error { return nil }
+func (transaction recordingMaterializationTransaction) Restore() error {
+	transaction.effects.trace.add("cleanup:materialization")
+	return nil
+}
 
 type recordingOperationMaterializationRollback struct{ trace *releaseOperationTrace }
 
@@ -311,7 +359,10 @@ func (transaction recordingStateTransaction) WriteUnitVersion(string, string) er
 	return transaction.effects.run("write-state")
 }
 
-func (recordingStateTransaction) RestoreSnapshot() error { return nil }
+func (transaction recordingStateTransaction) RestoreSnapshot() error {
+	transaction.effects.trace.add("cleanup:state")
+	return nil
+}
 
 type recordingOperationStateRollback struct{ trace *releaseOperationTrace }
 

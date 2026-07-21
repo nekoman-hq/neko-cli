@@ -8,6 +8,7 @@ package release
 
 import "fmt"
 
+// Legacy: tools retains the process-global V1 registry for compatibility only.
 var tools = make(map[string]Tool)
 
 // Register adds a legacy release tool to the process-global compatibility

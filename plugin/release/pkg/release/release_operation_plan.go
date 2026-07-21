@@ -79,8 +79,13 @@ type githubActionsReleaseStagingGit interface {
 	UnstageKnown(files KnownReleaseFiles) error
 }
 
+type knownReleaseFileUnstager interface {
+	UnstageKnown(files KnownReleaseFiles) error
+}
+
 type githubActionsReleaseCommitGit interface {
 	Commit(execCtx *ReleaseExecutionContext, files KnownReleaseFiles) (string, error)
+	UnstageKnown(files KnownReleaseFiles) error
 }
 
 type githubActionsReleaseTagGit interface {

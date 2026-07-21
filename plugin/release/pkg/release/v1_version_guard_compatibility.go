@@ -18,13 +18,16 @@ import (
 	"github.com/nekoman-hq/neko-cli/pkg/log"
 )
 
-// VersionGuardOptions makes remote-refresh behavior explicit at every call
-// site. Dry-run planning must stay local/read-only, while real releases may
-// refresh tag information before comparing versions.
+// VersionGuardOptions makes remote-refresh behavior explicit at every legacy
+// call site.
+//
+// Deprecated: use PlanV1Release with explicit latest-tag evidence instead.
 type VersionGuardOptions struct {
 	AllowRemoteRefresh bool
 }
 
+// Legacy: these replaceable functions preserve the former version-guard test
+// seams and are not used by active production composition.
 var (
 	refreshVersionTags = git.Fetch
 	latestVersionTag   = git.LatestTag
@@ -52,6 +55,8 @@ func VersionGuardWithOptions(cfg *config.V1ReleaseConfig, opts VersionGuardOptio
 	return EnsureVersionIsValid(cfg, latestTag)
 }
 
+// Legacy: EnsureVersionIsValid preserves the pure V1 SemVer compatibility
+// check and warning behavior.
 func EnsureVersionIsValid(cfg *config.V1ReleaseConfig, latestTag string) (*semver.Version, error) {
 	localVer, err := semver.NewVersion(cfg.Version)
 	if err != nil {
