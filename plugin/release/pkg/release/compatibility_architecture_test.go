@@ -55,7 +55,7 @@ func TestActiveReleasePlanHasAnActiveOwner(t *testing.T) {
 }
 
 func TestExtractedCommandRootFacadesRemainThin(t *testing.T) {
-	for _, path := range []string{"doctor.go", "unit_overview.go", "workflow_init.go", "context_validation.go"} {
+	for _, path := range []string{"doctor.go", "unit_overview.go", "workflow_init.go", "context_validation.go", "pipeline.go"} {
 		parsed := parseCompatibilityArchitectureFile(t, path)
 		for _, declaration := range parsed.Decls {
 			function, ok := declaration.(*ast.FuncDecl)
@@ -82,7 +82,7 @@ func TestExtractedCommandRootFacadesRemainThin(t *testing.T) {
 				continue
 			}
 			owner, ownerOK := selector.X.(*ast.Ident)
-			if !ownerOK || !strings.Contains(owner.Name, "doctor") && owner.Name != "unitoverview" && owner.Name != "workflowinit" && owner.Name != "contextvalidation" {
+			if !ownerOK || !strings.Contains(owner.Name, "doctor") && owner.Name != "unitoverview" && owner.Name != "workflowinit" && owner.Name != "contextvalidation" && owner.Name != "pipelineinspection" {
 				t.Errorf("root facade %s.%s does not forward to a focused internal owner", path, function.Name.Name)
 			}
 		}

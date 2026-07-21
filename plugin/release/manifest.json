@@ -358,6 +358,22 @@
       "flags": []
     },
     {
+      "name": "pipeline",
+      "description": "Explain the configured local Release V2 pipeline for one unit without execution, planning, journals, tokens, or network access",
+      "outputs": [
+        "table",
+        "json"
+      ],
+      "flags": [
+        {
+          "name": "unit",
+          "type": "string",
+          "required": false,
+          "description": "Selects the release unit. Required when a V2 repository defines multiple units."
+        }
+      ]
+    },
+    {
       "name": "ci-validate-context",
       "description": "Validate a dispatched Release V2 context against local config, state, HEAD, and tag history without mutation or network access",
       "outputs": [

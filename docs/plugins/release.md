@@ -1,5 +1,7 @@
 # Release Plugin
 
+`neko release pipeline --unit <unit>` inspects a unit's configured Release V2 pipeline locally without executing it.
+
 The **release** plugin is the core plugin for Neko CLI, providing comprehensive release management with semantic versioning support across multiple release systems.
 
 ## Overview

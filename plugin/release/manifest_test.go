@@ -80,6 +80,9 @@ func TestManifestMatchesPublicReleaseContract(t *testing.T) {
 			"verify-remote": "bool",
 		},
 		"units": {},
+		"pipeline": {
+			"unit": "string",
+		},
 		"ci-validate-context": {
 			"unit":        "string",
 			"version":     "string",

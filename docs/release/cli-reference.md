@@ -1,6 +1,8 @@
 # Release CLI Reference
 ## General
 
+Use `neko release pipeline --unit <unit>` to inspect the configured Release V2 pipeline without executing a release.
+
 ```bash
 neko release init --executor goreleaser --delivery github-actions --workflow .github/workflows/release-cli.yml
 neko release init --unit plugin-release --kind plugin --plugin-name release --plugin-manifest plugin/release/manifest.json --plugin-asset-prefix plugin-release --plugin-binary-name plugin-release --executor goreleaser --delivery github-actions --workflow .github/workflows/release-plugin-release.yml --tag-prefix plugin-release/v

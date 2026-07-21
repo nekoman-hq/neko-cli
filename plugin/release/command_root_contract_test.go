@@ -33,6 +33,7 @@ func TestMainOwnsOneExplicitRootBoundary(t *testing.T) {
 		"release.HandleReleaseWithV1ExecutorsAt(root, req, release.Patch, v1Executors...)",
 		"release.HandleDoctorAt(root, req)",
 		"release.HandleUnitsAt(root, req)",
+		"release.HandlePipelineAt(root, req)",
 		"release.HandleResumeAt(root, req)",
 		"evidence.HandleEvidenceAt(root, req)",
 		"history.HandleHistoryAt(root, req)",
@@ -53,7 +54,7 @@ func TestMainUsesInspectionRootOnlyForSourceInspectionCommands(t *testing.T) {
 	}
 	source := string(sourceBytes)
 	for _, required := range []string{
-		`if req.Command == "doctor" || req.Command == "units"`,
+		`if req.Command == "doctor" || req.Command == "units" || req.Command == "pipeline"`,
 		"workspace.ResolveInspectionRepositoryRoot(req.Context.WorkingDir)",
 		"workspace.ResolveRepositoryRoot(req.Context.WorkingDir)",
 	} {
