@@ -18,6 +18,7 @@ func TestPipelineStructuredFailuresRenderOnceAndKeepJSONErrors(t *testing.T) {
 		{ID: "cli", Version: "1.2.3"}, {ID: "plugin-release", Version: "2.0.0"},
 	})
 	v1Directory := t.TempDir()
+	//nolint:staticcheck // The error matrix must preserve the typed V1 unsupported contract.
 	writePipelineFile(t, filepath.Join(v1Directory, releaseconfig.V1FileName), `{"project-name":"legacy","project-owner":"owner","project-type":"backend","release-system":"goreleaser","version":"1.2.3"}`)
 	v1, err := workspace.ValidateRepositoryRoot(v1Directory)
 	if err != nil {
@@ -27,8 +28,8 @@ func TestPipelineStructuredFailuresRenderOnceAndKeepJSONErrors(t *testing.T) {
 	tests := []struct {
 		name string
 		root workspace.RepositoryRoot
-		req  plugin.Request
 		code string
+		req  plugin.Request
 	}{
 		{name: "missing unit", root: multi, req: plugin.Request{Command: pipelineCommandName}, code: "PIPELINE_UNIT_INVALID"},
 		{name: "unknown unit", root: multi, req: plugin.Request{Command: pipelineCommandName, Flags: map[string]any{"unit": "missing"}}, code: "PIPELINE_UNIT_INVALID"},

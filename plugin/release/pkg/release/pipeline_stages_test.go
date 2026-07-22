@@ -94,8 +94,8 @@ func TestPipelinePresentationUsesActualStageCountsGroupsAndResponsiveWidths(t *t
 	}
 	tests := []struct {
 		unit       string
-		stageCount int
 		groups     []string
+		stageCount int
 	}{
 		{unit: "cli", stageCount: 22, groups: []string{"Local release preparation", "Git and provider handoff", "Consumer workflow"}},
 		{unit: "plugin-release", stageCount: 26, groups: []string{"Local release preparation", "Git and provider handoff", "Consumer workflow", "Plugin registry"}},

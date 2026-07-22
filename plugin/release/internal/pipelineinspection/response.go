@@ -106,19 +106,6 @@ func pipelineVerificationStatusRole(status VerificationStatus) presentation.Styl
 	}
 }
 
-func pipelineVerificationSummaryRole(status verificationSummaryStatus) presentation.StyleRole {
-	switch status {
-	case verificationSummaryVerified:
-		return presentation.StyleSuccess
-	case verificationSummaryFailed:
-		return presentation.StyleError
-	case verificationSummaryPartial, verificationSummaryUnresolved, verificationSummaryNotChecked:
-		return presentation.StyleWarning
-	default:
-		return presentation.StyleDefault
-	}
-}
-
 func mapPipelineFailure(failure *commandFailure) *plugin.Response {
 	return &plugin.Response{
 		Status: "error", Metadata: pipelineResponseMetadata(),
