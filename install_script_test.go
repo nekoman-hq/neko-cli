@@ -128,6 +128,26 @@ func TestInstallScriptRejectsUnsupportedPlatform(t *testing.T) {
 	}
 }
 
+func TestInstallScriptRejectsUnsupportedDarwinI386Target(t *testing.T) {
+	fixture := newInstallScriptFixture(t)
+	fixture.writeFakeCurl()
+
+	output, err := fixture.run(map[string]string{
+		"NEKO_GITHUB_API_BASE": "https://api.example",
+		"NEKO_INSTALL_DIR":     fixture.installDir,
+		"NEKO_VERSION":         "v3.0.4",
+		"NEKO_OS":              "Darwin",
+		"NEKO_ARCH":            "i386",
+		"PATH":                 fixture.binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+	})
+	if err == nil {
+		t.Fatalf("install.sh unexpectedly accepted Darwin/i386:\n%s", output)
+	}
+	if !strings.Contains(output, "unsupported platform: Darwin/i386") {
+		t.Fatalf("expected unsupported Darwin/i386 error, got:\n%s", output)
+	}
+}
+
 type installScriptFixture struct {
 	t          *testing.T
 	root       string

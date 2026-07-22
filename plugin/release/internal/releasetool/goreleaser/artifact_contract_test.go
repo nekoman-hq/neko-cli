@@ -79,10 +79,9 @@ func TestInstallerArtifactContracts(t *testing.T) {
 	}
 }
 
-func TestPlatformArchiveAssetsAreDeterministic(t *testing.T) {
+func TestPlatformArchiveAssetsUseDeterministicSupportedGoTargets(t *testing.T) {
 	want := []string{
 		"plugin_1.2.3_Darwin_arm64.tar.gz",
-		"plugin_1.2.3_Darwin_i386.tar.gz",
 		"plugin_1.2.3_Darwin_x86_64.tar.gz",
 		"plugin_1.2.3_Windows_arm64.zip",
 		"plugin_1.2.3_Windows_i386.zip",

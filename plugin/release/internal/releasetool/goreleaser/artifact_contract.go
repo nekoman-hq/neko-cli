@@ -166,6 +166,11 @@ func PlatformArchiveAssets(prefix, version string, formats PlatformFormats) []st
 			continue
 		}
 		for _, architecture := range []string{"arm64", "i386", "x86_64"} {
+			// Current Go toolchains and GoReleaser exclude darwin/386 from the
+			// configured build matrix, so it must never become a required asset.
+			if platform.name == "Darwin" && architecture == "i386" {
+				continue
+			}
 			parts := []string{prefix}
 			if version != "" {
 				parts = append(parts, version)

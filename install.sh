@@ -118,6 +118,11 @@ platform_asset() {
       ;;
   esac
 
+  if [ "$os_label" = "Darwin" ] && [ "$arch_label" = "i386" ]; then
+    echo "Error: unsupported platform: Darwin/i386" >&2
+    exit 1
+  fi
+
   printf 'neko-cli_%s_%s.%s\n' "$os_label" "$arch_label" "$extension"
 }
 
