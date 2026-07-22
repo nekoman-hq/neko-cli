@@ -139,7 +139,7 @@ func pipelineStageGroup(stage LifecycleStage) string {
 	switch {
 	case stage.ID == "plugin-index-generation" || stage.ID == "plugin-index-publication":
 		return pipelinePluginRegistryGroup
-	case stage.Owner == StageOwnerConsumerWorkflow || stage.Owner == StageOwnerReleaseTool:
+	case pipelineConsumerStage(stage):
 		return pipelineConsumerGroup
 	case stage.Location == StageLocationRemoteGit || stage.Location == StageLocationGitHubAPI ||
 		stage.Mutation == MutationRemoteGit || stage.Mutation == MutationRemoteAPI ||
@@ -148,6 +148,11 @@ func pipelineStageGroup(stage LifecycleStage) string {
 	default:
 		return pipelineLocalPreparationGroup
 	}
+}
+
+func pipelineConsumerStage(stage LifecycleStage) bool {
+	return stage.Owner == StageOwnerConsumerWorkflow || stage.Owner == StageOwnerReleaseTool ||
+		(stage.Source != "" && !strings.HasPrefix(stage.Source, "pkg/release/"))
 }
 
 func pipelineLimitationPresentation(limitations []string) *presentation.Properties {
