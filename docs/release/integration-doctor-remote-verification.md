@@ -16,6 +16,32 @@ upload a GitHub Release, publish a package, change Actions policy, mutate a
 variable or secret, update a workflow, write config/state, read or write
 journals/Evidence, run a shell command, or mutate Git.
 
+## Pipeline reuse
+
+`neko release pipeline` consumes the same neutral verification facts without
+invoking the Doctor command handler, diagnostics/readiness policy, response
+mapper, or presentation:
+
+```bash
+neko release pipeline --unit cli
+neko release pipeline --unit cli --verify-remote
+neko release pipeline --unit cli --verify-remote --output json
+```
+
+The Pipeline default calls the local fact boundary, which constructs no GitHub
+client and never resolves a token. Its explicit flag calls the same GET reader
+and lazy token resolver documented below; there is no second Pipeline HTTP
+client. Pipeline maps Doctor states once into its own closed vocabulary and
+generates stable fact IDs from neutral identity fields. It does not consume
+Doctor diagnostics, remediation, readiness, exit policy, or human formatting.
+
+Pipeline's verification summary is independent from its lifecycle status.
+Remote workflow identity, Actions settings, variables, releases, tags, and
+artifacts are verification facts, not execution progress. The verifier owns no
+durable workflow-run ID and does not observe publication completion, so remote
+verification cannot mark a stage complete, authorize resume/retry, or change an
+accepted handoff into proof of publication success.
+
 ## GitHub read operations
 
 The package-private client targets `https://api.github.com` in production and

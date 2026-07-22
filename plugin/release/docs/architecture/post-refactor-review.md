@@ -54,9 +54,9 @@ Response mapping receives typed outcomes and owns no lifecycle decision.
 | `internal/releaseworkflow` | Canonical workflow name/file/ref/inputs, repository-target facts, and ordered consumer-operation classification | Pure local byte/model facts |
 | `internal/githubdispatch` | One bounded GitHub workflow-dispatch POST transport and response sanitization | HTTP mutation leaf; no lifecycle policy |
 | `internal/releasesource` | Tolerant, local, read-only V1/V2 source classification | Read-only leaf |
-| `internal/doctor` | Doctor inspection plus Doctor-owned severity, messages, remediation, fact mapping, presentation, and optional bounded GET verification | Default local/offline; remote path GET-only |
+| `internal/doctor` | Doctor inspection plus Doctor-owned severity, messages, remediation, fact mapping, presentation, optional bounded GET verification, and narrow neutral-fact snapshots reused by Pipeline | Default local/offline; remote path uses the single GET-only client |
 | `internal/unitoverview` | Local V2 unit inventory and its response presentation | Read-only command capability |
-| `internal/pipelineinspection` | Local V2 configured-stage and runtime read-model projection plus response presentation | Read-only command capability; consumes immutable root descriptors, neutral workflow/tool facts, and a root-composed runtime snapshot; owns no Git/journal/recovery implementation |
+| `internal/pipelineinspection` | V2 configured-stage, runtime, and verification read-model projection plus response presentation | Read-only command capability; consumes immutable root descriptors and root-composed runtime/verification snapshots; imports neither root Release nor Doctor and owns no Git/journal/recovery/HTTP implementation |
 | `internal/contextvalidation` | Local/CI release-context validation and response presentation | Read-only command capability |
 | `internal/workflowinit` | Canonical workflow preview and create-only persistence | One focused filesystem mutation |
 | `internal/legacyrequirements` | Source-format V1 token and configuration-file validation retained for the public V1 facade and Validate | Compatibility leaf; execution-context requirements remain distinct |
@@ -130,7 +130,7 @@ The following is the complete responsibility transfer made by this refactor:
 | resume assessment, recovery policy, and named continuation operations | Resume must reuse the same authoritative operations rather than implement a second state machine. |
 | V1 intent, planning, execution coordination, and compensation | V1 remains a supported release lifecycle with its own characterized safety/evidence contract. |
 | release command request/outcome/progress and response mapping | These are the supported public release boundary; mapping remains policy-free and adjacent to the lifecycle result it exposes. |
-| public Doctor, Units, Pipeline Inspection, Context Validation, and Workflow Init facades | Doctor, Units, Context Validation, and Workflow Init are aliases/forwarders. Pipeline additionally composes the authoritative read-only execution/dispatch journal, bounded local Git, recovery, and resume/retry-safety snapshot alongside immutable lifecycle descriptors; projection and presentation remain internal. |
+| public Doctor, Units, Pipeline Inspection, Context Validation, and Workflow Init facades | Doctor, Units, Context Validation, and Workflow Init are aliases/forwarders. Pipeline additionally composes authoritative read-only execution/dispatch journal, bounded local Git, recovery, resume/retry-safety, lifecycle-descriptor, and neutral Doctor-fact snapshots; verification projection and presentation remain internal. The default is offline/token-free, while explicit remote verification delegates to Doctor's existing GET/token boundary. |
 | deprecated V1 and inactive V2-local compatibility surfaces | They preserve supported historical Go contracts, are explicitly quarantined, and are not selected by active production composition. |
 
 No retained root responsibility owns reusable tool parsing, Doctor diagnostics,
@@ -164,10 +164,11 @@ and call direction rather than accepting filenames as evidence:
 - Doctor, Unit Overview, Workflow Init, and Context Validation root files
   contain only direct internal calls, type aliases, constant aliases, or
   mapping forwarders. Pipeline's root files are the deliberate exception: they
-  compose authoritative read-only lifecycle evidence and pass immutable data
-  to the internal projector. Structural guards enforce that this composition
-  has no writer, mutation, network, token, dispatch, or duplicate transition
-  capability;
+  compose authoritative read-only lifecycle evidence and neutral Doctor facts,
+  then pass immutable data to the internal projector. Structural guards enforce
+  no writer, mutation, dispatch, duplicate transition, direct HTTP client, or
+  direct token resolver; only explicit `--verify-remote` may delegate to
+  Doctor's existing GET/token boundary;
 - every `*_compatibility.go` declaration is explicitly inventoried as legacy,
   deprecated, alias, wrapper, or forwarding code; active declarations fail the
   compatibility architecture guard.
@@ -315,9 +316,10 @@ are not used by active production composition. `ReleasePlan` and
 `BuildReleasePlan` are active planning declarations owned by
 `v2_release_plan.go`. There is no operation registry,
 middleware chain, event loop, mutable pipeline context, dynamic step graph, or
-generic pipeline executor. Pipeline Inspection adds immutable configured and
-runtime records only; they contain no behavior and the active lifecycle does
-not execute by iterating over them.
+generic pipeline executor. Pipeline Inspection adds immutable configured,
+runtime, and verification records only; they contain no behavior and the active
+lifecycle does not execute by iterating over them. Verification status cannot
+change lifecycle status, stage completion, resume eligibility, or retry safety.
 
 ## Read-only and mutation boundaries
 
@@ -325,11 +327,13 @@ not execute by iterating over them.
   a bounded GET-only reader; it cannot reach workflow dispatch.
 - Plan, Units, Pipeline Inspection, Validate, History, Contributors, Evidence
   query, and Context Validation receive read capabilities only. Pipeline's
-  root composition reads one repository-confined workflow, execution and
-  dispatch journals, and bounded local Git facts through existing lifecycle
-  readers/coordinators; it receives no Git mutation, remote-ref read, token,
-  HTTP, writer, executor, or release-tool capability. The internal Pipeline
-  projector receives immutable data only.
+  root composition reads repository-confined local Doctor inputs, execution and
+  dispatch journals, and bounded local Git facts through existing owners; it
+  receives no Git mutation, remote-ref read, writer, executor, or release-tool
+  capability. Default Pipeline receives no token/HTTP capability. Explicit
+  remote Pipeline delegates only to Doctor's bounded GET/token boundary. The
+  internal Pipeline projector receives immutable data only and imports neither
+  Doctor nor an HTTP package.
 - Workflow Init owns only create/unchanged/conflict behavior and cannot update an
   existing workflow.
 - GitHub dispatch owns one POST and no retry, journal, token-resolution, or

@@ -236,6 +236,13 @@ facts; definite missing/mismatched/disabled configuration is an error. The
 Doctor still never dispatches, publishes, uploads, repairs, or mutates local or
 remote state. See [Remote Doctor verification](integration-doctor-remote-verification.md).
 
+`neko release pipeline --unit <unit>` reuses these neutral verification facts
+while keeping lifecycle projection independent. Its default is likewise local,
+offline, and token-free; `--verify-remote` reuses the same bounded GET client
+and optional lazy read-token boundary. Pipeline does not invoke the Doctor
+handler or consume diagnostics/readiness/presentation, and remote facts cannot
+complete a stage, authorize resume/retry, or prove workflow/publication success.
+
 ## Nekocli Production Workflows
 
 Nekocli dogfoods three independent V2 GitHub Actions units:

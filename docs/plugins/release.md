@@ -392,11 +392,15 @@ neko release pipeline --unit cli
 neko release pipeline --unit plugin-release
 neko release pipeline --unit plugin-ui
 neko release pipeline --unit cli --output json
+neko release pipeline --unit cli --verify-remote
+neko release pipeline --unit cli --verify-remote --output json
 ```
 
 The command is V2-only. Multi-unit repositories require `--unit`; omission is
-accepted only for a single-unit repository. There is no repository-wide,
-remote, journal-selection, repair, resume, retry, or future-version mode.
+accepted only for a single-unit repository. The default is local, offline, and
+token-free. `--verify-remote` is the only remote mode and explicitly enables
+the existing Doctor GET-only verifier. There is no repository-wide,
+journal-selection, repair, resume, retry, or future-version mode.
 Valid `ready`, `active`, `resumable`, `completed`, `blocked`, `uncertain`, and
 `rejected` observations exit `0`. Invalid requests and sources return typed
 failures; structurally invalid local runtime evidence is projected as
@@ -408,27 +412,46 @@ consumer-operation facts, publication/registry summaries, and ordered root and
 consumer stages. It correlates all relevant local execution and dispatch
 journals through their exact immutable identities, verifies expected local
 commit/tag facts, and exposes the existing recovery, resume, retry-safety, and
-manual-intervention decisions. Every stage keeps static configuration separate
-from `not_observed`, `not_started`, `pending`, `confirmed`, `blocked`,
+manual-intervention decisions. It also reports a separate verification summary
+and ordered neutral Doctor-owned verification facts. Every stage keeps static
+configuration separate from `not_observed`, `not_started`, `pending`, `confirmed`, `blocked`,
 `unknown`, `rejected`, or `invalid` runtime evidence.
 
-Human output uses `Release Pipeline Inspection`, a responsive stage table with
-essential `Stage`, `Runtime`, and `Owner` columns, optional `Configured`,
-`Location`, `Mutation`, and `Source`, and deterministic vertical records when
-width is unknown. Runtime, recovery, and manual-intervention facts remain
-visible outside the table. Redirected output and JSON are ANSI-free. JSON
-schema version `1` remains append-only with non-null ordered arrays and no
-presentation metadata.
+Human output uses `Release Pipeline Inspection`, a responsive verification-fact
+table with essential `Category`, `Status`, and `Class` columns, optional
+`Subject` and `Source`, and deterministic vertical records when width is unknown.
+Lifecycle status remains prominent; stage/runtime/owner facts, recovery, and
+manual intervention remain visible in the ordered summary/details. Redirected
+output and JSON are ANSI-free. JSON schema version `1` remains append-only with
+non-null ordered arrays and no presentation metadata.
 
-Pipeline inspection reads only local V2 config/state, the pair-recovery marker,
-the selected repository-confined workflow, local execution/dispatch journals,
-local Git objects/refs/index/worktree, and known-file recovery evidence. It
-never reads a token, uses HTTP, fetches, reads remote refs, writes journals,
-mutates config/state/Git, dispatches, resumes, retries, repairs, executes a
-release tool, or publishes. Local push confirmations are journal facts only;
-remote freshness and publication stay `remote_not_inspected`. `active` means
-locally recorded lifecycle evidence, and `completed` means accepted handoff—not
-remote publication success.
+The additive `verification` section contains `summary` and `facts`. Fact
+classes are `local`, `remote`, `runtime_required`, and `mutation_required`;
+statuses are `verified`, `failed`, `unavailable`, `unauthorized`,
+`rate_limited`, `not_checked`, and `unresolved`. Stable IDs depend only on
+neutral fact identity, not evidence messages, timestamps, ordering, absolute
+paths, credentials, or presentation. Verification status is independent from
+the lifecycle status and cannot make an execution `completed`, `resumable`, or
+safe to retry.
+
+Default Pipeline inspection reads local V2 config/state, the pair-recovery
+marker, repository-confined workflows and focused local Doctor inputs, local
+execution/dispatch journals, local Git objects/refs/index/worktree, and
+known-file recovery evidence. It uses Doctor's neutral fact API, not the Doctor
+handler, diagnostics, readiness, response, or presentation, and constructs no
+HTTP client or token resolver.
+
+Explicit `--verify-remote` reuses Doctor's one bounded GitHub GET client and
+lazy `GITHUB_TOKEN` resolver. It refuses redirects, caps bodies at 1 MiB, times
+out after 12 seconds, and never retries automatically. Neither mode fetches or
+reads remote Git refs, writes journals, mutates config/state/Git, dispatches,
+resumes, retries, repairs, executes a release tool, uploads, or publishes.
+Tokens, authorization headers, secret values, private response bodies, and
+absolute paths never enter output. Local push confirmations remain journal
+facts only; remote verification does not inspect a durable workflow run or
+publication result, so lifecycle remote freshness remains
+`remote_not_inspected`. `active` means locally recorded lifecycle evidence,
+and `completed` means accepted handoff—not remote publication success.
 
 ---
 

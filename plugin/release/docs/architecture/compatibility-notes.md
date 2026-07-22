@@ -44,8 +44,11 @@ tests. Execution, dispatch, migration, V1 compensation, and V2 pair-recovery
 journals remain distinct schemas with their existing locations and modes.
 
 Dry-run and read-only commands remain token-free and mutation-free unless the
-command explicitly requests its established mutation mode. Doctor remote
-verification remains opt-in and GET-only. Workflow Init remains create-only.
+command explicitly requests an established exception. Doctor and Pipeline
+remote verification remain opt-in and reuse the same GET-only client and lazy
+read-token boundary. Their defaults remain offline/token-free, and neither
+remote mode dispatches, uploads, publishes, or mutates. Workflow Init remains
+create-only.
 
 ## Public facades and internal exports
 

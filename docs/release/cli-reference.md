@@ -63,6 +63,7 @@ neko release units
 neko release units --output json
 neko release pipeline --unit api
 neko release pipeline --unit api --output json
+neko release pipeline --unit api --verify-remote
 neko release github-workflow-init --dry-run
 neko release github-workflow-init --unit api
 neko release github-workflow-init --path .github/workflows/release-api.yml
@@ -311,20 +312,24 @@ write anything. `release doctor` remains the workflow-readiness command;
 
 ### Pipeline inspection
 
-`neko release pipeline [--unit <unit>]` is the Release V2-only, local,
-read-only view of the configured pipeline for one unit:
+`neko release pipeline [--unit <unit>] [--verify-remote]` is the Release
+V2-only, read-only view of the configured pipeline for one unit. The default
+path is local, offline, and token-free; remote verification is explicit:
 
 ```bash
 neko release pipeline --unit cli
 neko release pipeline --unit plugin-release
 neko release pipeline --unit plugin-ui
 neko release pipeline --unit cli --output json
+neko release pipeline --unit cli --verify-remote
+neko release pipeline --unit cli --verify-remote --output json
 ```
 
 The command uses the existing V2 unit-selection policy: `--unit` is required
 for a multi-unit repository and may be omitted only when the repository has one
-unit. It has no `--all`, remote-verification, journal-selection, repair,
-planning, resume, retry, or pipeline-specific output flag. V1, unknown units,
+unit. It has no `--all`, journal-selection, repair, planning, resume, retry, or
+pipeline-specific output flag. `--verify-remote` must be a boolean and is the
+only remote mode. V1, unknown units,
 malformed requests, and unsupported executor, delivery, or workflow
 configurations return typed failures with exit code `1`. Structurally invalid
 runtime evidence is returned as an `invalid` inspection result with exit code
@@ -337,10 +342,12 @@ materialization files, canonical dispatch inputs, selected release tool,
 ordered consumer-operation facts, publication and plugin-registry summaries,
 and the full configured stage list. It adds execution-journal,
 dispatch-journal, local Git, recovery, resume-eligibility, retry-safety, and
-manual-intervention sections. Local branch and HEAD are inspected; tracking and
-all remote freshness remain explicitly `remote_not_inspected`. The configured
-tag is derived only from the current state version and tag prefix. No future
-version, next tag, proposed commit, or publication identity is calculated.
+manual-intervention sections plus `verification.summary` and ordered
+`verification.facts`. Local branch and HEAD are inspected; tracking and
+lifecycle remote freshness remain explicitly `remote_not_inspected`. The
+configured tag is derived only from the current state version and tag prefix.
+No future version, next tag, proposed commit, or publication identity is
+calculated.
 
 Each stage has a stable ID, label, owner, execution location, strongest
 mutation class, static `configured` status, source, and separate runtime
@@ -349,7 +356,10 @@ observation. Runtime values are `not_observed`, `not_started`, `pending`,
 from the existing monotonic execution-journal phase order; pending operations
 come from the journal's durable pending action. Dispatch submission is mapped
 only from the exactly linked dispatch journal. Consumer-workflow stages remain
-unobserved locally because no remote workflow state is queried. A stage marked
+unobserved because verification facts never become runtime progress. Even when
+`--verify-remote` confirms workflow identity or enabled state,
+`progress_inspection.remote_state_inspected` remains `false`: Pipeline does not
+inspect a durable workflow run or publication result. A stage marked
 `configured` is never itself a runtime-completion claim.
 
 The root lifecycle IDs are ordered as executed by the production coordinator:
@@ -379,30 +389,54 @@ Recognized consumer IDs follow in their literal workflow order:
 `plugin-index-publication`. Only operations actually present in the selected
 workflow are included.
 
-Human output is titled `Release Pipeline Inspection`, shows the unit/version/
-status/executor/delivery/workflow summary plus execution, dispatch, local Git,
-recovery, resume, and manual-intervention facts, and uses a responsive stage
-table. `Stage`, `Runtime`, and `Owner` are essential; `Configured`, `Location`,
-`Mutation`, and `Source` are optional. Width-unknown output uses deterministic
-vertical records. Semantic color is interactive-terminal-only, and redirected
-output is ANSI-free.
+Human output is titled `Release Pipeline Inspection`, keeps lifecycle status
+prominent, shows execution, dispatch, local Git, recovery, resume,
+manual-intervention, and verification summaries, and uses a responsive
+verification-fact table. `Category`, `Status`, and `Class` are essential;
+`Subject` and `Source` are optional. Configured stages and their runtime/owner
+facts remain visible in the ordered details. Width-unknown output uses
+deterministic vertical records. Semantic color is interactive-terminal-only,
+and redirected output is ANSI-free.
 
 JSON keeps the existing response envelope and `schema_version: 1`. The original
 `status`, `unit`, `release`, `repository`, `workflow`, `stages`,
 `progress_inspection`, and `limitations` sections remain. Append-only sections
-are `execution`, `dispatch`, `local_git`, `recovery`, and
-`manual_intervention`; arrays are never `null`, ordering is deterministic, and
+are `execution`, `dispatch`, `local_git`, `recovery`, `manual_intervention`,
+and `verification`; arrays are never `null`, ordering is deterministic, and
 presentation metadata, absolute paths, credentials, and raw journals are
 excluded.
 
-Inspection reads only the local V2 source pair, its recovery-readiness marker,
-the selected repository-confined workflow file, execution and dispatch
-journals below the Git common directory, local Git objects/refs/index/worktree,
-and known-file recovery evidence. It runs bounded read-only local Git commands
-but does not fetch or inspect remote refs. It does not invoke Doctor or another
-command handler, resolve a token, construct an HTTP client, write a journal or
-file, change cwd, stage, commit, tag, reset, clean, push, dispatch, execute a
-release tool, resume, retry, repair, or publish.
+Each verification fact has a stable Pipeline-owned `id`, `category`, `class`,
+`status`, `subject`, `evidence`, `source`, `scope`, non-null `references`, and
+optional `unit`/`workflow`. Classes are `local`, `remote`,
+`runtime_required`, or `mutation_required`. Statuses are `verified`, `failed`,
+`unavailable`, `unauthorized`, `rate_limited`, `not_checked`, or `unresolved`.
+Fact IDs derive only from immutable neutral identity fields, never evidence
+messages, timestamps, array position, absolute paths, credentials, or terminal
+presentation.
+
+The verification summary is separate from Pipeline lifecycle status. It
+reports `status`, `local_status`, `remote_status`, `remote_requested`,
+`remote_attempted`, `partial`, and verified/unresolved/failed/not-checked
+counts. A failed or partial verification does not change `ready`, `active`,
+`resumable`, `completed`, `blocked`, `uncertain`, `rejected`, or `invalid`.
+
+Default inspection reads the local V2 source pair, its recovery-readiness
+marker, repository-confined workflow and focused local Doctor inputs, execution
+and dispatch journals below the Git common directory, local Git
+objects/refs/index/worktree, and known-file recovery evidence. It uses the
+Doctor's neutral fact API directly, never its command handler, diagnostics,
+readiness policy, response mapper, or presentation. Default inspection
+constructs no HTTP client and never resolves `GITHUB_TOKEN`.
+
+`--verify-remote` delegates to Doctor's existing single bounded GitHub reader:
+exact GETs only, 12-second timeout, 1 MiB response cap, redirects refused, and
+no automatic retry. Repository reads are anonymous-first; the existing lazy
+resolver may read `GITHUB_TOKEN` once for a private-resource retry or protected
+Actions metadata. No token, authorization header, secret value, private body,
+or absolute path enters Pipeline output. Neither mode writes a journal or file,
+changes cwd, stages, commits, tags, resets, cleans, pushes, dispatches, executes
+a release tool, resumes, retries, repairs, uploads, or publishes.
 
 Runtime status is a read-only projection. `active` means locally recorded
 incomplete lifecycle evidence, not a live process. `resumable` is emitted only

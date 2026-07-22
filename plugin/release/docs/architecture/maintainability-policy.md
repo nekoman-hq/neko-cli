@@ -70,10 +70,17 @@ direction instead.
 - Shared tool facts do not import Doctor, HTTP, journals, presentation, or root
   release orchestration.
 - Extracted command capabilities do not import `pkg/release`.
+- Pipeline projection imports neither Doctor nor HTTP. Root Pipeline
+  composition may adapt neutral Doctor facts but must not construct a second
+  GitHub client or token resolver; explicit remote mode reuses Doctor's existing
+  bounded GET-only boundary.
 - Command handlers parse and map; they do not call other command handlers.
 - Response mapping does not access Git, HTTP, journal stores, or recovery policy.
 - Read-only capabilities do not receive mutation ports.
 - New mutable package globals are prohibited.
+- Verification fact IDs derive only from immutable neutral identity fields;
+  evidence messages, timestamps, array positions, absolute paths, credentials,
+  and presentation are prohibited inputs.
 - Prefer subject-qualified names. Reserve `dispatch` for GitHub workflow dispatch.
 - Do not introduce generic managers, engines, processors, registries, context
   bags, or pipeline abstractions for the release lifecycle.

@@ -295,22 +295,25 @@ repository isolation, JSON isolation, and Doctor behavior.
 
 ### Release V2 pipeline inspection
 
-`neko release pipeline [--unit <unit>]` is the active local-only configured and
-runtime pipeline view. It is intentionally separate from Unit Overview,
+`neko release pipeline [--unit <unit>] [--verify-remote]` is the active
+configured, runtime, and verification view. Its default remains local,
+offline, and token-free. It is intentionally separate from Unit Overview,
 Doctor, Plan, execution, and Resume: the command selects one valid V2 unit,
 describes the current configured identity and workflow, and projects immutable
-stage and runtime facts. It does not calculate a future version, execute a
-continuation, or inspect remote publication state.
+stage, runtime, and verification facts. It does not calculate a future version,
+execute a continuation, inspect a durable workflow run, or inspect publication
+completion.
 
 The focused `internal/pipelineinspection` capability owns typed request/source
 classification, runtime projection, result construction, and response
 presentation. Its root dependencies are supplied immutable data:
 `pkg/release/pipeline.go` forwards a fresh descriptor slice from
 `release_lifecycle_facts.go` and a runtime snapshot composed at the
-authoritative lifecycle boundary. Pipeline Inspection does not import root
-Release. The root lifecycle continues as explicit direct calls; descriptors
-carry no function, handler, transition, retry, or resume behavior and
-production execution never iterates over them.
+authoritative lifecycle boundary. Root composition also adapts a neutral
+Doctor verification snapshot. Pipeline Inspection does not import root Release
+or Doctor. The root lifecycle continues as explicit direct calls; descriptors
+and verification facts carry no function, handler, transition, retry, or
+resume behavior and production execution never iterates over them.
 
 Consumer ordering comes from `internal/releaseworkflow`'s neutral local YAML
 facts. Its GoReleaser-action classification reuses
@@ -327,17 +330,31 @@ journal stores and bounded local Git facts. It validates exact canonical
 identities, correlates dispatch only through the execution's recorded dispatch
 identity, avoids timestamp/recency selection, and reuses the authoritative
 execution-recovery, resume, and retry-safety decisions. It has no Git mutation,
-token, HTTP, dispatch, writer, release-tool execution, cwd mutation, remote-ref
-read, or independently implemented transition/resume capability.
+direct token resolver or HTTP client, dispatch, writer, release-tool execution,
+cwd mutation, remote-ref read, or independently implemented transition/resume
+capability. Its default path receives no token or HTTP capability.
+
+The default verification path calls Doctor's narrow local fact API; it
+constructs no GitHub client and never resolves a token. Explicit
+`--verify-remote` delegates to Doctor's narrow remote fact API and therefore
+reuses the existing single bounded GET client, anonymous-first identity policy,
+lazy one-time `GITHUB_TOKEN` resolution, timeout/body/redirect bounds, and
+sanitized outcomes. Pipeline never invokes the Doctor command handler or
+consumes Doctor diagnostics, readiness, remediation, response mapping, or
+presentation. The root adapter maps neutral states/classes; the internal
+projector owns stable IDs, summary aggregation, JSON, and human presentation.
 
 Status distinguishes `ready`, `active`, `resumable`, `blocked`, `uncertain`,
 `rejected`, `completed`, and `invalid`. An accepted dispatch handoff is
 `completed`; this does not claim workflow or publication completion. Invalid
 or conflicting local evidence remains inspectable structured data and uses
 exit code `1`. JSON schema version `1` additively exposes execution, dispatch,
-local Git, recovery, resume eligibility, manual intervention, and explicit
-remote-not-inspected limitations; human presentation delegates width and
-TTY-color behavior to Core's existing presentation contract.
+local Git, recovery, resume eligibility, manual intervention, and a separate
+verification summary/fact section. Lifecycle status is independent from
+verification status, and remote verification does not change stage completion,
+`remote_state_inspected`, resume eligibility, or retry safety. Human
+presentation delegates width and TTY-color behavior to Core's existing
+presentation contract.
 
 ### V2 local delivery evaluation
 
@@ -353,10 +370,11 @@ The retained inactive V2 local transaction scaffold is no longer a future produc
 
 ## Pending architecture decisions
 
-Remote workflow-run and publication state remain separate future capabilities.
-Local Pipeline Inspection must continue to report that boundary explicitly and
-must not infer remote freshness or publication completion from accepted
-dispatch handoff evidence.
+Durable workflow-run and publication-completion state remain separate future
+capabilities. Pipeline verification may expose exact Doctor-owned workflow,
+Actions-setting, variable, release, tag, and asset facts, but must not infer
+runtime progress, remote freshness, safe retry, or publication completion from
+those facts or from accepted dispatch handoff evidence.
 
 Release V2 bootstrap planning is product capability planning, not a reopened
 architecture refactor stage. The current product boundary for GitHub Actions
