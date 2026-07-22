@@ -316,6 +316,10 @@ write anything. `release doctor` remains the workflow-readiness command;
 V2-only, read-only view of the configured pipeline for one unit. The default
 path is local, offline, and token-free; remote verification is explicit:
 
+This section is the canonical Pipeline Inspection contract. Other Release
+documentation summarizes it and links here rather than redefining the schema,
+status, presentation, safety, and exit rules.
+
 ```bash
 neko release pipeline --unit cli
 neko release pipeline --unit plugin-release
@@ -428,6 +432,42 @@ excluded. JSON is already the complete machine contract: `--describe --output
 json` is identical to `--output json`, and verbose/describe presentation
 choices do not create another schema.
 
+The stable `data` object contains exactly these top-level fields in schema
+version 1: `schema_version`, `status`, `unit`, `release`, `repository`,
+`workflow`, `stages`, `progress_inspection`, `execution`, `dispatch`,
+`local_git`, `recovery`, `manual_intervention`, `verification`, and
+`limitations`. Its nested contract is:
+
+| Object | Fields |
+| --- | --- |
+| `unit` | `id`, optional `display_name`, `kind`, `executor`, `delivery`, `configured_version`, `working_directory` |
+| `release` | `configured_version`, `tag_prefix`, `configured_tag`, `materialized_files[]` (`path`, `reason`) |
+| `repository` | `source_generation`, `local_branch`, `local_head`, `tracking` |
+| `workflow` | `path`, `delivery`, `required_inputs[]`, `release_tool`, `consumer_operations[]`, `publication`, `plugin_registry` |
+| `stages[]` | `id`, `label`, `owner`, `location`, `mutation`, `configuration_status`, `source`, optional `conditional_reason`, `runtime_status`, optional `runtime_evidence`, `runtime_reason`, `runtime_identity`, `runtime_confirmed_at` |
+| `progress_inspection` | `execution_progress`, `journals_inspected`, `resume_eligibility_evaluated`, `remote_state_inspected` |
+| `execution` | `present`, `identity`, `journal_count`, `unresolved_count`, `validity`, `state`, `pending_action`, `terminal`, optional `created_at`, `updated_at`, `journal_reference`, `observations[]` |
+| `execution.observations[]` | `identity`, `reference`, optional `state`, `unresolved`, `valid`, optional `problem` |
+| `dispatch` | `present`, `identity`, `journal_count`, `unlinked_count`, `correlation`, `state`, optional `workflow_path`, `run_id`, `observations[]` |
+| `dispatch.observations[]` | `identity`, `reference`, optional `state`, `correlation`, `valid`, optional `problem` |
+| `local_git` | `scope`, `remote_freshness`, `branch`, `head`, `index_state`, `worktree_state`, `expected_commit`, `commit_exists`, `commit_content_verified`, `expected_tag`, `tag_exists`, optional `tag_target`, `tag_matches_expected_commit`, `head_contains_expected_commit`, `index_contains_recovery_evidence`, `worktree_contains_recovery_evidence`, `consistent`, optional `problem` |
+| `recovery` | `evaluated`, `classification`, `safe_to_continue`, `resume_eligible`, optional `resume_operation`, `resume_refusal`, `retry_safety`, `manual_intervention_required`, optional `guidance`, `reasons[]` |
+| `manual_intervention` | `required`, `reasons[]` |
+| `verification.summary` | `status`, `local_status`, `remote_status`, `remote_requested`, `remote_attempted`, `partial`, `verified`, `unresolved`, `failed`, `not_checked` |
+| `verification.facts[]` | `id`, `category`, `class`, `status`, `subject`, `evidence`, `source`, `scope`, `references[]`, optional `unit`, `workflow` |
+
+All established arrays encode as `[]`, never `null`. Root stages preserve the
+authoritative lifecycle order; consumer operations preserve literal workflow
+order; execution and dispatch observations sort by identity then safe relative
+reference; verification facts sort by neutral identity fields; references are
+deduplicated and sorted. Optional fields above are omitted only when empty;
+required objects, booleans, counts, states, and aggregate fields remain
+present. The standard public JSON envelope retains `status`, `metadata`,
+`data`, optional `error`, `renderer_hint`, and any already captured `logs`.
+Presentation properties, tables, group keys, notes, style roles, terminal
+width, ANSI, raw journals, HTTP bodies, credentials, secrets, and absolute
+developer paths are not part of `data`.
+
 Each verification fact has a stable Pipeline-owned `id`, `category`, `class`,
 `status`, `subject`, `evidence`, `source`, `scope`, non-null `references`, and
 optional `unit`/`workflow`. Classes are `local`, `remote`,
@@ -473,6 +513,60 @@ does not mean remote publication completed. `blocked` requires manual work
 under existing recovery policy, `uncertain` preserves ambiguous external
 effects, `rejected` reflects the exactly correlated terminal dispatch, and
 `invalid` denotes malformed, contradictory, unlinked, or non-unique evidence.
+
+The complete frozen machine vocabularies are:
+
+- lifecycle: `ready`, `active`, `resumable`, `completed`, `blocked`,
+  `uncertain`, `rejected`, `invalid`;
+- runtime stage: `not_observed`, `not_started`, `pending`, `confirmed`,
+  `blocked`, `unknown`, `rejected`, `invalid`;
+- verification fact status: `verified`, `failed`, `unavailable`,
+  `unauthorized`, `rate_limited`, `not_checked`, `unresolved`;
+- verification class: `local`, `remote`, `runtime_required`,
+  `mutation_required`;
+- verification summary status: `verified`, `partial`, `failed`, `unresolved`,
+  `not_checked`;
+- remote verification aggregate: `not_requested`, `complete`, `partial`,
+  `unavailable`;
+- static stage configuration: `configured`.
+
+Verification facts and remote availability never rewrite lifecycle, recovery,
+resume, or runtime stages. Recovery and resume consume the already selected
+local evidence and existing authoritative policies; Pipeline itself never
+continues an operation. `completed` requires exact local commit/tag evidence
+and accepted handoff evidence, not a completed build, upload, release, registry
+update, or publication.
+
+Exit code `0` covers every structurally valid inspection result, including
+`ready`, `active`, `resumable`, `completed`, `blocked`, `uncertain`, and
+`rejected`, regardless of verification fact status. Exit code `1` is reserved
+for typed invalid requests/sources/configuration and a successful structured
+inspection whose selected local runtime evidence is `invalid`. Default,
+`--describe`, `--verbose`, their combination, and JSON preserve that same
+policy.
+
+The support fixture contract covers untouched/ready, active, resumable,
+completed, blocked, uncertain, rejected, invalid, malformed and conflicting
+journals, multiple unresolved executions, missing or mismatched commits and
+tags, rejected or unknown dispatch, local failure, unauthorized/unavailable/
+rate-limited/partial remote verification, and manual intervention. Repository
+fixtures use isolated temporary Git repositories; remote fixtures use only
+test-owned loopback HTTP listeners; presentation fixtures contain only safe
+relative references. The repository's `cli`, `plugin-release`, and `plugin-ui`
+units are the dogfood cases. Fixtures never depend on real refs, user plugin
+directories, tokens, absolute developer paths, or external network state and
+are safe to interpret in support output.
+
+The supported release archive matrix derived from the focused GoReleaser
+configs and current Go target support is Darwin `amd64`/`arm64`, Linux
+`386`/`amd64`/`arm64`, and Windows `386`/`amd64`/`arm64`. Archive labels map
+`amd64` to `x86_64` and `386` to `i386`; Windows uses `zip` where configured,
+and the other focused archives use `tar.gz`. Darwin/i386 is not a supported Go
+target and must not be expected by Doctor, publication verification, or the
+installer. The historical `v3.0.4` absence of
+`neko-cli_Darwin_i386.tar.gz` is therefore consistent with the supported build
+matrix; the former local expectation was obsolete rather than evidence of a
+missing published artifact.
 
 Unsupported or read-only boundaries:
 

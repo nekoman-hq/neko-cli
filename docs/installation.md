@@ -18,6 +18,12 @@ neko-cli_Linux_x86_64.tar.gz
 neko-cli_Windows_x86_64.zip
 ```
 
+The supported matrix is Darwin `amd64`/`arm64`, Linux
+`386`/`amd64`/`arm64`, and Windows `386`/`amd64`/`arm64`. Darwin/i386 is not a
+supported Go target and the installer rejects it instead of requesting the
+nonexistent `neko-cli_Darwin_i386.tar.gz` asset. `amd64` is encoded as
+`x86_64`; supported `386` targets are encoded as `i386`.
+
 Supported environment variables:
 
 | Variable | Default | Description |

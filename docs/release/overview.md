@@ -115,7 +115,8 @@ Implemented now:
   configured lifecycle plus exactly correlated execution/dispatch journals,
   local Git evidence, recovery, resume eligibility, retry safety, and manual
   intervention, with append-only JSON schema version `1` and responsive human
-  output.
+  output. The canonical schema, status, presentation, exit, fixture, asset, and
+  safety contract is the [Pipeline inspection reference](cli-reference.md#pipeline-inspection).
 
 Not implemented yet:
 
