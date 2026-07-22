@@ -978,6 +978,33 @@ func integrationDoctorRemoteReleaseFixtures(
 	return releases
 }
 
+func TestIntegrationDoctorRemoteAssetsFollowFocusedGoReleaserMatrix(t *testing.T) {
+	fixtures := integrationDoctorRemoteReleaseFixtures(t, repositoryInspectionRoot(t).Path())
+	for tag, required := range map[string][]string{
+		"v3.0.4": {
+			"neko-cli_Darwin_arm64.tar.gz",
+			"neko-cli_Linux_i386.tar.gz",
+			"neko-cli_Windows_i386.zip",
+		},
+		"plugin-release/v4.2.0": {
+			"plugin-release_4.2.0_Darwin_arm64.tar.gz",
+			"plugin-release_4.2.0_Linux_i386.tar.gz",
+			"plugin-release_4.2.0_Windows_i386.zip",
+			"plugin-release_4.2.0_checksums.txt",
+		},
+	} {
+		assets := strings.Join(fixtures[tag], "\n")
+		for _, asset := range required {
+			if !strings.Contains(assets, asset) {
+				t.Errorf("%s assets omit %q: %v", tag, asset, fixtures[tag])
+			}
+		}
+		if strings.Contains(assets, "Darwin_i386") {
+			t.Errorf("%s assets retain unsupported Darwin/i386: %v", tag, fixtures[tag])
+		}
+	}
+}
+
 func writeIntegrationDoctorReleaseFixture(writer http.ResponseWriter, tag string, assets []string) {
 	encodedAssets := make([]map[string]string, 0, len(assets))
 	for _, asset := range assets {

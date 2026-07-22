@@ -225,24 +225,24 @@ func integrationDoctorInstallationRemoteContracts(
 	if version := variables["NEKO_VERSION"]; version != "" {
 		installer, err := request.Files.ReadFile(request.RepositoryRoot, "install.sh")
 		prefix := integrationDoctorCLIInstallerArchivePrefix(installer)
-		unit, _, configPath, ok := integrationDoctorFindCLIArtifactConfig(
+		unit, config, configPath, ok := integrationDoctorFindCLIArtifactConfig(
 			request.RepositoryRoot, request.Repository.Units, prefix, request.Files,
 		)
 		if err == nil && ok {
 			contracts = append(contracts, integrationDoctorRemoteArtifactContract{
 				UnitID: unit.ID, Tag: unit.TagPrefix + version, Reference: configPath,
-				RequiredAssets: integrationDoctorCLIInstallerAssets(prefix),
+				RequiredAssets: goreleaserfacts.PublicationAssets(config, prefix, version, false),
 			})
 		}
 	}
 	if version := variables["NEKO_RELEASE_PLUGIN_VERSION"]; version != "" {
 		unit, present := integrationDoctorReleasePluginUnit(request.Repository.Units)
 		if present {
-			_, configPath, ok := integrationDoctorLoadUnitGoReleaserConfig(request.RepositoryRoot, unit, request.Files)
+			config, configPath, ok := integrationDoctorLoadUnitGoReleaserConfig(request.RepositoryRoot, unit, request.Files)
 			if ok {
 				contracts = append(contracts, integrationDoctorRemoteArtifactContract{
 					UnitID: unit.ID, Tag: unit.TagPrefix + version, Reference: configPath,
-					RequiredAssets: integrationDoctorPluginInstallerAssets(unit.PluginAssetPrefix, version),
+					RequiredAssets: goreleaserfacts.PublicationAssets(config, unit.PluginAssetPrefix, version, true),
 				})
 			}
 		}
@@ -273,21 +273,6 @@ func integrationDoctorPublicationRemoteContract(
 	return integrationDoctorRemoteArtifactContract{
 		UnitID: unit.ID, Tag: unit.TagPrefix + unit.Version, Reference: configPath, RequiredAssets: assets,
 	}, true
-}
-
-func integrationDoctorCLIInstallerAssets(prefix string) []string {
-	return goreleaserfacts.PlatformArchiveAssets(prefix, "", goreleaserfacts.PlatformFormats{
-		Darwin: "tar.gz", Linux: "tar.gz", Windows: "zip",
-	})
-}
-
-func integrationDoctorPluginInstallerAssets(prefix, version string) []string {
-	assets := goreleaserfacts.PlatformArchiveAssets(prefix, version, goreleaserfacts.PlatformFormats{
-		Darwin: "tar.gz", Linux: "tar.gz", Windows: "tar.gz",
-	})
-	assets = append(assets, prefix+"_"+version+"_checksums.txt")
-	sort.Strings(assets)
-	return assets
 }
 
 func integrationDoctorMissingRemoteAssets(existing, required []string) []string {
