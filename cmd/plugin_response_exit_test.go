@@ -34,7 +34,7 @@ func TestGitHubOutputFlagsAreRegisteredAsExplicitCoreOptions(t *testing.T) {
 	}
 }
 
-func TestStructuredPluginErrorCharacterizationHasRendererAndCobraPaths(t *testing.T) {
+func TestStructuredPluginErrorIsRenderedOnceForHumanAndJSONOutput(t *testing.T) {
 	response := &plugin.Response{
 		Status: "error",
 		Error: &plugin.ResponseError{
@@ -50,26 +50,33 @@ func TestStructuredPluginErrorCharacterizationHasRendererAndCobraPaths(t *testin
 			var fallback bytes.Buffer
 			root := &cobra.Command{Use: "neko", SilenceUsage: true}
 			root.SetErr(&fallback)
-			root.AddCommand(&cobra.Command{
+			command := &cobra.Command{
 				Use: "pipeline",
-				RunE: func(*cobra.Command, []string) error {
+				RunE: func(cmd *cobra.Command, _ []string) error {
 					if err := renderer.RenderTo(response, format, &rendered); err != nil {
 						return err
 					}
-					return pluginResponseExitError(response)
+					return renderedPluginResponseExitError(cmd, response)
 				},
-			})
+			}
+			root.AddCommand(command)
 			root.SetArgs([]string{"pipeline"})
 
 			err := root.Execute()
 			if err == nil {
 				t.Fatal("structured plugin exit unexpectedly succeeded")
 			}
-			if got := strings.Count(rendered.String()+fallback.String(), response.Error.Code); got != 2 {
-				t.Fatalf("error code render paths = %d, want 2\nrendered:\n%s\nfallback:\n%s", got, rendered.String(), fallback.String())
+			if got := strings.Count(rendered.String()+fallback.String(), response.Error.Code); got != 1 {
+				t.Fatalf("error code render paths = %d, want 1\nrendered:\n%s\nfallback:\n%s", got, rendered.String(), fallback.String())
 			}
-			if got := strings.Count(rendered.String()+fallback.String(), response.Error.Message); got != 2 {
-				t.Fatalf("error message render paths = %d, want 2\nrendered:\n%s\nfallback:\n%s", got, rendered.String(), fallback.String())
+			if got := strings.Count(rendered.String()+fallback.String(), response.Error.Message); got != 1 {
+				t.Fatalf("error message render paths = %d, want 1\nrendered:\n%s\nfallback:\n%s", got, rendered.String(), fallback.String())
+			}
+			if fallback.Len() != 0 {
+				t.Fatalf("Cobra duplicated an already-rendered plugin failure: %q", fallback.String())
+			}
+			if !command.SilenceErrors {
+				t.Fatal("rendered plugin failure did not silence only its executed command")
 			}
 		})
 	}

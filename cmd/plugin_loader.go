@@ -378,7 +378,15 @@ func executePlugin(pluginName string, cmd *cobra.Command, args []string) error {
 	if err := renderer.RenderWithOptions(resp, opts); err != nil {
 		return err
 	}
-	return pluginResponseExitError(resp)
+	return renderedPluginResponseExitError(cmd, resp)
+}
+
+func renderedPluginResponseExitError(cmd *cobra.Command, response *plugin.Response) error {
+	err := pluginResponseExitError(response)
+	if err != nil {
+		cmd.SilenceErrors = true
+	}
+	return err
 }
 
 func pluginResponseExitError(response *plugin.Response) error {
