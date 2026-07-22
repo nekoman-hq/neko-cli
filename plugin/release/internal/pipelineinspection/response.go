@@ -1,7 +1,6 @@
 package pipelineinspection
 
 import (
-	"strconv"
 	"time"
 
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
@@ -9,70 +8,21 @@ import (
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata"
 )
 
-var pipelineVerificationColumns = []presentation.Column{
-	{Key: "category", Label: "Category", Essential: true},
-	{Key: "status", Label: "Status", RoleKey: "status_role", Essential: true},
-	{Key: "class", Label: "Class", Essential: true},
-	{Key: "subject", Label: "Subject"},
-	{Key: "source", Label: "Source"},
-}
-
 func mapPipelineResult(result *pipelineResult) *plugin.Response {
 	result = normalizePipelineArrays(result)
+	properties, table := pipelineHumanPresentation(result)
 	response := &plugin.Response{
 		Status:                 "success",
 		Metadata:               pipelineResponseMetadata(),
 		Data:                   pipelineResponseData(result),
 		RendererHint:           "table",
-		PresentationProperties: pipelineSummaryProperties(result),
-		PresentationTable: &presentation.Table{
-			Title: "Verification Facts", Columns: append([]presentation.Column(nil), pipelineVerificationColumns...),
-			Rows:    pipelineVerificationRows(result.Verification.Facts),
-			Details: &presentation.Properties{Title: "Runtime and Limitations", Properties: pipelineResultDetails(result)},
-		},
+		PresentationProperties: properties,
+		PresentationTable:      table,
 	}
 	if result.InvalidEvidence {
 		response.ExitCode = 1
 	}
 	return response
-}
-
-func pipelineVerificationRows(facts []VerificationFact) []map[string]any {
-	rows := make([]map[string]any, 0, len(facts))
-	for _, fact := range facts {
-		rows = append(rows, map[string]any{
-			"id": fact.ID, "category": fact.Category, "class": fact.Class,
-			"status": fact.Status, "status_role": string(pipelineVerificationStatusRole(fact.Status)),
-			"subject": fact.Subject, "source": fact.Source,
-		})
-	}
-	return rows
-}
-
-func pipelineResultDetails(result *pipelineResult) []presentation.Property {
-	details := make([]presentation.Property, 0, len(result.Stages)+len(result.Limitations)+6)
-	for index, stage := range result.Stages {
-		details = append(details, presentation.Property{
-			Label: "Stage " + strconv.Itoa(index+1),
-			Value: stage.Label + " (" + string(stage.RuntimeStatus) + ", " + string(stage.Owner) + ")",
-		})
-	}
-	if result.Execution.Present {
-		details = append(details, presentation.Property{Label: "Execution Evidence", Value: result.Execution.Identity + " (" + result.Execution.State + ")"})
-	}
-	if result.Dispatch.Present {
-		details = append(details, presentation.Property{Label: "Dispatch Evidence", Value: result.Dispatch.Identity + " (" + result.Dispatch.State + ")"})
-	}
-	if result.Recovery.Guidance != "" {
-		details = append(details, presentation.Property{Label: "Recovery Guidance", Value: result.Recovery.Guidance})
-	}
-	for index, reason := range result.ManualIntervention.Reasons {
-		details = append(details, presentation.Property{Label: "Manual Reason " + strconv.Itoa(index+1), Value: reason})
-	}
-	for index, limitation := range result.Limitations {
-		details = append(details, presentation.Property{Label: limitationLabel(index), Value: limitation, Role: presentation.StyleMuted})
-	}
-	return details
 }
 
 func pipelineResponseData(result *pipelineResult) map[string]any {
@@ -92,31 +42,6 @@ func pipelineResponseData(result *pipelineResult) map[string]any {
 		"manual_intervention": result.ManualIntervention,
 		"verification":        result.Verification,
 		"limitations":         append(make([]string, 0, len(result.Limitations)), result.Limitations...),
-	}
-}
-
-func pipelineSummaryProperties(result *pipelineResult) *presentation.Properties {
-	return &presentation.Properties{
-		Title: "Release Pipeline Inspection",
-		Properties: []presentation.Property{
-			{Label: "Unit", Value: result.Unit.ID, Emphasized: true},
-			{Label: "Version", Value: result.Unit.ConfiguredVersion},
-			{Label: "Status", Value: result.Status, Role: pipelineStatusRole(result.Status)},
-			{Label: "Executor", Value: result.Unit.Executor},
-			{Label: "Delivery", Value: result.Unit.Delivery},
-			{Label: "Workflow", Value: result.Workflow.Path},
-			{Label: "Execution", Value: pipelineDisplayValue(result.Execution.State, "none")},
-			{Label: "Dispatch", Value: pipelineDisplayValue(result.Dispatch.State, "none")},
-			{Label: "Local Git", Value: pipelineLocalGitSummary(result.LocalGit)},
-			{Label: "Recovery", Value: pipelineDisplayValue(result.Recovery.Classification, "not_evaluated")},
-			{Label: "Resume Eligible", Value: strconv.FormatBool(result.Recovery.ResumeEligible)},
-			{Label: "Manual Intervention", Value: strconv.FormatBool(result.ManualIntervention.Required)},
-			{Label: "Verification", Value: string(result.Verification.Summary.Status), Role: pipelineVerificationSummaryRole(result.Verification.Summary.Status)},
-			{Label: "Verified Facts", Value: strconv.Itoa(result.Verification.Summary.Verified)},
-			{Label: "Unresolved Facts", Value: strconv.Itoa(result.Verification.Summary.Unresolved)},
-			{Label: "Not Checked Facts", Value: strconv.Itoa(result.Verification.Summary.NotChecked)},
-			{Label: "Remote Verification", Value: result.Verification.Summary.RemoteStatus},
-		},
 	}
 }
 
@@ -207,27 +132,6 @@ func pipelineResponseMetadata() plugin.ResponseMetadata {
 		Plugin: metadata.PluginName, Version: metadata.Version,
 		Command: pipelineCommandName, Timestamp: time.Now(),
 	}
-}
-
-func limitationLabel(index int) string {
-	return "Limitation " + strconv.Itoa(index+1)
-}
-
-func pipelineDisplayValue(value, fallback string) string {
-	if value == "" {
-		return fallback
-	}
-	return value
-}
-
-func pipelineLocalGitSummary(observation pipelineLocalGit) string {
-	if observation.ExpectedCommit == "" {
-		return observation.Scope
-	}
-	if observation.Consistent {
-		return "consistent (local only)"
-	}
-	return "inconsistent (local only)"
 }
 
 func pipelineStatusRole(status pipelineStatus) presentation.StyleRole {

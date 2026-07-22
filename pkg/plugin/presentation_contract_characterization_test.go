@@ -54,6 +54,9 @@ func TestExportedPresentationTypeShapeCharacterization(t *testing.T) {
 		{name: "Rows", jsonName: "rows,omitempty", typeName: "[]map[string]interface {}"},
 		{name: "Details", jsonName: "details,omitempty", typeName: "*presentation.Properties"},
 		{name: "Title", jsonName: "title,omitempty", typeName: "string"},
+		{name: "Following", jsonName: "following,omitempty", typeName: "*presentation.Table"},
+		{name: "GroupKey", jsonName: "group_key,omitempty", typeName: "string"},
+		{name: "Note", jsonName: "note,omitempty", typeName: "string"},
 	})
 	assertJSONFields(t, reflect.TypeOf(presentation.Column{}), []fieldContract{
 		{name: "Key", jsonName: "key", typeName: "string"},
@@ -64,6 +67,7 @@ func TestExportedPresentationTypeShapeCharacterization(t *testing.T) {
 	assertJSONFields(t, reflect.TypeOf(presentation.Properties{}), []fieldContract{
 		{name: "Properties", jsonName: "properties", typeName: "[]presentation.Property"},
 		{name: "Title", jsonName: "title,omitempty", typeName: "string"},
+		{name: "SectionTitle", jsonName: "section_title,omitempty", typeName: "string"},
 	})
 	assertJSONFields(t, reflect.TypeOf(presentation.Property{}), []fieldContract{
 		{name: "Key", jsonName: "key,omitempty", typeName: "string"},

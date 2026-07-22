@@ -302,7 +302,7 @@ func renderTableWithWidth(
 	if rendered, err := renderTextPresentation(resp, w); rendered || err != nil {
 		return err
 	}
-	if rendered, err := renderResponsiveTableWithDetails(resp, w, wide, widthProvider, styler); rendered || err != nil {
+	if rendered, err := renderResponsivePresentationSequence(resp, w, wide, widthProvider, styler); rendered || err != nil {
 		return err
 	}
 	if resp.PresentationProperties == nil && resp.PresentationTable != nil {
@@ -347,36 +347,58 @@ func responseWithResolvedPresentation(response *plugin.Response) (*plugin.Respon
 	return &resolved, nil
 }
 
-func renderResponsiveTableWithDetails(
+func renderResponsivePresentationSequence(
 	response *plugin.Response,
 	writer io.Writer,
 	wide bool,
 	widthProvider OutputWidthProvider,
 	styler presentationStyler,
 ) (bool, error) {
-	if response.PresentationProperties == nil || response.PresentationTable == nil || response.PresentationTable.Details == nil {
+	table := response.PresentationTable
+	if table == nil || (response.PresentationProperties == nil && table.Following == nil && table.Details == nil) {
 		return false, nil
 	}
-	if rendered, err := renderPropertyValues(response, writer, widthProvider, styler); !rendered || err != nil {
-		return true, err
-	}
-	_, _ = fmt.Fprintln(writer)
-	if rendered, err := renderResponsiveTable(response, writer, wide, widthProvider, styler); !rendered || err != nil {
-		if err != nil {
+	renderedAny := false
+	if response.PresentationProperties != nil {
+		if rendered, err := renderPropertyValues(response, writer, widthProvider, styler); !rendered || err != nil {
 			return true, err
 		}
-		return true, fmt.Errorf("table presentation declaration could not be rendered")
+		renderedAny = true
 	}
 
-	_, _ = fmt.Fprintln(writer)
-	detailResponse := *response
-	detailResponse.PresentationProperties = response.PresentationTable.Details
-	detailResponse.PresentationTable = nil
-	if rendered, err := renderPropertyValues(&detailResponse, writer, widthProvider, styler); !rendered || err != nil {
-		if err != nil {
-			return true, err
+	seen := make(map[*presentation.Table]struct{})
+	for table != nil {
+		if _, exists := seen[table]; exists {
+			return true, fmt.Errorf("table presentation declaration contains a cycle")
 		}
-		return true, fmt.Errorf("table presentation detail declaration could not be rendered")
+		seen[table] = struct{}{}
+		if renderedAny {
+			_, _ = fmt.Fprintln(writer)
+		}
+		tableResponse := *response
+		tableResponse.PresentationProperties = nil
+		tableResponse.PresentationTable = table
+		if rendered, err := renderResponsiveTable(&tableResponse, writer, wide, widthProvider, styler); !rendered || err != nil {
+			if err != nil {
+				return true, err
+			}
+			return true, fmt.Errorf("table presentation declaration could not be rendered")
+		}
+		renderedAny = true
+
+		if table.Details != nil {
+			_, _ = fmt.Fprintln(writer)
+			detailResponse := *response
+			detailResponse.PresentationProperties = table.Details
+			detailResponse.PresentationTable = nil
+			if rendered, err := renderPropertyValues(&detailResponse, writer, widthProvider, styler); !rendered || err != nil {
+				if err != nil {
+					return true, err
+				}
+				return true, fmt.Errorf("table presentation detail declaration could not be rendered")
+			}
+		}
+		table = table.Following
 	}
 	return true, nil
 }

@@ -1,12 +1,14 @@
 package presentation
 
-// Properties declares an ordered property/value view for one result. It is
-// transport metadata and does not change the response data contract.
+// Properties declares an ordered property/value view for one result. Title
+// names the result and SectionTitle may name the contained property section.
+// It is transport metadata and does not change the response data contract.
 //
 //nolint:govet // Field order preserves the stable properties-presentation wire order.
 type Properties struct {
-	Properties []Property `json:"properties"`
-	Title      string     `json:"title,omitempty"`
+	Properties   []Property `json:"properties"`
+	Title        string     `json:"title,omitempty"`
+	SectionTitle string     `json:"section_title,omitempty"`
 }
 
 // Property declares one presentation label and either maps it to a response

@@ -51,9 +51,14 @@ func renderPropertyValues(
 	}
 
 	outputWidth, widthAvailable := widthProvider.Width(writer)
-	compact := response.PresentationProperties != nil && response.PresentationProperties.Title != ""
-	if compact {
+	compact := response.PresentationProperties != nil &&
+		(response.PresentationProperties.Title != "" || response.PresentationProperties.SectionTitle != "")
+	if response.PresentationProperties != nil && response.PresentationProperties.Title != "" {
 		printPresentationTitle(writer, response.PresentationProperties.Title, styler)
+		_, _ = fmt.Fprintln(writer)
+	}
+	if response.PresentationProperties != nil && response.PresentationProperties.SectionTitle != "" {
+		printPresentationTitle(writer, response.PresentationProperties.SectionTitle, styler)
 		_, _ = fmt.Fprintln(writer)
 	}
 	if containsPropertyHeadings(properties) {
@@ -78,6 +83,9 @@ func responsePropertyValues(response *plugin.Response) ([]propertyValue, bool, e
 func declaredPropertyValues(response *plugin.Response) ([]propertyValue, error) {
 	if strings.TrimSpace(response.PresentationProperties.Title) != response.PresentationProperties.Title {
 		return nil, fmt.Errorf("property presentation title must not have surrounding whitespace")
+	}
+	if strings.TrimSpace(response.PresentationProperties.SectionTitle) != response.PresentationProperties.SectionTitle {
+		return nil, fmt.Errorf("property presentation section title must not have surrounding whitespace")
 	}
 	declarations := response.PresentationProperties.Properties
 	if len(declarations) == 0 {

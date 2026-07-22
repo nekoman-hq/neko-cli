@@ -39,7 +39,11 @@ func renderResponsiveTable(
 	if items == nil {
 		return false, nil
 	}
-	rows, ok := responsiveRows(items, columns)
+	groupKey := strings.TrimSpace(response.PresentationTable.GroupKey)
+	if groupKey != response.PresentationTable.GroupKey {
+		return true, fmt.Errorf("table presentation group key is invalid")
+	}
+	rows, ok := responsiveRows(items, columns, groupKey)
 	if !ok {
 		return true, fmt.Errorf("table presentation rows do not satisfy the declaration")
 	}
@@ -53,16 +57,31 @@ func renderResponsiveTable(
 		printPresentationTitle(writer, response.PresentationTable.Title, styler)
 		_, _ = fmt.Fprintln(writer)
 	}
+	if groupKey != "" {
+		return true, renderGroupedResponsiveRows(
+			writer, columns, rows, groupKey, response.PresentationTable.Note,
+			outputWidth, available, wide, styler,
+		)
+	}
 	if !available || outputWidth <= 0 {
-		return true, renderVerticalRecords(writer, columns, rows, 0, false, styler)
+		if err := renderVerticalRecords(writer, columns, rows, 0, false, styler); err != nil {
+			return true, err
+		}
+		return true, renderResponsiveTableNote(writer, response.PresentationTable.Note, 0, false, styler)
 	}
 
 	columns = calculateResponsiveColumnWidths(columns, rows, outputWidth)
 	selected, tableFits := selectResponsiveColumns(columns, outputWidth, wide)
 	if !tableFits {
-		return true, renderVerticalRecords(writer, columns, rows, outputWidth, true, styler)
+		if err := renderVerticalRecords(writer, columns, rows, outputWidth, true, styler); err != nil {
+			return true, err
+		}
+		return true, renderResponsiveTableNote(writer, response.PresentationTable.Note, outputWidth, true, styler)
 	}
-	return true, renderResponsiveRows(writer, selected, rows, styler)
+	if err := renderResponsiveRows(writer, selected, rows, styler); err != nil {
+		return true, err
+	}
+	return true, renderResponsiveTableNote(writer, response.PresentationTable.Note, outputWidth, true, styler)
 }
 
 func responsiveColumns(table *presentation.Table) ([]responsiveColumn, bool) {
@@ -70,6 +89,9 @@ func responsiveColumns(table *presentation.Table) ([]responsiveColumn, bool) {
 		return nil, false
 	}
 	if strings.TrimSpace(table.Title) != table.Title {
+		return nil, false
+	}
+	if strings.TrimSpace(table.GroupKey) != table.GroupKey || strings.TrimSpace(table.Note) != table.Note {
 		return nil, false
 	}
 	columns := make([]responsiveColumn, 0, len(table.Columns))
@@ -92,7 +114,7 @@ func responsiveColumns(table *presentation.Table) ([]responsiveColumn, bool) {
 	return columns, true
 }
 
-func responsiveRows(items any, columns []responsiveColumn) ([]map[string]string, bool) {
+func responsiveRows(items any, columns []responsiveColumn, groupKey string) ([]map[string]string, bool) {
 	slice := reflect.ValueOf(items)
 	if slice.Kind() != reflect.Slice {
 		return nil, false
@@ -114,9 +136,80 @@ func responsiveRows(items any, columns []responsiveColumn) ([]map[string]string,
 				row[column.roleKey] = role
 			}
 		}
+		if groupKey != "" {
+			group, present := item[groupKey].(string)
+			if !present || strings.TrimSpace(group) == "" || strings.TrimSpace(group) != group {
+				return nil, false
+			}
+			row[groupKey] = group
+		}
 		rows = append(rows, row)
 	}
 	return rows, true
+}
+
+func renderGroupedResponsiveRows(
+	writer io.Writer,
+	columns []responsiveColumn,
+	rows []map[string]string,
+	groupKey string,
+	note string,
+	outputWidth int,
+	widthAvailable bool,
+	wide bool,
+	styler presentationStyler,
+) error {
+	columns = calculateResponsiveColumnWidths(columns, rows, outputWidth)
+	selected, tableFits := selectResponsiveColumns(columns, outputWidth, wide)
+	for start := 0; start < len(rows); {
+		end := start + 1
+		for end < len(rows) && rows[end][groupKey] == rows[start][groupKey] {
+			end++
+		}
+		if start > 0 {
+			_, _ = fmt.Fprintln(writer)
+		}
+		for _, line := range wrapVisibleLines(rows[start][groupKey], knownOutputWidth(outputWidth, widthAvailable)) {
+			_, _ = fmt.Fprintln(writer, styler.semantic(presentation.StyleEmphasis, true, line))
+		}
+		_, _ = fmt.Fprintln(writer)
+		groupRows := rows[start:end]
+		switch {
+		case !widthAvailable || outputWidth <= 0:
+			if err := renderVerticalRecords(writer, columns, groupRows, 0, false, styler); err != nil {
+				return err
+			}
+		case !tableFits:
+			if err := renderVerticalRecords(writer, columns, groupRows, outputWidth, true, styler); err != nil {
+				return err
+			}
+		default:
+			if err := renderResponsiveRows(writer, selected, groupRows, styler); err != nil {
+				return err
+			}
+		}
+		start = end
+	}
+	return renderResponsiveTableNote(writer, note, outputWidth, widthAvailable, styler)
+}
+
+func renderResponsiveTableNote(
+	writer io.Writer,
+	note string,
+	outputWidth int,
+	widthAvailable bool,
+	styler presentationStyler,
+) error {
+	if note == "" {
+		return nil
+	}
+	_, _ = fmt.Fprintln(writer)
+	for _, line := range wrapVisibleLines(note, knownOutputWidth(outputWidth, widthAvailable)) {
+		if _, err := fmt.Fprintln(writer, styler.semantic(presentation.StyleMuted, false, line)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func calculateResponsiveColumnWidths(columns []responsiveColumn, rows []map[string]string, outputWidth int) []responsiveColumn {

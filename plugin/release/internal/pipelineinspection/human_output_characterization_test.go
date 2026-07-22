@@ -17,17 +17,17 @@ func TestPipelineHumanOutputCharacterizationCoversUntouchedStageCountsAndWidths(
 			response := mapPipelineResult(result)
 
 			normal := ansi.Strip(renderPipelineForTest(t, response, pipelineTestWidth{width: 120, available: true}, false))
-			if !strings.Contains(normal, fmt.Sprintf("Stage %d", count)) || strings.Count(normal, "not_observed") != count {
+			if !strings.Contains(normal, fmt.Sprintf("Configured stage %d", count)) || strings.Contains(normal, "not_observed") || strings.Count(normal, "runtime stages have not been observed") != 1 {
 				t.Fatalf("normal-width untouched stage characterization changed:\n%s", normal)
 			}
 
 			narrow := ansi.Strip(renderPipelineForTest(t, response, pipelineTestWidth{width: 30, available: true}, false))
-			if !strings.Contains(narrow, fmt.Sprintf("Stage %d", count)) || strings.Count(narrow, "not_observed") != count {
+			if !strings.Contains(narrow, fmt.Sprintf("Configured stage %d", count)) || strings.Contains(narrow, "not_observed") || strings.Count(narrow, "No execution journal") != 1 {
 				t.Fatalf("narrow-width untouched stage characterization changed:\n%s", narrow)
 			}
 
 			unknown := ansi.Strip(renderPipelineForTest(t, response, pipelineTestWidth{}, false))
-			if !strings.Contains(unknown, fmt.Sprintf("Stage %d", count)) || strings.Count(unknown, "not_observed") != count {
+			if !strings.Contains(unknown, fmt.Sprintf("Configured stage %d", count)) || strings.Contains(unknown, "not_observed") || strings.Count(unknown, "runtime stages have not been observed") != 1 {
 				t.Fatalf("unknown-width untouched stage characterization changed:\n%s", unknown)
 			}
 		})
@@ -51,11 +51,16 @@ func TestPipelineHumanOutputCharacterizationCoversRuntimeAndVerificationVocabula
 
 	plain := ansi.Strip(renderPipelineForTest(t, mapPipelineResult(result), pipelineTestWidth{}, false))
 	for _, value := range []string{
-		"Status\n  resumable", "Execution\n  tag-created", "Recovery\n  interrupted-after-tag",
-		"consumer_structure", "remote_workflow_identity", "mutation_required", "not_checked", "Source: doctor",
+		"Lifecycle\n  Resumable", "Execution\n  Tag created", "Recovery\n  Interrupted after tag",
+		"Consumer workflow", "Remote workflow identity", "Mutation required", "Not checked",
 	} {
 		if !strings.Contains(plain, value) {
 			t.Fatalf("human-output characterization omitted %q:\n%s", value, plain)
+		}
+	}
+	for _, forbidden := range []string{"consumer_structure", "remote_workflow_identity", "mutation_required", "not_checked", "Source: doctor"} {
+		if strings.Contains(plain, forbidden) {
+			t.Fatalf("human-output characterization exposed %q:\n%s", forbidden, plain)
 		}
 	}
 }

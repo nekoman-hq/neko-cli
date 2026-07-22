@@ -14,15 +14,20 @@ import (
 func TestPipelinePresentationKeepsEssentialAndOptionalVerificationColumnsResponsive(t *testing.T) {
 	response := mapPipelineResult(pipelinePresentationFixture())
 	normal := ansi.Strip(renderPipelineForTest(t, response, pipelineTestWidth{width: 120, available: true}, false))
-	for _, want := range []string{"Release Pipeline Inspection", "Verification Facts", "Category", "Status", "Subject", "Class", "Source", "consumer_structure", "verified", "release-service.yml", "doctor", "Resolve release source", "not_observed", "Neko CLI"} {
+	for _, want := range []string{"Release Pipeline Inspection", "Summary", "Verification Facts", "Check", "Status", "Scope", "Subject", "Evidence", "Consumer workflow", "Verified", "release-service.yml", "Configured Pipeline", "Resolve release source", "Neko CLI"} {
 		if !strings.Contains(normal, want) {
 			t.Fatalf("normal output omitted %q:\n%s", want, normal)
+		}
+	}
+	for _, forbidden := range []string{"consumer_structure", "not_observed", "Source", "doctor", "Runtime and Limitations"} {
+		if strings.Contains(normal, forbidden) {
+			t.Fatalf("normal output exposed %q:\n%s", forbidden, normal)
 		}
 	}
 
 	narrow := renderPipelineForTest(t, response, pipelineTestWidth{width: 30, available: true}, false)
 	narrowPlain := ansi.Strip(narrow)
-	for _, want := range []string{"Category", "Status", "Class", "consumer", "verified", "local", "Resolve release", "not_observed", "Limitations"} {
+	for _, want := range []string{"Check", "Status", "Scope", "Consumer workflow", "Verified", "Local", "Stage", "Runtime", "Owner", "Resolve release", "Limitations"} {
 		if !strings.Contains(narrowPlain, want) {
 			t.Fatalf("narrow output omitted %q:\n%s", want, narrowPlain)
 		}
@@ -38,7 +43,7 @@ func TestPipelinePresentationIsDeterministicAtUnknownWidth(t *testing.T) {
 		t.Fatalf("unknown-width output changed:\nfirst=%q\nsecond=%q", first, second)
 	}
 	plain := ansi.Strip(first)
-	for _, want := range []string{"Category: consumer_structure", "Status: verified", "Subject: .github/workflows/release-service.yml", "Stage" + " 1", "Resolve release source (not_observed, Neko CLI)", "Execution journals were not inspected."} {
+	for _, want := range []string{"Check: Consumer workflow", "Status: Verified", "Subject: .github/workflows/release-service.yml", "#: 1", "Stage: Resolve release source", "Runtime: —", "Remote Git freshness was not inspected."} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("unknown-width output omitted %q:\n%s", want, plain)
 		}
@@ -49,7 +54,7 @@ func TestPipelinePresentationUsesSemanticTTYColorOnly(t *testing.T) {
 	response := mapPipelineResult(pipelinePresentationFixture())
 	colored := renderPipelineForTest(t, response, pipelineTestWidth{width: 100, available: true}, true)
 	plain := renderPipelineForTest(t, response, pipelineTestWidth{width: 100, available: true}, false)
-	if !strings.Contains(colored, "\x1b[32mready\x1b[0m") {
+	if !strings.Contains(colored, "\x1b[32mReady\x1b[0m") {
 		t.Fatalf("TTY output omitted semantic ready color: %q", colored)
 	}
 	if strings.Contains(plain, "\x1b[") {
@@ -66,13 +71,15 @@ func TestPipelinePresentationShowsRuntimeRecoveryAndManualIntervention(t *testin
 	result.Execution = pipelineExecution{Present: true, Identity: "execution-identity", State: "tag-pushed", Observations: []pipelineExecutionJournal{}}
 	result.Dispatch = pipelineDispatch{Present: true, Identity: "dispatch-identity", State: "unknown", Correlation: "exact", Observations: []pipelineDispatchJournal{}}
 	result.LocalGit = pipelineLocalGit{Scope: "local_only", Consistent: true}
-	result.Recovery = pipelineRecovery{Classification: "interrupted-after-tag-push", RetrySafety: "automatic_retry_prohibited", Reasons: []string{}}
+	result.Recovery = pipelineRecovery{Evaluated: true, Classification: "interrupted-after-tag-push", RetrySafety: "automatic_retry_prohibited", Reasons: []string{}}
 	result.ManualIntervention = pipelineManualIntervention{Required: true, Reasons: []string{"Inspect the durable dispatch outcome before retrying."}}
+	result.Stages[0].RuntimeStatus = RuntimeUnknown
+	result.Stages[0].RuntimeEvidence = "dispatch_journal"
 	plain := ansi.Strip(renderPipelineForTest(t, mapPipelineResult(result), pipelineTestWidth{}, false))
 	for _, want := range []string{
-		"Status\n  uncertain", "Execution\n  tag-pushed", "Dispatch\n  unknown",
-		"Recovery\n  interrupted-after-tag-push", "Resume Eligible\n  false",
-		"Manual Intervention\n  true", "Execution Evidence", "Dispatch Evidence", "Manual Reason 1",
+		"Lifecycle\n  Uncertain", "Execution\n  Tag pushed", "Dispatch\n  Unknown",
+		"Recovery\n  Interrupted after tag push", "Resume\n  Not eligible",
+		"Manual intervention\n  Required", "Runtime: Unknown", "Evidence: Dispatch journal",
 	} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("runtime presentation omitted %q:\n%s", want, plain)
@@ -85,16 +92,22 @@ func TestPipelinePresentationKeepsLifecycleAndVerificationStatusesSeparate(t *te
 	result.Status = pipelineReady
 	result.Verification = projectPipelineVerification(VerificationSnapshot{
 		RemoteStatus: "complete", RemoteRequested: true, RemoteAttempted: true,
-		Facts: []VerificationFact{{
-			Category: "remote_workflow_identity", Class: VerificationRemote, Status: VerificationFailed,
-			Subject: "owner/repository", Evidence: "The exact remote fact is missing.",
-			Source: "doctor", Scope: "repository", References: []string{".git/config"},
-		}},
+		Facts: []VerificationFact{
+			{
+				Category: "consumer_structure", Class: VerificationLocal, Status: VerificationVerified,
+				Subject: "workflow", Evidence: "The local workflow is valid.", Source: "doctor", Scope: "workflow",
+			},
+			{
+				Category: "remote_workflow_identity", Class: VerificationRemote, Status: VerificationFailed,
+				Subject: "owner/repository", Evidence: "The exact remote fact is missing.",
+				Source: "doctor", Scope: "repository", References: []string{".git/config"},
+			},
+		},
 	})
 	plain := ansi.Strip(renderPipelineForTest(t, mapPipelineResult(result), pipelineTestWidth{}, false))
 	for _, want := range []string{
-		"Status\n  ready", "Verification\n  failed", "Remote Verification\n  complete",
-		"Category: remote_workflow_identity", "Status: failed", "Subject: owner/repository",
+		"Lifecycle\n  Ready", "Verification\n  Local checks passed; remote checks failed", "Remote verification\n  Complete — 1 failed",
+		"Check: Remote workflow identity", "Status: Failed", "Subject: owner/repository",
 	} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("separate verification presentation omitted %q:\n%s", want, plain)
@@ -148,6 +161,10 @@ func pipelinePresentationFixture() *pipelineResult {
 			Mutation: MutationNone, ConfigurationStatus: StageConfigured,
 			Source: "pkg/release/release_start_v2.go",
 		}},
+		ProgressInspection: pipelineProgressInspection{JournalsInspected: true, ExecutionProgress: "not_started"},
+		Execution:          pipelineExecution{Validity: "valid", Observations: []pipelineExecutionJournal{}},
+		Dispatch:           pipelineDispatch{Correlation: "none", Observations: []pipelineDispatchJournal{}},
+		LocalGit:           pipelineLocalGit{Scope: "local_only", RemoteFreshness: "remote_not_inspected"},
 		Verification: projectPipelineVerification(VerificationSnapshot{
 			RemoteStatus: "not_requested",
 			Facts: []VerificationFact{{
@@ -156,6 +173,10 @@ func pipelinePresentationFixture() *pipelineResult {
 				Source: "doctor", Scope: "workflow", References: []string{".github/workflows/release-service.yml"},
 			}},
 		}),
-		Limitations: []string{"Execution journals were not inspected."},
+		Limitations: []string{
+			"Only local execution evidence was inspected; remote Git freshness was not inspected.",
+			"Workflow execution and publication state were not inspected remotely.",
+			"Runtime inspection is read-only and does not resume, retry, repair, or clean a release.",
+		},
 	}
 }
