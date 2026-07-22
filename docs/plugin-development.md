@@ -496,10 +496,19 @@ data, `Rows` can carry presentation-only row maps. If `Rows` is nil, Core keeps
 the established behavior of selecting a list from `Data`. `Details` can append
 one ordered `presentation.Properties` view after a response-level `presentation.Properties`
 summary and the table, producing the generic property/table/property order.
-Both fields are optional; their nil zero values are omitted from transport and
-do not alter existing responses. They must not replace complete typed `Data`.
-Their labels, projections, and direct values cross only the plugin transport
-and remain absent from public JSON and raw JSON.
+`DescribeOnly` marks a structured table section for global `--describe`; Core
+skips it in concise human output while retaining it in the same coherent
+plugin response. These fields are optional; their zero values are omitted from
+transport and do not alter existing responses. They must not replace complete
+typed `Data`. Their labels, projections, direct values, and visibility marker
+cross only the plugin transport and remain absent from public JSON and raw
+JSON.
+
+Global `--describe` controls structured human detail and response metadata.
+Global `--verbose` independently controls captured execution/debug logs and is
+the only one represented in `Request.Context.Verbose`; `--describe` is not sent
+to plugins and cannot enable a plugin capability. Both options leave public
+JSON and raw JSON unchanged.
 
 #### Property/value presentation
 

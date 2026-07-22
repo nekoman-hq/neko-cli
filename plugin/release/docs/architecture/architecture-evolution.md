@@ -355,9 +355,12 @@ verification status, and remote verification does not change stage completion,
 `remote_state_inspected`, resume eligibility, or retry safety. Human
 presentation delegates width, wrapping, and TTY-color behavior to Core's
 existing presentation contract. Pipeline Inspection supplies only ordered
-presentation metadata: a summary, a verification table, a grouped configured
-pipeline table, and numbered limitations. Verification keeps `Check`, `Status`,
-and `Scope` essential and admits `Subject` then `Evidence`; pipeline stages keep
+presentation metadata: an always-visible summary, conditional actionable
+findings, and describe-only verification, grouped configured pipeline, safe
+runtime/Git/recovery evidence, and numbered limitations. Findings project
+existing facts without introducing another diagnostics engine or changing
+lifecycle/verification meaning. Verification keeps `Check`, `Status`, and
+`Scope` essential and admits `Subject` then `Evidence`; pipeline stages keep
 `Stage`, `Runtime`, and `Owner` essential and admit `#`, `Location`, `Mutation`,
 then `Evidence`. Global stage order is unchanged while presentation headings
 classify canonical registry stage IDs first, consumer/release-tool or non-root
@@ -365,11 +368,16 @@ workflow-source stages second, remote/handoff stages third, and remaining local
 preparation stages last. Empty groups are omitted.
 
 The shared transport contract extends the same renderer with table chaining,
-presentation-only group keys, concise notes, and property section titles. These
-fields are not response data and are stripped from public and raw JSON. Unknown
-width remains a deterministic vertical form, redirected output remains
-ANSI-free, and only a TTY receives semantic lifecycle/runtime color. Pipeline
-Inspection imports neither the renderer nor terminal packages.
+presentation-only group keys, concise notes, property section titles, and a
+table-level describe-only marker. Core filters that marker only for human
+output. Global `--describe` adds structured sections and response metadata;
+global `--verbose` independently adds captured logs. Describe is not sent in
+the plugin request and therefore cannot enable remote verification or token
+resolution. These fields are not response data and are stripped from public
+and raw JSON, which remain identical with or without describe. Unknown width
+remains a deterministic vertical form, redirected output remains ANSI-free,
+and only a TTY receives semantic lifecycle/runtime color. Pipeline Inspection
+imports neither the renderer nor terminal packages.
 
 ### V2 local delivery evaluation
 

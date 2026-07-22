@@ -35,15 +35,19 @@ compatibility decision and migration.
 
 ## Presentation and rendering boundaries
 
-`pkg/presentation` declares tables, columns, properties, text, and semantic
-style roles. These values are rendering instructions and metadata, not final
-rendered bytes. `pkg/plugin.Response` carries them through the plugin protocol.
-Core's public JSON renderer, raw JSON path, and GitHub output omit them.
+`pkg/presentation` declares tables, columns, properties, text, semantic style
+roles, and the transport-only `Table.DescribeOnly` visibility marker. These
+values are rendering instructions and metadata, not final rendered bytes.
+`pkg/plugin.Response` carries them through the plugin protocol. Core's public
+JSON renderer, raw JSON path, and GitHub output omit them.
 
 `pkg/renderer` consumes `pkg/plugin` and `pkg/presentation`. The renderer owns
-layout, responsive width behavior, ANSI-safe visible-width calculations, and
-the mapping from semantic roles to terminal styles. Presentation declarations
-must never import the renderer, and the renderer must not import the logger.
+layout, responsive width behavior, ANSI-safe visible-width calculations,
+describe-only section filtering, and the mapping from semantic roles to
+terminal styles. Global `--describe` selects structured details and metadata;
+global `--verbose` independently selects captured logs. Neither option changes
+public or raw JSON. Presentation declarations must never import the renderer,
+and the renderer must not import the logger.
 
 `pkg/log` is independent of the renderer. Both packages may use only the
 private `internal/terminal` primitives for ANSI application and terminal

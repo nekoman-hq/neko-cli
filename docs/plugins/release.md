@@ -391,8 +391,12 @@ Inspect the configured Release V2 pipeline for one unit without executing it:
 neko release pipeline --unit cli
 neko release pipeline --unit plugin-release
 neko release pipeline --unit plugin-ui
+neko release pipeline --unit cli --describe
+neko release pipeline --unit cli --verbose
+neko release pipeline --unit cli --describe --verbose
 neko release pipeline --unit cli --output json
 neko release pipeline --unit cli --verify-remote
+neko release pipeline --unit cli --verify-remote --describe
 neko release pipeline --unit cli --verify-remote --output json
 ```
 
@@ -417,13 +421,26 @@ and ordered neutral Doctor-owned verification facts. Every stage keeps static
 configuration separate from `not_observed`, `not_started`, `pending`, `confirmed`, `blocked`,
 `unknown`, `rejected`, or `invalid` runtime evidence.
 
-Human output uses `Release Pipeline Inspection` with distinct `Summary`,
-`Verification Facts`, `Configured Pipeline`, and optional numbered
-`Limitations` sections. The summary keeps configured identity, humanized
-lifecycle, execution/dispatch evidence, recovery/resume policy, local and
-remote Git scope, and verification scope separate. In particular, no execution
-means recovery and resume are not applicable; it does not imply failure or
-eligibility.
+Default human output uses `Release Pipeline Inspection` with a concise
+`Summary` and a conditional `Findings` section. The summary keeps configured
+identity, humanized lifecycle, execution/dispatch evidence, recovery/resume
+policy, local and remote Git scope, and verification scope separate. In
+particular, no execution means recovery and resume are not applicable; it does
+not imply failure or eligibility. `Findings` lists individual actionable facts
+without requiring JSON or `--describe`: failed, unauthorized, rate-limited, or
+confidence-affecting unavailable verification; malformed or conflicting
+journals; multiple unresolved executions; rejected or unknown dispatch;
+invalid or missing/mismatched local commit/tag evidence; blocked or uncertain
+recovery; and manual-intervention reasons. Healthy, intentionally deferred,
+mutation-required, and ordinary not-checked facts stay summarized by default.
+
+Global `--describe` adds complete structured diagnosis to the same response:
+all `Verification Facts`, the grouped `Configured Pipeline`, safe `Execution
+Evidence`, `Dispatch Evidence`, `Local Git Evidence`, recovery/resume evidence,
+and complete numbered `Limitations` when those sections apply. Global
+`--verbose` remains separate and adds only captured execution/debug logs.
+`--describe --verbose` combines both; neither flag changes lifecycle,
+verification, recovery, resume, retry, or exit semantics.
 
 The verification table keeps essential `Check`, `Status`, and `Scope` columns;
 `Subject` and `Evidence` are optional. The configured pipeline keeps essential
@@ -440,10 +457,11 @@ absence of runtime evidence when every stage is unobserved.
 Core's existing responsive presentation path owns width fitting, deterministic
 vertical records when width is unknown, wrapping, and semantic TTY-only color.
 The transport declaration can chain tables, group rows by a presentation-only
-key, append a note, and name a property section; those declarations never enter
-public or raw JSON. Redirected output and JSON are ANSI-free. JSON schema
-version `1` remains append-only with non-null ordered arrays and unchanged
-machine vocabularies.
+key, append a note, name a property section, and mark a table describe-only;
+those declarations never enter public or raw JSON. Redirected output and JSON
+are ANSI-free. JSON schema version `1` remains append-only with non-null ordered
+arrays and unchanged machine vocabularies. `--output json` and `--describe
+--output json` are identical and complete.
 
 The additive `verification` section contains `summary` and `facts`. Fact
 classes are `local`, `remote`, `runtime_required`, and `mutation_required`;
@@ -460,6 +478,12 @@ execution/dispatch journals, local Git objects/refs/index/worktree, and
 known-file recovery evidence. It uses Doctor's neutral fact API, not the Doctor
 handler, diagnostics, readiness, response, or presentation, and constructs no
 HTTP client or token resolver.
+
+`--describe` is a Core presentation choice only. It is not serialized into the
+plugin request, does not enable remote verification, resolve `GITHUB_TOKEN`,
+call HTTP, fetch refs, execute a release tool, or mutate state. Only the
+command-local `--verify-remote` flag crosses the plugin request as the existing
+explicit remote capability switch.
 
 Explicit `--verify-remote` reuses Doctor's one bounded GitHub GET client and
 lazy `GITHUB_TOKEN` resolver. It refuses redirects, caps bodies at 1 MiB, times
@@ -521,7 +545,7 @@ Production publishing uses dedicated workflows and GoReleaser configs:
 | `plugin-release` | `.github/workflows/release-plugin-release.yml` | `.goreleaser.plugin-release.yaml` |
 | `plugin-ui` | `.github/workflows/release-plugin-ui.yml` | `.goreleaser.plugin-ui.yaml` |
 
-Dry-run does not require `GITHUB_TOKEN`. Verbose and `--describe` output shows the planned materialized files, known release files, workflow, dispatch inputs, and, for real handoffs, execution/dispatch journal paths, release commit SHA, dispatch state, run URL when resolvable, and recovery guidance. Unknown dispatch or ambiguous push outcomes must not be retried blindly; inspect with `neko release resume --unit <unit> --dry-run`.
+Dry-run does not require `GITHUB_TOKEN`. Structured release output shows the planned materialized files, known release files, workflow, dispatch inputs, and, for real handoffs, execution/dispatch journal paths, release commit SHA, dispatch state, run URL when resolvable, and recovery guidance. Global `--describe` adds declared structured details and response metadata; global `--verbose` separately adds execution/debug logs. Unknown dispatch or ambiguous push outcomes must not be retried blindly; inspect with `neko release resume --unit <unit> --dry-run`.
 
 ---
 

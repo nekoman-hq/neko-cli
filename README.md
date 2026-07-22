@@ -169,7 +169,7 @@ This repository releases itself with V2 multi-unit release state:
 - Dry-run release planning needs no token and writes nothing.
 - CLI version, update, and install checks use only stable CLI tags matching `vX.Y.Z`; plugin releases and `plugin-registry` are ignored for CLI updates.
 - Runtime plugin discovery, install, and update use `plugin-index.json` as the registry source of truth. The index is published as the `plugin-index.json` asset on the mutable `plugin-registry` GitHub Release after successful plugin releases; `/releases/latest` and release-prefix fallback discovery are not used for plugin discovery.
-- Use `--verbose --describe` to see journal paths, commit/tag, workflow, dispatch state, run URL when resolvable, and recovery guidance.
+- Use global `--describe` for structured inspection details and global `--verbose` for execution/debug logs. They are independent and may be combined.
 
 Copy-ready Release V2 and plugin registry examples live in [Release V2 Examples](docs/release/examples.md). The product boundary for release-ready GitHub Actions bootstrap lives in [Release V2 Bootstrap Product Boundary](docs/release/bootstrap-product-boundary.md).
 
@@ -180,9 +180,9 @@ All plugins inherit these global flags:
 | Flag | Shorthand | Description                                          |
 |------|-----------|------------------------------------------------------|
 | `--help` | `-h` | Show help for any command                            |
-| `--verbose` | `-v` | Enable verbose output                                |
-| `--output` | `-o` | Output format: `table`, `json`, `wide (in progress)` |
-| `--describe` | | Include logs and metadata in output                  |
+| `--verbose` | `-v` | Include execution and debug logs in plugin output   |
+| `--output` | | Output format: `table`, `json`, `wide (in progress)` |
+| `--describe` | | Include structured details and response metadata     |
 
 ### Other Built-in Commands
 
@@ -231,10 +231,16 @@ neko <plugin> <command> --output json
 }
 ```
 
-### Verbose with Logs
+### Structured Details and Logs
 ```bash
-neko <plugin> <command> --describe -v
+neko <plugin> <command> --describe
+neko <plugin> <command> --verbose
+neko <plugin> <command> --describe --verbose
 ```
+
+`--describe` changes human presentation only. It does not enable verbose logs,
+remote access, or a different JSON schema. `--verbose` adds captured execution
+logs without revealing describe-only structured sections.
 
 ---
 

@@ -429,8 +429,9 @@ func validateRequiredFlagsFromManifest(cmd *cobra.Command, flagDefs []plugin.Fla
 	return nil
 }
 
-// extractFlags extracts all flags from a cobra.Command into a map.
-// Only flags that have been explicitly set (changed from their default) are included.
+// extractFlags extracts command-local flags from a cobra.Command into a map.
+// Only flags that have been explicitly set (changed from their default) are included;
+// inherited Core response flags remain owned by Core and never enter a plugin request.
 // The function preserves type information for bool and int flags, converting them
 // to their appropriate Go types. Other flag types are stored as strings.
 //
@@ -441,7 +442,7 @@ func validateRequiredFlagsFromManifest(cmd *cobra.Command, flagDefs []plugin.Fla
 func extractFlags(cmd *cobra.Command) map[string]any {
 	flags := make(map[string]any)
 
-	cmd.Flags().VisitAll(func(flag *pflag.Flag) {
+	cmd.LocalNonPersistentFlags().VisitAll(func(flag *pflag.Flag) {
 		if flag.Changed {
 			// Try to get typed value
 			switch flag.Value.Type() {

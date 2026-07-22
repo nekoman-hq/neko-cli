@@ -359,7 +359,7 @@
     },
     {
       "name": "pipeline",
-      "description": "Explain the configured Release V2 pipeline for one unit with local verification by default and optional explicit read-only remote verification",
+      "description": "Inspect one Release V2 pipeline; default human output is concise and includes actionable findings, global --describe adds all structured inspection details, global --verbose adds execution logs, and --verify-remote explicitly enables bounded GET-only remote verification",
       "outputs": [
         "table",
         "json"

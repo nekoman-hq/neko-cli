@@ -40,6 +40,7 @@ func pipelineHumanPresentation(result *pipelineResult) (*presentation.Properties
 		Rows: pipelineVerificationRows(result.Verification.Facts), DescribeOnly: true,
 	}
 	return pipelineSummaryProperties(result), chainPipelineTables(
+		pipelineFindingsPresentation(result),
 		verification,
 		pipelineStagePresentation(result),
 		pipelineExecutionEvidencePresentation(result),

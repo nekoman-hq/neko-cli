@@ -270,7 +270,12 @@ func TestPipelineManifestContract(t *testing.T) {
 		command.Flags[1].Name != "verify-remote" || command.Flags[1].Type != "bool" || command.Flags[1].Required {
 		t.Fatalf("pipeline flags = %#v", command.Flags)
 	}
-	for _, forbidden := range []string{"all", "journal", "resume", "output"} {
+	for _, fragment := range []string{"default human output is concise", "actionable findings", "global --describe", "structured inspection details", "global --verbose", "execution logs", "--verify-remote", "GET-only"} {
+		if !strings.Contains(command.Description, fragment) {
+			t.Fatalf("pipeline description omitted %q: %q", fragment, command.Description)
+		}
+	}
+	for _, forbidden := range []string{"all", "journal", "resume", "output", "describe", "verbose"} {
 		if _, present := flagDescriptions(command)[forbidden]; present {
 			t.Fatalf("pipeline manifest exposes unsupported flag %q", forbidden)
 		}

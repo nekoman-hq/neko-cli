@@ -114,7 +114,9 @@ domain fields, callbacks, layout modes, or policy to Core.
 `presentation.Table.Rows` may provide a presentation-only projection when complete machine
 data is not a slice of row maps. `presentation.Table.Details` may reuse one
 `presentation.Properties` declaration after a response-level property summary and the
-table. Core then composes the existing property/table/property renderers. Both
+table. `presentation.Table.DescribeOnly` keeps a complete structured section out
+of concise human output until global `--describe` is selected. Core then composes
+the existing property/table/property renderers. These
 fields are optional transport metadata; nil values preserve the established
 table path, and neither field enters public JSON or raw JSON. This is a bounded
 master/detail presentation capability, not a generic document or layout model.
@@ -246,8 +248,8 @@ echo '{"command":"init-options","args":[],"flags":{},"context":{}}' | ./plugin/r
 - `--output table` (default) - kubectl-style table
 - `--output json` - Raw JSON
 - `--output wide` - All declared summary columns for opted-in responsive tables; legacy behavior otherwise
-- `--describe` - Include logs and metadata
-- `-v, --verbose` - Verbose logging
+- `--describe` - Include structured details and response metadata in human output
+- `-v, --verbose` - Include captured execution and debug logs independently
 
 ## Files to Ignore
 

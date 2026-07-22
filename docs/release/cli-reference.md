@@ -320,8 +320,12 @@ path is local, offline, and token-free; remote verification is explicit:
 neko release pipeline --unit cli
 neko release pipeline --unit plugin-release
 neko release pipeline --unit plugin-ui
+neko release pipeline --unit cli --describe
+neko release pipeline --unit cli --verbose
+neko release pipeline --unit cli --describe --verbose
 neko release pipeline --unit cli --output json
 neko release pipeline --unit cli --verify-remote
+neko release pipeline --unit cli --verify-remote --describe
 neko release pipeline --unit cli --verify-remote --output json
 ```
 
@@ -389,14 +393,30 @@ Recognized consumer IDs follow in their literal workflow order:
 `plugin-index-publication`. Only operations actually present in the selected
 workflow are included.
 
-Human output is titled `Release Pipeline Inspection`, keeps lifecycle status
-prominent, shows execution, dispatch, local Git, recovery, resume,
-manual-intervention, and verification summaries, and uses a responsive
-verification-fact table. `Category`, `Status`, and `Class` are essential;
-`Subject` and `Source` are optional. Configured stages and their runtime/owner
-facts remain visible in the ordered details. Width-unknown output uses
+Human output is titled `Release Pipeline Inspection`. Default output keeps the
+`Summary` concise and adds `Findings` only when an actionable problem exists.
+Each finding retains a readable check/problem, status, sanitized reason, and a
+safe subject when useful. It covers failed, unauthorized, rate-limited, and
+confidence-affecting unavailable verification facts; malformed/conflicting
+journals; multiple unresolved executions; rejected/unknown dispatch; invalid,
+missing, or mismatched local commit/tag evidence; blocked/uncertain recovery;
+and manual-intervention reasons. Healthy, not-checked, intentionally deferred,
+and mutation-required inventories stay summarized unless they directly explain
+an actionable problem.
+
+Global `--describe` adds the complete responsive `Verification Facts` table,
+grouped `Configured Pipeline`, applicable safe execution/dispatch/local-Git/
+recovery evidence, and complete `Limitations`. Verification uses essential
+`Check`, `Status`, and `Scope` columns with optional `Subject` and `Evidence`;
+the old `Category`/`Class`/`Source` display labels are not the current human
+contract. Stages use essential `Stage`, `Runtime`, and `Owner` with optional
+`#`, `Location`, `Mutation`, and `Evidence`. Width-unknown output uses
 deterministic vertical records. Semantic color is interactive-terminal-only,
 and redirected output is ANSI-free.
+
+Global `--verbose` adds captured execution/debug logs without exposing
+describe-only structured sections. Combining it with `--describe` shows both.
+Neither flag changes command exit behavior or enables a Pipeline capability.
 
 JSON keeps the existing response envelope and `schema_version: 1`. The original
 `status`, `unit`, `release`, `repository`, `workflow`, `stages`,
@@ -404,7 +424,9 @@ JSON keeps the existing response envelope and `schema_version: 1`. The original
 are `execution`, `dispatch`, `local_git`, `recovery`, `manual_intervention`,
 and `verification`; arrays are never `null`, ordering is deterministic, and
 presentation metadata, absolute paths, credentials, and raw journals are
-excluded.
+excluded. JSON is already the complete machine contract: `--describe --output
+json` is identical to `--output json`, and verbose/describe presentation
+choices do not create another schema.
 
 Each verification fact has a stable Pipeline-owned `id`, `category`, `class`,
 `status`, `subject`, `evidence`, `source`, `scope`, non-null `references`, and
@@ -428,6 +450,11 @@ objects/refs/index/worktree, and known-file recovery evidence. It uses the
 Doctor's neutral fact API directly, never its command handler, diagnostics,
 readiness policy, response mapper, or presentation. Default inspection
 constructs no HTTP client and never resolves `GITHUB_TOKEN`.
+
+`--describe` is consumed only by Core response rendering and is not included in
+the plugin request. It therefore cannot select remote verification, resolve a
+token, call HTTP, fetch refs, or mutate anything. Only the command-local
+`--verify-remote` boolean enables the existing explicit remote branch.
 
 `--verify-remote` delegates to Doctor's existing single bounded GitHub reader:
 exact GETs only, 12-second timeout, 1 MiB response cap, redirects refused, and

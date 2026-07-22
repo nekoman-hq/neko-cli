@@ -406,28 +406,36 @@ The public command contract is duplicated between `manifest.json` and the switch
   arrays and no presentation metadata. Verification failure, partial, or
   unresolved status never changes lifecycle status, resume eligibility, exit
   policy, or stage completion.
-- Presentation: the command mapper alone declares `Summary`, `Verification
-  Facts`, `Configured Pipeline`, and optional numbered `Limitations` sections.
-  Verification makes check/status/scope essential and subject/evidence
-  optional. Pipeline makes stage/runtime/owner essential and admits number,
-  location, mutation, then evidence as width permits. Presentation-only groups
-  preserve global stage order: canonical plugin-index stage IDs take the
-  registry group; consumer/release-tool owners or non-root workflow sources
-  take the consumer group; remote locations/mutations and handoff confirmation
-  take the handoff group; the remainder is local preparation. Empty groups are
-  omitted, and fully unobserved runtime data receives one concise note.
-  Humanized labels do not alter machine vocabularies. Core's existing renderer
-  owns chained-table composition, group headings, notes, section titles,
-  terminal width, wrapping, deterministic vertical fallback, and semantic
-  TTY-only color. These transport declarations are excluded from public and raw
-  JSON; Pipeline production code imports neither renderer nor terminal code.
+- Presentation: the internal response mapper alone declares an always-visible
+  `Summary`, conditional actionable `Findings`, and describe-only `Verification
+  Facts`, `Configured Pipeline`, safe execution/dispatch/local-Git/recovery
+  evidence, and complete numbered `Limitations`. Findings are a presentation-
+  only projection of existing verification, lifecycle, journal, Git, recovery,
+  and manual-intervention facts; they do not derive a second diagnostic or
+  lifecycle policy. Verification makes check/status/scope essential and
+  subject/evidence optional. Pipeline makes stage/runtime/owner essential and
+  admits number, location, mutation, then evidence as width permits.
+  Presentation-only groups preserve global stage order: canonical plugin-index
+  stage IDs take the registry group; consumer/release-tool owners or non-root
+  workflow sources take the consumer group; remote locations/mutations and
+  handoff confirmation take the handoff group; the remainder is local
+  preparation. Empty groups are omitted, and fully unobserved runtime data
+  receives one concise note. Humanized labels do not alter machine
+  vocabularies. Core's existing renderer owns describe-only filtering,
+  chained-table composition, group headings, notes, section titles, terminal
+  width, wrapping, deterministic vertical fallback, and semantic TTY-only
+  color. Global describe adds structured sections and metadata; global verbose
+  independently adds captured logs. These transport declarations are excluded
+  from public and raw JSON; Pipeline production code imports neither renderer
+  nor terminal code.
 - Safety: root composition has read-only journal and bounded local Git query
   capability but no Git mutator, direct token resolver, HTTP/dispatch client,
   writer, release-tool runner, cwd mutation, or duplicated
   retry/resume/transition policy. Only the explicit remote branch may delegate
   to Doctor's existing GET/token boundary. The internal inspector receives data
-  only. Neither layer calculates a future version or invokes another command
-  handler.
+  only. Core consumes describe locally and does not serialize it into the
+  plugin request, so describe cannot select that remote branch. Neither layer
+  calculates a future version or invokes another command handler.
 - Tests: source/unit/request contracts, exact root and real-workflow order,
   conditional plugin stages, immutable metadata ownership, all execution and
   dispatch phases, malformed/conflicting/unlinked evidence, exact identity

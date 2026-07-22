@@ -63,7 +63,7 @@ Resume continues only an existing unresolved V2 GitHub Actions execution journal
 
 `resume --dry-run` performs only read-only recovery assessment and does not require `GITHUB_TOKEN`.
 
-Verbose and `--describe` output includes the selected unit, version, tag, workflow, release commit SHA, execution journal path, dispatch journal path, execution state, dispatch state, dispatch run URL when resolvable, and recovery guidance. Unknown dispatch or ambiguous push outcomes must not be retried blindly; inspect the journals and use `neko release resume --unit <unit> --dry-run` first.
+Structured release output includes the selected unit, version, tag, workflow, release commit SHA, execution journal path, dispatch journal path, execution state, dispatch state, dispatch run URL when resolvable, and recovery guidance. Global `--describe` adds declared structured details and response metadata; global `--verbose` separately adds execution/debug logs. Unknown dispatch or ambiguous push outcomes must not be retried blindly; inspect the journals and use `neko release resume --unit <unit> --dry-run` first.
 
 ## Boundaries
 
