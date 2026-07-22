@@ -417,13 +417,33 @@ and ordered neutral Doctor-owned verification facts. Every stage keeps static
 configuration separate from `not_observed`, `not_started`, `pending`, `confirmed`, `blocked`,
 `unknown`, `rejected`, or `invalid` runtime evidence.
 
-Human output uses `Release Pipeline Inspection`, a responsive verification-fact
-table with essential `Category`, `Status`, and `Class` columns, optional
-`Subject` and `Source`, and deterministic vertical records when width is unknown.
-Lifecycle status remains prominent; stage/runtime/owner facts, recovery, and
-manual intervention remain visible in the ordered summary/details. Redirected
-output and JSON are ANSI-free. JSON schema version `1` remains append-only with
-non-null ordered arrays and no presentation metadata.
+Human output uses `Release Pipeline Inspection` with distinct `Summary`,
+`Verification Facts`, `Configured Pipeline`, and optional numbered
+`Limitations` sections. The summary keeps configured identity, humanized
+lifecycle, execution/dispatch evidence, recovery/resume policy, local and
+remote Git scope, and verification scope separate. In particular, no execution
+means recovery and resume are not applicable; it does not imply failure or
+eligibility.
+
+The verification table keeps essential `Check`, `Status`, and `Scope` columns;
+`Subject` and `Evidence` are optional. The configured pipeline keeps essential
+`Stage`, `Runtime`, and `Owner` columns; `#`, `Location`, `Mutation`, and
+`Evidence` are optional. It preserves global stage order while adding the
+ordered headings `Local release preparation`, `Git and provider handoff`,
+`Consumer workflow`, and, when configured, `Plugin registry`. Registry stages
+are identified by their canonical stage IDs, consumer stages by their owner or
+non-root workflow source, and handoff stages by remote location/mutation or the
+handoff-confirmation stage. Empty groups are omitted. An em dash denotes a
+runtime stage that has not been observed, and a concise note explains the
+absence of runtime evidence when every stage is unobserved.
+
+Core's existing responsive presentation path owns width fitting, deterministic
+vertical records when width is unknown, wrapping, and semantic TTY-only color.
+The transport declaration can chain tables, group rows by a presentation-only
+key, append a note, and name a property section; those declarations never enter
+public or raw JSON. Redirected output and JSON are ANSI-free. JSON schema
+version `1` remains append-only with non-null ordered arrays and unchanged
+machine vocabularies.
 
 The additive `verification` section contains `summary` and `facts`. Fact
 classes are `local`, `remote`, `runtime_required`, and `mutation_required`;
