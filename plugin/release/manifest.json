@@ -359,7 +359,7 @@
     },
     {
       "name": "pipeline",
-      "description": "Explain the configured local Release V2 pipeline for one unit without execution, planning, journals, tokens, or network access",
+      "description": "Explain the configured Release V2 pipeline for one unit with local verification by default and optional explicit read-only remote verification",
       "outputs": [
         "table",
         "json"
@@ -370,6 +370,12 @@
           "type": "string",
           "required": false,
           "description": "Selects the release unit. Required when a V2 repository defines multiple units."
+        },
+        {
+          "name": "verify-remote",
+          "type": "bool",
+          "required": false,
+          "description": "Explicitly enables bounded GitHub GET-only verification and optional read-token resolution; the default remains local, offline, and token-free."
         }
       ]
     },

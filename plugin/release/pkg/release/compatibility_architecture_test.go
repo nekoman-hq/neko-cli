@@ -94,7 +94,7 @@ func TestPipelineRootFacadeContainsOnlyRuntimeInspectionComposition(t *testing.T
 	allowed := map[string]bool{
 		"ResolveInspectionRepositoryRoot":     true,
 		"HandlePipelineAt":                    true,
-		"inspectLocalPipelineVerification":    true,
+		"inspectPipelineVerification":         true,
 		"inspectPipelineRuntime":              true,
 		"configuredReleaseLifecycleStages":    true,
 		"HandlePipelineRuntimeAt":             true,

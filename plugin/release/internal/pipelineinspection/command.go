@@ -27,7 +27,7 @@ func parsePipelineRequest(root workspace.RepositoryRoot, request plugin.Request)
 	}
 	sort.Strings(flagNames)
 	for _, name := range flagNames {
-		if name != "unit" && name != "output" {
+		if name != "unit" && name != "output" && name != "verify-remote" {
 			return pipelineRequest{}, &commandFailure{Code: "INVALID_PIPELINE_REQUEST", Message: fmt.Sprintf("pipeline inspection does not support --%s", name)}
 		}
 	}
@@ -39,7 +39,37 @@ func parsePipelineRequest(root workspace.RepositoryRoot, request plugin.Request)
 		}
 		unitID = value
 	}
-	return pipelineRequest{RepositoryRoot: root.Path(), UnitID: unitID}, nil
+	verifyRemote := false
+	if raw, present := request.Flags["verify-remote"]; present {
+		value, ok := raw.(bool)
+		if !ok {
+			return pipelineRequest{}, &commandFailure{Code: "INVALID_PIPELINE_REQUEST", Message: "--verify-remote must be a boolean"}
+		}
+		verifyRemote = value
+	}
+	return pipelineRequest{RepositoryRoot: root.Path(), UnitID: unitID, VerifyRemote: verifyRemote}, nil
+}
+
+// RequestsRemoteVerification selects the explicit remote composition path only
+// for a structurally valid Pipeline request. The command parser remains the
+// authoritative error boundary.
+func RequestsRemoteVerification(request plugin.Request) bool {
+	if len(request.Args) != 0 {
+		return false
+	}
+	for name := range request.Flags {
+		if name != "unit" && name != "output" && name != "verify-remote" {
+			return false
+		}
+	}
+	if raw, present := request.Flags["unit"]; present {
+		value, ok := raw.(string)
+		if !ok || value == "" || value != strings.TrimSpace(value) {
+			return false
+		}
+	}
+	value, ok := request.Flags["verify-remote"].(bool)
+	return ok && value
 }
 
 func (handler pipelineCommandHandler) Handle(_ context.Context, request plugin.Request) (*plugin.Response, error) {

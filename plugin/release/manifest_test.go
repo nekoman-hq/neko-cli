@@ -81,7 +81,8 @@ func TestManifestMatchesPublicReleaseContract(t *testing.T) {
 		},
 		"units": {},
 		"pipeline": {
-			"unit": "string",
+			"unit":          "string",
+			"verify-remote": "bool",
 		},
 		"ci-validate-context": {
 			"unit":        "string",
@@ -265,10 +266,11 @@ func TestPipelineManifestContract(t *testing.T) {
 	if !reflect.DeepEqual(command.Outputs, []string{"table", "json"}) {
 		t.Fatalf("outputs = %#v", command.Outputs)
 	}
-	if len(command.Flags) != 1 || command.Flags[0].Name != "unit" || command.Flags[0].Type != "string" || command.Flags[0].Required {
+	if len(command.Flags) != 2 || command.Flags[0].Name != "unit" || command.Flags[0].Type != "string" || command.Flags[0].Required ||
+		command.Flags[1].Name != "verify-remote" || command.Flags[1].Type != "bool" || command.Flags[1].Required {
 		t.Fatalf("pipeline flags = %#v", command.Flags)
 	}
-	for _, forbidden := range []string{"all", "verify-remote", "journal", "resume", "output"} {
+	for _, forbidden := range []string{"all", "journal", "resume", "output"} {
 		if _, present := flagDescriptions(command)[forbidden]; present {
 			t.Fatalf("pipeline manifest exposes unsupported flag %q", forbidden)
 		}

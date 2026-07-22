@@ -38,7 +38,7 @@ func TestPipelinePresentationIsDeterministicAtUnknownWidth(t *testing.T) {
 		t.Fatalf("unknown-width output changed:\nfirst=%q\nsecond=%q", first, second)
 	}
 	plain := ansi.Strip(first)
-	for _, want := range []string{"Category: consumer_structure", "Status: verified", "Subject: .github/workflows/release-service.yml", "Stage 1", "Resolve release source (not_observed, Neko CLI)", "Execution journals were not inspected."} {
+	for _, want := range []string{"Category: consumer_structure", "Status: verified", "Subject: .github/workflows/release-service.yml", "Stage" + " 1", "Resolve release source (not_observed, Neko CLI)", "Execution journals were not inspected."} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("unknown-width output omitted %q:\n%s", want, plain)
 		}

@@ -94,3 +94,22 @@ func TestPipelineVerificationMappingDoesNotMutateDoctorFacts(t *testing.T) {
 		t.Fatalf("mapping mutated Doctor fact: %#v", fact)
 	}
 }
+
+func TestPipelineRemoteDoctorFactsKeepRemoteProvenance(t *testing.T) {
+	fact := doctor.VerificationFact{
+		Subject: "owner/repository", Category: "remote_workflow_identity",
+		State: doctor.VerificationVerified, Evidence: "verified through GET",
+		References: []string{".git/config"}, Remote: true,
+	}
+	mapped := pipelineVerificationFact(fact, true)
+	if mapped.Class != pipelineinspection.VerificationRemote || mapped.Status != pipelineinspection.VerificationVerified {
+		t.Fatalf("remote mapping = %#v", mapped)
+	}
+	snapshot := doctor.VerificationSnapshot{
+		Facts:  []doctor.VerificationFact{fact},
+		Remote: doctor.VerificationRemoteSummary{Requested: true, Status: "complete"},
+	}
+	if !pipelineRemoteVerificationAttempted(snapshot) {
+		t.Fatal("GET-derived fact did not mark remote verification attempted")
+	}
+}

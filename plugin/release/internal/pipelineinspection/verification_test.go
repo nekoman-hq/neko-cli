@@ -58,4 +58,8 @@ func TestPipelineVerificationDoesNotChangeLifecycleStatus(t *testing.T) {
 	if result.Status != want || result.Verification.Summary.Status != verificationSummaryFailed {
 		t.Fatalf("lifecycle=%q verification=%q, want independent %q/failed", result.Status, result.Verification.Summary.Status, want)
 	}
+	if result.Verification.Summary.RemoteStatus != "partial" || !result.Verification.Summary.RemoteRequested ||
+		!result.Verification.Summary.RemoteAttempted {
+		t.Fatalf("remote summary = %#v", result.Verification.Summary)
+	}
 }

@@ -2,6 +2,7 @@ package doctor
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"reflect"
 	"strings"
@@ -52,6 +53,43 @@ func TestLocalVerificationBoundaryDoesNotConstructRemoteOrPresentationAdapters(t
 	} {
 		if strings.Contains(source, forbidden) {
 			t.Fatalf("local verification boundary contains %q", forbidden)
+		}
+	}
+}
+
+func TestInspectRemoteVerificationReusesExistingGETOnlyDoctorBoundary(t *testing.T) {
+	root := repositoryInspectionRoot(t)
+	server, requests := newSuccessfulIntegrationDoctorGitHubServer(t, root.Path(), false)
+	defer server.Close()
+	client := newIntegrationDoctorGitHubReadClientForTest(t, server.URL)
+	snapshot := inspectRemoteVerification(
+		context.Background(),
+		root,
+		"cli",
+		integrationDoctorGitHubRemoteInspector{
+			reader: client,
+			tokens: integrationDoctorRecordingTokenResolver{value: "pipeline-read-token"},
+		},
+	)
+	if !snapshot.Remote.Requested || snapshot.Remote.Status != "complete" || snapshot.Remote.Verified == 0 ||
+		snapshot.Remote.Unresolved != 0 || snapshot.Remote.Failed != 0 {
+		t.Fatalf("remote snapshot summary = %#v", snapshot.Remote)
+	}
+	remoteFacts := 0
+	for _, fact := range snapshot.Facts {
+		if fact.Remote {
+			remoteFacts++
+		}
+		if strings.Contains(fact.Evidence, "pipeline-read-token") {
+			t.Fatalf("remote fact exposed token: %#v", fact)
+		}
+	}
+	if remoteFacts == 0 {
+		t.Fatalf("remote snapshot did not identify GET-derived facts: %#v", snapshot.Facts)
+	}
+	for _, request := range requests.snapshot() {
+		if request.method != http.MethodGet {
+			t.Fatalf("remote verification emitted %s %s", request.method, request.uri)
 		}
 	}
 }

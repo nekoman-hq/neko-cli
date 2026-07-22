@@ -47,6 +47,7 @@ type VerificationFact struct {
 	Unit            string
 	Workflow        string
 	LimitationClass VerificationLimitation
+	Remote          bool
 }
 
 // VerificationRemoteSummary reports whether the Doctor's existing focused
@@ -97,6 +98,7 @@ func pipelineVerificationSnapshot(result *integrationDoctorResult) VerificationS
 			References: append([]string(nil), fact.References...),
 			Unit:       fact.Unit, Workflow: fact.Workflow,
 			LimitationClass: VerificationLimitation(fact.LimitationClass),
+			Remote:          fact.Remote,
 		})
 	}
 	return VerificationSnapshot{

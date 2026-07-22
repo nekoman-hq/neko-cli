@@ -19,7 +19,10 @@ func HandlePipeline(request plugin.Request) (*plugin.Response, error) {
 // HandlePipelineAt returns the configured pipeline and local runtime evidence
 // at an explicit root.
 func HandlePipelineAt(root workspace.RepositoryRoot, request plugin.Request) (*plugin.Response, error) {
-	verification := inspectLocalPipelineVerification(root, request)
+	verification, err := inspectPipelineVerification(root, request)
+	if err != nil {
+		return nil, err
+	}
 	runtime := inspectPipelineRuntime(root.Path())
 	return pipelineinspection.HandlePipelineRuntimeVerificationAt(
 		root, request, configuredReleaseLifecycleStages(), runtime, verification,

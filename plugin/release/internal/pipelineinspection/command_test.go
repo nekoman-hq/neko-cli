@@ -86,6 +86,33 @@ func TestPipelineCommandAcceptsCoreGlobalOutputFlag(t *testing.T) {
 	}
 }
 
+func TestPipelineCommandAcceptsExplicitRemoteVerificationFlag(t *testing.T) {
+	root := writePipelineRepository(t, []pipelineFixtureUnit{{ID: "service", Version: "1.2.3"}})
+	for _, value := range []bool{false, true} {
+		request := plugin.Request{
+			Command: pipelineCommandName,
+			Flags:   map[string]any{"verify-remote": value},
+		}
+		response := runPipelineAt(t, root, request)
+		if response.Status != "success" || RequestsRemoteVerification(request) != value {
+			t.Fatalf("verify-remote=%t response=%#v selected=%t", value, response, RequestsRemoteVerification(request))
+		}
+	}
+}
+
+func TestPipelineRemoteVerificationSelectorRejectsMalformedRequestsWithoutSelection(t *testing.T) {
+	for _, request := range []plugin.Request{
+		{Args: []string{"service"}, Flags: map[string]any{"verify-remote": true}},
+		{Flags: map[string]any{"unit": true, "verify-remote": true}},
+		{Flags: map[string]any{"unknown": true, "verify-remote": true}},
+		{Flags: map[string]any{"verify-remote": "true"}},
+	} {
+		if RequestsRemoteVerification(request) {
+			t.Fatalf("malformed request selected remote verification: %#v", request)
+		}
+	}
+}
+
 func TestPipelineCommandRejectsMalformedAndUnsupportedRequests(t *testing.T) {
 	root := writePipelineRepository(t, []pipelineFixtureUnit{{ID: "service", Version: "1.2.3"}})
 	for _, request := range []plugin.Request{
@@ -93,7 +120,7 @@ func TestPipelineCommandRejectsMalformedAndUnsupportedRequests(t *testing.T) {
 		{Command: pipelineCommandName, Flags: map[string]any{"unit": true}},
 		{Command: pipelineCommandName, Flags: map[string]any{"unit": " service"}},
 		{Command: pipelineCommandName, Flags: map[string]any{"all": true}},
-		{Command: pipelineCommandName, Flags: map[string]any{"verify-remote": true}},
+		{Command: pipelineCommandName, Flags: map[string]any{"verify-remote": "true"}},
 		{Command: pipelineCommandName, Flags: map[string]any{"journal": true}},
 	} {
 		assertPipelineFailure(t, runPipelineAt(t, root, request), "INVALID_PIPELINE_REQUEST")

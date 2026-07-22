@@ -87,6 +87,7 @@ type integrationDoctorVerification struct {
 	Unit            string                             `json:"unit,omitempty"`
 	Workflow        string                             `json:"workflow,omitempty"`
 	LimitationClass integrationDoctorLimitationClass   `json:"limitation_class,omitempty"`
+	Remote          bool                               `json:"-"`
 }
 
 type integrationDoctorUnit struct {

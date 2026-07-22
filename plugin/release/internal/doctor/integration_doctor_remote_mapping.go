@@ -16,6 +16,7 @@ func integrationDoctorRemoteFact(
 ) integrationDoctorVerification {
 	fact := newIntegrationDoctorVerification(category, state, evidence, workflow, unit, references...)
 	fact.Subject = subject
+	fact.Remote = true
 	switch state {
 	case integrationDoctorUnavailable, integrationDoctorUnauthorized, integrationDoctorRateLimited,
 		integrationDoctorUnsupported, integrationDoctorNotAttempted, integrationDoctorUnverifiable:

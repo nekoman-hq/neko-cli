@@ -18,6 +18,7 @@ const (
 type pipelineRequest struct {
 	RepositoryRoot string
 	UnitID         string
+	VerifyRemote   bool
 }
 
 // StageOwner identifies the component that owns a configured operation.
