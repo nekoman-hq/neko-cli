@@ -92,20 +92,62 @@ func TestPipelineVerificationFactIDsAreUniqueForNeutralIdentities(t *testing.T) 
 }
 
 func TestPipelineVerificationDoesNotChangeLifecycleStatus(t *testing.T) {
-	result := pipelinePresentationFixture()
-	want := result.Status
-	result.Verification = projectPipelineVerification(VerificationSnapshot{
-		RemoteStatus: "partial", RemoteRequested: true, RemoteAttempted: true,
-		Facts: []VerificationFact{{
-			Category: "remote_workflow_identity", Class: VerificationRemote, Status: VerificationFailed,
-			Subject: "owner/repository", Source: "doctor", Scope: "repository", References: []string{},
-		}},
-	})
-	if result.Status != want || result.Verification.Summary.Status != verificationSummaryFailed {
-		t.Fatalf("lifecycle=%q verification=%q, want independent %q/failed", result.Status, result.Verification.Summary.Status, want)
+	lifecycleStatuses := []pipelineStatus{
+		pipelineReady, pipelineActive, pipelineResumable, pipelineCompleted,
+		pipelineBlocked, pipelineUncertain, pipelineRejected, pipelineInvalid,
 	}
-	if result.Verification.Summary.RemoteStatus != "partial" || !result.Verification.Summary.RemoteRequested ||
-		!result.Verification.Summary.RemoteAttempted {
-		t.Fatalf("remote summary = %#v", result.Verification.Summary)
+	//nolint:govet // Scenario fields follow input then expected projection.
+	scenarios := []struct {
+		name     string
+		snapshot VerificationSnapshot
+		want     verificationSummaryStatus
+	}{
+		{name: "remote not requested", snapshot: VerificationSnapshot{
+			RemoteStatus: "not_requested",
+			Facts: []VerificationFact{{
+				Category: "remote_workflow_identity", Class: VerificationRemote, Status: VerificationNotChecked,
+				Subject: "workflow", Source: "doctor", Scope: "workflow",
+			}},
+		}, want: verificationSummaryNotChecked},
+		{name: "remote unavailable", snapshot: VerificationSnapshot{
+			RemoteStatus: "unavailable", RemoteRequested: true, RemoteAttempted: true,
+			Facts: []VerificationFact{{
+				Category: "remote_workflow_identity", Class: VerificationRemote, Status: VerificationUnavailable,
+				Subject: "repository", Source: "doctor", Scope: "repository",
+			}},
+		}, want: verificationSummaryUnresolved},
+		{name: "remote unauthorized", snapshot: VerificationSnapshot{
+			RemoteStatus: "partial", RemoteRequested: true, RemoteAttempted: true,
+			Facts: []VerificationFact{{
+				Category: "repository_variable_values", Class: VerificationRemote, Status: VerificationUnauthorized,
+				Subject: "VERSION", Source: "doctor", Scope: "workflow",
+			}},
+		}, want: verificationSummaryUnresolved},
+		{name: "partial verification", snapshot: VerificationSnapshot{
+			RemoteStatus: "partial", RemoteRequested: true, RemoteAttempted: true,
+			Facts: []VerificationFact{
+				{Category: "consumer_structure", Class: VerificationLocal, Status: VerificationVerified, Subject: "workflow", Source: "doctor", Scope: "workflow"},
+				{Category: "remote_workflow_identity", Class: VerificationRemote, Status: VerificationRateLimited, Subject: "workflow", Source: "doctor", Scope: "workflow"},
+			},
+		}, want: verificationSummaryPartial},
+		{name: "successful verification", snapshot: VerificationSnapshot{
+			RemoteStatus: "complete", RemoteRequested: true, RemoteAttempted: true,
+			Facts: []VerificationFact{{
+				Category: "remote_workflow_identity", Class: VerificationRemote, Status: VerificationVerified,
+				Subject: "workflow", Source: "doctor", Scope: "workflow",
+			}},
+		}, want: verificationSummaryVerified},
+	}
+
+	for _, lifecycle := range lifecycleStatuses {
+		for _, scenario := range scenarios {
+			t.Run(string(lifecycle)+"/"+scenario.name, func(t *testing.T) {
+				result := pipelineResult{Status: lifecycle}
+				result.Verification = projectPipelineVerification(scenario.snapshot)
+				if result.Status != lifecycle || result.Verification.Summary.Status != scenario.want {
+					t.Fatalf("lifecycle=%q verification=%q, want independent %q/%q", result.Status, result.Verification.Summary.Status, lifecycle, scenario.want)
+				}
+			})
+		}
 	}
 }
