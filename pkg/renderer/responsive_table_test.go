@@ -312,6 +312,87 @@ func TestResponsiveTableRowsAndDetailsCrossTransportButStayOutOfMachineOutput(t 
 	}
 }
 
+func TestResponsivePresentationSequenceGroupsFollowingTableAndKeepsMachineOutputIsolated(t *testing.T) {
+	response := &plugin.Response{
+		Status: "success",
+		Data:   map[string]any{"machine": "unchanged"},
+		PresentationProperties: &presentation.Properties{
+			Title: "Inspection", SectionTitle: "Summary",
+			Properties: []presentation.Property{{Label: "Lifecycle", Value: "Ready"}},
+		},
+		PresentationTable: &presentation.Table{
+			Title: "Checks",
+			Columns: []presentation.Column{
+				{Key: "check", Label: "Check", Essential: true},
+				{Key: "status", Label: "Status", Essential: true},
+			},
+			Rows: []map[string]any{{"check": "Consumer workflow", "status": "Verified"}},
+			Following: &presentation.Table{
+				Title: "Configured Pipeline", GroupKey: "group", Note: "Runtime was not observed.",
+				Columns: []presentation.Column{
+					{Key: "stage", Label: "Stage", Essential: true},
+					{Key: "runtime", Label: "Runtime", Essential: true},
+				},
+				Rows: []map[string]any{
+					{"group": "Local preparation", "stage": "Plan", "runtime": "—"},
+					{"group": "Handoff", "stage": "Push", "runtime": "—"},
+				},
+				Details: &presentation.Properties{
+					Title: "Limitations", Properties: []presentation.Property{{Label: "1", Value: "Read-only."}},
+				},
+			},
+		},
+	}
+
+	transport, err := json.Marshal(response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{`"section_title":"Summary"`, `"following"`, `"group_key":"group"`, `"note":"Runtime was not observed."`} {
+		if !bytes.Contains(transport, []byte(field)) {
+			t.Fatalf("transport omitted %s: %s", field, transport)
+		}
+	}
+	var transported plugin.Response
+	if err := json.Unmarshal(transport, &transported); err != nil {
+		t.Fatal(err)
+	}
+
+	known := ansi.Strip(renderResponsiveForTest(t, &transported, FormatTable, fixedOutputWidth{width: 80, available: true}))
+	assertOrderedText(t, known, "Inspection", "Summary", "Checks", "Configured Pipeline", "Local preparation", "Plan", "Handoff", "Push", "Runtime was not observed.", "Limitations")
+	assertRenderedLinesFit(t, known, 80)
+
+	unknown := ansi.Strip(renderResponsiveForTest(t, &transported, FormatTable, fixedOutputWidth{}))
+	if !strings.Contains(unknown, "Stage: Plan") || !strings.Contains(unknown, "Runtime: —") {
+		t.Fatalf("unknown-width sequence did not use deterministic vertical records:\n%s", unknown)
+	}
+
+	var publicJSON bytes.Buffer
+	if err := RenderTo(&transported, FormatJSON, &publicJSON); err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{"Inspection", "Configured Pipeline", "Local preparation", "Runtime was not observed", "human_table"} {
+		if strings.Contains(publicJSON.String(), forbidden) {
+			t.Fatalf("public JSON leaked presentation value %q: %s", forbidden, publicJSON.String())
+		}
+	}
+	if !strings.Contains(publicJSON.String(), `"machine": "unchanged"`) {
+		t.Fatalf("public JSON lost machine data: %s", publicJSON.String())
+	}
+}
+
+func assertOrderedText(t *testing.T, output string, values ...string) {
+	t.Helper()
+	position := -1
+	for _, value := range values {
+		next := strings.Index(output[position+1:], value)
+		if next < 0 {
+			t.Fatalf("output omitted ordered value %q after offset %d:\n%s", value, position, output)
+		}
+		position += next + 1
+	}
+}
+
 func TestResponsiveWidthProviderReceivesActualOutputWriter(t *testing.T) {
 	response := responsiveTestResponse()
 	provider := &recordingOutputWidth{width: 35, available: true}

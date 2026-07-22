@@ -1,11 +1,16 @@
 package release
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"reflect"
+	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/pkg/renderer"
 	"github.com/nekoman-hq/neko-cli/plugin/release/internal/pipelineinspection"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
 )
@@ -79,6 +84,108 @@ func TestPipelineStagesReflectConfiguredRepositoryConsumers(t *testing.T) {
 				t.Fatalf("materialized files = %d, want %d", got, test.wantMaterialized)
 			}
 		})
+	}
+}
+
+func TestPipelinePresentationUsesActualStageCountsGroupsAndResponsiveWidths(t *testing.T) {
+	root, err := workspace.ValidateRepositoryRoot("../../../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		unit       string
+		stageCount int
+		groups     []string
+	}{
+		{unit: "cli", stageCount: 22, groups: []string{"Local release preparation", "Git and provider handoff", "Consumer workflow"}},
+		{unit: "plugin-release", stageCount: 26, groups: []string{"Local release preparation", "Git and provider handoff", "Consumer workflow", "Plugin registry"}},
+	}
+	for _, test := range tests {
+		t.Run(test.unit, func(t *testing.T) {
+			response, err := HandlePipelineAt(root, plugin.Request{Command: "pipeline", Flags: map[string]any{"unit": test.unit}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			stageTable := response.PresentationTable.Following
+			if stageTable == nil || stageTable.Title != "Configured Pipeline" || len(stageTable.Rows) != test.stageCount {
+				t.Fatalf("stage presentation = %#v", stageTable)
+			}
+			groups := make([]string, 0, len(test.groups))
+			for index, row := range stageTable.Rows {
+				if row["number"] != index+1 {
+					t.Fatalf("row %d number = %#v", index, row["number"])
+				}
+				group, _ := row["group"].(string)
+				if len(groups) == 0 || groups[len(groups)-1] != group {
+					groups = append(groups, group)
+				}
+			}
+			if !reflect.DeepEqual(groups, test.groups) {
+				t.Fatalf("groups = %#v, want %#v", groups, test.groups)
+			}
+
+			normal := renderPipelineResponse(t, response, pipelineOutputWidth{width: 120, available: true})
+			for _, want := range append([]string{"Configured Pipeline", "Stage", "Runtime", "Owner"}, test.groups...) {
+				if !strings.Contains(normal, want) {
+					t.Errorf("normal output omitted %q:\n%s", want, normal)
+				}
+			}
+			for _, forbidden := range []string{"Record ", "Stage:", "not_observed", "consumer_structure", "mutation_required", "Source: doctor", "Runtime and Limitations"} {
+				if strings.Contains(normal, forbidden) {
+					t.Errorf("normal output exposed %q:\n%s", forbidden, normal)
+				}
+			}
+			if strings.Count(normal, "runtime stages have not been observed") != 1 {
+				t.Errorf("untouched runtime note count changed:\n%s", normal)
+			}
+			assertPipelineOutputWidth(t, normal, 120)
+
+			narrow := renderPipelineResponse(t, response, pipelineOutputWidth{width: 72, available: true})
+			for _, essential := range []string{"Check", "Status", "Scope", "Stage", "Runtime", "Owner"} {
+				if !strings.Contains(narrow, essential) {
+					t.Errorf("narrow output omitted essential field %q:\n%s", essential, narrow)
+				}
+			}
+			assertPipelineOutputWidth(t, narrow, 72)
+
+			firstUnknown := renderPipelineResponse(t, response, pipelineOutputWidth{})
+			secondUnknown := renderPipelineResponse(t, response, pipelineOutputWidth{})
+			if firstUnknown != secondUnknown || !strings.Contains(firstUnknown, "Stage:") || !strings.Contains(firstUnknown, "Runtime: —") {
+				t.Fatalf("unknown-width output is not deterministic vertical output:\n%s", firstUnknown)
+			}
+			if test.unit == "cli" && strings.Contains(normal, "Plugin registry") {
+				t.Fatalf("normal release unit exposed plugin-only group:\n%s", normal)
+			}
+		})
+	}
+}
+
+type pipelineOutputWidth struct {
+	width     int
+	available bool
+}
+
+func (width pipelineOutputWidth) Width(io.Writer) (int, bool) {
+	return width.width, width.available
+}
+
+func renderPipelineResponse(t *testing.T, response *plugin.Response, width renderer.OutputWidthProvider) string {
+	t.Helper()
+	var output bytes.Buffer
+	if err := renderer.RenderWithOptionsTo(response, renderer.RenderOptions{
+		Format: renderer.FormatTable, WidthProvider: width,
+	}, &output); err != nil {
+		t.Fatal(err)
+	}
+	return ansi.Strip(output.String())
+}
+
+func assertPipelineOutputWidth(t *testing.T, output string, width int) {
+	t.Helper()
+	for lineNumber, line := range strings.Split(strings.TrimSuffix(output, "\n"), "\n") {
+		if got := ansi.StringWidth(line); got > width {
+			t.Fatalf("line %d width = %d, want <= %d: %q", lineNumber+1, got, width, line)
+		}
 	}
 }
 
