@@ -77,7 +77,8 @@ func (handler pipelineCommandHandler) Handle(_ context.Context, request plugin.R
 	if failure != nil {
 		return mapPipelineFailure(failure), nil
 	}
-	result, failure := inspectConfiguredPipeline(typedRequest, handler.stages, handler.runtime, handler.verification)
+	verification := verificationSnapshotForRequest(handler.verification, typedRequest.VerifyRemote)
+	result, failure := inspectConfiguredPipeline(typedRequest, handler.stages, handler.runtime, verification)
 	if failure != nil {
 		return mapPipelineFailure(failure), nil
 	}
@@ -85,6 +86,20 @@ func (handler pipelineCommandHandler) Handle(_ context.Context, request plugin.R
 		return nil, fmt.Errorf("pipeline inspection did not produce a result")
 	}
 	return mapPipelineResult(result), nil
+}
+
+func verificationSnapshotForRequest(
+	snapshot VerificationSnapshot,
+	remoteRequested bool,
+) VerificationSnapshot {
+	snapshot.RemoteRequested = remoteRequested
+	if !remoteRequested {
+		snapshot.RemoteAttempted = false
+		snapshot.RemoteStatus = "not_requested"
+	} else if snapshot.RemoteStatus == "" || snapshot.RemoteStatus == "not_requested" {
+		snapshot.RemoteStatus = "unavailable"
+	}
+	return snapshot
 }
 
 // HandlePipeline resolves the local repository root and projects one Release

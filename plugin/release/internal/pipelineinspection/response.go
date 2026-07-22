@@ -189,6 +189,11 @@ func normalizePipelineArrays(result *pipelineResult) *pipelineResult {
 	if result.Verification.Facts == nil {
 		result.Verification.Facts = make([]VerificationFact, 0)
 	}
+	for index := range result.Verification.Facts {
+		if result.Verification.Facts[index].References == nil {
+			result.Verification.Facts[index].References = make([]string, 0)
+		}
+	}
 	return result
 }
 

@@ -94,6 +94,32 @@ func TestPipelineInspectionProductionPolicyHasNoRepositorySpecificExceptions(t *
 	}
 }
 
+func TestPipelineVerificationModelContainsFactsNotCapabilitiesOrMutableGlobals(t *testing.T) {
+	content, err := os.ReadFile("verification.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(content)
+	for _, forbidden := range []string{
+		"http.Client", "RoundTripper", "TokenResolver", "CommandHandler", "plugin.Response",
+		"DoctorDiagnostic", "DoctorReadiness", "Remediation", "func(context.Context",
+	} {
+		if strings.Contains(text, forbidden) {
+			t.Errorf("Pipeline verification model contains capability %q", forbidden)
+		}
+	}
+	parsed, err := parser.ParseFile(token.NewFileSet(), "verification.go", content, parser.SkipObjectResolution)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, declaration := range parsed.Decls {
+		generated, ok := declaration.(*ast.GenDecl)
+		if ok && generated.Tok == token.VAR {
+			t.Error("Pipeline verification model declares mutable package state")
+		}
+	}
+}
+
 func pipelineProductionFiles(t *testing.T) []*ast.File {
 	t.Helper()
 	paths := pipelineProductionPaths(t)

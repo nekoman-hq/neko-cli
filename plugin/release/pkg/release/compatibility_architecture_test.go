@@ -120,6 +120,53 @@ func TestPipelineRootFacadeContainsOnlyRuntimeInspectionComposition(t *testing.T
 	})
 }
 
+func TestPipelineVerificationRootContainsOnlyNeutralComposition(t *testing.T) {
+	const sourcePath = "pipeline_verification.go"
+	content, err := os.ReadFile(sourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(content)
+	for _, forbidden := range []string{
+		"net/http", "http.Client", "http.Method", "GITHUB_TOKEN", "os.Getenv",
+		"newIntegrationDoctorGitHubReadClient", "integrationDoctorCommandHandler",
+		"HandleDoctor", "plugin.Response", "presentation.",
+	} {
+		if strings.Contains(text, forbidden) {
+			t.Errorf("Pipeline verification composition contains prohibited boundary %q", forbidden)
+		}
+	}
+	parsed := parseCompatibilityArchitectureFile(t, sourcePath)
+	for _, declaration := range parsed.Decls {
+		generated, ok := declaration.(*ast.GenDecl)
+		if ok && generated.Tok == token.VAR {
+			t.Error("Pipeline verification composition declares mutable package state")
+		}
+	}
+	ast.Inspect(parsed, func(node ast.Node) bool {
+		call, ok := node.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		name := ""
+		switch function := call.Fun.(type) {
+		case *ast.Ident:
+			name = function.Name
+		case *ast.SelectorExpr:
+			name = function.Sel.Name
+		}
+		for _, forbidden := range []string{
+			"WriteFile", "Mkdir", "Create", "Remove", "Rename", "Push", "Dispatch",
+			"BeginPending", "ConfirmPhase", "Retry", "Transition",
+		} {
+			if name == forbidden {
+				t.Errorf("Pipeline verification composition calls prohibited capability %s", name)
+			}
+		}
+		return true
+	})
+}
+
 func TestExtractedCommandImplementationsRemainOutsideRootRelease(t *testing.T) {
 	entries, err := os.ReadDir(".")
 	if err != nil {

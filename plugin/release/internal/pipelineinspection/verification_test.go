@@ -28,6 +28,9 @@ func TestPipelineVerificationProjectionUsesStableNeutralFactIDs(t *testing.T) {
 	changedEvidence := snapshot
 	changedEvidence.Facts = append([]VerificationFact(nil), snapshot.Facts...)
 	changedEvidence.Facts[0].Evidence = "A different non-identity message."
+	changedEvidence.Facts[0].Status = VerificationVerified
+	changedEvidence.Facts[0].References = []string{"different-reference"}
+	changedEvidence.Facts[0].ID = "caller-controlled"
 	second := projectPipelineVerification(changedEvidence)
 
 	if len(first.Facts) != 2 || first.Facts[0].Category != "consumer_structure" {
@@ -42,6 +45,49 @@ func TestPipelineVerificationProjectionUsesStableNeutralFactIDs(t *testing.T) {
 	if first.Summary.Status != verificationSummaryPartial || first.Summary.Verified != 1 ||
 		first.Summary.NotChecked != 1 || first.Summary.Unresolved != 0 || !first.Summary.Partial {
 		t.Fatalf("summary = %#v", first.Summary)
+	}
+}
+
+func TestPipelineVerificationSummaryStatusContract(t *testing.T) {
+	tests := []struct {
+		name   string
+		status VerificationStatus
+		want   verificationSummaryStatus
+	}{
+		{name: "verified", status: VerificationVerified, want: verificationSummaryVerified},
+		{name: "failed", status: VerificationFailed, want: verificationSummaryFailed},
+		{name: "unavailable", status: VerificationUnavailable, want: verificationSummaryUnresolved},
+		{name: "unauthorized", status: VerificationUnauthorized, want: verificationSummaryUnresolved},
+		{name: "rate limited", status: VerificationRateLimited, want: verificationSummaryUnresolved},
+		{name: "unresolved", status: VerificationUnresolved, want: verificationSummaryUnresolved},
+		{name: "not checked", status: VerificationNotChecked, want: verificationSummaryNotChecked},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			projected := projectPipelineVerification(VerificationSnapshot{Facts: []VerificationFact{{
+				Category: "category", Class: VerificationLocal, Status: test.status,
+				Subject: "subject", Source: "doctor", Scope: "repository",
+			}}})
+			if projected.Summary.Status != test.want {
+				t.Fatalf("summary status = %q, want %q", projected.Summary.Status, test.want)
+			}
+		})
+	}
+}
+
+func TestPipelineVerificationFactIDsAreUniqueForNeutralIdentities(t *testing.T) {
+	facts := []VerificationFact{
+		{Category: "category", Subject: "subject-a", Source: "doctor", Scope: "repository"},
+		{Category: "category", Subject: "subject-b", Source: "doctor", Scope: "repository"},
+		{Category: "other-category", Subject: "subject-a", Source: "doctor", Scope: "repository"},
+	}
+	projected := projectPipelineVerification(VerificationSnapshot{Facts: facts})
+	seen := make(map[string]bool, len(projected.Facts))
+	for _, fact := range projected.Facts {
+		if fact.ID == "" || seen[fact.ID] {
+			t.Fatalf("fact ID is empty or duplicated: %#v", projected.Facts)
+		}
+		seen[fact.ID] = true
 	}
 }
 

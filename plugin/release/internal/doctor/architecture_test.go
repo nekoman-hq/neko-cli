@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
@@ -61,6 +62,71 @@ func TestDoctorRemoteTransportIsOneBoundedGETBoundary(t *testing.T) {
 	}
 	if !strings.Contains(string(inspection), "if request.VerifyRemote && useCase.remote != nil") {
 		t.Fatal("Doctor remote inspection is not guarded by the explicit request")
+	}
+}
+
+func TestPipelineVerificationReusesDoctorFactsWithoutSecondClientOrHandlerChaining(t *testing.T) {
+	httpOwners := make([]string, 0, 1)
+	for _, path := range doctorProductionFiles(t) {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		parsed, err := parser.ParseFile(token.NewFileSet(), path, content, parser.SkipObjectResolution)
+		if err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		for _, specification := range parsed.Imports {
+			importPath, err := strconv.Unquote(specification.Path.Value)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if importPath == "net/http" {
+				httpOwners = append(httpOwners, path)
+			}
+		}
+	}
+	if len(httpOwners) != 1 || httpOwners[0] != "integration_doctor_github_read_client.go" {
+		t.Fatalf("Doctor HTTP ownership = %v", httpOwners)
+	}
+
+	for _, path := range []string{"pipeline_verification.go", "pipeline_remote_verification.go"} {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(content)
+		for _, forbidden := range []string{
+			"integrationDoctorCommandHandler", "mapIntegrationDoctorResult", "HandleDoctor",
+			"plugin.Response", "presentation.Table", "http.Client", "http.MethodGet", "httpClient.Do",
+		} {
+			if strings.Contains(text, forbidden) {
+				t.Errorf("%s contains prohibited duplicate boundary %q", path, forbidden)
+			}
+		}
+		parsed, err := parser.ParseFile(token.NewFileSet(), path, content, parser.SkipObjectResolution)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, declaration := range parsed.Decls {
+			generated, ok := declaration.(*ast.GenDecl)
+			if ok && generated.Tok == token.VAR {
+				t.Errorf("%s declares mutable package state", path)
+			}
+		}
+	}
+
+	remote, err := os.ReadFile("pipeline_remote_verification.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{
+		"newIntegrationDoctorGitHubReadClient", "integrationDoctorGitHubRemoteInspector",
+		"environmentGitHubReadTokenResolver", "integrationDoctorInspectionUseCase",
+	} {
+		if !strings.Contains(string(remote), required) {
+			t.Errorf("remote Pipeline verification does not reuse %s", required)
+		}
 	}
 }
 

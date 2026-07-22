@@ -36,12 +36,31 @@ func TestPipelineDefaultIncludesLocalDoctorVerificationWithoutTokenExposure(t *t
 	if !ok || len(facts) == 0 {
 		t.Fatalf("local facts = %#v", verification["facts"])
 	}
+	seenIDs := make(map[string]bool, len(facts))
+	for _, value := range facts {
+		fact, ok := value.(map[string]any)
+		if !ok {
+			t.Fatalf("fact = %#v", value)
+		}
+		id, _ := fact["id"].(string)
+		if id == "" || seenIDs[id] {
+			t.Fatalf("local fact ID is empty or duplicated: %#v", fact)
+		}
+		seenIDs[id] = true
+		if fact["source"] != "doctor" {
+			t.Fatalf("fact source = %#v", fact)
+		}
+	}
 	encoded, err := json.Marshal(response.Data)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(encoded), "pipeline-local-verification-must-not-read-this-token") {
-		t.Fatalf("pipeline data exposed token: %s", encoded)
+	for _, forbidden := range []string{
+		root.Path(), "pipeline-local-verification-must-not-read-this-token", "Authorization", "Bearer", "\x1b[",
+	} {
+		if strings.Contains(string(encoded), forbidden) {
+			t.Fatalf("pipeline data exposed %q: %s", forbidden, encoded)
+		}
 	}
 }
 

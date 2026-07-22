@@ -2,6 +2,7 @@ package doctor
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"os"
 	"reflect"
@@ -87,9 +88,32 @@ func TestInspectRemoteVerificationReusesExistingGETOnlyDoctorBoundary(t *testing
 	if remoteFacts == 0 {
 		t.Fatalf("remote snapshot did not identify GET-derived facts: %#v", snapshot.Facts)
 	}
+	encoded, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{"pipeline-read-token", "Authorization", "Bearer", root.Path(), "\x1b["} {
+		if strings.Contains(string(encoded), forbidden) {
+			t.Fatalf("remote snapshot exposed %q: %s", forbidden, encoded)
+		}
+	}
 	for _, request := range requests.snapshot() {
 		if request.method != http.MethodGet {
 			t.Fatalf("remote verification emitted %s %s", request.method, request.uri)
 		}
+	}
+}
+
+func TestPipelineRemoteProvenanceDoesNotChangeDoctorJSON(t *testing.T) {
+	fact := integrationDoctorRemoteFact(
+		"owner/repository", "remote_workflow_identity", integrationDoctorVerified,
+		"verified", "", "", ".git/config",
+	)
+	encoded, err := json.Marshal(fact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), `"remote"`) || !strings.Contains(string(encoded), `"state":"verified"`) {
+		t.Fatalf("Doctor verification JSON changed: %s", encoded)
 	}
 }

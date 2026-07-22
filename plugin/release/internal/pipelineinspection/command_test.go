@@ -97,6 +97,17 @@ func TestPipelineCommandAcceptsExplicitRemoteVerificationFlag(t *testing.T) {
 		if response.Status != "success" || RequestsRemoteVerification(request) != value {
 			t.Fatalf("verify-remote=%t response=%#v selected=%t", value, response, RequestsRemoteVerification(request))
 		}
+		verification, ok := response.Data["verification"].(pipelineVerification)
+		if !ok || verification.Summary.RemoteRequested != value {
+			t.Fatalf("verify-remote=%t summary=%#v", value, response.Data["verification"])
+		}
+		wantStatus := "not_requested"
+		if value {
+			wantStatus = "unavailable"
+		}
+		if verification.Summary.RemoteStatus != wantStatus || verification.Summary.RemoteAttempted {
+			t.Fatalf("verify-remote=%t summary=%#v", value, verification.Summary)
+		}
 	}
 }
 

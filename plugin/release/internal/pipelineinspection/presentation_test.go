@@ -80,6 +80,28 @@ func TestPipelinePresentationShowsRuntimeRecoveryAndManualIntervention(t *testin
 	}
 }
 
+func TestPipelinePresentationKeepsLifecycleAndVerificationStatusesSeparate(t *testing.T) {
+	result := pipelinePresentationFixture()
+	result.Status = pipelineReady
+	result.Verification = projectPipelineVerification(VerificationSnapshot{
+		RemoteStatus: "complete", RemoteRequested: true, RemoteAttempted: true,
+		Facts: []VerificationFact{{
+			Category: "remote_workflow_identity", Class: VerificationRemote, Status: VerificationFailed,
+			Subject: "owner/repository", Evidence: "The exact remote fact is missing.",
+			Source: "doctor", Scope: "repository", References: []string{".git/config"},
+		}},
+	})
+	plain := ansi.Strip(renderPipelineForTest(t, mapPipelineResult(result), pipelineTestWidth{}, false))
+	for _, want := range []string{
+		"Status\n  ready", "Verification\n  failed", "Remote Verification\n  complete",
+		"Category: remote_workflow_identity", "Status: failed", "Subject: owner/repository",
+	} {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("separate verification presentation omitted %q:\n%s", want, plain)
+		}
+	}
+}
+
 func renderPipelineForTest(t *testing.T, response *plugin.Response, width renderer.OutputWidthProvider, color bool) string {
 	t.Helper()
 	var output bytes.Buffer

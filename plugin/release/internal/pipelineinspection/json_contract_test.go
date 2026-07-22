@@ -3,6 +3,7 @@ package pipelineinspection
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"slices"
 	"strings"
@@ -76,12 +77,17 @@ func TestPipelineJSONArraysNeverEncodeAsNull(t *testing.T) {
 	result.Dispatch.Observations = nil
 	result.Recovery.Reasons = nil
 	result.ManualIntervention.Reasons = nil
+	result.Verification.Facts = []VerificationFact{{
+		Category: "remote_workflow_identity", Class: VerificationRemote,
+		Status: VerificationNotChecked, Subject: "workflow", Source: "doctor", Scope: "workflow",
+		References: nil,
+	}}
 	response := mapPipelineResult(normalizePipelineArrays(result))
 	encoded, err := json.Marshal(response.Data)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, field := range []string{"materialized_files", "required_inputs", "consumer_operations", "stages", "limitations", "observations", "reasons"} {
+	for _, field := range []string{"materialized_files", "required_inputs", "consumer_operations", "stages", "limitations", "observations", "reasons", "facts", "references"} {
 		if strings.Contains(string(encoded), `"`+field+`":null`) {
 			t.Fatalf("%s encoded null: %s", field, encoded)
 		}
@@ -122,6 +128,57 @@ func TestPipelineRuntimeJSONSectionsHaveExactAdditiveKeys(t *testing.T) {
 		"head_contains_expected_commit", "index_contains_recovery_evidence", "index_state", "remote_freshness", "scope",
 		"tag_exists", "tag_matches_expected_commit", "worktree_contains_recovery_evidence", "worktree_state",
 	})
+}
+
+func TestPipelineVerificationJSONHasExactAppendOnlyKeysAndVocabulary(t *testing.T) {
+	result := pipelinePresentationFixture()
+	result.Verification = projectPipelineVerification(VerificationSnapshot{
+		RemoteStatus: "partial", RemoteRequested: true, RemoteAttempted: true,
+		Facts: []VerificationFact{{
+			Category: "consumer_structure", Class: VerificationLocal, Status: VerificationVerified,
+			Subject: "workflow", Evidence: "verified", Source: "doctor", Scope: "unit",
+			References: []string{"workflow"}, Unit: "service", Workflow: "workflow",
+		}},
+	})
+	encoded, err := json.Marshal(mapPipelineResult(result).Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var data map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &data); err != nil {
+		t.Fatal(err)
+	}
+	var verification struct {
+		Summary json.RawMessage   `json:"summary"`
+		Facts   []json.RawMessage `json:"facts"`
+	}
+	if err := json.Unmarshal(data["verification"], &verification); err != nil {
+		t.Fatal(err)
+	}
+	assertPipelineJSONKeys(t, verification.Summary, []string{
+		"failed", "local_status", "not_checked", "partial", "remote_attempted", "remote_requested",
+		"remote_status", "status", "unresolved", "verified",
+	})
+	if len(verification.Facts) != 1 {
+		t.Fatalf("verification facts = %d", len(verification.Facts))
+	}
+	assertPipelineJSONKeys(t, verification.Facts[0], []string{
+		"category", "class", "evidence", "id", "references", "scope", "source", "status", "subject", "unit", "workflow",
+	})
+
+	statuses := []VerificationStatus{
+		VerificationVerified, VerificationFailed, VerificationUnavailable, VerificationUnauthorized,
+		VerificationRateLimited, VerificationNotChecked, VerificationUnresolved,
+	}
+	if got, want := fmt.Sprint(statuses), "[verified failed unavailable unauthorized rate_limited not_checked unresolved]"; got != want {
+		t.Fatalf("verification statuses = %s, want %s", got, want)
+	}
+	classes := []VerificationClass{
+		VerificationLocal, VerificationRemote, VerificationRuntimeRequired, VerificationMutationRequired,
+	}
+	if got, want := fmt.Sprint(classes), "[local remote runtime_required mutation_required]"; got != want {
+		t.Fatalf("verification classes = %s, want %s", got, want)
+	}
 }
 
 func assertPipelineJSONKeys(t *testing.T, raw json.RawMessage, want []string) {
