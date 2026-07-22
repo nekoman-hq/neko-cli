@@ -68,19 +68,19 @@ func TestPipelineMapsEveryDoctorVerificationStateExactlyOnce(t *testing.T) {
 	tests := []struct {
 		state           doctor.VerificationState
 		class           pipelineinspection.VerificationClass
-		remoteRequested bool
 		want            pipelineinspection.VerificationStatus
+		remoteRequested bool
 	}{
-		{doctor.VerificationVerified, pipelineinspection.VerificationLocal, false, pipelineinspection.VerificationVerified},
-		{doctor.VerificationMissing, pipelineinspection.VerificationRemote, true, pipelineinspection.VerificationFailed},
-		{doctor.VerificationMismatch, pipelineinspection.VerificationRemote, true, pipelineinspection.VerificationFailed},
-		{doctor.VerificationUnavailable, pipelineinspection.VerificationRemote, true, pipelineinspection.VerificationUnavailable},
-		{doctor.VerificationUnauthorized, pipelineinspection.VerificationRemote, true, pipelineinspection.VerificationUnauthorized},
-		{doctor.VerificationRateLimited, pipelineinspection.VerificationRemote, true, pipelineinspection.VerificationRateLimited},
-		{doctor.VerificationNotAttempted, pipelineinspection.VerificationRemote, true, pipelineinspection.VerificationNotChecked},
-		{doctor.VerificationUnsupported, pipelineinspection.VerificationRemote, true, pipelineinspection.VerificationUnresolved},
-		{doctor.VerificationUnverifiable, pipelineinspection.VerificationRemote, false, pipelineinspection.VerificationNotChecked},
-		{doctor.VerificationUnverifiable, pipelineinspection.VerificationMutationRequired, false, pipelineinspection.VerificationUnresolved},
+		{doctor.VerificationVerified, pipelineinspection.VerificationLocal, pipelineinspection.VerificationVerified, false},
+		{doctor.VerificationMissing, pipelineinspection.VerificationRemote, pipelineinspection.VerificationFailed, true},
+		{doctor.VerificationMismatch, pipelineinspection.VerificationRemote, pipelineinspection.VerificationFailed, true},
+		{doctor.VerificationUnavailable, pipelineinspection.VerificationRemote, pipelineinspection.VerificationUnavailable, true},
+		{doctor.VerificationUnauthorized, pipelineinspection.VerificationRemote, pipelineinspection.VerificationUnauthorized, true},
+		{doctor.VerificationRateLimited, pipelineinspection.VerificationRemote, pipelineinspection.VerificationRateLimited, true},
+		{doctor.VerificationNotAttempted, pipelineinspection.VerificationRemote, pipelineinspection.VerificationNotChecked, true},
+		{doctor.VerificationUnsupported, pipelineinspection.VerificationRemote, pipelineinspection.VerificationUnresolved, true},
+		{doctor.VerificationUnverifiable, pipelineinspection.VerificationRemote, pipelineinspection.VerificationNotChecked, false},
+		{doctor.VerificationUnverifiable, pipelineinspection.VerificationMutationRequired, pipelineinspection.VerificationUnresolved, false},
 	}
 	for _, test := range tests {
 		if got := pipelineVerificationStatus(test.state, test.class, test.remoteRequested); got != test.want {

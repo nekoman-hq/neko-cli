@@ -52,8 +52,8 @@ type VerificationFact struct {
 // VerificationSnapshot is the read-only composition input. Remote fields
 // describe verification only and never alter lifecycle state.
 type VerificationSnapshot struct {
-	Facts           []VerificationFact
 	RemoteStatus    string
+	Facts           []VerificationFact
 	RemoteRequested bool
 	RemoteAttempted bool
 }
@@ -82,6 +82,7 @@ type pipelineVerificationSummary struct {
 	NotChecked      int                       `json:"not_checked"`
 }
 
+//nolint:govet // Field order keeps the summary before facts in schema-version-one JSON.
 type pipelineVerification struct {
 	Summary pipelineVerificationSummary `json:"summary"`
 	Facts   []VerificationFact          `json:"facts"`

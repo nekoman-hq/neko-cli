@@ -49,36 +49,6 @@ func pipelineVerificationRows(facts []VerificationFact) []map[string]any {
 	return rows
 }
 
-func pipelineStageRows(stages []LifecycleStage) []map[string]any {
-	rows := make([]map[string]any, 0, len(stages))
-	for _, stage := range stages {
-		row := map[string]any{
-			"id": stage.ID, "label": stage.Label,
-			"runtime_status":       stage.RuntimeStatus,
-			"configuration_status": stage.ConfigurationStatus,
-			"owner":                stage.Owner, "location": stage.Location,
-			"mutation": stage.Mutation, "source": stage.Source,
-		}
-		if stage.ConditionalReason != "" {
-			row["conditional_reason"] = stage.ConditionalReason
-		}
-		if stage.RuntimeEvidence != "" {
-			row["runtime_evidence"] = stage.RuntimeEvidence
-		}
-		if stage.RuntimeReason != "" {
-			row["runtime_reason"] = stage.RuntimeReason
-		}
-		if stage.RuntimeIdentity != "" {
-			row["runtime_identity"] = stage.RuntimeIdentity
-		}
-		if stage.RuntimeConfirmedAt != "" {
-			row["runtime_confirmed_at"] = stage.RuntimeConfirmedAt
-		}
-		rows = append(rows, row)
-	}
-	return rows
-}
-
 func pipelineResultDetails(result *pipelineResult) []presentation.Property {
 	details := make([]presentation.Property, 0, len(result.Stages)+len(result.Limitations)+6)
 	for index, stage := range result.Stages {
