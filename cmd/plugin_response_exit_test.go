@@ -1,10 +1,13 @@
 package cmd
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/pkg/renderer"
+	"github.com/spf13/cobra"
 )
 
 func TestPluginResponseExitIsOptInAndRetainsStructuredFailure(t *testing.T) {
@@ -30,3 +33,66 @@ func TestGitHubOutputFlagsAreRegisteredAsExplicitCoreOptions(t *testing.T) {
 		t.Fatalf("explicit GitHub output destination flag = %#v", flag)
 	}
 }
+
+func TestStructuredPluginErrorCharacterizationHasRendererAndCobraPaths(t *testing.T) {
+	response := &plugin.Response{
+		Status: "error",
+		Error: &plugin.ResponseError{
+			Code:    "PIPELINE_UNIT_INVALID",
+			Message: "Release unit is required. Available units: cli, plugin-release, plugin-ui",
+		},
+		ExitCode: 1,
+	}
+
+	for _, format := range []renderer.OutputFormat{renderer.FormatTable, renderer.FormatJSON} {
+		t.Run(string(format), func(t *testing.T) {
+			var rendered bytes.Buffer
+			var fallback bytes.Buffer
+			root := &cobra.Command{Use: "neko", SilenceUsage: true}
+			root.SetErr(&fallback)
+			root.AddCommand(&cobra.Command{
+				Use: "pipeline",
+				RunE: func(*cobra.Command, []string) error {
+					if err := renderer.RenderTo(response, format, &rendered); err != nil {
+						return err
+					}
+					return pluginResponseExitError(response)
+				},
+			})
+			root.SetArgs([]string{"pipeline"})
+
+			err := root.Execute()
+			if err == nil {
+				t.Fatal("structured plugin exit unexpectedly succeeded")
+			}
+			if got := strings.Count(rendered.String()+fallback.String(), response.Error.Code); got != 2 {
+				t.Fatalf("error code render paths = %d, want 2\nrendered:\n%s\nfallback:\n%s", got, rendered.String(), fallback.String())
+			}
+			if got := strings.Count(rendered.String()+fallback.String(), response.Error.Message); got != 2 {
+				t.Fatalf("error message render paths = %d, want 2\nrendered:\n%s\nfallback:\n%s", got, rendered.String(), fallback.String())
+			}
+		})
+	}
+}
+
+func TestUnrenderedCommandErrorCharacterizationUsesCobraFallback(t *testing.T) {
+	var output bytes.Buffer
+	root := &cobra.Command{Use: "neko", SilenceUsage: true}
+	root.SetErr(&output)
+	root.AddCommand(&cobra.Command{
+		Use:  "pipeline",
+		RunE: func(*cobra.Command, []string) error { return assertiveCommandError{} },
+	})
+	root.SetArgs([]string{"pipeline"})
+
+	if err := root.Execute(); err == nil {
+		t.Fatal("unrendered command error unexpectedly succeeded")
+	}
+	if got := strings.Count(output.String(), "unrendered command failure"); got != 1 {
+		t.Fatalf("Cobra fallback count = %d, want 1: %q", got, output.String())
+	}
+}
+
+type assertiveCommandError struct{}
+
+func (assertiveCommandError) Error() string { return "unrendered command failure" }
