@@ -12,8 +12,8 @@ import (
 var pipelineVerificationColumns = []presentation.Column{
 	{Key: "category", Label: "Category", Essential: true},
 	{Key: "status", Label: "Status", RoleKey: "status_role", Essential: true},
-	{Key: "subject", Label: "Subject", Essential: true},
-	{Key: "class", Label: "Class"},
+	{Key: "class", Label: "Class", Essential: true},
+	{Key: "subject", Label: "Subject"},
 	{Key: "source", Label: "Source"},
 }
 

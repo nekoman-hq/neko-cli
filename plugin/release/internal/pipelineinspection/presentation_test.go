@@ -22,7 +22,7 @@ func TestPipelinePresentationKeepsEssentialAndOptionalVerificationColumnsRespons
 
 	narrow := renderPipelineForTest(t, response, pipelineTestWidth{width: 30, available: true}, false)
 	narrowPlain := ansi.Strip(narrow)
-	for _, want := range []string{"Category", "Status", "Subject", "consumer", "verified", "Resolve release", "not_observed", "Limitations"} {
+	for _, want := range []string{"Category", "Status", "Class", "consumer", "verified", "local", "Resolve release", "not_observed", "Limitations"} {
 		if !strings.Contains(narrowPlain, want) {
 			t.Fatalf("narrow output omitted %q:\n%s", want, narrowPlain)
 		}
