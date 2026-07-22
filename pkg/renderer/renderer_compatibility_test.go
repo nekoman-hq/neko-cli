@@ -76,7 +76,7 @@ func TestLegacyDescribeRenderingRemainsStable(t *testing.T) {
 	}
 
 	var output bytes.Buffer
-	if err := RenderWithOptionsTo(response, RenderOptions{Format: FormatTable, Describe: true, ColorProvider: fixedColorProvider(true)}, &output); err != nil {
+	if err := RenderWithOptionsTo(response, RenderOptions{Format: FormatTable, Describe: true, Verbose: true, ColorProvider: fixedColorProvider(true)}, &output); err != nil {
 		t.Fatalf("RenderDescribeTo: %v", err)
 	}
 

@@ -25,7 +25,7 @@ import (
 func init() {
 	rootCmd.PersistentFlags().StringVar(&outputFormat, "output", "table", "Output format (table, json, wide, github) -- only for plugin responses")
 	rootCmd.PersistentFlags().StringVar(&githubOutputFile, "github-output-file", "", "Explicit GitHub Actions command-file destination -- only for --output github")
-	rootCmd.PersistentFlags().BoolVar(&describe, "describe", false, "Include execution logs and metadata in output -- only for plugin responses")
+	rootCmd.PersistentFlags().BoolVar(&describe, "describe", false, "Include structured details and metadata in output -- only for plugin responses")
 
 	// Detect plugin directory
 	home, _ := os.UserHomeDir()
@@ -374,6 +374,7 @@ func executePlugin(pluginName string, cmd *cobra.Command, args []string) error {
 		GitHubOutputFile: githubOutputFile,
 		Format:           renderer.OutputFormat(outputFormat),
 		Describe:         describe,
+		Verbose:          verbose,
 	}
 	if err := renderer.RenderWithOptions(resp, opts); err != nil {
 		return err

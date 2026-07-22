@@ -13,12 +13,15 @@ import (
 func TestPipelineDescribeTransportCharacterization(t *testing.T) {
 	response := transportedPipelineResponse(t, mapPipelineResult(pipelinePresentationFixture()))
 	response.Logs = []plugin.LogEntry{{Timestamp: "10:11:12", Level: "verbose", Message: "V$ inspected pipeline"}}
+	for table := response.PresentationTable; table != nil; table = table.Following {
+		table.DescribeOnly = false
+	}
 
 	defaultOutput := renderPipelineTransport(t, response, renderer.RenderOptions{
 		Format: renderer.FormatTable, WidthProvider: pipelineTestWidth{width: 120, available: true},
 	})
 	describeOutput := renderPipelineTransport(t, response, renderer.RenderOptions{
-		Format: renderer.FormatTable, Describe: true,
+		Format: renderer.FormatTable, Describe: true, Verbose: true,
 		WidthProvider: pipelineTestWidth{width: 120, available: true},
 	})
 	for _, section := range []string{"Summary", "Verification Facts", "Configured Pipeline", "Limitations"} {

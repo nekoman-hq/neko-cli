@@ -119,7 +119,7 @@ func renderPipelineForTest(t *testing.T, response *plugin.Response, width render
 	t.Helper()
 	var output bytes.Buffer
 	if err := renderer.RenderWithOptionsTo(response, renderer.RenderOptions{
-		Format: renderer.FormatTable, WidthProvider: width, ColorProvider: pipelineTestColor(color),
+		Format: renderer.FormatTable, Describe: true, WidthProvider: width, ColorProvider: pipelineTestColor(color),
 	}, &output); err != nil {
 		t.Fatalf("RenderWithOptionsTo: %v", err)
 	}

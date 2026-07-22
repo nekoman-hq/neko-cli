@@ -173,7 +173,7 @@ func renderPipelineResponse(t *testing.T, response *plugin.Response, width rende
 	t.Helper()
 	var output bytes.Buffer
 	if err := renderer.RenderWithOptionsTo(response, renderer.RenderOptions{
-		Format: renderer.FormatTable, WidthProvider: width,
+		Format: renderer.FormatTable, Describe: true, WidthProvider: width,
 	}, &output); err != nil {
 		t.Fatal(err)
 	}

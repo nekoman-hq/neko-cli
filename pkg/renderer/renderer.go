@@ -36,7 +36,8 @@ type RenderOptions struct {
 	ColorProvider    ColorProvider       // Optional test/composition seam for interactive presentation color
 	GitHubOutputFile string              // Explicit command-file destination for GitHub output
 	Format           OutputFormat        // The output format to use
-	Describe         bool                // When true, include logs and metadata in the output
+	Describe         bool                // When true, include structured details and metadata
+	Verbose          bool                // When true, include captured execution/debug logs
 }
 
 // RenderWithOptions is the unified render function that respects both format and describe options.
@@ -63,11 +64,17 @@ func RenderWithOptionsTo(resp *plugin.Response, opts RenderOptions, w io.Writer)
 		}
 		return renderGitHubOutput(resp, opts.GitHubOutputFile)
 	}
-	if opts.Describe {
-		return renderDescribeWithOptionsTo(resp, opts, w)
+	if opts.Format == FormatJSON {
+		return renderJSON(resp, w)
 	}
 	if resp.RendererHint == "raw-json" {
 		return renderRawJSON(resp, w)
+	}
+	if opts.Describe {
+		return renderDescribeWithOptionsTo(resp, opts, w)
+	}
+	if opts.Verbose {
+		return renderVerboseWithOptionsTo(resp, opts, w)
 	}
 	return renderToWithOptions(resp, opts, w)
 }
@@ -102,11 +109,11 @@ func renderToWithOptions(resp *plugin.Response, opts RenderOptions, w io.Writer)
 	case FormatJSON:
 		return renderJSON(resp, w)
 	case FormatWide:
-		return renderTableWithWidth(resp, w, true, outputWidthProvider(opts.WidthProvider), newPresentationStyler(opts.ColorProvider, w))
+		return renderTableWithWidth(resp, w, true, false, outputWidthProvider(opts.WidthProvider), newPresentationStyler(opts.ColorProvider, w))
 	case FormatTable:
-		return renderTableWithWidth(resp, w, false, outputWidthProvider(opts.WidthProvider), newPresentationStyler(opts.ColorProvider, w))
+		return renderTableWithWidth(resp, w, false, false, outputWidthProvider(opts.WidthProvider), newPresentationStyler(opts.ColorProvider, w))
 	default:
-		return renderTableWithWidth(resp, w, false, outputWidthProvider(opts.WidthProvider), newPresentationStyler(opts.ColorProvider, w))
+		return renderTableWithWidth(resp, w, false, false, outputWidthProvider(opts.WidthProvider), newPresentationStyler(opts.ColorProvider, w))
 	}
 }
 
@@ -133,7 +140,7 @@ func RenderDescribe(resp *plugin.Response, format OutputFormat) error {
 //
 // Returns an error if rendering fails.
 func RenderDescribeTo(resp *plugin.Response, format OutputFormat, w io.Writer) error {
-	return renderDescribeWithOptionsTo(resp, RenderOptions{Format: format}, w)
+	return renderDescribeWithOptionsTo(resp, RenderOptions{Format: format, Describe: true, Verbose: true}, w)
 }
 
 func renderDescribeWithOptionsTo(resp *plugin.Response, opts RenderOptions, w io.Writer) error {
@@ -142,12 +149,14 @@ func renderDescribeWithOptionsTo(resp *plugin.Response, opts RenderOptions, w io
 		return renderJSON(resp, w)
 	}
 	styler := newPresentationStyler(opts.ColorProvider, w)
+	widthProvider := outputWidthProvider(opts.WidthProvider)
+	outputWidth, widthAvailable := widthProvider.Width(w)
 
 	// Render metadata section
-	renderMetadataSection(resp, w, styler)
+	renderMetadataSection(resp, w, styler, outputWidth, widthAvailable)
 
 	// Render execution logs
-	if len(resp.Logs) > 0 {
+	if opts.Verbose && len(resp.Logs) > 0 {
 		renderLogsSection(resp.Logs, w, styler)
 	}
 
@@ -155,17 +164,52 @@ func renderDescribeWithOptionsTo(resp *plugin.Response, opts RenderOptions, w io
 	return renderOutputSection(resp, opts, w, styler)
 }
 
+func renderVerboseWithOptionsTo(resp *plugin.Response, opts RenderOptions, w io.Writer) error {
+	styler := newPresentationStyler(opts.ColorProvider, w)
+	if len(resp.Logs) > 0 {
+		renderLogsSection(resp.Logs, w, styler)
+	}
+	wide := opts.Format == FormatWide
+	return renderTableWithWidth(resp, w, wide, false, outputWidthProvider(opts.WidthProvider), styler)
+}
+
 // renderMetadataSection outputs the command metadata section with plugin info,
 // version, timestamp, and status.
-func renderMetadataSection(resp *plugin.Response, w io.Writer, styler presentationStyler) {
+func renderMetadataSection(
+	resp *plugin.Response,
+	w io.Writer,
+	styler presentationStyler,
+	outputWidth int,
+	widthAvailable bool,
+) {
 	printSectionHeader(w, "Command Metadata", presentation.StyleInfo, styler)
 
-	_, _ = fmt.Fprintf(w, "%s     %s\n", styler.semantic(presentation.StyleMuted, false, "Plugin:"), resp.Metadata.Plugin)
-	_, _ = fmt.Fprintf(w, "%s    %s\n", styler.semantic(presentation.StyleMuted, false, "Command:"), resp.Metadata.Command)
-	_, _ = fmt.Fprintf(w, "%s    %s\n", styler.semantic(presentation.StyleMuted, false, "Version:"), resp.Metadata.Version)
-	_, _ = fmt.Fprintf(w, "%s  %s\n", styler.semantic(presentation.StyleMuted, false, "Timestamp:"), resp.Metadata.Timestamp.Format("2006-01-02 15:04:05"))
-	_, _ = fmt.Fprintf(w, "%s     %s\n", styler.semantic(presentation.StyleMuted, false, "Status:"), colorizeStatus(styler, resp.Status))
+	renderMetadataValue(w, "Plugin:", "     ", resp.Metadata.Plugin, styler, outputWidth, widthAvailable)
+	renderMetadataValue(w, "Command:", "    ", resp.Metadata.Command, styler, outputWidth, widthAvailable)
+	renderMetadataValue(w, "Version:", "    ", resp.Metadata.Version, styler, outputWidth, widthAvailable)
+	renderMetadataValue(w, "Timestamp:", "  ", resp.Metadata.Timestamp.Format("2006-01-02 15:04:05"), styler, outputWidth, widthAvailable)
+	renderMetadataValue(w, "Status:", "     ", colorizeStatus(styler, resp.Status), styler, outputWidth, widthAvailable)
 	_, _ = fmt.Fprintln(w)
+}
+
+func renderMetadataValue(
+	w io.Writer,
+	label string,
+	spacing string,
+	value string,
+	styler presentationStyler,
+	outputWidth int,
+	widthAvailable bool,
+) {
+	styledLabel := styler.semantic(presentation.StyleMuted, false, label)
+	if !widthAvailable || outputWidth <= 0 || visibleWidth(label+spacing+value) <= outputWidth {
+		_, _ = fmt.Fprintf(w, "%s%s%s\n", styledLabel, spacing, value)
+		return
+	}
+	_, _ = fmt.Fprintln(w, styledLabel)
+	for _, line := range wrapVisibleLines(value, outputWidth-2) {
+		_, _ = fmt.Fprintln(w, "  "+line)
+	}
 }
 
 // renderLogsSection outputs the execution logs section with timestamps,
@@ -194,7 +238,7 @@ func renderOutputSection(resp *plugin.Response, opts RenderOptions, w io.Writer,
 	printSectionHeader(w, "Output", presentation.StyleSuccess, styler)
 
 	wide := opts.Format == FormatWide
-	return renderTableWithWidth(resp, w, wide, outputWidthProvider(opts.WidthProvider), styler)
+	return renderTableWithWidth(resp, w, wide, true, outputWidthProvider(opts.WidthProvider), styler)
 }
 
 // colorizeStatus adds color and icons to status strings.
@@ -288,6 +332,7 @@ func renderTableWithWidth(
 	resp *plugin.Response,
 	w io.Writer,
 	wide bool,
+	describe bool,
 	widthProvider OutputWidthProvider,
 	styler presentationStyler,
 ) error {
@@ -302,7 +347,7 @@ func renderTableWithWidth(
 	if rendered, err := renderTextPresentation(resp, w); rendered || err != nil {
 		return err
 	}
-	if rendered, err := renderResponsivePresentationSequence(resp, w, wide, widthProvider, styler); rendered || err != nil {
+	if rendered, err := renderResponsivePresentationSequence(resp, w, wide, describe, widthProvider, styler); rendered || err != nil {
 		return err
 	}
 	if resp.PresentationProperties == nil && resp.PresentationTable != nil {
@@ -351,11 +396,12 @@ func renderResponsivePresentationSequence(
 	response *plugin.Response,
 	writer io.Writer,
 	wide bool,
+	describe bool,
 	widthProvider OutputWidthProvider,
 	styler presentationStyler,
 ) (bool, error) {
 	table := response.PresentationTable
-	if table == nil || (response.PresentationProperties == nil && table.Following == nil && table.Details == nil) {
+	if table == nil || (response.PresentationProperties == nil && table.Following == nil && table.Details == nil && !table.DescribeOnly) {
 		return false, nil
 	}
 	renderedAny := false
@@ -372,6 +418,10 @@ func renderResponsivePresentationSequence(
 			return true, fmt.Errorf("table presentation declaration contains a cycle")
 		}
 		seen[table] = struct{}{}
+		if table.DescribeOnly && !describe {
+			table = table.Following
+			continue
+		}
 		if renderedAny {
 			_, _ = fmt.Fprintln(writer)
 		}

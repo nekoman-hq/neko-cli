@@ -35,7 +35,7 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
+	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Include execution and debug logs in plugin output")
 
 	// Load plugins during initialization
 	if err := InitializePlugins(); err != nil {

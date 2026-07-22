@@ -35,11 +35,19 @@ var pipelineStageColumns = []presentation.Column{
 }
 
 func pipelineHumanPresentation(result *pipelineResult) (*presentation.Properties, *presentation.Table) {
-	stages := pipelineStagePresentation(result)
-	return pipelineSummaryProperties(result), &presentation.Table{
+	verification := &presentation.Table{
 		Title: "Verification Facts", Columns: append([]presentation.Column(nil), pipelineVerificationColumns...),
-		Rows: pipelineVerificationRows(result.Verification.Facts), Following: stages,
+		Rows: pipelineVerificationRows(result.Verification.Facts), DescribeOnly: true,
 	}
+	return pipelineSummaryProperties(result), chainPipelineTables(
+		verification,
+		pipelineStagePresentation(result),
+		pipelineExecutionEvidencePresentation(result),
+		pipelineDispatchEvidencePresentation(result),
+		pipelineLocalGitEvidencePresentation(result),
+		pipelineRecoveryEvidencePresentation(result),
+		pipelineLimitationPresentation(result.Limitations),
+	)
 }
 
 func pipelineSummaryProperties(result *pipelineResult) *presentation.Properties {
@@ -87,7 +95,7 @@ func pipelineStagePresentation(result *pipelineResult) *presentation.Table {
 	table := &presentation.Table{
 		Title: "Configured Pipeline", Columns: append([]presentation.Column(nil), pipelineStageColumns...),
 		Rows: pipelineStageRows(result.Stages), GroupKey: "group",
-		Details: pipelineLimitationPresentation(result.Limitations),
+		DescribeOnly: true,
 	}
 	if allPipelineStagesUnobserved(result.Stages) {
 		switch {
@@ -155,8 +163,8 @@ func pipelineConsumerStage(stage LifecycleStage) bool {
 		(stage.Source != "" && !strings.HasPrefix(stage.Source, "pkg/release/"))
 }
 
-func pipelineLimitationPresentation(limitations []string) *presentation.Properties {
-	properties := make([]presentation.Property, 0, len(limitations))
+func pipelineLimitationPresentation(limitations []string) *presentation.Table {
+	rows := make([]map[string]any, 0, len(limitations))
 	seen := make(map[string]struct{}, len(limitations))
 	for _, limitation := range limitations {
 		value := humanPipelineLimitation(limitation)
@@ -167,14 +175,20 @@ func pipelineLimitationPresentation(limitations []string) *presentation.Properti
 			continue
 		}
 		seen[value] = struct{}{}
-		properties = append(properties, presentation.Property{
-			Label: strconv.Itoa(len(properties) + 1), Value: value, Role: presentation.StyleMuted,
+		rows = append(rows, map[string]any{
+			"number": strconv.Itoa(len(rows) + 1), "limitation": value,
 		})
 	}
-	if len(properties) == 0 {
+	if len(rows) == 0 {
 		return nil
 	}
-	return &presentation.Properties{Title: "Limitations", Properties: properties}
+	return &presentation.Table{
+		Title: "Limitations", DescribeOnly: true, Rows: rows,
+		Columns: []presentation.Column{
+			{Key: "number", Label: "#"},
+			{Key: "limitation", Label: "Limitation", Essential: true},
+		},
+	}
 }
 
 func humanPipelineLimitation(value string) string {
