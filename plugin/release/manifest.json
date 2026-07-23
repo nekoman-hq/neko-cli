@@ -236,7 +236,7 @@
     },
     {
       "name": "patch",
-      "description": "Create a patch release (x.y.Z)",
+      "description": "Create a patch release (x.y.Z); dry-run keeps the release preview, global --describe adds complete safe lifecycle facts, and global --verbose adds chronological execution phases",
       "outputs": [
         "text",
         "json"
@@ -259,7 +259,7 @@
     },
     {
       "name": "minor",
-      "description": "Create a minor release (x.Y.0)",
+      "description": "Create a minor release (x.Y.0); dry-run keeps the release preview, global --describe adds complete safe lifecycle facts, and global --verbose adds chronological execution phases",
       "outputs": [
         "text",
         "json"
@@ -282,7 +282,7 @@
     },
     {
       "name": "major",
-      "description": "Create a major release (X.0.0)",
+      "description": "Create a major release (X.0.0); dry-run keeps the release preview, global --describe adds complete safe lifecycle facts, and global --verbose adds chronological execution phases",
       "outputs": [
         "text",
         "json"
@@ -444,7 +444,7 @@
     },
     {
       "name": "resume",
-      "description": "Resumes a previously journaled V2 GitHub Actions release. It never calculates a new version and does not automatically retry uncertain push or dispatch outcomes.",
+      "description": "Resumes a previously journaled V2 GitHub Actions release; default output preserves the recovery decision, global --describe adds safe journal/Git/recovery facts, and global --verbose adds chronological continuation phases. It never calculates a new version or automatically retries uncertain push or dispatch outcomes.",
       "outputs": [
         "table",
         "json"

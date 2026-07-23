@@ -523,7 +523,28 @@ Production publishing uses dedicated workflows and GoReleaser configs:
 | `plugin-release` | `.github/workflows/release-plugin-release.yml` | `.goreleaser.plugin-release.yaml` |
 | `plugin-ui` | `.github/workflows/release-plugin-ui.yml` | `.goreleaser.plugin-ui.yaml` |
 
-Dry-run does not require `GITHUB_TOKEN`. Structured release output shows the planned materialized files, known release files, workflow, dispatch inputs, and, for real handoffs, execution/dispatch journal paths, release commit SHA, dispatch state, run URL when resolvable, and recovery guidance. Global `--describe` adds declared structured details and response metadata; global `--verbose` separately adds execution/debug logs. Unknown dispatch or ambiguous push outcomes must not be retried blindly; inspect with `neko release resume --unit <unit> --dry-run`.
+Dry-run does not require `GITHUB_TOKEN`. Patch, Minor, and Major share one
+Release-owned presentation vocabulary. Default dry-run keeps release identity,
+previous/planned version and tag, executor/delivery, ordered principal
+operations, primary materialized files, the no-mutation boundary, blockers,
+and the preview result. Ordinary completion is concise: change, unit,
+previous/resulting version, tag, executor/delivery, lifecycle/handoff result,
+and next action.
+
+Global `--describe` adds `Source and Configuration`, declared and materialized
+release files, complete operations, `Execution Evidence`, `Git and Handoff`,
+ownership, safe journal/handoff facts, and `Limitations`. Global `--verbose`
+independently adds chronological phases from the authoritative V1/V2 path. It
+does not duplicate policy or structured detail. Human paths are
+repository-relative or safe labels; captured logs omit repository roots, raw
+Git output, tokens, authorization values, config/journal payloads, and raw
+provider bodies.
+
+The existing machine rows and V1/V2 outcome variants remain unchanged across
+default, describe, verbose, combined, redirected, `NO_COLOR`, and JSON modes.
+Unknown dispatch or ambiguous push outcomes remain actionable by default and
+must not be retried blindly; inspect with
+`neko release resume --unit <unit> --dry-run`.
 
 ---
 

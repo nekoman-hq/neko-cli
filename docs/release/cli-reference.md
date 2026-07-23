@@ -120,6 +120,48 @@ neko release plugin-index --output /tmp/plugin-index.json
 
 For `plugin-index --output`, relative paths are resolved from the repository root. Explicit absolute paths remain supported for CI or temporary artifacts. Repository-contained output is blocked from overwriting release config/state, recovery evidence, Git internals, or plugin manifest inputs.
 
+### Patch, Minor, Major, and Resume presentation
+
+`patch`, `minor`, and `major` use one Release-owned human presentation
+contract. Their established `data.items`, outcome variants, status/error
+envelopes, and exit behavior remain the machine contract.
+
+| Mode | Patch / Minor / Major | Resume |
+| --- | --- | --- |
+| default success | release change, unit, previous/resulting version, tag, executor/delivery, lifecycle and handoff result, next action | execution identity, journal phase, pending action, recovery status, Resume eligibility, retry safety, next action |
+| default dry-run | the same release identity plus ordered principal operations, primary materialized files, explicit mutation boundary, blockers, and preview status | the recovery decision plus planned continuation, no-write boundary, refusal or eligibility, retry safety, and guidance |
+| `--describe` | `Release Summary`, `Operations`, `Materialized Files`, `Source and Configuration`, declared release files, `Execution Evidence`, `Git and Handoff`, and `Limitations` | `Resume Summary`, `Planned Continuation`, `Recovery Journal`, `Local Git Evidence`, `Recovery Assessment`, `Continuation and Handoff`, and `Limitations` |
+| `--verbose` | chronological source/unit, preflight, version/tag, materialization, Git, push, dispatch, handoff, and completion phases already owned by the selected V1/V2 path | chronological discovery, exact journal selection, local recovery evaluation, policy resolution, config/Git validation, selected continuation, push/dispatch/handoff, completion, or refusal phases |
+| `--output json` | unchanged ReleaseCommandOutcome-derived domain rows; presentation declarations are excluded | unchanged ResumeCommandOutcome-derived domain rows or error envelope; presentation declarations are excluded |
+
+Default failures keep the typed code and exact actionable reason visible.
+Rejected or uncertain operations, ambiguous pending pushes, invalid local
+evidence, conflicts, and required manual intervention are never hidden behind
+`--describe`. Presentation-only failure text replaces absolute local paths
+with a repository-local label; the established machine error message remains
+unchanged.
+
+Describe and verbose are independent. Describe performs no extra planning,
+journal selection, recovery resolution, Git query, token lookup, or provider
+call. Verbose reports the existing orchestration and does not select an
+operation. Patch/Minor/Major dry-run invokes no release tool and creates no
+journal, commit, tag, push, or dispatch. Resume dry-run stops after the
+authoritative local assessment and performs no continuation.
+
+Human file references are repository-relative or safe artifact labels. Logs
+never print repository roots, developer paths, token values, authorization
+headers, full config/journal payloads, raw provider bodies, or raw Git command
+output. Narrow output retains identity, action/status, pending action, and
+reason; unknown width uses deterministic vertical records. Redirected and
+`NO_COLOR` output is ANSI-free.
+
+V1 retains its real compatibility differences: one virtual `default` unit,
+local delivery, `.release.neko.json`, and the configured legacy release tool.
+Its established outcome does not retain V2 journal/push/dispatch evidence, so
+describe states that outcome boundary instead of inventing evidence. V2 keeps
+Neko-owned state/materialization/commit/tag/push and the configured GitHub
+Actions handoff. No presentation helper owns lifecycle or recovery policy.
+
 ### Validate presentation
 
 `neko release validate` validates the complete repository release source. In V2 this
@@ -760,7 +802,28 @@ no release files or journals, and mutates no Git worktree, index, or ref.
 ```bash
 neko release resume --unit api
 neko release resume --unit api --dry-run
+neko release resume --unit api --dry-run --describe
+neko release resume --unit api --dry-run --verbose
+neko release resume --unit api --dry-run --describe --verbose
+neko release resume --unit api --dry-run --output json
 ```
+
+Default output is a recovery decision, not a generic execution result. It
+keeps the exact refusal or recovery status, journal phase, pending action,
+eligibility, retry safety, manual guidance, and next safe action visible.
+Dry-run adds the planned continuation and explicit no-write boundary.
+`--describe` adds the safe journal identity/path, retained release identity,
+local Git assessment boundary, complete recovery decision, continuation and
+handoff facts, and limitations. `--verbose` follows actual discovery,
+selection, assessment, validation, continuation, and refusal/completion order.
+
+The presentation mapper does not infer a continuation. `resolveResumeRecovery`
+and `resolveResumeDispatch` remain the only policy owners, and the existing
+selectors choose exactly one named operation. Missing/malformed/conflicting
+journals, multiple unresolved executions, mismatched commit/tag evidence,
+ambiguous pending pushes, rejected/unknown dispatch, completed handoff, and
+manual-intervention outcomes retain their established error, status, retry,
+JSON, and exit semantics.
 
 ## Unit Flag
 

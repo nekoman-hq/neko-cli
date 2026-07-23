@@ -70,9 +70,19 @@ command handler to reuse policy.
 
 - Stable command success/error codes, metadata, item ordering, JSON fields, raw
   JSON, widths, TTY color, and `NO_COLOR` behavior remain characterized.
+- Patch, Minor, and Major share one transport-only lifecycle presentation;
+  Resume owns a separate transport-only recovery presentation. Neither mapper
+  reads configuration, journals, Git, tokens, remotes, or provider state.
+- Global `--describe` changes human structure only. Global `--verbose` adds
+  chronological captured phases only. Both preserve lifecycle and recovery
+  selection, dry-run effects, outcome rows, error envelopes, and exit behavior.
 - Explicit-root handlers continue to isolate two repositories in one process;
   production routing does not change cwd.
 - Tokens remain typed/redacted and are resolved only at established mutation or
   explicit remote-verification boundaries.
 - Dispatch response bodies remain sanitized; no external network call is needed
   by the test suite.
+- Human lifecycle output uses repository-relative paths or safe artifact labels.
+  Verbose Git diagnostics do not print repository roots, absolute command
+  paths, raw command output, tokens, authorization headers, or full
+  configuration/journal payloads.

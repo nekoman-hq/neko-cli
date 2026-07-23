@@ -457,11 +457,12 @@ The public command contract is duplicated between `manifest.json` and the switch
 #### V2 release progress reporting
 
 - Boundary: active V2 start/planning, runner/use-case, named operations, Git progress, and dispatch progress report `ReleaseProgressEvent` values through `ReleaseProgress`. The interface is synchronous and has no error return.
-- Terminal ownership: `release_progress_terminal.go` is the only active V2 progress renderer. It wraps the established plugin stderr logger, preserves human message text/order, and preserves verbose suppression through `log.Verbose`.
+- Terminal ownership: `release_progress_terminal.go` is the only active V2 progress renderer. It wraps the established plugin stderr logger, preserves lifecycle order and verbose suppression through `log.Verbose`, and projects repository/config/state/snapshot/journal paths to repository-relative or safe artifact labels.
 - Diagnostics ownership: verbose Git command diagnostics are separate from release progress through `gitReleaseDiagnostics` and `git_release_diagnostics_terminal.go`.
 - Suppression: absent reporters are converted to an explicit no-op; application and operation code does not branch on JSON, quiet, interactive, or renderer configuration.
 - Machine output: final `plugin.Response` construction remains in command response mappers and stdout remains JSON-only. Progress uses stderr and is captured as execution logs by the plugin protocol.
 - Safety: progress events contain no token/header/environment/body fields or arbitrary maps; call sites pass sanitized remote display values. Reporting cannot choose release policy, retry behavior, journal state, Git/network effects, command success, or response schema.
+- Presentation: `release_lifecycle_presentation.go` maps the sealed V1/V2 release outcomes to one shared human contract. Dry-run keeps ordered principal operations and primary materialized files visible; describe adds source/configuration, declared files, execution evidence, Git/handoff, and limitations. The mapper neither reads infrastructure nor changes the established machine rows.
 
 #### V2 local execution
 
@@ -484,6 +485,8 @@ The public command contract is duplicated between `manifest.json` and the switch
 
 - Entry: `main.main` -> `release.HandleResumeAt` -> `resumeCommandHandler` -> `resumeReleaseUseCase`. `HandleResume` remains a compatibility facade that resolves the root before delegating.
 - Parsing and response: `ParseResumeCommandRequest` creates the typed request; the handler invokes `releaseResumer.Resume` once and maps a sealed `ResumeCommandOutcome` or `CommandFailure` with its injected response clock.
+- Presentation: `resume_presentation.go` projects only facts retained by `ResumeCommandOutcome`. Default output remains a recovery decision with exact status, pending action, eligibility, retry safety, guidance, and dry-run mutation boundary. Describe adds safe journal, local-Git assessment, recovery, continuation/handoff, and limitation sections without reading a journal or resolving policy in the mapper.
+- Progress: `resume_progress.go` and command-owned call sites narrate discovery, exact selection, local assessment, policy resolution, config/Git validation, the selected continuation, and completion/refusal through verbose-only stderr logs. Completion messages occur only after the owned operation returns successfully; dry-run stops after the no-continuation assessment message.
 - Discovery: `locateResumableExecution` requires V2, resolves one unit and its current upstream remote, and finds exactly one unresolved execution journal matching remote URL and unit.
 - Assessment: `AssessReleaseExecutionRecovery` verifies journal structure, known-file hashes, and local tag evidence through an injected tag inspector without remote access. Non-dry continuation separately reconstructs the journal-bound execution context and rejects current-config drift.
 - Dry-run: returns that assessment without requiring `GITHUB_TOKEN` or modifying the journal/worktree.
@@ -494,6 +497,7 @@ The public command contract is duplicated between `manifest.json` and the switch
 - Restrictions: it will not calculate a new version, continue before a confirmed commit, prove ambiguous push completion, or redispatch a terminal dispatch journal.
 - Existing tests: dry-run read-only behavior, ordered assessment output, no/exactly-one journal selection, corrupt/conflicted/config-drift handling, every execution-state/pending-action policy combination, operation selection, supported continuation from `commit-created`, `tag-created`, and `tag-pushed`, expected-tag-already-present blocking, completed-handoff behavior, ambiguous-push blocking, no push-state inference, accepted dispatch reuse without a token, terminal dispatch no-retry behavior, and focused continuation failure boundaries.
 - Retained limitations: there is no remote-state probe, automatic retry, journal repair, or continuation from pre-commit/ambiguous push evidence. Production discovery deliberately excludes completed journals.
+- Compatibility: presentation declarations are transport-only. `ResumeCommandOutcome`, journal selection, assessment status, eligibility, retry safety, named-operation selection, machine rows/error envelopes, and exit behavior are unchanged.
 
 ### `history`
 
