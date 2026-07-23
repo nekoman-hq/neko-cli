@@ -213,7 +213,10 @@ func TestReleasePlanPresentationKeepsMachineLimitationsAndSecretsOut(t *testing.
 
 func TestReleaseContextPropertiesRemainReadableWithResponsiveLayout(t *testing.T) {
 	response := MapValidatedReleaseContext(validatedReleaseContextFixture(), time.Date(2026, time.July, 18, 18, 33, 0, 0, time.UTC))
-	output := renderReleasePlanForTest(t, response, renderer.FormatTable, releasePlanOutputWidth{width: 54, available: true})
+	output := renderReleasePlanWithOptionsForTest(t, response, renderer.RenderOptions{
+		Format: renderer.FormatTable, Describe: true,
+		WidthProvider: releasePlanOutputWidth{width: 54, available: true},
+	})
 	plain := ansi.Strip(output)
 
 	for _, want := range []string{"Release commit", "Working directory", "services/api"} {
