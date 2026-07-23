@@ -17,6 +17,7 @@ func (systemContextValidationClock) Now() time.Time {
 	return time.Now()
 }
 
+//nolint:govet // Logical error fields precede optional presentation-only context.
 type commandFailure struct {
 	Code    string
 	Message string

@@ -7,42 +7,15 @@ import (
 
 const (
 	validationPresentationTitle = "Release Configuration Validation"
-	validationSummaryRoleKey    = "value_role"
 	validationUnitRoleKey       = "unit_role"
 	validationVersionRoleKey    = "version_role"
 	validationKindRoleKey       = "kind_role"
 )
 
-var validationSummaryColumns = []presentation.Column{
-	{Key: "property", Label: "PROPERTY", Essential: true},
-	{Key: "value", Label: "VALUE", RoleKey: validationSummaryRoleKey, Essential: true},
-}
-
 func validationSummaryPresentation(result validationQueryResult) *presentation.Properties {
 	return &presentation.Properties{
 		Title:      validationPresentationTitle,
 		Properties: validationSummaryProperties(result),
-	}
-}
-
-func validationSummaryTable(result validationQueryResult) *presentation.Table {
-	properties := validationSummaryProperties(result)
-	rows := make([]map[string]any, 0, len(properties))
-	for _, property := range properties {
-		role := property.Role
-		if role == "" {
-			role = presentation.StyleDefault
-		}
-		rows = append(rows, map[string]any{
-			"property":               property.Label,
-			"value":                  property.Value,
-			validationSummaryRoleKey: string(role),
-		})
-	}
-	return &presentation.Table{
-		Title:   validationPresentationTitle,
-		Columns: append([]presentation.Column(nil), validationSummaryColumns...),
-		Rows:    rows,
 	}
 }
 

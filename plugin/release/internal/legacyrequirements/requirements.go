@@ -2,6 +2,8 @@
 // the retained V1 release format.
 package legacyrequirements
 
+//lint:file-ignore SA1019 V1 requirements intentionally preserve the deprecated compatibility model.
+
 import (
 	"fmt"
 	"os"
@@ -24,10 +26,13 @@ func Validate(repositoryRoot string, cfg *releaseconfig.V1ReleaseConfig) error {
 
 // ValidateForInspection applies the same retained V1 requirements without
 // emitting lifecycle progress for a deterministic read-only query.
+//
+//nolint:staticcheck // The inspection boundary intentionally preserves the deprecated V1 input contract.
 func ValidateForInspection(repositoryRoot string, cfg *releaseconfig.V1ReleaseConfig) error {
 	return validate(repositoryRoot, cfg, false)
 }
 
+//nolint:staticcheck // Shared implementation for the two explicit V1 compatibility entry points.
 func validate(repositoryRoot string, cfg *releaseconfig.V1ReleaseConfig, reportProgress bool) error {
 	if cfg == nil {
 		return fmt.Errorf("release configuration is missing")

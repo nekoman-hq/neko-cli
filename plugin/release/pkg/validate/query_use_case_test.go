@@ -106,16 +106,16 @@ func captureValidationStderr(t *testing.T, run func()) string {
 	os.Stderr = writer
 	defer func() { os.Stderr = original }()
 	run()
-	if err := writer.Close(); err != nil {
-		t.Fatalf("close stderr writer: %v", err)
+	if closeErr := writer.Close(); closeErr != nil {
+		t.Fatalf("close stderr writer: %v", closeErr)
 	}
 	os.Stderr = original
 	output, err := io.ReadAll(reader)
 	if err != nil {
 		t.Fatalf("read stderr: %v", err)
 	}
-	if err := reader.Close(); err != nil {
-		t.Fatalf("close stderr reader: %v", err)
+	if closeErr := reader.Close(); closeErr != nil {
+		t.Fatalf("close stderr reader: %v", closeErr)
 	}
 	return string(output)
 }

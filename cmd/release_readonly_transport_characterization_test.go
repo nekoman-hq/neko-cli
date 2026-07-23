@@ -424,8 +424,8 @@ func releaseReadonlyRepositoryRoot(t *testing.T) string {
 }
 
 type releaseReadonlyPublicResponse struct {
-	Status string         `json:"status"`
 	Data   map[string]any `json:"data"`
+	Status string         `json:"status"`
 }
 
 func decodeReleaseReadonlyPublicResponse(t *testing.T, output string) releaseReadonlyPublicResponse {

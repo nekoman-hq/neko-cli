@@ -89,6 +89,7 @@ func newReleaseContextValidationUseCase() releaseContextValidationUseCase {
 	}
 }
 
+//nolint:funlen // Validation order is the product contract; extracting phases would obscure fail precedence.
 func (useCase releaseContextValidationUseCase) Validate(_ context.Context, request ReleaseContextValidationRequest) (*ValidatedReleaseContext, *commandFailure) {
 	if failure := validateReleaseContextRequestSyntax(request); failure != nil {
 		return nil, failure

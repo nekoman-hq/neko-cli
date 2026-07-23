@@ -132,6 +132,7 @@ printf '10:11:13 \033[92m[exec]\033[0m \033[35mV$\033[0m Inspecting local journa
 func TestDispatcherPreservesSubprocessOutcomeContracts(t *testing.T) {
 	t.Parallel()
 
+	//nolint:govet // Table fields follow assertion readability rather than pointer packing.
 	tests := []struct {
 		name         string
 		script       string
