@@ -45,8 +45,13 @@ func V1LoadConfig() (*V1ReleaseConfig, error) {
 // V1LoadConfigAt reads a legacy .release.neko.json file without changing the
 // public V1 schema fields used by existing init and release flows.
 func V1LoadConfigAt(path string) (*V1ReleaseConfig, error) {
-	log.PluginV(log.Config, "Loading config from file...")
+	return v1LoadConfigAt(path, true)
+}
 
+func v1LoadConfigAt(path string, reportProgress bool) (*V1ReleaseConfig, error) {
+	if reportProgress {
+		log.PluginV(log.Config, "Loading config from file...")
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -67,7 +72,7 @@ func V1LoadConfigAt(path string) (*V1ReleaseConfig, error) {
 		)
 	}
 
-	if err := V1Validate(&config); err != nil {
+	if err := v1Validate(&config, reportProgress); err != nil {
 		return nil, err
 	}
 
@@ -82,8 +87,13 @@ var semverRegex = regexp.MustCompile(
 //
 // Deprecated: V1 is supported only as the legacy compatibility format.
 func V1Validate(cfg *V1ReleaseConfig) error {
-	log.PluginV(log.Config, "Validating serialised config...")
+	return v1Validate(cfg, true)
+}
 
+func v1Validate(cfg *V1ReleaseConfig, reportProgress bool) error {
+	if reportProgress {
+		log.PluginV(log.Config, "Validating serialised config...")
+	}
 	if !cfg.ProjectType.IsValid() {
 		return errors.New(
 			"invalid configuration: V1ProjectType is invalid in ..release.neko.json",
@@ -108,7 +118,9 @@ func V1Validate(cfg *V1ReleaseConfig) error {
 		)
 	}
 
-	log.PluginPrint(log.Config, "\uF00C Config appears valid")
+	if reportProgress {
+		log.PluginPrint(log.Config, "\uF00C Config appears valid")
+	}
 
 	return nil
 }

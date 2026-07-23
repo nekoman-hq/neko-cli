@@ -80,7 +80,7 @@ type releasePlanInspectionUseCase struct {
 func newReleasePlanInspectionUseCase(repositoryRoot string) releasePlanInspectionUseCase {
 	return releasePlanInspectionUseCase{
 		repositoryRoot: repositoryRoot,
-		repositories:   releaseConfigRepositoryReader{},
+		repositories:   releasePlanConfigRepositoryReader{},
 	}
 }
 

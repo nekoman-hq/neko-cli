@@ -78,6 +78,16 @@ func NormalizeV1Repository(repositoryRoot string, cfg *V1ReleaseConfig) *Release
 // LoadReleaseRepository loads and validates the configured release repository
 // at repositoryRoot. V2 wins when present; otherwise the legacy V1 file is used.
 func LoadReleaseRepository(repositoryRoot string) (*ReleaseRepository, error) {
+	return loadReleaseRepository(repositoryRoot, true)
+}
+
+// LoadReleaseRepositoryForInspection loads the same repository contract
+// without emitting lifecycle progress for a deterministic read-only query.
+func LoadReleaseRepositoryForInspection(repositoryRoot string) (*ReleaseRepository, error) {
+	return loadReleaseRepository(repositoryRoot, false)
+}
+
+func loadReleaseRepository(repositoryRoot string, reportProgress bool) (*ReleaseRepository, error) {
 	if repositoryRoot == "" {
 		repositoryRoot = "."
 	}
@@ -89,7 +99,7 @@ func LoadReleaseRepository(repositoryRoot string) (*ReleaseRepository, error) {
 		return LoadV2Repository(repositoryRoot)
 	}
 
-	cfg, err := V1LoadConfigAt(filepath.Join(repositoryRoot, V1FileName))
+	cfg, err := v1LoadConfigAt(filepath.Join(repositoryRoot, V1FileName), reportProgress)
 	if err != nil {
 		return nil, err
 	}

@@ -8,34 +8,158 @@ import (
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
+	"github.com/nekoman-hq/neko-cli/pkg/log"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 	"github.com/nekoman-hq/neko-cli/pkg/renderer"
+	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
 )
 
 func TestReleasePlanReadableOutputPresentsLimitationsSemantically(t *testing.T) {
 	response := MapReleasePlanInspection(releasePlanPresentationFixture(), time.Date(2026, time.July, 18, 18, 30, 0, 0, time.UTC))
-	output := renderReleasePlanForTest(t, response, renderer.FormatTable, releasePlanOutputWidth{width: 72, available: true})
-	plain := ansi.Strip(output)
+	concise := renderReleasePlanForTest(t, response, renderer.FormatTable, releasePlanOutputWidth{width: 96, available: true})
+	concisePlain := ansi.Strip(concise)
 
 	for _, want := range []string{
+		"Release Plan",
+		"Unit",
+		"cli",
+		"Current version",
+		"2.4.0",
+		"Requested change",
+		"patch",
+		"Next version",
+		"2.4.1",
+		"Tag",
+		"v2.4.1",
+		"Local readiness",
+		"Ready",
+		"Mutation boundary",
+		"Inspection only",
+		"Operations",
+		"Resolve release identity",
+		"Prepare tag",
+		"Materialize files",
+		"Release execution",
+		"Primary Materialized Files",
+		".neko/release.state.json",
+		"plugin/release/manifest.json",
+	} {
+		if !strings.Contains(concisePlain, want) {
+			t.Fatalf("concise release-plan output omitted %q:\n%s", want, concisePlain)
+		}
+	}
+	for _, hidden := range []string{
+		"Plan Details",
+		"Known Release Files",
+		"Assumptions and Limitations",
+		"This inspection uses local planning facts only",
+		"Execution journals, dispatch journals",
+		"Remote tags, releases, workflow runs",
+		"Tokens and provider authorization",
+		"/Users/benjamin/Developer/Projects/nekoman/neko-cli",
+	} {
+		if strings.Contains(concisePlain, hidden) {
+			t.Fatalf("concise release-plan output exposed describe-only value %q:\n%s", hidden, concisePlain)
+		}
+	}
+
+	described := renderReleasePlanWithOptionsForTest(
+		t,
+		response,
+		renderer.RenderOptions{
+			Format: renderer.FormatTable, Describe: true,
+			WidthProvider: releasePlanOutputWidth{width: 96, available: true},
+		},
+	)
+	describedPlain := ansi.Strip(described)
+	for _, want := range []string{
+		"Plan Details",
+		"V2 config and state",
+		"Neko CLI",
+		"goreleaser",
+		"github-actions",
+		".github/workflows/release-neko-cli.yml",
+		"Materialized File Facts",
+		"v2 release state",
+		"sync plugin manifest version",
+		"Known Release Files",
+		"Assumptions and Limitations",
 		"Local Inspection Only",
 		"Evidence Not Inspected",
-		"Remote Checks Not",
-		"Performed",
+		"Remote Checks Not Performed",
 		"Token Free",
 		"This inspection uses local planning facts only",
 		"Execution journals, dispatch journals",
 		"Remote tags, releases, workflow runs",
 		"Tokens and provider authorization",
 	} {
-		if !strings.Contains(plain, want) {
-			t.Fatalf("semantic limitation output omitted %q:\n%s", want, plain)
+		if !strings.Contains(describedPlain, want) {
+			t.Fatalf("described release-plan output omitted %q:\n%s", want, describedPlain)
 		}
 	}
-	if strings.Contains(plain, " | ") || strings.Contains(plain, "local-only:") {
-		t.Fatalf("human output retained the machine-oriented limitation mega-string:\n%s", plain)
+	if strings.Contains(describedPlain, " | ") || strings.Contains(describedPlain, "local-only:") ||
+		strings.Contains(describedPlain, "/Users/benjamin/Developer/Projects/nekoman/neko-cli") {
+		t.Fatalf("described human output retained a machine mega-string or absolute path:\n%s", describedPlain)
 	}
-	assertReleasePlanLinesFit(t, output, 72)
+	assertReleasePlanLinesFit(t, described, 96)
+}
+
+func TestReleasePlanDefaultShowsEveryBlocker(t *testing.T) {
+	result := releasePlanPresentationFixture()
+	result.Readiness = LocalPlanBlocked
+	result.Blockers = []LocalPlanBlocker{
+		{Category: "materialization-blocked", Message: "Configured output leaves the selected unit."},
+		{Category: "unsupported-delivery", Message: "The selected delivery cannot execute this plan."},
+	}
+	response := MapReleasePlanInspection(result, time.Date(2026, time.July, 18, 18, 30, 30, 0, time.UTC))
+	output := ansi.Strip(renderReleasePlanForTest(
+		t,
+		response,
+		renderer.FormatTable,
+		releasePlanOutputWidth{width: 72, available: true},
+	))
+
+	for _, want := range []string{
+		"Blockers",
+		"Materialization Blocked",
+		"Configured output leaves the selected unit.",
+		"Unsupported Delivery",
+		"The selected delivery cannot execute this plan.",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("blocked release-plan default omitted %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestReleasePlanVerboseIsNoOpForLegacyAndCurrentSources(t *testing.T) {
+	legacyRoot := t.TempDir()
+	if err := releaseconfig.V1SaveConfigAt(legacyRoot, *validV1ReleaseConfig("1.2.3")); err != nil {
+		t.Fatalf("write legacy release config: %v", err)
+	}
+	root, err := workspace.ValidateRepositoryRoot(legacyRoot)
+	if err != nil {
+		t.Fatalf("validate legacy repository root: %v", err)
+	}
+	originalVerbose := log.Verbose
+	log.Verbose = true
+	t.Cleanup(func() { log.Verbose = originalVerbose })
+
+	stderr := captureReleaseUseCaseStderr(t, func() {
+		response, handleErr := HandlePlanAt(root, plugin.Request{
+			Command: "plan",
+			Flags:   map[string]any{"change": "patch", "unit": "default"},
+			Context: plugin.Context{Verbose: true},
+		})
+		if handleErr != nil || response == nil || response.Status != "success" {
+			t.Fatalf("HandlePlanAt legacy source: response=%#v err=%v", response, handleErr)
+		}
+	})
+
+	if strings.TrimSpace(stderr) != "" {
+		t.Fatalf("verbose release plan emitted generic execution narration:\n%s", stderr)
+	}
 }
 
 func TestReleasePlanReadableOutputUsesVerticalLayoutAtNarrowAndUnknownWidths(t *testing.T) {
@@ -44,19 +168,26 @@ func TestReleasePlanReadableOutputUsesVerticalLayoutAtNarrowAndUnknownWidths(t *
 	narrow := renderReleasePlanForTest(t, response, renderer.FormatTable, releasePlanOutputWidth{width: 28, available: true})
 	narrowPlain := ansi.Strip(narrow)
 	if strings.Contains(narrowPlain, "PROPERTY") || !strings.Contains(narrowPlain, "Unit\n  cli") ||
-		!strings.Contains(narrowPlain, "Local Inspection Only\n  This") {
-		t.Fatalf("narrow release-plan output did not use vertical properties:\n%s", narrowPlain)
+		!strings.Contains(narrowPlain, "Record 1") || !strings.Contains(narrowPlain, "Action: Update") {
+		t.Fatalf("narrow release-plan output did not preserve summary and essential table records:\n%s", narrowPlain)
 	}
 	assertReleasePlanLinesFit(t, narrow, 28)
 
-	first := renderReleasePlanForTest(t, response, renderer.FormatTable, releasePlanOutputWidth{})
-	second := renderReleasePlanForTest(t, response, renderer.FormatTable, releasePlanOutputWidth{})
+	options := renderer.RenderOptions{
+		Format: renderer.FormatTable, Describe: true,
+		WidthProvider: releasePlanOutputWidth{},
+	}
+	first := renderReleasePlanWithOptionsForTest(t, response, options)
+	second := renderReleasePlanWithOptionsForTest(t, response, options)
 	if first != second {
 		t.Fatalf("unknown-width release-plan output is not deterministic:\nfirst=%q\nsecond=%q", first, second)
 	}
 	unknownPlain := ansi.Strip(first)
-	if strings.Contains(unknownPlain, "PROPERTY") || !strings.Contains(unknownPlain, "Token Free\n  Tokens and provider authorization") {
-		t.Fatalf("unknown-width release-plan output did not use vertical properties:\n%s", unknownPlain)
+	if strings.Contains(unknownPlain, "PROPERTY") ||
+		!strings.Contains(unknownPlain, "Assumption: Token Free") ||
+		!strings.Contains(unknownPlain, "Source ownership: V2 config and state") ||
+		!strings.Contains(unknownPlain, "Record 1") {
+		t.Fatalf("unknown-width described release-plan output did not use deterministic vertical records:\n%s", unknownPlain)
 	}
 }
 
@@ -109,8 +240,23 @@ func releasePlanPresentationFixture() *ReleasePlanInspection {
 		Workflow:         ".github/workflows/release-neko-cli.yml",
 		WorkingDirectory: ".",
 		UnitRoot:         "/Users/benjamin/Developer/Projects/nekoman/neko-cli",
-		Readiness:        LocalPlanReady,
-		Limitations:      appendCommonPlanLimitations(nil),
+		MaterializedOutputs: []PlannedMaterializedOutput{
+			{
+				Path: ".neko/release.state.json", Reason: "v2 release state",
+				RequiredForReleaseCommit: true, Exists: true,
+			},
+			{
+				Path: "plugin/release/manifest.json", Reason: "sync plugin manifest version with release plan",
+				RequiredForReleaseCommit: true, Exists: true,
+			},
+		},
+		KnownReleaseFiles: []InspectedKnownReleaseFile{
+			{Path: ".goreleaser.yml", Reason: "release executor configuration"},
+			{Path: ".neko/release.state.json", Reason: "v2 release state", RequiredForReleaseCommit: true},
+			{Path: "plugin/release/manifest.json", Reason: "release plugin manifest", RequiredForReleaseCommit: true},
+		},
+		Readiness:   LocalPlanReady,
+		Limitations: appendCommonPlanLimitations(nil),
 	}
 }
 
@@ -130,8 +276,19 @@ func renderReleasePlanForTest(
 	width renderer.OutputWidthProvider,
 ) string {
 	t.Helper()
+	return renderReleasePlanWithOptionsForTest(t, response, renderer.RenderOptions{
+		Format: format, WidthProvider: width,
+	})
+}
+
+func renderReleasePlanWithOptionsForTest(
+	t *testing.T,
+	response *plugin.Response,
+	options renderer.RenderOptions,
+) string {
+	t.Helper()
 	var output bytes.Buffer
-	if err := renderer.RenderWithOptionsTo(response, renderer.RenderOptions{Format: format, WidthProvider: width}, &output); err != nil {
+	if err := renderer.RenderWithOptionsTo(response, options, &output); err != nil {
 		t.Fatalf("RenderWithOptionsTo: %v", err)
 	}
 	return output.String()

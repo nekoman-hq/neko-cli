@@ -2,6 +2,7 @@ package release
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -15,7 +16,11 @@ func MapReleasePlanInspection(result *ReleasePlanInspection, timestamp time.Time
 		return successTableResponse("plan", timestamp, nil)
 	}
 	response := successTableResponse("plan", timestamp, releasePlanMachineItems(result))
-	response.PresentationProperties = &presentation.Properties{Properties: releasePlanPresentationProperties(result)}
+	response.PresentationProperties = &presentation.Properties{
+		Title:      "Release Plan",
+		Properties: releasePlanSummaryProperties(result),
+	}
+	response.PresentationTable = releasePlanPresentationTables(result)
 	return response
 }
 
@@ -57,21 +62,330 @@ func releasePlanMachineItems(result *ReleasePlanInspection) []map[string]any {
 	return items
 }
 
-func releasePlanPresentationProperties(result *ReleasePlanInspection) []presentation.Property {
-	properties := releasePlanSharedProperties(result)
-	for _, limitation := range result.Limitations {
-		properties = append(properties, releasePlanResponseProperty{
-			label: releasePlanLimitationLabel(limitation.Category),
-			value: limitation.Message,
+func releasePlanSummaryProperties(result *ReleasePlanInspection) []presentation.Property {
+	properties := []presentation.Property{
+		{Label: "Unit", Value: result.Unit.ID, Emphasized: true},
+		{Label: "Current version", Value: result.CurrentVersion},
+		{Label: "Requested change", Value: string(result.RequestedChange)},
+		{Label: "Next version", Value: result.NextVersion, Emphasized: true},
+		{Label: "Tag", Value: result.Tag},
+		{
+			Label: "Local readiness", Value: releasePlanReadableLabel(string(result.Readiness)),
+			Role: releasePlanReadinessRole(result.Readiness), Emphasized: true,
+		},
+	}
+	if len(result.Blockers) > 0 {
+		properties = append(properties, presentation.Property{
+			Label: "Blockers", Value: len(result.Blockers), Role: presentation.StyleError,
 		})
 	}
-	properties = append(properties, releasePlanStatusProperty())
+	return append(properties, presentation.Property{
+		Label: "Mutation boundary", Value: "Inspection only; release execution was not started",
+		Role: presentation.StyleMuted,
+	})
+}
 
-	declarations := make([]presentation.Property, 0, len(properties))
-	for _, property := range properties {
-		declarations = append(declarations, presentation.Property{Label: property.label, Value: property.value})
+func releasePlanReadinessRole(readiness LocalPlanReadiness) presentation.StyleRole {
+	switch readiness {
+	case LocalPlanReady:
+		return presentation.StyleSuccess
+	case LocalPlanBlocked:
+		return presentation.StyleError
+	case LocalPlanUnsupported:
+		return presentation.StyleWarning
+	default:
+		return presentation.StyleDefault
 	}
-	return declarations
+}
+
+func releasePlanPresentationTables(result *ReleasePlanInspection) *presentation.Table {
+	tables := []*presentation.Table{
+		releasePlanOperationsTable(result),
+		releasePlanBlockersTable(result.Blockers),
+		releasePlanPrimaryMaterializedFilesTable(result.MaterializedOutputs),
+		releasePlanDetailsTable(result),
+		releasePlanMaterializedFileFactsTable(result.MaterializedOutputs),
+		releasePlanKnownReleaseFilesTable(result.KnownReleaseFiles),
+		releasePlanLimitationsTable(result.Limitations),
+	}
+	var first *presentation.Table
+	var tail *presentation.Table
+	for _, table := range tables {
+		if table == nil {
+			continue
+		}
+		if first == nil {
+			first = table
+			tail = table
+			continue
+		}
+		tail.Following = table
+		tail = table
+	}
+	return first
+}
+
+func releasePlanOperationsTable(result *ReleasePlanInspection) *presentation.Table {
+	return &presentation.Table{
+		Title: "Operations",
+		Columns: []presentation.Column{
+			{Key: "step", Label: "Step", Essential: true},
+			{Key: "result", Label: "Result", Essential: true},
+			{Key: "scope", Label: "Scope"},
+		},
+		Rows: []map[string]any{
+			{
+				"step": "Resolve release identity",
+				"result": fmt.Sprintf(
+					"%s \u2192 %s (%s)",
+					result.CurrentVersion,
+					result.NextVersion,
+					result.RequestedChange,
+				),
+				"scope": result.Unit.ID,
+			},
+			{"step": "Prepare tag", "result": result.Tag, "scope": "local plan"},
+			{
+				"step":   "Materialize files",
+				"result": fmt.Sprintf("%d planned", len(result.MaterializedOutputs)),
+				"scope":  "release commit",
+			},
+			{
+				"step":   "Release execution",
+				"result": "Not started",
+				"scope":  "inspection boundary",
+			},
+		},
+	}
+}
+
+func releasePlanBlockersTable(blockers []LocalPlanBlocker) *presentation.Table {
+	if len(blockers) == 0 {
+		return nil
+	}
+	rows := make([]map[string]any, 0, len(blockers))
+	for _, blocker := range blockers {
+		rows = append(rows, map[string]any{
+			"problem": releasePlanReadableLabel(blocker.Category),
+			"status":  "Blocked",
+			"reason":  blocker.Message,
+		})
+	}
+	return &presentation.Table{
+		Title: "Blockers",
+		Columns: []presentation.Column{
+			{Key: "problem", Label: "Problem", Essential: true},
+			{Key: "status", Label: "Status", Essential: true},
+			{Key: "reason", Label: "Reason", Essential: true},
+		},
+		Rows: rows,
+	}
+}
+
+func releasePlanPrimaryMaterializedFilesTable(outputs []PlannedMaterializedOutput) *presentation.Table {
+	if len(outputs) == 0 {
+		return nil
+	}
+	rows := make([]map[string]any, 0, len(outputs))
+	for _, output := range outputs {
+		rows = append(rows, map[string]any{
+			"path":           releasePlanSafePath(output.Path),
+			"action":         releasePlanMaterializedAction(output),
+			"release_commit": releasePlanYesNo(output.RequiredForReleaseCommit),
+			"reason":         output.Reason,
+		})
+	}
+	return &presentation.Table{
+		Title: "Primary Materialized Files",
+		Columns: []presentation.Column{
+			{Key: "path", Label: "Path", Essential: true},
+			{Key: "action", Label: "Action", Essential: true},
+			{Key: "release_commit", Label: "Release commit"},
+			{Key: "reason", Label: "Reason"},
+		},
+		Rows: rows,
+	}
+}
+
+func releasePlanDetailsTable(result *ReleasePlanInspection) *presentation.Table {
+	return &presentation.Table{
+		Title: "Plan Details", DescribeOnly: true,
+		Columns: []presentation.Column{
+			{Key: "unit", Label: "Unit", Essential: true},
+			{Key: "source", Label: "Source ownership", Essential: true},
+			{Key: "readiness", Label: "Readiness", Essential: true},
+			{Key: "executor", Label: "Executor"},
+			{Key: "delivery", Label: "Delivery"},
+			{Key: "workflow", Label: "Workflow"},
+		},
+		Rows: []map[string]any{
+			{
+				"unit": result.Unit.ID, "source": releasePlanSourceOwnership(string(result.Source)),
+				"readiness": releasePlanReadableLabel(string(result.Readiness)),
+				"executor":  result.Executor, "delivery": result.Delivery,
+				"workflow": releasePlanSafePath(result.Workflow),
+			},
+		},
+		Details: &presentation.Properties{
+			SectionTitle: "Complete planning facts",
+			Properties:   releasePlanDetailProperties(result),
+		},
+	}
+}
+
+func releasePlanDetailProperties(result *ReleasePlanInspection) []presentation.Property {
+	return []presentation.Property{
+		{Label: "Selected source", Value: string(result.Source)},
+		{Label: "Source ownership", Value: releasePlanSourceOwnership(string(result.Source))},
+		{Label: "Unit", Value: result.Unit.ID},
+		{Label: "Display name", Value: emptyFallback(result.Unit.DisplayName, "not configured")},
+		{Label: "Resolved release identity", Value: result.Unit.ID + "@" + result.NextVersion},
+		{Label: "Current version", Value: result.CurrentVersion},
+		{Label: "Requested change", Value: string(result.RequestedChange)},
+		{Label: "Next version", Value: result.NextVersion},
+		{Label: "Tag", Value: result.Tag},
+		{Label: "Executor", Value: result.Executor},
+		{Label: "Delivery", Value: result.Delivery},
+		{Label: "Workflow", Value: releasePlanSafePath(result.Workflow)},
+		{Label: "Working directory", Value: releasePlanSafePath(result.WorkingDirectory)},
+		{Label: "Unit root", Value: releasePlanSafeUnitRoot(result)},
+		{Label: "Preflight readiness", Value: releasePlanReadableLabel(string(result.Readiness))},
+		{Label: "Preflight blockers", Value: len(result.Blockers)},
+		{Label: "Materialized files", Value: len(result.MaterializedOutputs)},
+		{Label: "Known release files", Value: len(result.KnownReleaseFiles)},
+		{Label: "Mutation boundary", Value: "Inspection only; release execution was not started"},
+	}
+}
+
+func releasePlanMaterializedFileFactsTable(outputs []PlannedMaterializedOutput) *presentation.Table {
+	if len(outputs) == 0 {
+		return nil
+	}
+	rows := make([]map[string]any, 0, len(outputs))
+	for _, output := range outputs {
+		rows = append(rows, map[string]any{
+			"path": releasePlanSafePath(output.Path), "action": releasePlanMaterializedAction(output),
+			"exists":         releasePlanYesNo(output.Exists),
+			"release_commit": releasePlanYesNo(output.RequiredForReleaseCommit),
+			"reason":         output.Reason,
+		})
+	}
+	return &presentation.Table{
+		Title: "Materialized File Facts", DescribeOnly: true,
+		Columns: []presentation.Column{
+			{Key: "path", Label: "Path", Essential: true},
+			{Key: "action", Label: "Action", Essential: true},
+			{Key: "exists", Label: "Exists", Essential: true},
+			{Key: "release_commit", Label: "Release commit"},
+			{Key: "reason", Label: "Reason"},
+		},
+		Rows: rows,
+	}
+}
+
+func releasePlanKnownReleaseFilesTable(files []InspectedKnownReleaseFile) *presentation.Table {
+	if len(files) == 0 {
+		return nil
+	}
+	rows := make([]map[string]any, 0, len(files))
+	for _, file := range files {
+		rows = append(rows, map[string]any{
+			"path":           releasePlanSafePath(file.Path),
+			"release_commit": releasePlanYesNo(file.RequiredForReleaseCommit),
+			"reason":         file.Reason,
+		})
+	}
+	return &presentation.Table{
+		Title: "Known Release Files", DescribeOnly: true,
+		Columns: []presentation.Column{
+			{Key: "path", Label: "Path", Essential: true},
+			{Key: "release_commit", Label: "Release commit", Essential: true},
+			{Key: "reason", Label: "Reason"},
+		},
+		Rows: rows,
+	}
+}
+
+func releasePlanLimitationsTable(limitations []ReleasePlanLimitation) *presentation.Table {
+	if len(limitations) == 0 {
+		return nil
+	}
+	rows := make([]map[string]any, 0, len(limitations))
+	for _, limitation := range limitations {
+		rows = append(rows, map[string]any{
+			"assumption": releasePlanLimitationLabel(limitation.Category),
+			"statement":  limitation.Message,
+		})
+	}
+	return &presentation.Table{
+		Title: "Assumptions and Limitations", DescribeOnly: true,
+		Columns: []presentation.Column{
+			{Key: "assumption", Label: "Assumption", Essential: true},
+			{Key: "statement", Label: "Statement", Essential: true},
+		},
+		Rows: rows,
+	}
+}
+
+func releasePlanMaterializedAction(output PlannedMaterializedOutput) string {
+	if output.Exists {
+		return "Update"
+	}
+	return "Create"
+}
+
+func releasePlanYesNo(value bool) string {
+	if value {
+		return "yes"
+	}
+	return "no"
+}
+
+func releasePlanSourceOwnership(source string) string {
+	switch source {
+	case "v1":
+		return "Legacy release configuration"
+	case "v2":
+		return "V2 config and state"
+	default:
+		return "Unresolved release source"
+	}
+}
+
+func releasePlanReadableLabel(value string) string {
+	value = strings.NewReplacer("_", " ", "-", " ").Replace(strings.TrimSpace(value))
+	if value == "" {
+		return "Not configured"
+	}
+	words := strings.Fields(value)
+	for index := range words {
+		words[index] = strings.ToUpper(words[index][:1]) + words[index][1:]
+	}
+	return strings.Join(words, " ")
+}
+
+func releasePlanSafePath(value string) string {
+	value = strings.TrimSpace(value)
+	switch {
+	case value == "":
+		return "not configured"
+	case value == ".":
+		return "repository root"
+	case filepath.IsAbs(value):
+		return "repository-local path"
+	default:
+		return filepath.ToSlash(filepath.Clean(value))
+	}
+}
+
+func releasePlanSafeUnitRoot(result *ReleasePlanInspection) string {
+	if !filepath.IsAbs(result.UnitRoot) {
+		return releasePlanSafePath(result.UnitRoot)
+	}
+	if strings.TrimSpace(result.WorkingDirectory) == "." {
+		return "repository root"
+	}
+	return releasePlanSafePath(result.WorkingDirectory)
 }
 
 func releasePlanLimitationLabel(category string) string {

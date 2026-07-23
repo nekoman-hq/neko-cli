@@ -15,7 +15,20 @@ type releaseRepositoryReader interface {
 type releaseConfigRepositoryReader struct{}
 
 func (releaseConfigRepositoryReader) Load(root string) (*config.ReleaseRepository, error) {
-	repository, err := config.LoadReleaseRepository(root)
+	return loadReleaseRepository(root, config.LoadReleaseRepository)
+}
+
+type releasePlanConfigRepositoryReader struct{}
+
+func (releasePlanConfigRepositoryReader) Load(root string) (*config.ReleaseRepository, error) {
+	return loadReleaseRepository(root, config.LoadReleaseRepositoryForInspection)
+}
+
+func loadReleaseRepository(
+	root string,
+	load func(string) (*config.ReleaseRepository, error),
+) (*config.ReleaseRepository, error) {
+	repository, err := load(root)
 	if err != nil {
 		return nil, err
 	}

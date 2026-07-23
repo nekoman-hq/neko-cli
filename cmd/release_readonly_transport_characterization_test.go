@@ -176,6 +176,51 @@ func TestReleasePipelineReferenceTransportRemainsStable(t *testing.T) {
 	}
 }
 
+func TestReleasePlanUsesDescribeForCompleteStructuredDetail(t *testing.T) {
+	manifest := installReleaseReadonlyHelperPlugin(t)
+	repositoryRoot := releaseReadonlyRepositoryRoot(t)
+	flags := []string{"--change", "patch", "--unit", "cli"}
+
+	defaultOutput, defaultErr := executeReleaseReadonlyCommand(
+		t, manifest, repositoryRoot, "plan", flags, releaseReadonlyMode{},
+	)
+	describeOutput, describeErr := executeReleaseReadonlyCommand(
+		t, manifest, repositoryRoot, "plan", flags, releaseReadonlyMode{describe: true},
+	)
+	verboseOutput, verboseErr := executeReleaseReadonlyCommand(
+		t, manifest, repositoryRoot, "plan", flags, releaseReadonlyMode{verbose: true},
+	)
+	if defaultErr != nil || describeErr != nil || verboseErr != nil {
+		t.Fatalf("plan transport exits: default=%v describe=%v verbose=%v", defaultErr, describeErr, verboseErr)
+	}
+	for _, value := range []string{
+		"Release Plan",
+		"Current version",
+		"Next version",
+		"Operations",
+		"Mutation boundary",
+	} {
+		if !strings.Contains(defaultOutput, value) {
+			t.Fatalf("plan default omitted %q:\n%s", value, defaultOutput)
+		}
+	}
+	for _, value := range []string{
+		"Plan Details",
+		"Known Release Files",
+		"Assumptions and Limitations",
+	} {
+		if strings.Contains(defaultOutput, value) {
+			t.Fatalf("plan default exposed describe-only section %q:\n%s", value, defaultOutput)
+		}
+		if !strings.Contains(describeOutput, value) {
+			t.Fatalf("plan describe omitted %q:\n%s", value, describeOutput)
+		}
+	}
+	if defaultOutput != verboseOutput {
+		t.Fatalf("plan verbose added execution narration:\ndefault:\n%s\nverbose:\n%s", defaultOutput, verboseOutput)
+	}
+}
+
 type releaseReadonlyMode struct {
 	format   string
 	describe bool
