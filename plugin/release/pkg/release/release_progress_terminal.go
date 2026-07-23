@@ -2,6 +2,7 @@ package release
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/nekoman-hq/neko-cli/pkg/log"
@@ -44,11 +45,11 @@ func renderReleaseProgressEvent(event ReleaseProgressEvent) []releaseProgressLin
 		return []releaseProgressLine{progressLine(log.Exec, "Starting %s release", event.ReleaseType)}
 	case ReleaseProgressRepositoryContext:
 		return []releaseProgressLine{
-			progressLine(log.Config, "Repository root: %s", event.RepositoryRoot),
+			progressLine(log.Config, "Repository root: selected repository root"),
 			progressLine(log.Config, "Release source format: %s", event.SourceFormat),
 			progressLine(log.Config, "Selected unit: %s", event.UnitID),
-			progressLine(log.Config, "Config path: %s", event.ConfigPath),
-			progressLine(log.Config, "State path: %s", event.StatePath),
+			progressLine(log.Config, "Config path: %s", safeReleaseProgressPath(event.ConfigPath)),
+			progressLine(log.Config, "State path: %s", safeReleaseProgressPath(event.StatePath)),
 		}
 	case ReleaseProgressReleasePlan:
 		return []releaseProgressLine{
@@ -74,9 +75,9 @@ func renderReleaseProgressEvent(event ReleaseProgressEvent) []releaseProgressLin
 	case ReleaseProgressMaterializationPlanningStarted:
 		return []releaseProgressLine{progressLine(log.Exec, "Planning materialized files")}
 	case ReleaseProgressMaterializationPlanningCompleted:
-		return []releaseProgressLine{progressLine(log.Exec, "Planned materialized files: %s", strings.Join(event.Files, ", "))}
+		return []releaseProgressLine{progressLine(log.Exec, "Planned materialized files: %s", safeReleaseProgressPaths(event.Files))}
 	case ReleaseProgressKnownFiles:
-		return []releaseProgressLine{progressLine(log.Exec, "Known release files: %s", strings.Join(event.Files, ", "))}
+		return []releaseProgressLine{progressLine(log.Exec, "Known release files: %s", safeReleaseProgressPaths(event.Files))}
 	case ReleaseProgressGitPreflightStarted:
 		return []releaseProgressLine{progressLine(log.Exec, "Running git preflight checks")}
 	case ReleaseProgressGitPreflightUnitStarted:
@@ -105,7 +106,7 @@ func renderReleaseProgressEvent(event ReleaseProgressEvent) []releaseProgressLin
 		return []releaseProgressLine{progressLine(log.Exec, "Preparing execution journal")}
 	case ReleaseProgressExecutionJournalPrepared:
 		return []releaseProgressLine{
-			progressLine(log.Exec, "Execution journal path: %s", event.Path),
+			progressLine(log.Exec, "Execution journal path: %s", safeReleaseProgressPath(event.Path)),
 			progressLine(log.Exec, "Execution journal identity: %s", event.Identity),
 		}
 	case ReleaseProgressExecutionPhase:
@@ -121,11 +122,11 @@ func renderReleaseProgressEvent(event ReleaseProgressEvent) []releaseProgressLin
 	case ReleaseProgressMaterializationSnapshotCaptured:
 		return []releaseProgressLine{progressLine(log.Exec, "Materialization snapshots captured")}
 	case ReleaseProgressMaterializedFilesApplied:
-		return []releaseProgressLine{progressLine(log.Exec, "Applied materialized files: %s", strings.Join(event.Files, ", "))}
+		return []releaseProgressLine{progressLine(log.Exec, "Applied materialized files: %s", safeReleaseProgressPaths(event.Files))}
 	case ReleaseProgressStateSnapshotCapturing:
 		return []releaseProgressLine{progressLine(log.Exec, "Capturing V2 state snapshot")}
 	case ReleaseProgressStateSnapshotCaptured:
-		return []releaseProgressLine{progressLine(log.Exec, "V2 state snapshot captured: %s", event.Path)}
+		return []releaseProgressLine{progressLine(log.Exec, "V2 state snapshot captured: %s", safeReleaseProgressPath(event.Path))}
 	case ReleaseProgressStateUpdateWriting:
 		return []releaseProgressLine{progressLine(log.Exec, "Writing V2 state update: %s -> %s", event.UnitID, event.NextVersion)}
 	case ReleaseProgressStateUpdateWritten:
@@ -137,7 +138,7 @@ func renderReleaseProgressEvent(event ReleaseProgressEvent) []releaseProgressLin
 	case ReleaseProgressPendingActionFinished:
 		return []releaseProgressLine{verboseProgressLine(log.Exec, "Release action completed: %s", event.PendingAction)}
 	case ReleaseProgressStagingTargetedFiles:
-		return []releaseProgressLine{progressLine(log.Exec, "Staging targeted release files: %s", strings.Join(event.Files, ", "))}
+		return []releaseProgressLine{progressLine(log.Exec, "Staging targeted release files: %s", safeReleaseProgressPaths(event.Files))}
 	case ReleaseProgressTargetedFilesStaged:
 		return []releaseProgressLine{progressLine(log.Exec, "Targeted release files staged")}
 	case ReleaseProgressReleaseCommitCreating:
@@ -149,7 +150,7 @@ func renderReleaseProgressEvent(event ReleaseProgressEvent) []releaseProgressLin
 	case ReleaseProgressDispatchJournalPrepare:
 		return []releaseProgressLine{progressLine(log.Exec, "Preparing dispatch journal")}
 	case ReleaseProgressDispatchJournalReady:
-		return []releaseProgressLine{progressLine(log.Exec, "Dispatch journal path: %s", event.Path)}
+		return []releaseProgressLine{progressLine(log.Exec, "Dispatch journal path: %s", safeReleaseProgressPath(event.Path))}
 	case ReleaseProgressDispatchInputs:
 		return []releaseProgressLine{progressLine(log.Exec, "Dispatch inputs: %s", releaseProgressInputsValue(event.Inputs))}
 	case ReleaseProgressReleaseCommitPushing:
@@ -169,7 +170,7 @@ func renderReleaseProgressEvent(event ReleaseProgressEvent) []releaseProgressLin
 	case ReleaseProgressGitWorktreeChecking:
 		return []releaseProgressLine{progressLine(log.Exec, "Checking V2 release worktree before staging")}
 	case ReleaseProgressGitStagingFiles:
-		return []releaseProgressLine{progressLine(log.Exec, "Staging V2 release files: %s", strings.Join(event.Files, ", "))}
+		return []releaseProgressLine{progressLine(log.Exec, "Staging V2 release files: %s", safeReleaseProgressPaths(event.Files))}
 	case ReleaseProgressGitStagedFilesVerified:
 		return []releaseProgressLine{progressLine(log.Exec, "Verified staged V2 release files")}
 	case ReleaseProgressGitReleaseCommitCreating:
@@ -191,13 +192,13 @@ func renderReleaseProgressEvent(event ReleaseProgressEvent) []releaseProgressLin
 	case ReleaseProgressGitUnitTagPushed:
 		return []releaseProgressLine{progressLine(log.Exec, "Pushed V2 unit tag %s", event.Tag)}
 	case ReleaseProgressGitKnownFilesUnstaging:
-		return []releaseProgressLine{progressLine(log.Exec, "Unstaging V2 release files: %s", strings.Join(event.Files, ", "))}
+		return []releaseProgressLine{progressLine(log.Exec, "Unstaging V2 release files: %s", safeReleaseProgressPaths(event.Files))}
 	case ReleaseProgressGitHubActionsTarget:
 		return []releaseProgressLine{progressLine(log.Exec, "GitHub Actions target resolved: %s/%s workflow=%s ref=%s", event.Owner, event.Repository, event.Workflow, event.Ref)}
 	case ReleaseProgressGitHubActionsJournal:
 		return []releaseProgressLine{progressLine(log.Exec, "Preparing GitHub Actions dispatch journal")}
 	case ReleaseProgressGitHubActionsJournalPath:
-		return []releaseProgressLine{progressLine(log.Exec, "Dispatch journal path: %s", event.Path)}
+		return []releaseProgressLine{progressLine(log.Exec, "Dispatch journal path: %s", safeReleaseProgressPath(event.Path))}
 	case ReleaseProgressGitHubActionsBlocked:
 		return []releaseProgressLine{progressLine(log.Exec, "Dispatch blocked by existing journal state: %s", event.DispatchState)}
 	case ReleaseProgressGitHubActionsTokenResolving:
@@ -223,4 +224,34 @@ func releaseProgressInputsValue(inputs []ReleaseProgressInput) string {
 		parts = append(parts, fmt.Sprintf("%s=%s", input.Name, input.Value))
 	}
 	return strings.Join(parts, " ")
+}
+
+func safeReleaseProgressPaths(paths []string) string {
+	if len(paths) == 0 {
+		return "none"
+	}
+	safe := make([]string, 0, len(paths))
+	for _, path := range paths {
+		safe = append(safe, safeReleaseProgressPath(path))
+	}
+	return strings.Join(safe, ", ")
+}
+
+func safeReleaseProgressPath(value string) string {
+	value = strings.TrimSpace(value)
+	switch {
+	case value == "":
+		return "not recorded"
+	case value == ".":
+		return "repository root"
+	case !filepath.IsAbs(value):
+		return filepath.ToSlash(filepath.Clean(value))
+	}
+	slashed := filepath.ToSlash(filepath.Clean(value))
+	for _, marker := range []string{"/.git/", "/.neko/"} {
+		if index := strings.LastIndex(slashed, marker); index >= 0 {
+			return strings.TrimPrefix(slashed[index+1:], "/")
+		}
+	}
+	return "repository-local artifact"
 }

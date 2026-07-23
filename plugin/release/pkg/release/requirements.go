@@ -53,9 +53,8 @@ func ValidateRequirementsForContext(ctx *ReleaseExecutionContext) error {
 
 	log.PluginV(
 		log.Config,
-		"Validating release requirements for %s in %s",
+		"Validating release requirements for %s at the selected unit root",
 		log.ColorText(log.ColorCyan, ctx.Executor),
-		log.ColorText(log.ColorGreen, ctx.UnitRoot),
 	)
 
 	return validateRequirementsForExecutor(ctx.Executor, ctx.UnitRoot, !ctx.DryRun)

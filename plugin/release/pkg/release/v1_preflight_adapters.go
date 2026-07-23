@@ -32,9 +32,8 @@ func (requirements systemV1ReleaseRequirements) Validate(intent V1ReleaseIntent)
 	}
 	log.PluginV(
 		log.Config,
-		"Validating release requirements for %s in %s",
+		"Validating release requirements for %s at the selected repository root",
 		log.ColorText(log.ColorCyan, string(intent.Config.ReleaseSystem)),
-		log.ColorText(log.ColorGreen, intent.RepositoryRoot),
 	)
 	if _, err := requirements.tokens.Resolve(); err != nil {
 		return err

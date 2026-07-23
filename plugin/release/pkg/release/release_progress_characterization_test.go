@@ -35,7 +35,7 @@ func TestGitHubActionsReleaseProgressCharacterization(t *testing.T) {
 	})
 
 	assertOrderedSubstrings(t, stderr,
-		"Repository root: "+ctx.RepositoryRoot,
+		"Repository root: selected repository root",
 		"Release source format: v2",
 		"Selected unit: api",
 		"Planning V2 release: current=0.2.0 next=0.2.1 tag=api/v0.2.1",
@@ -88,10 +88,6 @@ func TestGitHubActionsReleaseProgressCharacterization(t *testing.T) {
 
 func TestV2DryRunProgressCharacterizationKeepsMachineResponseSeparate(t *testing.T) {
 	root := newGitHubActionsDispatchRepository(t)
-	expectedRoot := root
-	if strings.HasPrefix(expectedRoot, "/var/") {
-		expectedRoot = "/private" + expectedRoot
-	}
 	withWorkingDirectoryRoot(t, root)
 	t.Setenv("GITHUB_TOKEN", "progress-dry-run-secret")
 
@@ -129,7 +125,7 @@ func TestV2DryRunProgressCharacterizationKeepsMachineResponseSeparate(t *testing
 	}
 	assertOrderedSubstrings(t, stderr,
 		"Starting patch release",
-		"Repository root: "+expectedRoot,
+		"Repository root: selected repository root",
 		"Release source format: v2",
 		"Selected unit: api",
 		"Planning V2 dry-run: current=0.2.0 next=0.2.1 tag=api/v0.2.1",

@@ -21,7 +21,7 @@ func (SystemV1BinaryLocator) Require(name string) error {
 	if err != nil {
 		return fmt.Errorf("required dependency missing: %s: %w", path, err)
 	}
-	log.PluginPrint(log.Init, "\uF00C Found %s at %s", log.ColorText(log.ColorCyan, name), log.ColorText(log.ColorGreen, path))
+	log.PluginPrint(log.Init, "\uF00C Found required %s executable", log.ColorText(log.ColorCyan, name))
 	return nil
 }
 

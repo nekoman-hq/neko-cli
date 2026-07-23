@@ -40,11 +40,11 @@ func TestTerminalReleaseProgressRendersTypedEventsToStderr(t *testing.T) {
 	}
 	assertOrderedSubstrings(t, stderr,
 		"Starting patch release",
-		"Repository root: /repo",
+		"Repository root: selected repository root",
 		"Release source format: v2",
 		"Selected unit: api",
-		"Config path: /repo/.neko/release.config.json",
-		"State path: /repo/.neko/release.state.json",
+		"Config path: .neko/release.config.json",
+		"State path: .neko/release.state.json",
 		"Planning V2 release: current=1.2.3 next=1.2.4 tag=api/v1.2.4",
 		"Executor=goreleaser delivery=github-actions workflow=.github/workflows/release-api.yml tagPrefix=api/v",
 	)
@@ -92,5 +92,31 @@ func TestTerminalReleaseProgressCannotRenderSecretFields(t *testing.T) {
 	})
 	if strings.Contains(stderr, secret) {
 		t.Fatalf("terminal progress rendered secret-bearing unused fields:\n%s", stderr)
+	}
+}
+
+func TestTerminalReleaseProgressSanitizesAbsoluteArtifactPaths(t *testing.T) {
+	root := "/private/tmp/release-progress-fixture"
+	_, stderr := captureReleaseProgressOutput(t, func() {
+		progress := newTerminalReleaseProgress()
+		progress.ReportReleaseProgress(ReleaseProgressEvent{
+			Kind: ReleaseProgressExecutionJournalPrepared,
+			Path: root + "/.git/neko/release/executions/identity.json",
+		})
+		progress.ReportReleaseProgress(ReleaseProgressEvent{
+			Kind: ReleaseProgressStateSnapshotCaptured,
+			Path: root + "/outside/snapshot.json",
+		})
+	})
+	if strings.Contains(stderr, root) {
+		t.Fatalf("terminal progress rendered an absolute fixture root:\n%s", stderr)
+	}
+	for _, want := range []string{
+		".git/neko/release/executions/identity.json",
+		"repository-local artifact",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("terminal progress omitted safe path label %q:\n%s", want, stderr)
+		}
 	}
 }
