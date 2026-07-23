@@ -405,6 +405,139 @@ func TestReleaseMigrateConflictIsActionableAndWriteFree(t *testing.T) {
 	}
 }
 
+func TestReleaseWorkflowInitCorePresentationAndIdempotencyContracts(t *testing.T) {
+	manifest := installReleaseSetupHelperPlugin(t)
+
+	defaultRoot, flags := newReleaseSetupWorkflowMissingRepository(t)
+	defaultOutput, defaultErr := executeReleaseReadonlyCommand(
+		t, manifest, defaultRoot, "github-workflow-init", flags, releaseReadonlyMode{},
+	)
+	describeRoot, flags := newReleaseSetupWorkflowMissingRepository(t)
+	describeOutput, describeErr := executeReleaseReadonlyCommand(
+		t, manifest, describeRoot, "github-workflow-init", flags, releaseReadonlyMode{describe: true},
+	)
+	verboseRoot, flags := newReleaseSetupWorkflowMissingRepository(t)
+	verboseOutput, verboseErr := executeReleaseReadonlyCommand(
+		t, manifest, verboseRoot, "github-workflow-init", flags, releaseReadonlyMode{verbose: true},
+	)
+	combinedRoot, flags := newReleaseSetupWorkflowMissingRepository(t)
+	combinedOutput, combinedErr := executeReleaseReadonlyCommand(
+		t, manifest, combinedRoot, "github-workflow-init", flags, releaseReadonlyMode{describe: true, verbose: true},
+	)
+	if defaultErr != nil || describeErr != nil || verboseErr != nil || combinedErr != nil {
+		t.Fatalf("workflow preview exits: default=%v describe=%v verbose=%v combined=%v", defaultErr, describeErr, verboseErr, combinedErr)
+	}
+	for _, want := range []string{
+		"GitHub Actions workflow scaffolding preview", "Target: .github/workflows/release-api.yml",
+		"Status: create", "Action: would-create", "Generated workflow",
+	} {
+		if !strings.Contains(defaultOutput, want) {
+			t.Fatalf("workflow preview default omitted %q:\n%s", want, defaultOutput)
+		}
+	}
+	for _, hidden := range []string{
+		"Workflow Identity", "Target Comparison", "Validation Facts", "Required Workflow Inputs", "Write Plan", "Limitations",
+	} {
+		if strings.Contains(defaultOutput, hidden) ||
+			!strings.Contains(describeOutput, hidden) || !strings.Contains(combinedOutput, hidden) {
+			t.Fatalf("workflow describe visibility for %q is incorrect:\ndefault:\n%s\ndescribe:\n%s\ncombined:\n%s", hidden, defaultOutput, describeOutput, combinedOutput)
+		}
+	}
+	for _, want := range []string{
+		"Validating workflow initialization request", "Reading Release V2 workflow configuration",
+		"Resolving configured workflow target", "Reading existing workflow target",
+		"Comparing canonical and existing workflow content", "Workflow target classified as create",
+		"Dry-run selected; no workflow file written", "Workflow preview completed",
+	} {
+		if !strings.Contains(verboseOutput, want) || !strings.Contains(combinedOutput, want) {
+			t.Fatalf("workflow verbose modes omitted %q:\nverbose:\n%s\ncombined:\n%s", want, verboseOutput, combinedOutput)
+		}
+	}
+	outputs := []struct {
+		root   string
+		output string
+	}{
+		{root: defaultRoot, output: defaultOutput},
+		{root: describeRoot, output: describeOutput},
+		{root: verboseRoot, output: verboseOutput},
+		{root: combinedRoot, output: combinedOutput},
+	}
+	for _, result := range outputs {
+		for _, forbidden := range []string{result.root, "\x1b[", "setup-transport-secret", "Authorization", "Bearer"} {
+			if strings.Contains(result.output, forbidden) {
+				t.Fatalf("workflow human output contains %q:\n%s", forbidden, result.output)
+			}
+		}
+		if existsReleaseSetupFile(filepath.Join(result.root, ".github", "workflows", "release-api.yml")) {
+			t.Fatalf("workflow dry-run created target in %s", result.root)
+		}
+	}
+
+	actualRoot, actualFlags := newReleaseSetupWorkflowMissingRepository(t)
+	target := filepath.Join(actualRoot, ".github", "workflows", "release-api.yml")
+	actualOutput, actualErr := executeReleaseReadonlyCommand(
+		t, manifest, actualRoot, "github-workflow-init", actualFlags[:len(actualFlags)-1], releaseReadonlyMode{verbose: true},
+	)
+	if actualErr != nil {
+		t.Fatalf("workflow actual create exit: %v\n%s", actualErr, actualOutput)
+	}
+	for _, want := range []string{
+		"GitHub Workflow Initialization", "Workflow created", ".github/workflows/release-api.yml",
+		"Writing missing workflow file", "Workflow file created", "Workflow initialization completed",
+	} {
+		if !strings.Contains(actualOutput, want) {
+			t.Fatalf("workflow actual create omitted %q:\n%s", want, actualOutput)
+		}
+	}
+	canonical, err := releasecmd.RenderCanonicalGitHubActionsReleaseWorkflow()
+	if err != nil {
+		t.Fatalf("render canonical workflow: %v", err)
+	}
+	created, err := os.ReadFile(target)
+	if err != nil || !reflect.DeepEqual(created, canonical) {
+		t.Fatalf("workflow actual create bytes differ from canonical: err=%v", err)
+	}
+
+	identicalOutput, identicalErr := executeReleaseReadonlyCommand(
+		t, manifest, actualRoot, "github-workflow-init", actualFlags[:len(actualFlags)-1], releaseReadonlyMode{verbose: true},
+	)
+	if identicalErr != nil {
+		t.Fatalf("workflow identical exit: %v\n%s", identicalErr, identicalOutput)
+	}
+	for _, want := range []string{"Workflow already current", "No write required", "Existing canonical workflow accepted; no write required"} {
+		if !strings.Contains(identicalOutput, want) {
+			t.Fatalf("workflow identical omitted %q:\n%s", want, identicalOutput)
+		}
+	}
+	afterIdentical, err := os.ReadFile(target)
+	if err != nil || !reflect.DeepEqual(afterIdentical, canonical) {
+		t.Fatalf("workflow identical changed canonical target: err=%v", err)
+	}
+
+	conflictRoot, conflictFlags := newReleaseSetupWorkflowMissingRepository(t)
+	conflictTarget := filepath.Join(conflictRoot, ".github", "workflows", "release-api.yml")
+	conflicting := []byte("name: consumer-owned\n")
+	writeReleaseSetupFile(t, conflictTarget, string(conflicting))
+	conflictOutput, conflictErr := executeReleaseReadonlyCommand(
+		t, manifest, conflictRoot, "github-workflow-init", conflictFlags[:len(conflictFlags)-1], releaseReadonlyMode{},
+	)
+	if conflictErr == nil {
+		t.Fatal("workflow conflict changed non-zero exit policy")
+	}
+	for _, want := range []string{
+		"Workflow Initialization Blocked", "WORKFLOW_TARGET_CONFLICT", "Different content",
+		"Overwrite", "Refused", "--dry-run", "resolve the file manually",
+	} {
+		if !strings.Contains(conflictOutput, want) {
+			t.Fatalf("workflow conflict omitted %q:\n%s", want, conflictOutput)
+		}
+	}
+	afterConflict, err := os.ReadFile(conflictTarget)
+	if err != nil || !reflect.DeepEqual(afterConflict, conflicting) {
+		t.Fatalf("workflow conflict overwrote target: content=%q err=%v", afterConflict, err)
+	}
+}
+
 func normalizeReleaseSetupData(t *testing.T, data map[string]any, root string) map[string]any {
 	t.Helper()
 	encoded, err := json.Marshal(data)
@@ -530,6 +663,16 @@ func newReleaseSetupWorkflowRepository(t *testing.T) (string, []string) {
 	t.Helper()
 	root, _ := newReleaseSetupUnitAddRepository(t)
 	return root, []string{"--unit", "api", "--dry-run"}
+}
+
+func newReleaseSetupWorkflowMissingRepository(t *testing.T) (string, []string) {
+	t.Helper()
+	root, flags := newReleaseSetupWorkflowRepository(t)
+	target := filepath.Join(root, ".github", "workflows", "release-api.yml")
+	if err := os.Remove(target); err != nil {
+		t.Fatalf("remove workflow fixture target: %v", err)
+	}
+	return root, flags
 }
 
 func newReleaseSetupRepository(t *testing.T) string {

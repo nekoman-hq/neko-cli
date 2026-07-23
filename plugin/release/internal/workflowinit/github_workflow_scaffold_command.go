@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nekoman-hq/neko-cli/pkg/log"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
 )
@@ -86,10 +87,13 @@ func invalidWorkflowScaffoldFlag(name, expected string) *commandFailure {
 }
 
 func (handler githubWorkflowScaffoldCommandHandler) Handle(ctx context.Context, request plugin.Request) (*plugin.Response, error) {
+	log.PluginV(log.Config, "Validating workflow initialization request")
 	typedRequest, failure := parseGitHubWorkflowScaffoldCommandRequest(handler.root, request)
 	if failure != nil {
+		log.PluginV(log.Exec, "Workflow initialization stopped during request validation")
 		return workflowScaffoldFailureResponse(failure, handler.clock.Now()), nil
 	}
+	log.PluginV(log.Config, "Selecting workflow initialization mode")
 	var result *githubWorkflowScaffoldResult
 	switch typedRequest.Intent {
 	case githubWorkflowScaffoldPreviewIntent:
@@ -100,13 +104,18 @@ func (handler githubWorkflowScaffoldCommandHandler) Handle(ctx context.Context, 
 		failure = failureFromMessage("INVALID_WORKFLOW_SCAFFOLD_REQUEST", "workflow scaffolding intent is invalid")
 	}
 	if failure != nil {
+		log.PluginV(log.Exec, "Workflow initialization stopped before completion")
 		return workflowScaffoldFailureResponse(failure, handler.clock.Now()), nil
+	}
+	if !result.Preview {
+		log.PluginV(log.Exec, "Workflow initialization completed")
 	}
 	return mapGitHubWorkflowScaffoldResult(result, handler.clock.Now()), nil
 }
 
 func workflowScaffoldFailureResponse(failure *commandFailure, timestamp time.Time) *plugin.Response {
 	response := mapCommandFailure(githubWorkflowInitCommandName, failure, timestamp)
+	response.PresentationTable = githubWorkflowFailurePresentation(failure)
 	response.ExitCode = 1
 	return response
 }

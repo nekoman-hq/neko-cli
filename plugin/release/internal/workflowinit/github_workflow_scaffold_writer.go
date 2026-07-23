@@ -7,6 +7,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+
+	"github.com/nekoman-hq/neko-cli/pkg/log"
 )
 
 const (
@@ -88,6 +90,7 @@ func (useCase githubWorkflowScaffoldCreateUseCase) Create(ctx context.Context, r
 	}
 	switch plan.Classification {
 	case githubWorkflowTargetUnchanged:
+		log.PluginV(log.Exec, "Existing canonical workflow accepted; no write required")
 		return &githubWorkflowScaffoldResult{
 			Plan:      *plan,
 			Action:    "none",
@@ -95,6 +98,7 @@ func (useCase githubWorkflowScaffoldCreateUseCase) Create(ctx context.Context, r
 			Unchanged: true,
 		}, nil
 	case githubWorkflowTargetConflict:
+		log.PluginV(log.Exec, "Workflow content conflict detected; overwrite refused")
 		return nil, &commandFailure{
 			Code:    "WORKFLOW_TARGET_CONFLICT",
 			Message: fmt.Sprintf("workflow target %q already exists with different content and was not overwritten", plan.Target.RelativePath),
@@ -106,9 +110,11 @@ func (useCase githubWorkflowScaffoldCreateUseCase) Create(ctx context.Context, r
 			},
 		}
 	case githubWorkflowTargetCreate:
+		log.PluginV(log.Exec, "Writing missing workflow file")
 		if failure := useCase.writer.Create(plan.Target, plan.GeneratedContent); failure != nil {
 			return nil, failure
 		}
+		log.PluginV(log.Exec, "Workflow file created")
 		return &githubWorkflowScaffoldResult{
 			Plan:     *plan,
 			Action:   "created",

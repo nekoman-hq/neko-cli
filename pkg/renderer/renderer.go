@@ -344,11 +344,18 @@ func renderTableWithWidth(
 		if err != nil {
 			return err
 		}
-		if rendered, err := renderTextPresentation(resolved, w); rendered || err != nil {
+		textRendered, err := renderTextPresentation(resolved, w)
+		if err != nil {
 			return err
 		}
-		if rendered, err := renderResponsivePresentationSequence(resolved, w, wide, describe, widthProvider, styler); rendered || err != nil {
-			return err
+		if textRendered && !hasVisibleStructuredPresentation(resolved, describe) {
+			return nil
+		}
+		if textRendered {
+			_, _ = fmt.Fprintln(w)
+		}
+		if rendered, sequenceErr := renderResponsivePresentationSequence(resolved, w, wide, describe, widthProvider, styler); rendered || sequenceErr != nil {
+			return sequenceErr
 		}
 		if resolved.PresentationTable != nil {
 			_, err = renderResponsiveTable(resolved, w, wide, widthProvider, styler)
@@ -362,11 +369,18 @@ func renderTableWithWidth(
 		return err
 	}
 	resp = resolved
-	if rendered, err := renderTextPresentation(resp, w); rendered || err != nil {
+	textRendered, err := renderTextPresentation(resp, w)
+	if err != nil {
 		return err
 	}
-	if rendered, err := renderResponsivePresentationSequence(resp, w, wide, describe, widthProvider, styler); rendered || err != nil {
-		return err
+	if textRendered && !hasVisibleStructuredPresentation(resp, describe) {
+		return nil
+	}
+	if textRendered {
+		_, _ = fmt.Fprintln(w)
+	}
+	if rendered, sequenceErr := renderResponsivePresentationSequence(resp, w, wide, describe, widthProvider, styler); rendered || sequenceErr != nil {
+		return sequenceErr
 	}
 	if resp.PresentationProperties == nil && resp.PresentationTable != nil {
 		if rendered, err := renderResponsiveTable(resp, w, wide, widthProvider, styler); rendered || err != nil {
@@ -388,6 +402,18 @@ func renderTableWithWidth(
 
 	// Single object or key-value data
 	return renderKeyValue(resp.Data, w, styler)
+}
+
+func hasVisibleStructuredPresentation(response *plugin.Response, describe bool) bool {
+	if response.PresentationProperties != nil {
+		return true
+	}
+	for table := response.PresentationTable; table != nil; table = table.Following {
+		if !table.DescribeOnly || describe {
+			return true
+		}
+	}
+	return false
 }
 
 func responseWithResolvedPresentation(response *plugin.Response) (*plugin.Response, error) {

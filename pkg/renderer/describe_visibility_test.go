@@ -92,6 +92,31 @@ func TestDescribeAndVerboseDoNotChangeJSONOrRawJSON(t *testing.T) {
 	}
 }
 
+func TestTextPresentationComposesDescribeOnlyStructuredDetails(t *testing.T) {
+	response := &plugin.Response{
+		Status:           "success",
+		PresentationText: &presentation.Text{Content: "generated preview\n"},
+		PresentationTable: &presentation.Table{
+			Title: "Preview Facts", DescribeOnly: true,
+			Columns: []presentation.Column{{Key: "fact", Label: "Fact", Essential: true}},
+			Rows:    []map[string]any{{"fact": "safe structured detail"}},
+		},
+	}
+	plain := renderDescribeVisibilityFixture(t, response, RenderOptions{Format: FormatTable})
+	if plain != "generated preview\n" {
+		t.Fatalf("default text presentation changed: %q", plain)
+	}
+	described := renderDescribeVisibilityFixture(t, response, RenderOptions{Format: FormatTable, Describe: true})
+	for _, want := range []string{"generated preview", "Preview Facts", "safe structured detail"} {
+		if !strings.Contains(described, want) {
+			t.Fatalf("described text composition omitted %q:\n%s", want, described)
+		}
+	}
+	if strings.Count(described, "generated preview") != 1 {
+		t.Fatalf("described text composition duplicated preview:\n%s", described)
+	}
+}
+
 func renderDescribeVisibilityFixture(t *testing.T, response *plugin.Response, options RenderOptions) string {
 	t.Helper()
 	options.ColorProvider = fixedColorProvider(false)

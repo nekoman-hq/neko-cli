@@ -9,18 +9,6 @@ import (
 	"github.com/nekoman-hq/neko-cli/pkg/presentation"
 )
 
-var githubWorkflowScaffoldPresentationProperties = []presentation.Property{
-	{Key: "target", Label: "Target"},
-	{Key: "classification", Label: "Status"},
-	{Key: "action", Label: "Action"},
-	{Key: "selected_unit", Label: "Selected unit"},
-	{Key: "units_using_workflow", Label: "Units using workflow"},
-	{Key: "contract_version", Label: "Contract version"},
-	{Key: "written", Label: "Written"},
-	{Key: "unchanged", Label: "Unchanged"},
-	{Key: "guidance", Label: "Guidance"},
-}
-
 func mapGitHubWorkflowScaffoldResult(result *githubWorkflowScaffoldResult, timestamp time.Time) *plugin.Response {
 	if result == nil {
 		return workflowScaffoldFailureResponse(
@@ -41,13 +29,12 @@ func mapGitHubWorkflowScaffoldResult(result *githubWorkflowScaffoldResult, times
 		"guidance":             result.Guidance,
 	}
 	response := &plugin.Response{
-		Status:       "success",
-		Metadata:     workflowInitResponseMetadata(githubWorkflowInitCommandName, timestamp),
-		Data:         data,
-		RendererHint: "table",
-		PresentationProperties: &presentation.Properties{
-			Properties: append([]presentation.Property(nil), githubWorkflowScaffoldPresentationProperties...),
-		},
+		Status:                 "success",
+		Metadata:               workflowInitResponseMetadata(githubWorkflowInitCommandName, timestamp),
+		Data:                   data,
+		RendererHint:           "table",
+		PresentationProperties: githubWorkflowScaffoldSummaryPresentation(result),
+		PresentationTable:      githubWorkflowScaffoldDetailPresentation(result),
 	}
 	if result.Preview {
 		data["generated_content"] = string(result.Plan.GeneratedContent)
