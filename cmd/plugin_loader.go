@@ -92,7 +92,7 @@ func createSubCommand(pluginName string, pluginCmd plugin.Command) *cobra.Comman
 		},
 	}
 	subCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		_ = renderPluginCommandHelp(cmd.OutOrStdout(), pluginName, pluginCmd)
+		_ = renderPluginCommandHelp(cmd.OutOrStdout(), cmd, pluginName, pluginCmd)
 	})
 
 	// Add flags from the plugin manifest
@@ -143,7 +143,7 @@ func renderPluginOverview(w io.Writer, manifest plugin.Manifest) error {
 	return err
 }
 
-func renderPluginCommandHelp(w io.Writer, pluginName string, pluginCmd plugin.Command) error {
+func renderPluginCommandHelp(w io.Writer, cmd *cobra.Command, pluginName string, pluginCmd plugin.Command) error {
 	if _, err := fmt.Fprintf(w, "Plugin: %s\n", pluginName); err != nil {
 		return err
 	}
@@ -162,7 +162,7 @@ func renderPluginCommandHelp(w io.Writer, pluginName string, pluginCmd plugin.Co
 		}
 	}
 
-	if _, err := fmt.Fprintln(w, "\nFlags:"); err != nil {
+	if _, err := fmt.Fprintln(w, "\nCommand flags:"); err != nil {
 		return err
 	}
 	if len(pluginCmd.Flags) == 0 {
@@ -188,8 +188,47 @@ func renderPluginCommandHelp(w io.Writer, pluginName string, pluginCmd plugin.Co
 		}
 	}
 
+	if err := renderInheritedPluginResponseFlags(w, cmd); err != nil {
+		return err
+	}
+
 	_, err := fmt.Fprintf(w, "\nUsage: neko %s %s [flags]\n", pluginName, pluginCmd.Name)
 	return err
+}
+
+var inheritedPluginResponseFlagOrder = []string{
+	"describe",
+	"verbose",
+	"output",
+	"github-output-file",
+}
+
+func renderInheritedPluginResponseFlags(w io.Writer, cmd *cobra.Command) error {
+	inherited := cmd.InheritedFlags()
+	flags := make([]*pflag.Flag, 0, len(inheritedPluginResponseFlagOrder))
+	for _, name := range inheritedPluginResponseFlagOrder {
+		if flag := inherited.Lookup(name); flag != nil {
+			flags = append(flags, flag)
+		}
+	}
+	if len(flags) == 0 {
+		return nil
+	}
+
+	if _, err := fmt.Fprintln(w, "\nGlobal plugin-response flags:"); err != nil {
+		return err
+	}
+	tw := tabwriter.NewWriter(w, 0, 0, 2, 32, 0)
+	for _, flag := range flags {
+		defaultValue := ""
+		if flag.DefValue != "" {
+			defaultValue = " default=" + flag.DefValue
+		}
+		if _, err := fmt.Fprintf(tw, "  --%s\t%s%s\t%s\n", flag.Name, flag.Value.Type(), defaultValue, flag.Usage); err != nil {
+			return err
+		}
+	}
+	return tw.Flush()
 }
 
 func splitPluginUnitFlags(flags []plugin.Flag) ([]plugin.Flag, []plugin.Flag) {

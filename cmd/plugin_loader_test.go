@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -79,6 +80,99 @@ func TestPluginCommandHelpRendersManifestFlags(t *testing.T) {
 	assertNotContains(t, output, "Neko CLI plugin unit flags")
 }
 
+func TestPluginCommandHelpSeparatesInheritedGlobalPluginResponseFlags(t *testing.T) {
+	manifest := testPluginManifest("release")
+	root := testRootWithPluginResponseFlags()
+	root.AddCommand(CreatePluginCommand(manifest))
+
+	output, err := executeTestCommand(root, "release", "patch", "--help")
+	if err != nil {
+		t.Fatalf("expected command help to render without error: %v", err)
+	}
+
+	commandIndex := strings.Index(output, "\nCommand flags:\n")
+	globalIndex := strings.Index(output, "\nGlobal plugin-response flags:\n")
+	usageIndex := strings.Index(output, "\nUsage:")
+	if commandIndex < 0 || globalIndex < 0 || usageIndex < 0 || commandIndex >= globalIndex || globalIndex >= usageIndex {
+		t.Fatalf("expected separated command/global flag sections before usage, got:\n%s", output)
+	}
+	commandSection := output[commandIndex:globalIndex]
+	globalSection := output[globalIndex:usageIndex]
+	for _, name := range []string{"--unit", "--dry-run"} {
+		assertContains(t, commandSection, name)
+		assertNotContains(t, globalSection, name)
+	}
+	for _, name := range []string{"--describe", "--verbose", "--output", "--github-output-file"} {
+		assertNotContains(t, commandSection, name)
+		assertContains(t, globalSection, name)
+		if count := countHelpFlagDefinitions(output, name); count != 1 {
+			t.Fatalf("help occurrence count for %s = %d, want 1:\n%s", name, count, output)
+		}
+	}
+	assertOrderedHelpFlags(t, commandSection, "--unit", "--dry-run")
+	assertOrderedHelpFlags(t, globalSection, "--describe", "--verbose", "--output", "--github-output-file")
+}
+
+func TestPluginIndexHelpKeepsKnownLocalGlobalOutputCollisionVisible(t *testing.T) {
+	manifest := plugin.Manifest{
+		Name: "release",
+		Commands: []plugin.Command{{
+			Name: "plugin-index",
+			Flags: []plugin.Flag{
+				{Name: "output", Type: "string", Description: "Optional file path to write plugin-index.json"},
+				{Name: "check", Type: "bool", Description: "Check only"},
+			},
+		}},
+	}
+	root := testRootWithPluginResponseFlags()
+	root.AddCommand(CreatePluginCommand(manifest))
+
+	output, err := executeTestCommand(root, "release", "plugin-index", "--help")
+	if err != nil {
+		t.Fatalf("expected plugin-index help to render without error: %v", err)
+	}
+	commandIndex := strings.Index(output, "\nCommand flags:\n")
+	globalIndex := strings.Index(output, "\nGlobal plugin-response flags:\n")
+	if commandIndex < 0 || globalIndex < 0 {
+		t.Fatalf("expected separated flag sections, got:\n%s", output)
+	}
+	commandSection := output[commandIndex:globalIndex]
+	globalSection := output[globalIndex:]
+	assertContains(t, commandSection, "--output")
+	assertContains(t, commandSection, "Optional file path to write plugin-index.json")
+	if count := countHelpFlagDefinitions(globalSection, "--output"); count != 0 {
+		t.Fatalf("global plugin-index help defines shadowed --output %d times:\n%s", count, globalSection)
+	}
+	for _, name := range []string{"--describe", "--verbose", "--github-output-file"} {
+		assertContains(t, globalSection, name)
+	}
+	if count := countHelpFlagDefinitions(output, "--output"); count != 1 {
+		t.Fatalf("plugin-index --output occurrence count = %d, want one local collision surface:\n%s", count, output)
+	}
+}
+
+func TestExtractFlagsSerializesOnlyCommandLocalNonPersistentFlags(t *testing.T) {
+	root := testRootWithPluginResponseFlags()
+	command := &cobra.Command{Use: "inspect"}
+	command.Flags().String("unit", "", "Release unit")
+	command.Flags().Bool("show", false, "Show details")
+	var got map[string]any
+	command.RunE = func(cmd *cobra.Command, _ []string) error {
+		got = extractFlags(cmd)
+		return nil
+	}
+	root.AddCommand(command)
+	root.SetArgs([]string{"inspect", "--unit", "cli", "--show", "--describe", "--verbose", "--output", "json", "--github-output-file", "/private/tmp/neko-cli-output"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute flag extraction command: %v", err)
+	}
+
+	want := map[string]any{"unit": "cli", "show": true}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("extracted flags = %#v, want %#v", got, want)
+	}
+}
+
 func TestPluginCommandHelpGroupsPluginUnitFlags(t *testing.T) {
 	manifest := plugin.Manifest{
 		Name:        "release",
@@ -105,7 +199,7 @@ func TestPluginCommandHelpGroupsPluginUnitFlags(t *testing.T) {
 		t.Fatalf("expected command help to render without error: %v", err)
 	}
 
-	flagsIndex := strings.Index(output, "\nFlags:\n")
+	flagsIndex := strings.Index(output, "\nCommand flags:\n")
 	pluginIndex := strings.Index(output, "\nNeko CLI plugin unit flags (only with --kind plugin):\n")
 	if flagsIndex < 0 || pluginIndex < 0 || flagsIndex >= pluginIndex {
 		t.Fatalf("expected plugin flags after normal flags section, got:\n%s", output)
@@ -270,6 +364,38 @@ func executeTestCommand(cmd *cobra.Command, args ...string) (string, error) {
 	cmd.SetArgs(args)
 	err := cmd.Execute()
 	return buf.String(), err
+}
+
+func testRootWithPluginResponseFlags() *cobra.Command {
+	root := &cobra.Command{Use: "neko"}
+	root.PersistentFlags().Bool("describe", false, "Include structured details and metadata in output -- only for plugin responses")
+	root.PersistentFlags().BoolP("verbose", "v", false, "Include execution and debug logs in plugin output")
+	root.PersistentFlags().String("output", "table", "Output format (table, json, wide, github) -- only for plugin responses")
+	root.PersistentFlags().String("github-output-file", "", "Explicit GitHub Actions command-file destination -- only for --output github")
+	return root
+}
+
+func assertOrderedHelpFlags(t *testing.T, output string, names ...string) {
+	t.Helper()
+	last := -1
+	for _, name := range names {
+		index := strings.Index(output, name)
+		if index < 0 || index <= last {
+			t.Fatalf("flags are not in expected order %v:\n%s", names, output)
+		}
+		last = index
+	}
+}
+
+func countHelpFlagDefinitions(output, name string) int {
+	count := 0
+	for _, line := range strings.Split(output, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) > 0 && fields[0] == name {
+			count++
+		}
+	}
+	return count
 }
 
 func testPluginManifest(name string) plugin.Manifest {
