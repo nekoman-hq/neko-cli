@@ -15,6 +15,42 @@ neko release init-options
 
 `unit-add` appends one unit to existing V2 config/state. It uses the same unit flags as `init`; the plugin metadata flags are only for `--kind plugin` Neko CLI plugin units. Normal repositories can contain only normal release units and need no plugin metadata or plugin registry. It requires both `.neko/release.config.json` and `.neko/release.state.json`, preserves existing units, and never overwrites an existing unit. It does not generate workflow files, GoReleaser config files, plugin manifests, source directories, or any release artifacts. See [Normal release units vs Neko CLI plugin units](examples.md#normal-release-units-vs-neko-cli-plugin-units).
 
+### Setup and migration presentation
+
+`init`, `unit-add`, `migrate`, and `github-workflow-init` declare the supported
+Core formats `table,json`. They inherit the global `--describe`, `--verbose`,
+and `--output` flags. They do not declare local copies of those flags, and
+there is no selectable global format named `text`.
+
+| Command | Default table output | `--describe` additions | `--verbose` phases |
+| --- | --- | --- | --- |
+| `init` | initialized unit, version, executor, delivery, V2 config/state, next action | `Resolved Configuration` with complete unit and force facts; `Artifact Write Plan`; `Validation Facts`; `Limitations` | input validation; repository-state inspection; configuration resolution; pair validation; artifact preparation; config/state write; completion |
+| `unit-add` | added unit, version, executor, delivery, updated V2 config/state, next action | `Resolved Unit`; `Existing Unit Comparison`; `Artifact Write Plan`; `Validation Facts`; `Limitations` | existing-pair inspection/read; input/default resolution; duplicate check; updated-pair validation; config/state write; completion |
+| `migrate` | V1/V2 contracts, readiness/outcome, dry-run state, planned count, V2 targets, archive decision, next action | `Source Facts`; `Resolved V2 Configuration`; `Generated Artifacts`; `Ordered Migration Plan`; `Archive and Journal`; `Validation Facts`; `Write Plan`; `Limitations` | source/root discovery; V1 validation; V2 derivation and validation; archive/journal planning; dry-run decision; successful pair write/verification; archive; journal completion |
+| `github-workflow-init` | create/current result, target, canonical identity, contract, write outcome, next action; dry-run preview once | `Workflow Identity`; `Target Comparison`; `Validation Facts`; `Required Workflow Inputs`; `Write Plan`; `Limitations` | request/config selection; target/path resolution; read/render/validation; canonical comparison; classification; dry-run, idempotent acceptance, conflict, or create; completion |
+
+Failures remain visible without `--describe`. Init reports the affected V1/V2
+source or pair and whether `--force` applies. Unit Add reports duplicate or
+invalid unit facts and remediation. Migrate distinguishes planning failures
+with no writes from later failures where recovery evidence may remain.
+Workflow Init reports the safe target, refuses overwrite, and recommends a
+dry-run/manual comparison for differing content.
+
+JSON remains the established domain response for every command:
+`--describe --output json` does not add presentation-only fields or change
+values, ordering, nullability, dry-run/actual variants, or exit behavior.
+`--verbose` may add captured logs outside domain data. Human output and logs
+use repository-relative paths, do not print generated config documents,
+credentials, token values, or environment values, and contain no ANSI when
+redirected or when `NO_COLOR` is set.
+
+The mode flags do not change side effects. Init and Unit Add persist one
+validated V2 pair with the existing recovery policy. Migrate dry-run performs
+no write; successful migration retains its established V1 archive and journal
+semantics. Workflow Init creates only a missing target, accepts byte-identical
+content without rewriting, and never overwrites differing content. None of
+these presentation modes performs Git or network operations.
+
 ## V1
 
 V1 uses `.release.neko.json` and supports the existing release commands.
@@ -151,9 +187,11 @@ The command is create-only:
 - `--dry-run`: make no write and return classification plus the complete
   generated YAML, including for a conflict.
 
-Human-readable output uses ordered target/status/action/scope/version/write/guidance
-fields; preview uses readable preformatted YAML. JSON returns typed `target`,
-`classification`, `action`, `written`, `unchanged`, `dry_run`,
+Default human-readable output uses concise result/target/identity/write/guidance
+fields; dry-run preview uses readable preformatted YAML. Describe adds the
+complete structured identity, target comparison, validation, input, write
+plan, and limitation sections without rendering the YAML twice. JSON returns
+typed `target`, `classification`, `action`, `written`, `unchanged`, `dry_run`,
 `contract_version`, `selected_unit`, `units_using_workflow`, and `guidance`;
 `generated_content` appears only for preview. The command supports `table` and
 `json`, not GitHub output mode. It reads no token, contacts no network, runs no
@@ -754,3 +792,11 @@ unit and treats `--unit` only as a presentation focus.
 ```
 
 It migrates only `.release.neko.json` in the Git root to a V2 `default` unit. It does not migrate nested V1 files, infer multiple units, change tag prefixes, or run a release.
+
+Default human output is a concise source/destination/readiness/write summary.
+Describe exposes the normalized source and resolved V2 facts, generated
+artifact summaries, exact ordered plan, archive/journal decisions, validation,
+write outcome, and limitations. Dry-run logs contain planning phases and an
+explicit no-write result, never write-completed claims. Actual logs announce
+only completed write, verification, archive, and journal phases. JSON retains
+the complete generated artifact data and existing outcome variants.

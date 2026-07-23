@@ -129,6 +129,58 @@ neko release unit-add \
 
 It does not generate workflow files, GoReleaser config files, plugin manifests, source directories, tags, releases, or release assets. V1 repositories should use `neko release migrate` first.
 
+#### Setup and migration output modes
+
+`init`, `unit-add`, `migrate`, and `github-workflow-init` support the Core
+output formats `table` and `json`. The global `--describe` and `--verbose`
+flags are inherited from Core; they are not command-local flags and they can
+be combined.
+
+- Default table output keeps the primary result, affected repository-relative
+  artifacts, and the next useful action concise. Conflicts and refusals always
+  retain their reason and remediation.
+- `--describe` adds structured configuration, source/target, comparison,
+  validation, artifact, write-plan, outcome, and limitation facts. It does not
+  change the operation or create a second machine-data shape.
+- `--verbose` adds chronological orchestration logs from the command that owns
+  each phase. Logs do not repeat the full describe projection.
+- `--output json` remains the complete established machine contract.
+  `--describe --output json` has the same domain data, and verbose logs stay
+  outside that data.
+
+Init describe output contains `Resolved Configuration`, `Artifact Write Plan`,
+`Validation Facts`, and `Limitations`, including the complete resolved unit,
+plugin metadata when applicable, and force policy. Its verbose path covers
+input validation, repository-state inspection, default resolution, generated
+pair validation, artifact preparation, pair persistence, and completion.
+
+Unit Add describe output contains `Resolved Unit`, `Existing Unit Comparison`,
+`Artifact Write Plan`, `Validation Facts`, and `Limitations`. Its verbose path
+covers existing-pair inspection and reading, input/default resolution,
+duplicate detection, updated-pair validation, persistence, and completion.
+Duplicate identities are refused and never replaced.
+
+Migrate describe output contains `Source Facts`, `Resolved V2 Configuration`,
+`Generated Artifacts`, `Ordered Migration Plan`, `Archive and Journal`,
+`Validation Facts`, `Write Plan`, and `Limitations`. Dry-run logs stop after
+planning and explicitly report that no migration files were written. Actual
+logs report V2 pair writes, verification, V1 archive handling, and journal
+completion only after those phases succeed. Post-write failures may retain
+recovery evidence; planning failures write nothing.
+
+Workflow Init describe output contains `Workflow Identity`, `Target
+Comparison`, `Validation Facts`, `Required Workflow Inputs`, `Write Plan`, and
+`Limitations`. The existing YAML preview remains the principal dry-run output
+and is not duplicated in describe tables. Verbose output records target
+resolution, path and generated-content validation, comparison,
+create/unchanged/conflict classification, dry-run or write handling, and
+completion. Differing workflow content is always preserved.
+
+Human projections and logs use safe repository-relative paths, emit no token
+or credential values, and are ANSI-free when redirected or when `NO_COLOR` is
+set. These modes do not alter dry-run, write, overwrite, exit, Git, or network
+behavior.
+
 ---
 
 ### `neko release github-workflow-init`
@@ -183,9 +235,11 @@ OIDC, deployments, release notes, and any GitHub Release creation.
 Generation is token-free, network-free, Git-mutation-free, rooted at the
 resolved repository, and independent of process cwd. Existing manually
 maintained workflows remain supported and are never silently overwritten.
-Human output uses ordered facts and readable preview text; stable JSON keeps
-machine booleans and includes generated content only for preview. There is no
-provider, force, update, or arbitrary consumer-command flag.
+Default human output uses a concise result plus readable preview text where
+preview is the command's purpose. Describe adds identity, comparison,
+validation, input, and write-plan facts without repeating that YAML. Stable
+JSON keeps machine booleans and includes generated content only for preview.
+There is no provider, force, update, or arbitrary consumer-command flag.
 
 ---
 
@@ -833,6 +887,14 @@ neko release migrate [flags]
 | `--dry-run` | bool | `false` | Preview the migration without writing files |
 
 `migrate` only converts `.release.neko.json` in the Git root to a single V2 `default` unit. It does not infer multiple units, convert nested V1 files, or run a release.
+
+Default human output summarizes the source and destination contracts, dry-run
+state, planned action count, V2 targets, archive decision, and next action.
+Describe adds the normalized source, resolved V2 pair, artifact summaries,
+ordered actions, archive/journal policy, validation results, write outcomes,
+and limitations. Generated config/state documents remain available in JSON
+instead of being dumped into normal terminal output. Migration blockers state
+whether no write began or recovery evidence may remain.
 
 ---
 
