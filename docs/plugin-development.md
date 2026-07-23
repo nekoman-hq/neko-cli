@@ -506,9 +506,19 @@ JSON.
 
 Global `--describe` controls structured human detail and response metadata.
 Global `--verbose` independently controls captured execution/debug logs and is
-the only one represented in `Request.Context.Verbose`; `--describe` is not sent
-to plugins and cannot enable a plugin capability. Both options leave public
-JSON and raw JSON unchanged.
+the only presentation-related option represented in
+`Request.Context.Verbose`; `--describe`, `--output`, and
+`--github-output-file` are not sent to plugins and cannot enable a plugin
+capability. Describe does not change public JSON. Verbose does not change
+domain `data`, although public JSON logs may grow when a plugin produces
+additional verbose entries. Raw JSON remains the command-owned raw value.
+
+Custom plugin command help reads the actually inherited Core flags and renders
+them after manifest-local command flags under a separate
+`Global plugin-response flags` heading. A manifest-local flag shadows an
+inherited flag with the same name and is shown only in the command section.
+The Release Plugin's existing manifest-local `plugin-index --output` collision
+is intentionally unchanged pending its own compatibility decision.
 
 #### Property/value presentation
 
@@ -538,8 +548,11 @@ Semantic color is enabled only for interactive human-readable output written to 
 terminal. A non-empty `NO_COLOR` disables it, and pipes, redirects, files,
 public JSON, raw JSON, and GitHub output remain ANSI-free. Core provides this
 policy and style mapping through its renderer; plugins must never emit ANSI
-sequences or branch on terminal capability. Styling changes presentation only,
-never machine data, command meaning, or exit behavior.
+sequences in response data or presentation declarations, or branch on terminal
+capability. The established plugin stderr logger may color its protocol prefix;
+Core strips ANSI before parsing category, level, and message into
+`Response.Logs`. Styling changes presentation only, never machine data, command
+meaning, or exit behavior.
 
 ---
 
@@ -557,6 +570,19 @@ log.PluginV(log.Config, "Verbose message: %s", value)
 // ❌ WRONG - writes to stdout, CORRUPTS JSON response
 log.Print(log.Init, "This breaks the plugin!")
 ```
+
+Core captures stderr separately from the JSON response, strips ANSI before
+semantic parsing, and preserves line order, category, level, and verbose
+classification. If a response already supplies structured logs, those entries
+come first and captured stderr logs follow. Entries transported identically
+through both channels appear once; there is no fuzzy message deduplication.
+Stored log fields, JSON logs, and redirected human output are ANSI-free.
+Interactive human rendering may add renderer-owned semantic color afterward.
+
+Log messages can contain command-owned paths. Core does not apply generic path
+redaction; each command remains responsible for deciding whether its own path
+values require normalization. The transport does not add environment
+credentials, tokens, or authorization headers to plugin requests or logs.
 
 ### Log Categories
 

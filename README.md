@@ -175,14 +175,24 @@ Copy-ready Release V2 and plugin registry examples live in [Release V2 Examples]
 
 ### Global Flags
 
-All plugins inherit these global flags:
+Plugin command help separates manifest-owned `Command flags` from inherited
+`Global plugin-response flags`. Core owns the inherited flags and does not add
+them to a plugin command's local flag map:
 
-| Flag | Shorthand | Description                                          |
-|------|-----------|------------------------------------------------------|
-| `--help` | `-h` | Show help for any command                            |
-| `--verbose` | `-v` | Include execution and debug logs in plugin output   |
-| `--output` | | Output format: `table`, `json`, `wide (in progress)` |
-| `--describe` | | Include structured details and response metadata     |
+| Flag | Shorthand | Description |
+|------|-----------|-------------|
+| `--help` | `-h` | Show help for any command |
+| `--describe` | | Include structured details and response metadata |
+| `--verbose` | `-v` | Include execution and debug logs in plugin output |
+| `--output` | | Output format: `table`, `json`, `wide`, or `github` |
+| `--github-output-file` | | Explicit GitHub Actions command-file destination for `--output github` |
+
+`--verbose` is the only presentation-related global value sent to a plugin,
+through `Request.Context.Verbose`, because it controls plugin-side log
+production. `--describe`, `--output`, and `--github-output-file` stay in Core.
+The Release Plugin's manifest-local `plugin-index --output` remains its output
+file path option and currently shadows the global rendering flag for that one
+command.
 
 ### Other Built-in Commands
 

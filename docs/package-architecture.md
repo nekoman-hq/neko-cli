@@ -45,9 +45,20 @@ JSON renderer, raw JSON path, and GitHub output omit them.
 layout, responsive width behavior, ANSI-safe visible-width calculations,
 describe-only section filtering, and the mapping from semantic roles to
 terminal styles. Global `--describe` selects structured details and metadata;
-global `--verbose` independently selects captured logs. Neither option changes
-public or raw JSON. Presentation declarations must never import the renderer,
-and the renderer must not import the logger.
+global `--verbose` independently selects captured logs. Describe does not
+change public or raw JSON; verbose leaves domain data unchanged while public
+JSON logs may differ when the plugin produces additional verbose entries.
+Presentation declarations must never import the renderer, and the renderer
+must not import the logger.
+
+`cmd` owns the persistent `--describe`, `--verbose`, `--output`, and
+`--github-output-file` flags plus their custom plugin-help composition. Only
+verbose crosses the request boundary as `plugin.Context.Verbose`; local flag
+extraction reads command-local, non-persistent flags. `pkg/dispatcher` owns
+subprocess capture, ANSI sanitation before stderr parsing, and deterministic
+log merging. Response-provided logs precede captured logs, with only exact
+cross-channel duplicates collapsed. `pkg/plugin` remains a neutral transport
+model and imports neither renderer nor terminal implementation.
 
 `pkg/log` is independent of the renderer. Both packages may use only the
 private `internal/terminal` primitives for ANSI application and terminal
