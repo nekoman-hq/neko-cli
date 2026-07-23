@@ -144,3 +144,65 @@ func TestResumePresentationUsesDeterministicResponsiveRecords(t *testing.T) {
 		t.Fatalf("unknown-width resume output is not deterministic and vertical:\n%s", first.String())
 	}
 }
+
+func TestResumeDefaultKeepsEveryRecoveryDecisionActionable(t *testing.T) {
+	tests := []struct {
+		name        string
+		status      ReleaseExecutionRecoveryStatus
+		pending     ReleaseExecutionPendingAction
+		guidance    string
+		eligibility string
+		safe        bool
+	}{
+		{
+			name: "resumable commit push", status: ReleaseExecutionRecoveryInterruptedBeforePush,
+			pending: ReleaseExecutionPendingPushReleaseCommit, safe: true,
+			guidance: "Continue the confirmed release commit push.", eligibility: "Eligible",
+		},
+		{
+			name: "uncertain tag push", status: ReleaseExecutionRecoveryInterruptedAfterCommitPush,
+			pending:  ReleaseExecutionPendingPushUnitTag,
+			guidance: "Verify remote tag evidence manually before retry.", eligibility: "Not eligible",
+		},
+		{
+			name: "conflicting evidence", status: ReleaseExecutionRecoveryConflicted,
+			pending:  ReleaseExecutionPendingNone,
+			guidance: "Resolve the mismatched commit and tag evidence manually.", eligibility: "Not eligible",
+		},
+		{
+			name: "already handed off", status: ReleaseExecutionRecoveryAlreadyHandedOff,
+			pending:  ReleaseExecutionPendingNone,
+			guidance: "Release was already handed off.", eligibility: "Not eligible",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			response, err := MapResumeCommandOutcome(&ResumeAssessment{
+				UnitID: "api", NextVersion: "2.4.1", Tag: "api/v2.4.1",
+				ExecutionJournalPath: ".git/neko/release/executions/id.json",
+				State:                ReleaseExecutionTagCreated, PendingAction: test.pending,
+				RecoveryStatus: test.status, SafeToContinue: test.safe,
+				KnownFilePaths: []string{".neko/release.state.json"},
+				Guidance:       test.guidance,
+			}, time.Date(2026, time.July, 22, 13, 3, 0, 0, time.UTC))
+			if err != nil {
+				t.Fatalf("MapResumeCommandOutcome: %v", err)
+			}
+			output := ansi.Strip(renderLifecycleResponse(t, response, renderer.RenderOptions{
+				Format: renderer.FormatTable,
+			}))
+			for _, want := range []string{
+				releaseLifecycleReadableValue(string(test.status)),
+				releaseLifecycleReadableValue(string(test.pending)),
+				test.eligibility,
+				test.guidance,
+				"Retry safety",
+			} {
+				if !strings.Contains(output, want) {
+					t.Fatalf("resume default omitted %q:\n%s", want, output)
+				}
+			}
+		})
+	}
+}

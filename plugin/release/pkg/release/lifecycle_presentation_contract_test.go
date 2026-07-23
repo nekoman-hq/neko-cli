@@ -15,7 +15,7 @@ import (
 
 func TestReleaseDryRunPresentationUsesOneSharedVocabulary(t *testing.T) {
 	timestamp := time.Date(2026, time.July, 22, 12, 30, 0, 0, time.UTC)
-	outcomes := []struct {
+	outcomes := []struct { //nolint:govet // Test rows follow name, command, fixture order.
 		name    string
 		command string
 		outcome ReleaseCommandOutcome
@@ -91,7 +91,7 @@ func TestReleaseDryRunPresentationUsesOneSharedVocabulary(t *testing.T) {
 
 func TestReleasePresentationLeavesCanonicalJSONUnchanged(t *testing.T) {
 	timestamp := time.Date(2026, time.July, 22, 12, 31, 0, 0, time.UTC)
-	outcomes := []struct {
+	outcomes := []struct { //nolint:govet // Test rows follow command and fixture order.
 		command string
 		outcome ReleaseCommandOutcome
 	}{
@@ -196,6 +196,25 @@ func TestLifecycleFailuresRemainSpecificAndActionable(t *testing.T) {
 		if response.Error.Code != test.code || response.Error.Message != test.message {
 			t.Fatalf("%s failure envelope changed: %#v", test.command, response.Error)
 		}
+	}
+}
+
+func TestLifecycleFailurePresentationRedactsPathsWithoutChangingMachineError(t *testing.T) {
+	const message = "multiple resumable journals found: /private/tmp/lifecycle-failure/.git/neko/release/executions/one.json; inspect manually"
+	response := MapCommandFailure(
+		"resume",
+		failureFromMessage("MULTIPLE_RESUMABLE_JOURNALS", message),
+		time.Date(2026, time.July, 22, 12, 34, 0, 0, time.UTC),
+	)
+	human := ansi.Strip(renderLifecycleResponse(t, response, renderer.RenderOptions{Format: renderer.FormatTable}))
+	if strings.Contains(human, "/private/tmp/lifecycle-failure") ||
+		!strings.Contains(human, "repository-local path") ||
+		!strings.Contains(human, "inspect manually") {
+		t.Fatalf("failure presentation did not safely preserve the actionable reason:\n%s", human)
+	}
+	jsonOutput := renderLifecycleResponse(t, response, renderer.RenderOptions{Format: renderer.FormatJSON})
+	if !strings.Contains(jsonOutput, message) || response.Error.Message != message {
+		t.Fatalf("machine error message changed:\n%s", jsonOutput)
 	}
 }
 

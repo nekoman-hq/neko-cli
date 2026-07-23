@@ -501,6 +501,7 @@ func runReleaseReadonlyGit(t *testing.T, root string, args ...string) string {
 	return string(bytes.TrimSpace(output))
 }
 
+//nolint:staticcheck // Explicit V1 compatibility fixture.
 func newReleaseLifecycleV1Repository(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
@@ -563,7 +564,7 @@ func newReleaseLifecycleResumeRepository(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("load V2 release repository: %v", err)
 	}
-	execution, err := releasecmd.BuildReleaseExecutionContext(repository, repository.Units[0], releasecmd.Patch, false)
+	execution, err := releasecmd.BuildV2ReleaseExecutionContext(root, repository.Units[0], releasecmd.Patch, false)
 	if err != nil {
 		t.Fatalf("build release execution context: %v", err)
 	}

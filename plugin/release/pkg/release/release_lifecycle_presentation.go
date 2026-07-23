@@ -3,12 +3,15 @@ package release
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 	"github.com/nekoman-hq/neko-cli/pkg/presentation"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
+
+const legacyReleaseConfigFile = ".release.neko.json"
 
 // releaseLifecyclePresentationFacts is a presentation-only projection of the
 // established release outcome variants. It does not participate in planning,
@@ -66,99 +69,115 @@ func attachReleaseLifecyclePresentation(response *plugin.Response, command strin
 func releaseLifecycleFacts(command string, outcome ReleaseCommandOutcome) (releaseLifecyclePresentationFacts, bool) {
 	switch result := outcome.(type) {
 	case *V1ReleasePreview:
-		return releaseLifecyclePresentationFacts{
-			command:                   command,
-			source:                    string(config.SourceFormatV1),
-			unit:                      "default",
-			currentVersion:            result.CurrentVersion,
-			nextVersion:               result.NextVersion,
-			tag:                       "v" + result.NextVersion,
-			executor:                  result.ReleaseSystem,
-			delivery:                  string(config.DeliveryLocal),
-			workingDirectory:          ".",
-			unitRoot:                  ".",
-			status:                    "Preview",
-			handoff:                   "Not started",
-			nextAction:                "Review the preview, then run the same release command without --dry-run when ready.",
-			materializedFiles:         []string{config.V1FileName},
-			knownReleaseFiles:         []string{config.V1FileName},
-			dryRun:                    true,
-			legacyCompatibilityResult: true,
-		}, true
+		return v1ReleasePreviewPresentationFacts(command, result), true
 	case *V1ReleaseCompleted:
-		return releaseLifecyclePresentationFacts{
-			command:                   command,
-			source:                    string(config.SourceFormatV1),
-			unit:                      "default",
-			currentVersion:            result.PreviousVersion,
-			nextVersion:               result.NextVersion,
-			tag:                       "v" + result.NextVersion,
-			executor:                  result.ReleaseSystem,
-			delivery:                  string(config.DeliveryLocal),
-			workingDirectory:          ".",
-			unitRoot:                  ".",
-			status:                    "Released successfully",
-			handoff:                   "Completed by the configured V1 release tool",
-			nextAction:                "Verify the release artifacts produced by the configured V1 release tool.",
-			materializedFiles:         []string{config.V1FileName},
-			knownReleaseFiles:         []string{config.V1FileName},
-			legacyCompatibilityResult: true,
-		}, true
+		return v1ReleaseCompletedPresentationFacts(command, result), true
 	case *V2ReleasePreview:
-		handoff := "Not started"
-		nextAction := "Review the preview, then run the same release command without --dry-run when ready."
-		if result.MaterializationBlockedReason != "" {
-			handoff = "Blocked before execution"
-			nextAction = "Resolve the materialized-file blocker before starting the release."
-		}
-		return releaseLifecyclePresentationFacts{
-			command:                command,
-			source:                 string(config.SourceFormatV2),
-			unit:                   result.UnitID,
-			currentVersion:         result.CurrentVersion,
-			nextVersion:            result.NextVersion,
-			tag:                    result.Tag,
-			executor:               result.Executor,
-			delivery:               result.Delivery,
-			workflow:               result.Workflow,
-			workingDirectory:       result.WorkingDirectory,
-			unitRoot:               result.UnitRoot,
-			status:                 "Preview",
-			handoff:                handoff,
-			nextAction:             nextAction,
-			commitMessage:          result.CommitMessage,
-			ownership:              result.OwnershipSummary,
-			gitOwnership:           result.V2GitOwnership,
-			stateGuarantee:         result.StateGuarantee,
-			materializedFiles:      append([]string(nil), result.MaterializedFilePaths...),
-			knownReleaseFiles:      append([]string(nil), result.KnownReleaseFilePaths...),
-			materializationBlocker: result.MaterializationBlockedReason,
-			dispatch:               result.Dispatch,
-			dryRun:                 true,
-		}, true
+		return v2ReleasePreviewPresentationFacts(command, result), true
 	case *GitHubActionsReleaseResult:
-		return releaseLifecyclePresentationFacts{
-			command:             command,
-			source:              string(config.SourceFormatV2),
-			unit:                result.Unit,
-			currentVersion:      "not retained in the established outcome",
-			nextVersion:         result.Version,
-			tag:                 result.Tag,
-			executor:            "configured V2 release tool",
-			delivery:            string(config.DeliveryGitHubActions),
-			workflow:            result.Workflow,
-			status:              releaseLifecycleReadableValue(string(result.ExecutionState)),
-			handoff:             releaseLifecycleHandoff(result),
-			nextAction:          result.RecoveryGuidance,
-			commitSHA:           result.CommitSHA,
-			executionJournal:    result.ExecutionJournalPath,
-			dispatchJournal:     result.DispatchJournalPath,
-			executionState:      string(result.ExecutionState),
-			dispatchState:       string(result.DispatchState),
-			gitHubActionsResult: true,
-		}, true
+		return githubActionsReleasePresentationFacts(command, result), true
 	default:
 		return releaseLifecyclePresentationFacts{}, false
+	}
+}
+
+func v1ReleasePreviewPresentationFacts(command string, result *V1ReleasePreview) releaseLifecyclePresentationFacts {
+	return releaseLifecyclePresentationFacts{
+		command:                   command,
+		source:                    string(config.SourceFormatV1),
+		unit:                      "default",
+		currentVersion:            result.CurrentVersion,
+		nextVersion:               result.NextVersion,
+		tag:                       "v" + result.NextVersion,
+		executor:                  result.ReleaseSystem,
+		delivery:                  string(config.DeliveryLocal),
+		workingDirectory:          ".",
+		unitRoot:                  ".",
+		status:                    "Preview",
+		handoff:                   "Not started",
+		nextAction:                "Review the preview, then run the same release command without --dry-run when ready.",
+		materializedFiles:         []string{legacyReleaseConfigFile},
+		knownReleaseFiles:         []string{legacyReleaseConfigFile},
+		dryRun:                    true,
+		legacyCompatibilityResult: true,
+	}
+}
+
+func v1ReleaseCompletedPresentationFacts(command string, result *V1ReleaseCompleted) releaseLifecyclePresentationFacts {
+	return releaseLifecyclePresentationFacts{
+		command:                   command,
+		source:                    string(config.SourceFormatV1),
+		unit:                      "default",
+		currentVersion:            result.PreviousVersion,
+		nextVersion:               result.NextVersion,
+		tag:                       "v" + result.NextVersion,
+		executor:                  result.ReleaseSystem,
+		delivery:                  string(config.DeliveryLocal),
+		workingDirectory:          ".",
+		unitRoot:                  ".",
+		status:                    "Released successfully",
+		handoff:                   "Completed by the configured V1 release tool",
+		nextAction:                "Verify the release artifacts produced by the configured V1 release tool.",
+		materializedFiles:         []string{legacyReleaseConfigFile},
+		knownReleaseFiles:         []string{legacyReleaseConfigFile},
+		legacyCompatibilityResult: true,
+	}
+}
+
+func v2ReleasePreviewPresentationFacts(command string, result *V2ReleasePreview) releaseLifecyclePresentationFacts {
+	handoff := "Not started"
+	nextAction := "Review the preview, then run the same release command without --dry-run when ready."
+	if result.MaterializationBlockedReason != "" {
+		handoff = "Blocked before execution"
+		nextAction = "Resolve the materialized-file blocker before starting the release."
+	}
+	return releaseLifecyclePresentationFacts{
+		command:                command,
+		source:                 string(config.SourceFormatV2),
+		unit:                   result.UnitID,
+		currentVersion:         result.CurrentVersion,
+		nextVersion:            result.NextVersion,
+		tag:                    result.Tag,
+		executor:               result.Executor,
+		delivery:               result.Delivery,
+		workflow:               result.Workflow,
+		workingDirectory:       result.WorkingDirectory,
+		unitRoot:               result.UnitRoot,
+		status:                 "Preview",
+		handoff:                handoff,
+		nextAction:             nextAction,
+		commitMessage:          result.CommitMessage,
+		ownership:              result.OwnershipSummary,
+		gitOwnership:           result.V2GitOwnership,
+		stateGuarantee:         result.StateGuarantee,
+		materializedFiles:      append([]string(nil), result.MaterializedFilePaths...),
+		knownReleaseFiles:      append([]string(nil), result.KnownReleaseFilePaths...),
+		materializationBlocker: result.MaterializationBlockedReason,
+		dispatch:               result.Dispatch,
+		dryRun:                 true,
+	}
+}
+
+func githubActionsReleasePresentationFacts(command string, result *GitHubActionsReleaseResult) releaseLifecyclePresentationFacts {
+	return releaseLifecyclePresentationFacts{
+		command:             command,
+		source:              string(config.SourceFormatV2),
+		unit:                result.Unit,
+		currentVersion:      "not retained in the established outcome",
+		nextVersion:         result.Version,
+		tag:                 result.Tag,
+		executor:            "configured V2 release tool",
+		delivery:            string(config.DeliveryGitHubActions),
+		workflow:            result.Workflow,
+		status:              releaseLifecycleReadableValue(string(result.ExecutionState)),
+		handoff:             releaseLifecycleHandoff(result),
+		nextAction:          result.RecoveryGuidance,
+		commitSHA:           result.CommitSHA,
+		executionJournal:    result.ExecutionJournalPath,
+		dispatchJournal:     result.DispatchJournalPath,
+		executionState:      string(result.ExecutionState),
+		dispatchState:       string(result.DispatchState),
+		gitHubActionsResult: true,
 	}
 }
 
@@ -284,7 +303,7 @@ func releaseLifecycleOperationRows(facts releaseLifecyclePresentationFacts) []ma
 	}
 	if facts.legacyCompatibilityResult {
 		return append(rows,
-			map[string]any{"action": "Prepare V1 release configuration", "status": result, "scope": config.V1FileName},
+			map[string]any{"action": "Prepare V1 release configuration", "status": result, "scope": legacyReleaseConfigFile},
 			map[string]any{"action": "Invoke configured release tool", "status": result, "scope": facts.executor},
 			map[string]any{"action": "Complete release lifecycle", "status": facts.status, "scope": "V1 compatibility"},
 		)
@@ -619,11 +638,23 @@ func attachLifecycleFailurePresentation(response *plugin.Response, command strin
 		Properties: []presentation.Property{
 			{Label: "Status", Value: status, Role: presentation.StyleError, Emphasized: true},
 			{Label: "Code", Value: failure.Code},
-			{Label: "Reason", Value: failure.responseMessage(), Role: presentation.StyleError},
+			{Label: "Reason", Value: safeLifecycleFailureReason(failure.responseMessage()), Role: presentation.StyleError},
 			{Label: "Retry safety", Value: "Re-evaluate after resolving the reported condition", Role: presentation.StyleWarning},
 			{Label: "Next safe action", Value: lifecycleFailureNextAction(command), Emphasized: true},
 		},
 	}
+}
+
+var (
+	lifecycleAbsolutePathPattern  = regexp.MustCompile(`(^|[\s(=])(/[^\s,;]+)`)
+	lifecycleURLCredentialPattern = regexp.MustCompile(`(?i)(https?://)[^/@\s]+@`)
+	lifecycleBearerPattern        = regexp.MustCompile(`(?i)(authorization:\s*bearer|bearer)\s+\S+`)
+)
+
+func safeLifecycleFailureReason(message string) string {
+	message = lifecycleURLCredentialPattern.ReplaceAllString(message, "$1")
+	message = lifecycleBearerPattern.ReplaceAllString(message, "$1 [redacted]")
+	return lifecycleAbsolutePathPattern.ReplaceAllString(message, "${1}repository-local path")
 }
 
 func isLifecyclePresentationCommand(command string) bool {
