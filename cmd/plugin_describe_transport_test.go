@@ -100,6 +100,23 @@ func TestPluginDescribeTransportKeepsPublicJSONIdentical(t *testing.T) {
 	}
 }
 
+func TestPluginTransportDoesNotInjectEnvironmentCredentials(t *testing.T) {
+	manifest, requestPath := installDescribeTransportPlugin(t)
+	t.Setenv("GITHUB_TOKEN", "transport-secret-token")
+	t.Setenv("AUTHORIZATION", "Bearer transport-secret-authorization")
+
+	_ = executeDescribeTransportCommand(t, manifest, false, true, "json")
+	data, err := os.ReadFile(requestPath)
+	if err != nil {
+		t.Fatalf("read dispatched request: %v", err)
+	}
+	for _, secret := range []string{"transport-secret-token", "transport-secret-authorization", "Bearer"} {
+		if strings.Contains(string(data), secret) {
+			t.Fatalf("plugin request contains environment credential %q: %s", secret, data)
+		}
+	}
+}
+
 func executeDescribeTransportCommand(t *testing.T, manifest plugin.Manifest, describeValue, verboseValue bool, format string) string {
 	t.Helper()
 	oldDescribe, oldVerbose, oldFormat, oldGitHubOutput := describe, verbose, outputFormat, githubOutputFile
