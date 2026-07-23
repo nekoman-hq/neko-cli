@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 )
 
@@ -92,11 +93,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, pluginName string, req plugin
 			var resp plugin.Response
 			if jsonErr := json.Unmarshal(stdout.Bytes(), &resp); jsonErr == nil {
 				// Valid response found, parse logs and return it
-				resp.Logs = parseLogOutput(stderr.String())
+				resp.Logs = mergeResponseAndCapturedLogs(resp.Logs, parseLogOutput(stderr.String()))
 				return &resp, nil
 			}
 		}
-		return nil, fmt.Errorf("plugin execution failed: %w\nStderr: %s", err, stderr.String())
+		return nil, fmt.Errorf("plugin execution failed: %w\nStderr: %s", err, ansi.Strip(stderr.String()))
 	}
 
 	var resp plugin.Response
@@ -105,7 +106,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, pluginName string, req plugin
 	}
 
 	// Parse stderr as structured logs
-	resp.Logs = parseLogOutput(stderr.String())
+	resp.Logs = mergeResponseAndCapturedLogs(resp.Logs, parseLogOutput(stderr.String()))
 
 	return &resp, nil
 }
@@ -124,7 +125,7 @@ func parseLogOutput(stderr string) []plugin.LogEntry {
 	}
 
 	var logs []plugin.LogEntry
-	scanner := bufio.NewScanner(strings.NewReader(stderr))
+	scanner := bufio.NewScanner(strings.NewReader(ansi.Strip(stderr)))
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -133,6 +134,34 @@ func parseLogOutput(stderr string) []plugin.LogEntry {
 		}
 
 		entry := parseLogLine(line)
+		logs = append(logs, entry)
+	}
+	return logs
+}
+
+// mergeResponseAndCapturedLogs preserves response-provided entries first and
+// appends captured stderr entries in their original order. An exact entry
+// transported through both channels is represented once; repeated captured
+// lines beyond the response-provided count remain distinct.
+func mergeResponseAndCapturedLogs(responseLogs, capturedLogs []plugin.LogEntry) []plugin.LogEntry {
+	if len(capturedLogs) == 0 {
+		return responseLogs
+	}
+	if len(responseLogs) == 0 {
+		return capturedLogs
+	}
+
+	logs := make([]plugin.LogEntry, 0, len(responseLogs)+len(capturedLogs))
+	logs = append(logs, responseLogs...)
+	responseCounts := make(map[plugin.LogEntry]int, len(responseLogs))
+	for _, entry := range responseLogs {
+		responseCounts[entry]++
+	}
+	for _, entry := range capturedLogs {
+		if responseCounts[entry] > 0 {
+			responseCounts[entry]--
+			continue
+		}
 		logs = append(logs, entry)
 	}
 	return logs
