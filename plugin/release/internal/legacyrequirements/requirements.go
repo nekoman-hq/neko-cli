@@ -19,15 +19,27 @@ import (
 //
 //nolint:staticcheck // The boundary intentionally preserves the deprecated V1 input contract.
 func Validate(repositoryRoot string, cfg *releaseconfig.V1ReleaseConfig) error {
+	return validate(repositoryRoot, cfg, true)
+}
+
+// ValidateForInspection applies the same retained V1 requirements without
+// emitting lifecycle progress for a deterministic read-only query.
+func ValidateForInspection(repositoryRoot string, cfg *releaseconfig.V1ReleaseConfig) error {
+	return validate(repositoryRoot, cfg, false)
+}
+
+func validate(repositoryRoot string, cfg *releaseconfig.V1ReleaseConfig, reportProgress bool) error {
 	if cfg == nil {
 		return fmt.Errorf("release configuration is missing")
 	}
 
-	log.PluginV(
-		log.Config,
-		"Validating release requirements for %s",
-		log.ColorText(log.ColorCyan, string(cfg.ReleaseSystem)),
-	)
+	if reportProgress {
+		log.PluginV(
+			log.Config,
+			"Validating release requirements for %s",
+			log.ColorText(log.ColorCyan, string(cfg.ReleaseSystem)),
+		)
+	}
 
 	if _, err := coreconfig.GetPAT(); err != nil {
 		return err

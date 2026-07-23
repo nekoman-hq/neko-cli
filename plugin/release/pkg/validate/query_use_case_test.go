@@ -5,10 +5,14 @@ package validate
 
 import (
 	"errors"
+	"io"
+	"os"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/nekoman-hq/neko-cli/pkg/log"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
@@ -67,6 +71,53 @@ func TestValidateCommandHandlerInvokesOneQueryAndMapsResult(t *testing.T) {
 	if got := resp.Data["items"]; !reflect.DeepEqual(got, want) {
 		t.Fatalf("items = %#v, want %#v", got, want)
 	}
+}
+
+func TestValidateCommandVerboseIsDeterministicNoOp(t *testing.T) {
+	originalVerbose := log.Verbose
+	log.Verbose = true
+	t.Cleanup(func() { log.Verbose = originalVerbose })
+	handler := validateCommandHandler{
+		query: &recordingValidationQuerier{result: validationQueryResult{
+			SourceFormat: config.SourceFormatV2,
+			Units:        []config.ReleaseUnit{{ID: "api", Version: "1.2.3"}},
+		}},
+		clock: fixedValidationClock{now: time.Date(2026, time.July, 23, 10, 0, 0, 0, time.UTC)},
+	}
+
+	stderr := captureValidationStderr(t, func() {
+		response, err := handler.Handle(plugin.Request{Context: plugin.Context{Verbose: true}})
+		if err != nil || response.Status != "success" {
+			t.Fatalf("Handle validate: response=%#v err=%v", response, err)
+		}
+	})
+	if strings.TrimSpace(stderr) != "" {
+		t.Fatalf("validate verbose emitted generic query narration:\n%s", stderr)
+	}
+}
+
+func captureValidationStderr(t *testing.T, run func()) string {
+	t.Helper()
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("create stderr pipe: %v", err)
+	}
+	original := os.Stderr
+	os.Stderr = writer
+	defer func() { os.Stderr = original }()
+	run()
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close stderr writer: %v", err)
+	}
+	os.Stderr = original
+	output, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("read stderr: %v", err)
+	}
+	if err := reader.Close(); err != nil {
+		t.Fatalf("close stderr reader: %v", err)
+	}
+	return string(output)
 }
 
 func TestValidationQueryUseCaseClassifiesRepositoryFailures(t *testing.T) {

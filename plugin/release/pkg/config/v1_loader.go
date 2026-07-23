@@ -90,6 +90,12 @@ func V1Validate(cfg *V1ReleaseConfig) error {
 	return v1Validate(cfg, true)
 }
 
+// V1ValidateForInspection applies the same compatibility validation without
+// emitting lifecycle progress for a deterministic read-only query.
+func V1ValidateForInspection(cfg *V1ReleaseConfig) error {
+	return v1Validate(cfg, false)
+}
+
 func v1Validate(cfg *V1ReleaseConfig, reportProgress bool) error {
 	if reportProgress {
 		log.PluginV(log.Config, "Validating serialised config...")

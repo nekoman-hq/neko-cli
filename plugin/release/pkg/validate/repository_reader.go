@@ -5,7 +5,7 @@ import "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 type validationReleaseRepositoryReader struct{}
 
 func (validationReleaseRepositoryReader) Read(root string) (*config.ReleaseRepository, bool, error) {
-	repository, err := config.LoadReleaseRepository(root)
+	repository, err := config.LoadReleaseRepositoryForInspection(root)
 	if err == nil {
 		return repository, true, nil
 	}

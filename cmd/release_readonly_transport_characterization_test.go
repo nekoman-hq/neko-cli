@@ -221,6 +221,74 @@ func TestReleasePlanUsesDescribeForCompleteStructuredDetail(t *testing.T) {
 	}
 }
 
+func TestReleaseValidateKeepsShowCompatibilityAndUsesDescribeForDetail(t *testing.T) {
+	manifest := installReleaseReadonlyHelperPlugin(t)
+	repositoryRoot := releaseReadonlyRepositoryRoot(t)
+	flags := []string{"--unit", "cli"}
+
+	defaultOutput, defaultErr := executeReleaseReadonlyCommand(
+		t, manifest, repositoryRoot, "validate", flags, releaseReadonlyMode{},
+	)
+	describeOutput, describeErr := executeReleaseReadonlyCommand(
+		t, manifest, repositoryRoot, "validate", flags, releaseReadonlyMode{describe: true},
+	)
+	verboseOutput, verboseErr := executeReleaseReadonlyCommand(
+		t, manifest, repositoryRoot, "validate", flags, releaseReadonlyMode{verbose: true},
+	)
+	showOutput, showErr := executeReleaseReadonlyCommand(
+		t, manifest, repositoryRoot, "validate", append(flags, "--show"), releaseReadonlyMode{},
+	)
+	showDescribeOutput, showDescribeErr := executeReleaseReadonlyCommand(
+		t, manifest, repositoryRoot, "validate", append(flags, "--show"), releaseReadonlyMode{describe: true},
+	)
+	if defaultErr != nil || describeErr != nil || verboseErr != nil || showErr != nil || showDescribeErr != nil {
+		t.Fatalf(
+			"validate transport exits: default=%v describe=%v verbose=%v show=%v show-describe=%v",
+			defaultErr, describeErr, verboseErr, showErr, showDescribeErr,
+		)
+	}
+	if defaultOutput != verboseOutput {
+		t.Fatalf("validate verbose added query narration:\ndefault:\n%s\nverbose:\n%s", defaultOutput, verboseOutput)
+	}
+	if strings.Contains(defaultOutput, "Validated Units") || strings.Contains(defaultOutput, "Validation Scope") {
+		t.Fatalf("validate default exposed structured detail:\n%s", defaultOutput)
+	}
+	for _, output := range []string{describeOutput, showDescribeOutput} {
+		for _, want := range []string{"Validated Units", "Validation Scope", "Local configuration"} {
+			if !strings.Contains(output, want) {
+				t.Fatalf("validate detailed output omitted %q:\n%s", want, output)
+			}
+		}
+	}
+	if !strings.Contains(showOutput, "Validated Units") || strings.Contains(showOutput, "Validation Scope") {
+		t.Fatalf("validate --show compatibility changed:\n%s", showOutput)
+	}
+	if strings.Count(showDescribeOutput, "Validated Units") != 1 {
+		t.Fatalf("validate --show --describe duplicated the established detail view:\n%s", showDescribeOutput)
+	}
+
+	showJSON, showJSONErr := executeReleaseReadonlyCommand(
+		t, manifest, repositoryRoot, "validate", append(flags, "--show"), releaseReadonlyMode{format: "json"},
+	)
+	showDescribeJSON, showDescribeJSONErr := executeReleaseReadonlyCommand(
+		t,
+		manifest,
+		repositoryRoot,
+		"validate",
+		append(flags, "--show"),
+		releaseReadonlyMode{format: "json", describe: true},
+	)
+	if showJSONErr != nil || showDescribeJSONErr != nil {
+		t.Fatalf("validate show JSON exits: plain=%v describe=%v", showJSONErr, showDescribeJSONErr)
+	}
+	if !reflect.DeepEqual(
+		decodeReleaseReadonlyPublicResponse(t, showJSON).Data,
+		decodeReleaseReadonlyPublicResponse(t, showDescribeJSON).Data,
+	) {
+		t.Fatalf("describe changed validate --show machine facts:\nplain=%s\ndescribe=%s", showJSON, showDescribeJSON)
+	}
+}
+
 type releaseReadonlyMode struct {
 	format   string
 	describe bool

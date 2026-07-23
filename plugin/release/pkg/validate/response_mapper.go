@@ -48,12 +48,8 @@ func mapValidationQueryResponse(result validationQueryResult, failure *validatio
 		Data:         map[string]any{"items": validationResponseItems(result)},
 		RendererHint: "table",
 	}
-	if result.Show {
-		response.PresentationProperties = validationSummaryPresentation(result)
-		response.PresentationTable = validationUnitPresentation(result)
-	} else {
-		response.PresentationTable = validationSummaryTable(result)
-	}
+	response.PresentationProperties = validationSummaryPresentation(result)
+	response.PresentationTable = validationUnitPresentation(result)
 	return response
 }
 

@@ -24,13 +24,16 @@ var v1ValidationPresentationColumns = []presentation.Column{
 }
 
 func validationUnitPresentation(result validationQueryResult) *presentation.Table {
-	if !result.Show {
-		return nil
-	}
+	var table *presentation.Table
 	if result.SourceFormat == config.SourceFormatV1 {
-		return legacyValidationUnitPresentation(result.Legacy)
+		table = legacyValidationUnitPresentation(result.Legacy)
+	} else {
+		table = v2ValidationUnitPresentation(result.Units)
 	}
-	return v2ValidationUnitPresentation(result.Units)
+	table.Title = "Validated Units"
+	table.DescribeOnly = !result.Show
+	table.Following = validationScopePresentation(result)
+	return table
 }
 
 func v2ValidationUnitPresentation(units []config.ReleaseUnit) *presentation.Table {
@@ -127,4 +130,35 @@ func validationPathsValue(paths []string) string {
 		return "none configured"
 	}
 	return strings.Join(paths, "\n")
+}
+
+func validationScopePresentation(result validationQueryResult) *presentation.Table {
+	source := "V2 config and state"
+	configPath := ".neko/release.config.json and .neko/release.state.json"
+	if result.SourceFormat == config.SourceFormatV1 {
+		source = "Legacy V1 config"
+		configPath = ".release.neko.json"
+	}
+	unitScope := "All configured units"
+	if result.SelectedUnit != "" {
+		unitScope = "Selected unit " + result.SelectedUnit
+	}
+	return &presentation.Table{
+		Title: "Validation Scope", DescribeOnly: true,
+		Columns: []presentation.Column{
+			{Key: "check", Label: "Check", Essential: true},
+			{Key: "status", Label: "Status", Essential: true},
+			{Key: "subject", Label: "Subject", Essential: true},
+			{Key: "details", Label: "Details"},
+		},
+		Rows: []map[string]any{
+			{"check": "Release source", "status": "Valid", "subject": source, "details": configPath},
+			{"check": "Unit configuration", "status": "Valid", "subject": unitScope, "details": "Normalized release facts"},
+			{
+				"check": "Inspection boundary", "status": "Local configuration",
+				"subject": "Read-only validation",
+				"details": "Remote state, release execution, and publication are not inspected",
+			},
+		},
+	}
 }

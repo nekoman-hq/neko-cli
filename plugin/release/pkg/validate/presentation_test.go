@@ -27,31 +27,45 @@ func TestValidationDefaultHumanPresentationIsConciseAndSummaryFirst(t *testing.T
 		},
 	}
 	response := mapValidationQueryResponse(result, nil, time.Time{})
-	if response.PresentationProperties != nil {
-		t.Fatalf("default validate uses headerless properties instead of a table: %#v", response.PresentationProperties)
+	if response.PresentationProperties == nil || response.PresentationProperties.Title != validationPresentationTitle {
+		t.Fatalf("default validate omitted concise product summary: %#v", response.PresentationProperties)
 	}
-	wantColumns := []presentation.Column{
-		{Key: "property", Label: "PROPERTY", Essential: true},
-		{Key: "value", Label: "VALUE", RoleKey: "value_role", Essential: true},
-	}
-	wantRows := []map[string]any{
-		{"property": "Status", "value": "✓ Valid", "value_role": "success"},
-		{"property": "Source", "value": "V2 config and state", "value_role": "default"},
-		{"property": "Schema", "value": "v2", "value_role": "default"},
-		{"property": "Configuration", "value": ".neko/release.config.json", "value_role": "default"},
-		{"property": "State", "value": ".neko/release.state.json", "value_role": "default"},
-		{"property": "Configured units", "value": 2, "value_role": "default"},
-	}
-	if response.PresentationTable == nil || response.PresentationTable.Title != validationPresentationTitle ||
-		!reflect.DeepEqual(response.PresentationTable.Columns, wantColumns) ||
-		!reflect.DeepEqual(response.PresentationTable.Rows, wantRows) || response.PresentationTable.Details != nil {
-		t.Fatalf("default summary table = %#v, want columns=%#v rows=%#v", response.PresentationTable, wantColumns, wantRows)
+	if response.PresentationTable == nil || response.PresentationTable.Title != "Validated Units" ||
+		!response.PresentationTable.DescribeOnly || response.PresentationTable.Following == nil ||
+		response.PresentationTable.Following.Title != "Validation Scope" ||
+		!response.PresentationTable.Following.DescribeOnly {
+		t.Fatalf("default validation detail visibility = %#v", response.PresentationTable)
 	}
 
 	output := renderValidationResponseAtWidth(t, response, 80)
-	if !strings.HasPrefix(output, validationPresentationTitle+"\n") || !strings.Contains(output, "PROPERTY") ||
-		!strings.Contains(output, "VALUE") || strings.Contains(output, "Unit api") || strings.Contains(output, "Unit web") {
+	if !strings.HasPrefix(output, validationPresentationTitle+"\n") ||
+		strings.Contains(output, "Validated Units") || strings.Contains(output, "Unit api") || strings.Contains(output, "Unit web") {
 		t.Fatalf("default human output is not concise and summary-first:\n%s", output)
+	}
+	described := renderValidationResponseWithDescribe(t, response, 80)
+	for _, want := range []string{"Validated Units", "api", "web", "Validation Scope", "Local configuration"} {
+		if !strings.Contains(described, want) {
+			t.Fatalf("validate describe omitted %q:\n%s", want, described)
+		}
+	}
+}
+
+func TestValidationFailureKeepsEveryAvailableActionableReasonVisible(t *testing.T) {
+	t.Parallel()
+	response := mapValidationQueryResponse(validationQueryResult{}, &validationQueryFailure{
+		Code:    "UNIT_RESOLUTION_FAILED",
+		Message: "release unit \"missing\" is not configured",
+		Hint:    "Select one configured release unit",
+	}, time.Time{})
+	output := renderValidationResponse(t, response)
+	for _, want := range []string{
+		"UNIT_RESOLUTION_FAILED",
+		"release unit \"missing\" is not configured",
+		"Select one configured release unit",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("validate failure omitted actionable value %q:\n%s", want, output)
+		}
 	}
 }
 
@@ -105,6 +119,9 @@ func TestValidationV2ShowDeclaresResponsiveUnitSummaryAndCompleteDetails(t *test
 	}
 	if response.PresentationTable == nil || !reflect.DeepEqual(response.PresentationTable.Columns, wantColumns) {
 		t.Fatalf("unit columns = %#v, want %#v", response.PresentationTable, wantColumns)
+	}
+	if response.PresentationTable.DescribeOnly {
+		t.Fatal("validate --show detail unexpectedly remained describe-only")
 	}
 	wantRows := []map[string]any{
 		{"unit": "api", "version": "1.2.3", "kind": "release", "executor": "goreleaser", "delivery": "github-actions", "workflow": ".github/workflows/release-api.yml", validationUnitRoleKey: "emphasis", validationVersionRoleKey: "info", validationKindRoleKey: "default"},
@@ -343,6 +360,17 @@ func renderValidationResponseWithOptions(
 		ColorProvider: color,
 	}, &output); err != nil {
 		t.Fatalf("render response at width %d: %v", width, err)
+	}
+	return output.String()
+}
+
+func renderValidationResponseWithDescribe(t *testing.T, response *plugin.Response, width int) string {
+	t.Helper()
+	var output bytes.Buffer
+	if err := renderer.RenderWithOptionsTo(response, renderer.RenderOptions{
+		Format: renderer.FormatTable, Describe: true, WidthProvider: validationOutputWidth(width),
+	}, &output); err != nil {
+		t.Fatalf("render described response at width %d: %v", width, err)
 	}
 	return output.String()
 }

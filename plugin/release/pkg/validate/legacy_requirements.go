@@ -11,5 +11,5 @@ type legacyReleaseRequirementsValidator struct {
 }
 
 func (validator legacyReleaseRequirementsValidator) Validate(cfg *config.V1ReleaseConfig) error {
-	return legacyrequirements.Validate(validator.repositoryRoot, cfg)
+	return legacyrequirements.ValidateForInspection(validator.repositoryRoot, cfg)
 }

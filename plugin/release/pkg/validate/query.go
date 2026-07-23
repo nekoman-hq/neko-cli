@@ -124,7 +124,7 @@ func (useCase validationQueryUseCase) queryV1Validation(repository *config.Relea
 		return result, validationFailure("UNIT_RESOLUTION_FAILED", err)
 	}
 	legacy := repository.Legacy
-	if err := config.V1Validate(legacy); err != nil {
+	if err := config.V1ValidateForInspection(legacy); err != nil {
 		return result, validationFailure("VALIDATION_FAILED", err)
 	}
 	if err := useCase.requirements.Validate(legacy); err != nil {

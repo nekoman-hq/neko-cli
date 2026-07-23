@@ -12,9 +12,7 @@ package validate
 */
 
 import (
-	"github.com/nekoman-hq/neko-cli/pkg/log"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
-	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
 )
 
@@ -47,14 +45,6 @@ func HandleValidateAt(root workspace.RepositoryRoot, req plugin.Request) (*plugi
 }
 
 func (handler validateCommandHandler) Handle(req plugin.Request) (*plugin.Response, error) {
-	log.PluginPrint(log.Config, "Validating release configuration")
-
 	result, failure := handler.query.Query(parseValidationQueryRequest(req.Flags))
-	if result.SourceFormat == config.SourceFormatV2 {
-		log.PluginPrint(log.Config, "V2 release configuration is valid")
-	} else if result.SourceFormat == config.SourceFormatV1 && failure == nil {
-		log.PluginPrint(log.Config, "Configuration is valid")
-	}
-
 	return mapValidationQueryResponse(result, failure, handler.clock.Now()), nil
 }
