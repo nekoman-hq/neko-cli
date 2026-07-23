@@ -67,7 +67,7 @@ func TestDispatcherPreservesResponseLogsBeforeCapturedLogsWithoutExactTransportD
 	t.Parallel()
 
 	dispatcher := installDispatcherTestPlugin(t, "combined", `#!/bin/sh
-printf '%s\n' '{"status":"success","metadata":{"timestamp":"2026-07-23T00:00:00Z","plugin":"combined","version":"1.0.0","command":"inspect"},"logs":[{"timestamp":"09:00:00","level":"info","category":"response","message":"Response-provided"},{"timestamp":"10:11:12","level":"info","category":"config","message":"Shared entry"}]}'
+printf '%s\n' '{"status":"success","metadata":{"timestamp":"2026-07-23T00:00:00Z","plugin":"combined","version":"1.0.0","command":"inspect"},"logs":[{"timestamp":"\u001b[90m09:00:00\u001b[0m","level":"\u001b[90minfo\u001b[0m","category":"\u001b[96mresponse\u001b[0m","message":"\u001b[92mResponse-provided\u001b[0m"},{"timestamp":"10:11:12","level":"info","category":"\u001b[96mconfig\u001b[0m","message":"Shared entry"}]}'
 printf '10:11:12 \033[96m[config]\033[0m Shared entry\n' >&2
 printf '10:11:13 \033[92m[exec]\033[0m Captured entry\n' >&2
 `)

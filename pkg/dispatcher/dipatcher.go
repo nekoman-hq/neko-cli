@@ -144,6 +144,8 @@ func parseLogOutput(stderr string) []plugin.LogEntry {
 // transported through both channels is represented once; repeated captured
 // lines beyond the response-provided count remain distinct.
 func mergeResponseAndCapturedLogs(responseLogs, capturedLogs []plugin.LogEntry) []plugin.LogEntry {
+	responseLogs = sanitizeLogEntries(responseLogs)
+	capturedLogs = sanitizeLogEntries(capturedLogs)
 	if len(capturedLogs) == 0 {
 		return responseLogs
 	}
@@ -165,6 +167,22 @@ func mergeResponseAndCapturedLogs(responseLogs, capturedLogs []plugin.LogEntry) 
 		logs = append(logs, entry)
 	}
 	return logs
+}
+
+func sanitizeLogEntries(logs []plugin.LogEntry) []plugin.LogEntry {
+	if len(logs) == 0 {
+		return logs
+	}
+	sanitized := make([]plugin.LogEntry, len(logs))
+	for index, entry := range logs {
+		sanitized[index] = plugin.LogEntry{
+			Timestamp: ansi.Strip(entry.Timestamp),
+			Level:     ansi.Strip(entry.Level),
+			Category:  ansi.Strip(entry.Category),
+			Message:   ansi.Strip(entry.Message),
+		}
+	}
+	return sanitized
 }
 
 // parseLogLine attempts to parse a single log line into a structured LogEntry.
