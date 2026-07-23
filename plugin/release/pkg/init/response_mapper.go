@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/pkg/presentation"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata"
 )
@@ -14,7 +15,7 @@ func mapInitializeV2Response(result initializeV2Result, failure *commandFailure,
 		return mapCommandFailure(failure, timestamp)
 	}
 	unit := result.Unit
-	return &plugin.Response{
+	response := &plugin.Response{
 		Status: "success",
 		Metadata: plugin.ResponseMetadata{
 			Plugin:    metadata.PluginName,
@@ -41,6 +42,9 @@ func mapInitializeV2Response(result initializeV2Result, failure *commandFailure,
 		},
 		RendererHint: "text",
 	}
+	response.PresentationProperties = initializeV2SummaryPresentation(result)
+	response.PresentationTable = initializeV2DetailPresentation(result)
+	return response
 }
 
 func mapAddV2UnitResponse(result addV2UnitResult, failure *commandFailure, timestamp time.Time) *plugin.Response {
@@ -50,7 +54,7 @@ func mapAddV2UnitResponse(result addV2UnitResult, failure *commandFailure, times
 		return mapCommandFailure(failure, timestamp)
 	}
 	unit := result.Unit
-	return &plugin.Response{
+	response := &plugin.Response{
 		Status: "success",
 		Metadata: plugin.ResponseMetadata{
 			Plugin:    metadata.PluginName,
@@ -69,6 +73,9 @@ func mapAddV2UnitResponse(result addV2UnitResult, failure *commandFailure, times
 		},
 		RendererHint: "table",
 	}
+	response.PresentationProperties = addV2UnitSummaryPresentation(result)
+	response.PresentationTable = addV2UnitDetailPresentation(result)
+	return response
 }
 
 func mapCommandFailure(failure *commandFailure, timestamp time.Time) *plugin.Response {
@@ -79,7 +86,7 @@ func mapCommandFailure(failure *commandFailure, timestamp time.Time) *plugin.Res
 	if len(failure.details) > 0 {
 		responseError.Details = failure.details
 	}
-	return &plugin.Response{
+	response := &plugin.Response{
 		Status: "error",
 		Metadata: plugin.ResponseMetadata{
 			Plugin:    metadata.PluginName,
@@ -89,6 +96,14 @@ func mapCommandFailure(failure *commandFailure, timestamp time.Time) *plugin.Res
 		},
 		Error: responseError,
 	}
+	response.PresentationTable = initializationFailurePresentation(failure)
+	response.PresentationProperties = &presentation.Properties{
+		Title: "Setup Request Refused",
+		Properties: []presentation.Property{
+			{Label: "Status", Value: "No files written", Role: presentation.StyleError, Emphasized: true},
+		},
+	}
+	return response
 }
 
 func pluginResponseData(initConfig v2InitConfig) map[string]any {

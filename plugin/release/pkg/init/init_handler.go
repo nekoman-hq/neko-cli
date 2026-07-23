@@ -23,6 +23,7 @@ func HandleInit(req plugin.Request) (*plugin.Response, error) {
 // changing process cwd.
 func HandleInitAt(root workspace.RepositoryRoot, req plugin.Request) (*plugin.Response, error) {
 	log.PluginPrint(log.Init, "Starting release initialization")
+	log.PluginV(log.Init, "Validating initialization command inputs")
 	repository := newV2Repository(root.Path())
 	useCase := initializeV2RepositoryUseCase{
 		presenceReader: repository,

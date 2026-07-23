@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/nekoman-hq/neko-cli/pkg/log"
 )
 
 type v2PresencePolicyFailure struct {
@@ -27,11 +29,15 @@ type commandFailureOrigin uint8
 const commandFailureFromPresencePolicy commandFailureOrigin = 1
 
 type initializeV2Result struct {
-	Unit v2InitConfig
+	Unit         v2InitConfig
+	ConfigAction string
+	StateAction  string
+	Force        bool
 }
 
 type addV2UnitResult struct {
-	Unit v2InitConfig
+	Unit              v2InitConfig
+	ExistingUnitCount int
 }
 
 type v2PresenceReader interface {
@@ -57,10 +63,16 @@ type initializeV2RepositoryUseCase struct {
 }
 
 func (useCase initializeV2RepositoryUseCase) Execute(request initCommandRequest) (initializeV2Result, *commandFailure) {
-	if policyFailure := evaluateV2InitializationPolicy(useCase.presenceReader.Presence(), request.Force); policyFailure != nil {
+	log.PluginV(log.Init, "Inspecting repository initialization state")
+	presence := useCase.presenceReader.Presence()
+	if policyFailure := evaluateV2InitializationPolicy(presence, request.Force); policyFailure != nil {
 		return initializeV2Result{}, mapPresencePolicyFailure(policyFailure)
 	}
+	if request.Force && (presence.Config || presence.State) {
+		log.PluginV(log.Init, "Existing V2 artifacts accepted for replacement via --force")
+	}
 
+	log.PluginV(log.Init, "Resolving V2 release unit configuration")
 	unit, err := constructV2Unit(request.Unit)
 	if err != nil {
 		return initializeV2Result{}, &commandFailure{
@@ -70,16 +82,23 @@ func (useCase initializeV2RepositoryUseCase) Execute(request initCommandRequest)
 		}
 	}
 	pair := newV2ReleasePair(unit)
+	log.PluginV(log.Init, "Validating generated V2 configuration and state")
 	if err := useCase.validator.ValidatePair(pair); err != nil {
 		return initializeV2Result{}, &commandFailure{code: "VALIDATION_ERROR", message: err.Error()}
 	}
+	log.PluginV(log.Init, "Preparing V2 configuration and state artifacts")
+	log.PluginV(log.Init, "Writing V2 configuration and state")
 	if err := useCase.writer.PersistPair(pair); err != nil {
 		return initializeV2Result{}, &commandFailure{
 			code:    "SAVE_ERROR",
 			message: fmt.Sprintf("Failed to save V2 release configuration: %v", err),
 		}
 	}
-	return initializeV2Result{Unit: unit.Config}, nil
+	log.PluginV(log.Init, "V2 configuration and state write completed")
+	return initializeV2Result{
+		Unit: unit.Config, ConfigAction: setupArtifactAction(presence.Config),
+		StateAction: setupArtifactAction(presence.State), Force: request.Force,
+	}, nil
 }
 
 type addV2ReleaseUnitUseCase struct {
@@ -90,6 +109,7 @@ type addV2ReleaseUnitUseCase struct {
 }
 
 func (useCase addV2ReleaseUnitUseCase) Execute(request unitAddCommandRequest) (addV2UnitResult, *commandFailure) {
+	log.PluginV(log.Init, "Inspecting existing V2 configuration and state")
 	if policyFailure := evaluateV2UnitAdditionPolicy(useCase.presenceReader.Presence()); policyFailure != nil {
 		return addV2UnitResult{}, mapPresencePolicyFailure(policyFailure)
 	}
@@ -103,6 +123,7 @@ func (useCase addV2ReleaseUnitUseCase) Execute(request unitAddCommandRequest) (a
 		}
 	}
 
+	log.PluginV(log.Init, "Resolving release unit defaults")
 	unit, err := constructV2Unit(request.Unit)
 	if err != nil {
 		return addV2UnitResult{}, &commandFailure{
@@ -112,6 +133,7 @@ func (useCase addV2ReleaseUnitUseCase) Execute(request unitAddCommandRequest) (a
 		}
 	}
 
+	log.PluginV(log.Init, "Reading existing V2 configuration and state")
 	current, err := useCase.loader.LoadPair()
 	if err != nil {
 		var loadError *v2PairLoadError
@@ -132,6 +154,7 @@ func (useCase addV2ReleaseUnitUseCase) Execute(request unitAddCommandRequest) (a
 	if current.State.Units == nil {
 		return addV2UnitResult{}, &commandFailure{code: "VALIDATION_ERROR", message: "v2 state units must be present"}
 	}
+	log.PluginV(log.Init, "Checking duplicate unit identity")
 	if _, exists := current.State.Units[unit.Unit.ID]; exists {
 		return addV2UnitResult{}, &commandFailure{
 			code:    "DUPLICATE_UNIT",
@@ -140,16 +163,26 @@ func (useCase addV2ReleaseUnitUseCase) Execute(request unitAddCommandRequest) (a
 	}
 
 	updated := appendV2ReleaseUnit(current, unit)
+	log.PluginV(log.Init, "Validating updated V2 configuration and state")
 	if err := useCase.validator.ValidatePair(updated); err != nil {
 		return addV2UnitResult{}, &commandFailure{code: "VALIDATION_ERROR", message: err.Error()}
 	}
+	log.PluginV(log.Init, "Writing updated V2 configuration and state")
 	if err := useCase.writer.PersistPair(updated); err != nil {
 		return addV2UnitResult{}, &commandFailure{
 			code:    "SAVE_ERROR",
 			message: fmt.Sprintf("Failed to save V2 release configuration: %v", err),
 		}
 	}
-	return addV2UnitResult{Unit: unit.Config}, nil
+	log.PluginV(log.Init, "Release unit append completed")
+	return addV2UnitResult{Unit: unit.Config, ExistingUnitCount: len(current.Config.Units)}, nil
+}
+
+func setupArtifactAction(exists bool) string {
+	if exists {
+		return "replaced"
+	}
+	return "created"
 }
 
 func mapPresencePolicyFailure(policyFailure *v2PresencePolicyFailure) *commandFailure {
