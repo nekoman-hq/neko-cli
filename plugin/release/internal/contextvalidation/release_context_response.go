@@ -1,6 +1,7 @@
 package contextvalidation
 
 import (
+	"path/filepath"
 	"time"
 
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
@@ -8,7 +9,7 @@ import (
 	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releaseworkflow"
 )
 
-var releaseContextPresentationProperties = []presentation.Property{
+var releaseContextCompleteProperties = []presentation.Property{
 	{Key: "valid", Label: "Release context valid"},
 	{Key: releaseworkflow.DispatchInputUnit, Label: "Unit"},
 	{Key: "display_name", Label: "Display name"},
@@ -50,7 +51,7 @@ func MapValidatedReleaseContext(result *ValidatedReleaseContext, timestamp time.
 		response.ExitCode = 1
 		return response
 	}
-	return &plugin.Response{
+	response := &plugin.Response{
 		Status:   "success",
 		Metadata: contextValidationResponseMetadata(releaseContextValidationCommandName, timestamp),
 		Data: map[string]any{
@@ -71,10 +72,166 @@ func MapValidatedReleaseContext(result *ValidatedReleaseContext, timestamp time.
 		},
 		RendererHint: "table",
 		PresentationProperties: &presentation.Properties{
-			Properties: append([]presentation.Property(nil), releaseContextPresentationProperties...),
+			Title: "Validated Release Context",
+			Properties: []presentation.Property{
+				{Label: "Release context", Value: "Valid", Role: presentation.StyleSuccess, Emphasized: true},
+				{Label: "Unit", Value: result.UnitID},
+				{Label: "Version", Value: result.Version},
+				{Label: "Tag", Value: result.Tag},
+				{Label: "Release commit", Value: result.ReleaseSHA},
+				{Label: "Git consistency", Value: "HEAD and tag target match", Role: presentation.StyleSuccess},
+			},
 		},
 		GitHubOutput: &plugin.GitHubOutput{
 			Fields: append([]plugin.GitHubOutputField(nil), releaseContextGitHubOutputFields...),
+		},
+	}
+	response.PresentationTable = releaseContextCompleteChecksTable(result.Checks)
+	response.PresentationTable.Following = releaseContextDetailsTable(result)
+	response.PresentationTable.Following.Following = releaseContextGitHubMappingTable()
+	response.PresentationTable.Following.Following.Following = releaseContextLimitationsTable()
+	return response
+}
+
+func attachFailedReleaseContextPresentation(response *plugin.Response, result *ValidatedReleaseContext) {
+	if response == nil || result == nil || len(result.Checks) == 0 {
+		return
+	}
+	findings := releaseContextCheckRows(result.Checks, true)
+	if len(findings) == 0 {
+		return
+	}
+	response.PresentationTable = &presentation.Table{
+		Title:   "Failed Checks",
+		Columns: releaseContextCheckColumns(),
+		Rows:    findings,
+	}
+	response.PresentationTable.Following = releaseContextCompleteChecksTable(result.Checks)
+	response.PresentationTable.Following.Following = releaseContextDetailsTable(result)
+	response.PresentationTable.Following.Following.Following = releaseContextLimitationsTable()
+}
+
+func releaseContextCompleteChecksTable(checks []ReleaseContextCheck) *presentation.Table {
+	return &presentation.Table{
+		Title: "Context Checks", DescribeOnly: true,
+		Columns: releaseContextCheckColumns(),
+		Rows:    releaseContextCheckRows(checks, false),
+	}
+}
+
+func releaseContextCheckColumns() []presentation.Column {
+	return []presentation.Column{
+		{Key: "check", Label: "Check", Essential: true},
+		{Key: "status", Label: "Status", Essential: true},
+		{Key: "subject", Label: "Subject", Essential: true},
+		{Key: "expected", Label: "Expected"},
+		{Key: "actual", Label: "Actual"},
+		{Key: "guidance", Label: "Guidance"},
+	}
+}
+
+func releaseContextCheckRows(checks []ReleaseContextCheck, failedOnly bool) []map[string]any {
+	rows := make([]map[string]any, 0, len(checks))
+	for _, check := range checks {
+		if failedOnly && check.Status != "failed" {
+			continue
+		}
+		rows = append(rows, map[string]any{
+			"check": check.Name, "status": check.Status, "subject": check.Subject,
+			"expected": check.Expected, "actual": check.Actual, "guidance": check.Guidance,
+		})
+	}
+	return rows
+}
+
+func releaseContextDetailsTable(result *ValidatedReleaseContext) *presentation.Table {
+	properties := make([]presentation.Property, 0, len(releaseContextCompleteProperties))
+	for _, property := range releaseContextCompleteProperties {
+		value := resultPresentationValue(result, property.Key)
+		properties = append(properties, presentation.Property{Label: property.Label, Value: value})
+	}
+	return &presentation.Table{
+		Title: "Resolved Context", DescribeOnly: true,
+		Columns: []presentation.Column{
+			{Key: "unit", Label: "Unit", Essential: true},
+			{Key: "version", Label: "Version", Essential: true},
+			{Key: "tag", Label: "Tag", Essential: true},
+			{Key: "release_sha", Label: "Release commit"},
+			{Key: "source", Label: "Source"},
+		},
+		Rows: []map[string]any{{
+			"unit": result.UnitID, "version": result.Version, "tag": result.Tag,
+			"release_sha": result.ReleaseSHA, "source": "V2 config, state, and local Git",
+		}},
+		Details: &presentation.Properties{Properties: properties},
+	}
+}
+
+func resultPresentationValue(result *ValidatedReleaseContext, key string) any {
+	switch key {
+	case "valid":
+		return result.HeadMatches && result.TagTargetMatches
+	case "unit":
+		return result.UnitID
+	case "display_name":
+		return result.DisplayName
+	case "version":
+		return result.Version
+	case "tag_prefix":
+		return result.TagPrefix
+	case "tag":
+		return result.Tag
+	case "release_sha":
+		return result.ReleaseSHA
+	case "working_directory":
+		if filepath.IsAbs(result.WorkingDirectory) {
+			return "repository-local path"
+		}
+		return result.WorkingDirectory
+	case "executor":
+		return result.Executor
+	case "delivery":
+		return result.Delivery
+	case "workflow":
+		return result.Workflow
+	case "git_object_format":
+		return string(result.GitObjectFormat)
+	case "head_matches":
+		return result.HeadMatches
+	case "tag_target_matches":
+		return result.TagTargetMatches
+	default:
+		return ""
+	}
+}
+
+func releaseContextGitHubMappingTable() *presentation.Table {
+	rows := make([]map[string]any, 0, len(releaseContextGitHubOutputFields))
+	for _, field := range releaseContextGitHubOutputFields {
+		rows = append(rows, map[string]any{"key": field.Name, "source": field.DataKey})
+	}
+	return &presentation.Table{
+		Title: "GitHub Output Mapping", DescribeOnly: true,
+		Columns: []presentation.Column{
+			{Key: "key", Label: "Output key", Essential: true},
+			{Key: "source", Label: "Validated fact", Essential: true},
+		},
+		Rows: rows,
+	}
+}
+
+func releaseContextLimitationsTable() *presentation.Table {
+	return &presentation.Table{
+		Title: "Limitations", DescribeOnly: true,
+		Columns: []presentation.Column{
+			{Key: "area", Label: "Area", Essential: true},
+			{Key: "scope", Label: "Scope", Essential: true},
+			{Key: "details", Label: "Details"},
+		},
+		Rows: []map[string]any{
+			{"area": "Repository", "scope": "Local checkout", "details": "No remote provider state is inspected"},
+			{"area": "Credentials", "scope": "Token free", "details": "No GitHub token or credential is read"},
+			{"area": "Mutation", "scope": "Read only", "details": "No Git, workflow, release, upload, or publication mutation is performed"},
 		},
 	}
 }

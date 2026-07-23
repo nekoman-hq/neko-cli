@@ -51,6 +51,18 @@ type ValidatedReleaseContext struct {
 	GitObjectFormat  GitObjectFormat
 	HeadMatches      bool
 	TagTargetMatches bool
+	Checks           []ReleaseContextCheck
+}
+
+// ReleaseContextCheck is presentation-only validation evidence. Machine data
+// remains mapped explicitly from ValidatedReleaseContext's canonical fields.
+type ReleaseContextCheck struct {
+	Name     string
+	Status   string
+	Subject  string
+	Expected string
+	Actual   string
+	Guidance string
 }
 
 type releaseContextSourceReader interface {
@@ -89,61 +101,131 @@ func (useCase releaseContextValidationUseCase) Validate(_ context.Context, reque
 	if err != nil {
 		return nil, failureFromMessage("RELEASE_UNIT_NOT_FOUND", "the dispatched release unit is not present exactly once in V2 config and state")
 	}
-	if failure := validateReleaseContextVersion(*unit, request.Version); failure != nil {
-		return nil, failure
+	result := &ValidatedReleaseContext{
+		UnitID: request.UnitID, DisplayName: unit.DisplayName, Version: request.Version,
+		TagPrefix: unit.TagPrefix, Tag: request.Tag, ReleaseSHA: request.ReleaseSHA,
+		WorkingDirectory: unit.WorkingDirectory, Executor: unit.ExecutorType,
+		Delivery: unit.Delivery, Workflow: unit.Workflow,
+		Checks: []ReleaseContextCheck{
+			passedReleaseContextCheck("Release source", "V2 config and state"),
+			passedReleaseContextCheck("Release unit", request.UnitID),
+		},
 	}
-	if failure := validateReleaseContextTag(*unit, request.Version, request.Tag); failure != nil {
-		return nil, failure
+	versionFailure := validateReleaseContextVersion(*unit, request.Version)
+	result.Checks = append(result.Checks, releaseContextCheck(
+		"Version", unit.Version, request.Version, versionFailure,
+	))
+	tagSpec, tagSpecErr := releaseconfig.NewTagSpec(unit.TagPrefix)
+	expectedTag := ""
+	if tagSpecErr == nil {
+		expectedTag = tagSpec.Format(request.Version)
+	}
+	tagFailure := validateReleaseContextTag(*unit, request.Version, request.Tag)
+	result.Checks = append(result.Checks, releaseContextCheck(
+		"Tag", expectedTag, request.Tag, tagFailure,
+	))
+	if versionFailure != nil {
+		return releaseContextValidationFailure(result, versionFailure)
+	}
+	if tagFailure != nil {
+		return releaseContextValidationFailure(result, tagFailure)
 	}
 
 	objectFormat, err := useCase.git.ObjectFormat(request.RepositoryRoot)
 	if err != nil {
-		return nil, failureFromMessage("GIT_REPOSITORY_UNAVAILABLE", "the repository object format could not be read from local Git data")
+		failure := failureFromMessage("GIT_REPOSITORY_UNAVAILABLE", "the repository object format could not be read from local Git data")
+		result.Checks = append(result.Checks, failedReleaseContextCheck("Git object format", "local repository", failure))
+		return releaseContextValidationFailure(result, failure)
 	}
+	result.GitObjectFormat = objectFormat
+	result.Checks = append(result.Checks, passedReleaseContextCheck("Git object format", string(objectFormat)))
 	if failure := validateReleaseObjectIDForFormat(request.ReleaseSHA, objectFormat); failure != nil {
-		return nil, failure
+		result.Checks = append(result.Checks, failedReleaseContextCheck("Release commit format", request.ReleaseSHA, failure))
+		return releaseContextValidationFailure(result, failure)
 	}
+	result.Checks = append(result.Checks, passedReleaseContextCheck("Release commit format", request.ReleaseSHA))
 	objectType, err := useCase.git.ObjectType(request.RepositoryRoot, request.ReleaseSHA)
 	if err != nil || objectType != "commit" {
-		return nil, failureFromMessage("RELEASE_SHA_NOT_COMMIT", "release_sha must identify an existing local commit object")
+		failure := failureFromMessage("RELEASE_SHA_NOT_COMMIT", "release_sha must identify an existing local commit object")
+		result.Checks = append(result.Checks, failedReleaseContextCheck("Release commit object", request.ReleaseSHA, failure))
+		return releaseContextValidationFailure(result, failure)
 	}
+	result.Checks = append(result.Checks, passedReleaseContextCheck("Release commit object", request.ReleaseSHA))
 	head, err := useCase.git.HeadCommit(request.RepositoryRoot)
 	if err != nil {
-		return nil, failureFromMessage("HEAD_UNAVAILABLE", "checked-out HEAD could not be resolved to a local commit")
+		failure := failureFromMessage("HEAD_UNAVAILABLE", "checked-out HEAD could not be resolved to a local commit")
+		result.Checks = append(result.Checks, failedReleaseContextCheck("Checked-out HEAD", request.ReleaseSHA, failure))
+		return releaseContextValidationFailure(result, failure)
 	}
 	if head != request.ReleaseSHA {
-		return nil, failureFromMessage("HEAD_MISMATCH", "checked-out HEAD does not match release_sha")
+		failure := failureFromMessage("HEAD_MISMATCH", "checked-out HEAD does not match release_sha")
+		result.Checks = append(result.Checks, releaseContextCheck("Checked-out HEAD", request.ReleaseSHA, head, failure))
+		return releaseContextValidationFailure(result, failure)
 	}
+	result.HeadMatches = true
+	result.Checks = append(result.Checks, passedReleaseContextCheck("Checked-out HEAD", head))
 	tagExists, err := useCase.git.TagExists(request.RepositoryRoot, request.Tag)
 	if err != nil {
-		return nil, failureFromMessage("TAG_HISTORY_UNAVAILABLE", "local tag history could not be inspected; ensure the checkout contains complete tag history")
+		failure := failureFromMessage("TAG_HISTORY_UNAVAILABLE", "local tag history could not be inspected; ensure the checkout contains complete tag history")
+		result.Checks = append(result.Checks, failedReleaseContextCheck("Release tag history", request.Tag, failure))
+		return releaseContextValidationFailure(result, failure)
 	}
 	if !tagExists {
-		return nil, failureFromMessage("RELEASE_TAG_MISSING", "the dispatched release tag is missing locally; fetch complete tag history before validation")
+		failure := failureFromMessage("RELEASE_TAG_MISSING", "the dispatched release tag is missing locally; fetch complete tag history before validation")
+		result.Checks = append(result.Checks, failedReleaseContextCheck("Release tag history", request.Tag, failure))
+		return releaseContextValidationFailure(result, failure)
 	}
+	result.Checks = append(result.Checks, passedReleaseContextCheck("Release tag history", request.Tag))
 	tagCommit, err := useCase.git.TagCommit(request.RepositoryRoot, request.Tag)
 	if err != nil {
-		return nil, failureFromMessage("TAG_TARGET_INVALID", "the dispatched release tag does not resolve to a local commit")
+		failure := failureFromMessage("TAG_TARGET_INVALID", "the dispatched release tag does not resolve to a local commit")
+		result.Checks = append(result.Checks, failedReleaseContextCheck("Release tag target", request.Tag, failure))
+		return releaseContextValidationFailure(result, failure)
 	}
 	if tagCommit != request.ReleaseSHA {
-		return nil, failureFromMessage("TAG_TARGET_MISMATCH", "the dispatched release tag does not resolve to release_sha")
+		failure := failureFromMessage("TAG_TARGET_MISMATCH", "the dispatched release tag does not resolve to release_sha")
+		result.Checks = append(result.Checks, releaseContextCheck("Release tag target", request.ReleaseSHA, tagCommit, failure))
+		return releaseContextValidationFailure(result, failure)
 	}
+	result.TagTargetMatches = true
+	result.Checks = append(result.Checks, passedReleaseContextCheck("Release tag target", tagCommit))
+	return result, nil
+}
 
-	return &ValidatedReleaseContext{
-		UnitID:           unit.ID,
-		DisplayName:      unit.DisplayName,
-		Version:          request.Version,
-		TagPrefix:        unit.TagPrefix,
-		Tag:              request.Tag,
-		ReleaseSHA:       request.ReleaseSHA,
-		WorkingDirectory: unit.WorkingDirectory,
-		Executor:         unit.ExecutorType,
-		Delivery:         unit.Delivery,
-		Workflow:         unit.Workflow,
-		GitObjectFormat:  objectFormat,
-		HeadMatches:      true,
-		TagTargetMatches: true,
-	}, nil
+func releaseContextValidationFailure(
+	result *ValidatedReleaseContext,
+	failure *commandFailure,
+) (*ValidatedReleaseContext, *commandFailure) {
+	failure.Context = result
+	return nil, failure
+}
+
+func passedReleaseContextCheck(name, subject string) ReleaseContextCheck {
+	return ReleaseContextCheck{Name: name, Status: "passed", Subject: subject}
+}
+
+func failedReleaseContextCheck(name, subject string, failure *commandFailure) ReleaseContextCheck {
+	return ReleaseContextCheck{
+		Name: name, Status: "failed", Subject: subject,
+		Guidance: releaseContextFailureGuidance(failure),
+	}
+}
+
+func releaseContextCheck(name, expected, actual string, failure *commandFailure) ReleaseContextCheck {
+	if failure == nil {
+		return ReleaseContextCheck{Name: name, Status: "passed", Subject: actual, Expected: expected, Actual: actual}
+	}
+	return ReleaseContextCheck{
+		Name: name, Status: "failed", Subject: actual, Expected: expected, Actual: actual,
+		Guidance: releaseContextFailureGuidance(failure),
+	}
+}
+
+func releaseContextFailureGuidance(failure *commandFailure) string {
+	if failure == nil {
+		return ""
+	}
+	return failure.Message
 }
 
 func validateReleaseContextRequestSyntax(request ReleaseContextValidationRequest) *commandFailure {

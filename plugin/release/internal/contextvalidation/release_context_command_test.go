@@ -84,6 +84,57 @@ func TestReleaseContextValidationCommandHandlerReturnsStructuredFailureWithNilGo
 	}
 }
 
+func TestReleaseContextValidationFailureShowsAllAvailableFailedChecks(t *testing.T) {
+	result := validatedReleaseContextFixture()
+	result.Checks = []ReleaseContextCheck{
+		{Name: "Release source", Status: "passed", Subject: "V2 config and state"},
+		{
+			Name: "Version", Status: "failed", Expected: "2.4.0", Actual: "2.4.1",
+			Guidance: "the dispatched version does not match authoritative state",
+		},
+		{
+			Name: "Tag", Status: "failed", Expected: "api/v2.4.0", Actual: "web/v2.4.1",
+			Guidance: "the dispatched tag does not match the selected unit",
+		},
+	}
+	handler := releaseContextValidationCommandHandler{
+		validator: &recordingReleaseContextValidator{
+			result: result,
+			failure: failureFromMessage(
+				"RELEASE_VERSION_MISMATCH",
+				"the dispatched version does not match the authoritative current V2 state version",
+			),
+		},
+		clock: fixedContextValidationClock{time.Time{}},
+		root:  releaseContextCommandRoot(t),
+	}
+	response, err := handler.Handle(context.Background(), plugin.Request{})
+	if err != nil {
+		t.Fatalf("Handle failure: %v", err)
+	}
+	var concise bytes.Buffer
+	if err := renderer.RenderTo(response, renderer.FormatTable, &concise); err != nil {
+		t.Fatalf("render failure: %v", err)
+	}
+	for _, want := range []string{"Failed Checks", "Version", "2.4.1", "Tag", "web/v2.4.1"} {
+		if !strings.Contains(concise.String(), want) {
+			t.Fatalf("context failure omitted %q:\n%s", want, concise.String())
+		}
+	}
+	if strings.Contains(concise.String(), "Release source") {
+		t.Fatalf("context failure default exposed passed check:\n%s", concise.String())
+	}
+	var described bytes.Buffer
+	if err := renderer.RenderWithOptionsTo(response, renderer.RenderOptions{
+		Format: renderer.FormatTable, Describe: true,
+	}, &described); err != nil {
+		t.Fatalf("render described failure: %v", err)
+	}
+	if !strings.Contains(described.String(), "Context Checks") || !strings.Contains(described.String(), "Release source") {
+		t.Fatalf("context failure describe omitted complete checks:\n%s", described.String())
+	}
+}
+
 func TestValidatedReleaseContextResponseHasStableTypedMachineSchema(t *testing.T) {
 	timestamp := time.Date(2026, time.July, 18, 15, 2, 0, 0, time.UTC)
 	response := MapValidatedReleaseContext(validatedReleaseContextFixture(), timestamp)
@@ -103,12 +154,10 @@ func TestValidatedReleaseContextResponseHasStableTypedMachineSchema(t *testing.T
 		t.Fatalf("machine response = %#v", response)
 	}
 
-	propertyKeys := make([]string, 0, len(response.PresentationProperties.Properties))
-	for _, property := range response.PresentationProperties.Properties {
-		propertyKeys = append(propertyKeys, property.Key)
-	}
-	if !reflect.DeepEqual(propertyKeys, wantKeys) {
-		t.Fatalf("human property order = %#v, want %#v", propertyKeys, wantKeys)
+	if response.PresentationProperties == nil || response.PresentationProperties.Title != "Validated Release Context" ||
+		response.PresentationTable == nil || response.PresentationTable.Title != "Context Checks" ||
+		!response.PresentationTable.DescribeOnly {
+		t.Fatalf("context presentation contract = %#v / %#v", response.PresentationProperties, response.PresentationTable)
 	}
 	wantGitHubKeys := []string{"unit", "display_name", "version", "tag_prefix", "tag", "release_sha", "working_directory", "executor", "delivery", "workflow"}
 	githubKeys := make([]string, 0, len(response.GitHubOutput.Fields))
@@ -132,7 +181,7 @@ func TestValidatedReleaseContextReadableJSONAndGitHubOutputs(t *testing.T) {
 		t.Fatalf("human render: %v", err)
 	}
 	plain := ansi.Strip(human.String())
-	for _, expected := range []string{"Release context valid", "Unit", "api", "Version", "2.4.0", "HEAD matches", "true", "Tag target matches"} {
+	for _, expected := range []string{"Validated Release Context", "Release context", "Valid", "Unit", "api", "Version", "2.4.0", "Git consistency"} {
 		if !strings.Contains(plain, expected) {
 			t.Fatalf("human output omitted %q:\n%s", expected, plain)
 		}

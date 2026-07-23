@@ -20,6 +20,7 @@ func (systemContextValidationClock) Now() time.Time {
 type commandFailure struct {
 	Code    string
 	Message string
+	Context *ValidatedReleaseContext
 }
 
 func failureFromMessage(code, message string) *commandFailure {

@@ -37,6 +37,11 @@ func (handler releaseContextValidationCommandHandler) Handle(ctx context.Context
 	timestamp := handler.clock.Now()
 	if failure != nil {
 		response := mapCommandFailure(releaseContextValidationCommandName, failure, timestamp)
+		presentationResult := failure.Context
+		if presentationResult == nil {
+			presentationResult = result
+		}
+		attachFailedReleaseContextPresentation(response, presentationResult)
 		response.ExitCode = 1
 		return response, nil
 	}

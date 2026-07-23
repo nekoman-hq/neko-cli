@@ -289,6 +289,36 @@ func TestReleaseValidateKeepsShowCompatibilityAndUsesDescribeForDetail(t *testin
 	}
 }
 
+func TestReleaseContextValidationUsesDescribeForCompleteChecks(t *testing.T) {
+	manifest := installReleaseReadonlyHelperPlugin(t)
+	repositoryRoot, flags := newReleaseReadonlyContextRepository(t)
+	defaultOutput, defaultErr := executeReleaseReadonlyCommand(
+		t, manifest, repositoryRoot, "ci-validate-context", flags, releaseReadonlyMode{},
+	)
+	describeOutput, describeErr := executeReleaseReadonlyCommand(
+		t, manifest, repositoryRoot, "ci-validate-context", flags, releaseReadonlyMode{describe: true},
+	)
+	verboseOutput, verboseErr := executeReleaseReadonlyCommand(
+		t, manifest, repositoryRoot, "ci-validate-context", flags, releaseReadonlyMode{verbose: true},
+	)
+	if defaultErr != nil || describeErr != nil || verboseErr != nil {
+		t.Fatalf("context transport exits: default=%v describe=%v verbose=%v", defaultErr, describeErr, verboseErr)
+	}
+	if defaultOutput != verboseOutput {
+		t.Fatalf("context verbose changed deterministic output:\ndefault:\n%s\nverbose:\n%s", defaultOutput, verboseOutput)
+	}
+	for _, want := range []string{"Validated Release Context", "Release context", "Valid", "Git consistency"} {
+		if !strings.Contains(defaultOutput, want) {
+			t.Fatalf("context default omitted %q:\n%s", want, defaultOutput)
+		}
+	}
+	for _, hidden := range []string{"Context Checks", "Resolved Context", "GitHub Output Mapping", "Limitations"} {
+		if strings.Contains(defaultOutput, hidden) || !strings.Contains(describeOutput, hidden) {
+			t.Fatalf("context describe visibility for %q is incorrect:\ndefault:\n%s\ndescribe:\n%s", hidden, defaultOutput, describeOutput)
+		}
+	}
+}
+
 type releaseReadonlyMode struct {
 	format   string
 	describe bool

@@ -40,8 +40,12 @@ func TestReleaseContextValidationUseCaseReturnsCanonicalContext(t *testing.T) {
 		HeadMatches:      true,
 		TagTargetMatches: true,
 	}
+	want.Checks = append([]ReleaseContextCheck(nil), result.Checks...)
 	if !reflect.DeepEqual(result, want) {
 		t.Fatalf("result = %#v, want %#v", result, want)
+	}
+	if len(result.Checks) != 10 {
+		t.Fatalf("context checks = %#v, want 10 complete checks", result.Checks)
 	}
 	if sources.calls != 1 {
 		t.Fatalf("source reads = %d, want 1", sources.calls)
@@ -54,6 +58,30 @@ func TestReleaseContextValidationUseCaseReturnsCanonicalContext(t *testing.T) {
 	again, secondFailure := useCase.Validate(context.Background(), validReleaseContextRequest())
 	if secondFailure != nil || !reflect.DeepEqual(again, result) {
 		t.Fatalf("second result = %#v failure=%#v, want deterministic %#v", again, secondFailure, result)
+	}
+}
+
+func TestReleaseContextValidationCollectsIndependentVersionAndTagFailures(t *testing.T) {
+	request := validReleaseContextRequest()
+	request.Version = "1.2.4"
+	request.Tag = "web/v1.2.4"
+	useCase := releaseContextValidationUseCase{
+		sources: &recordingReleaseContextSource{repository: contextValidationRepository()},
+		git:     &recordingReleaseContextGit{},
+	}
+
+	result, failure := useCase.Validate(context.Background(), request)
+	if result != nil || failure == nil || failure.Code != "RELEASE_VERSION_MISMATCH" || failure.Context == nil {
+		t.Fatalf("result=%#v failure=%#v", result, failure)
+	}
+	failed := make([]string, 0)
+	for _, check := range failure.Context.Checks {
+		if check.Status == "failed" {
+			failed = append(failed, check.Name)
+		}
+	}
+	if !reflect.DeepEqual(failed, []string{"Version", "Tag"}) {
+		t.Fatalf("failed checks = %#v, want version and tag", failed)
 	}
 }
 
