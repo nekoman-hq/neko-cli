@@ -100,7 +100,7 @@ func mapCommandFailure(failure *commandFailure, timestamp time.Time) *plugin.Res
 	response.PresentationProperties = &presentation.Properties{
 		Title: "Setup Request Refused",
 		Properties: []presentation.Property{
-			{Label: "Status", Value: "No files written", Role: presentation.StyleError, Emphasized: true},
+			{Label: "Status", Value: "No successful config/state write", Role: presentation.StyleError, Emphasized: true},
 		},
 	}
 	return response

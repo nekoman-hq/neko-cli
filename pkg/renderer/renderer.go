@@ -337,18 +337,24 @@ func renderTableWithWidth(
 	styler presentationStyler,
 ) error {
 	if resp.Status == "error" {
-		if err := renderError(resp, w, styler); err != nil {
-			return err
-		}
 		if resp.PresentationProperties == nil && resp.PresentationTable == nil && resp.PresentationText == nil {
-			return nil
+			return renderError(resp, w, styler)
 		}
 		resolved, err := responseWithResolvedPresentation(resp)
 		if err != nil {
 			return err
 		}
-		_, _ = fmt.Fprintln(w)
-		_, err = renderResponsivePresentationSequence(resolved, w, wide, describe, widthProvider, styler)
+		if rendered, err := renderTextPresentation(resolved, w); rendered || err != nil {
+			return err
+		}
+		if rendered, err := renderResponsivePresentationSequence(resolved, w, wide, describe, widthProvider, styler); rendered || err != nil {
+			return err
+		}
+		if resolved.PresentationTable != nil {
+			_, err = renderResponsiveTable(resolved, w, wide, widthProvider, styler)
+			return err
+		}
+		_, err = renderPropertyValues(resolved, w, widthProvider, styler)
 		return err
 	}
 	resolved, err := responseWithResolvedPresentation(resp)

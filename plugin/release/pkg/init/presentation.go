@@ -243,6 +243,7 @@ func initializationFailurePresentation(failure *commandFailure) *presentation.Ta
 	return &presentation.Table{
 		Title: title,
 		Columns: []presentation.Column{
+			{Key: "code", Label: "Code", Essential: true},
 			{Key: "area", Label: "Area", Essential: true},
 			{Key: "status", Label: "Status", Essential: true},
 			{Key: "reason", Label: "Reason", Essential: true},
@@ -250,7 +251,7 @@ func initializationFailurePresentation(failure *commandFailure) *presentation.Ta
 			{Key: "remediation", Label: "Remediation", Essential: true},
 		},
 		Rows: []map[string]any{{
-			"area": area, "status": "Refused", "reason": failure.message,
+			"code": failure.code, "area": area, "status": "Refused", "reason": failure.message,
 			"force": force, "remediation": remediation,
 		}},
 	}
