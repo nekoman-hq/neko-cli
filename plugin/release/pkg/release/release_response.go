@@ -13,26 +13,34 @@ import (
 func MapReleaseCommandOutcome(command string, outcome ReleaseCommandOutcome, timestamp time.Time) (*plugin.Response, error) {
 	switch result := outcome.(type) {
 	case *LegacyReleasePreview:
-		return successTableResponse(command, timestamp, []map[string]any{
+		response := successTableResponse(command, timestamp, []map[string]any{
 			{"property": "Release Type", "value": string(result.ReleaseType)},
 			{"property": "Current Version", "value": result.CurrentVersion},
 			{"property": "New Version", "value": result.NextVersion},
 			{"property": "Release System", "value": result.ReleaseSystem},
 			{"property": "Dry Run", "value": "yes"},
 			{"property": "Status", "value": "Preview - no changes made"},
-		}), nil
+		})
+		attachReleaseLifecyclePresentation(response, command, outcome)
+		return response, nil
 	case *LegacyReleaseCompleted:
-		return successTableResponse(command, timestamp, []map[string]any{
+		response := successTableResponse(command, timestamp, []map[string]any{
 			{"property": "Release Type", "value": string(result.ReleaseType)},
 			{"property": "Previous Version", "value": result.PreviousVersion},
 			{"property": "New Version", "value": result.NextVersion},
 			{"property": "Release System", "value": result.ReleaseSystem},
 			{"property": "Status", "value": "Released successfully"},
-		}), nil
+		})
+		attachReleaseLifecyclePresentation(response, command, outcome)
+		return response, nil
 	case *V2ReleasePreview:
-		return mapV2ReleasePreview(command, result, timestamp), nil
+		response := mapV2ReleasePreview(command, result, timestamp)
+		attachReleaseLifecyclePresentation(response, command, outcome)
+		return response, nil
 	case *GitHubActionsReleaseResult:
-		return mapGitHubActionsReleaseResult(command, result, timestamp), nil
+		response := mapGitHubActionsReleaseResult(command, result, timestamp)
+		attachReleaseLifecyclePresentation(response, command, outcome)
+		return response, nil
 	default:
 		return nil, fmt.Errorf("unsupported release command outcome %T", outcome)
 	}

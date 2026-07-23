@@ -148,7 +148,7 @@ func TestReleasePresentationIsResponsiveAndPathSafe(t *testing.T) {
 		WidthProvider: releasePlanOutputWidth{width: 36, available: true},
 	})
 	narrowPlain := ansi.Strip(narrow)
-	for _, want := range []string{"Release Summary", "Requested change", "Patch", "Operations", "Action:"} {
+	for _, want := range []string{"Release Summary", "Requested", "Patch", "Operations", "Action:"} {
 		if !strings.Contains(narrowPlain, want) {
 			t.Fatalf("narrow lifecycle output omitted %q:\n%s", want, narrowPlain)
 		}

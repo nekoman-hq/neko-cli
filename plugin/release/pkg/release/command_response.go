@@ -14,7 +14,7 @@ func MapCommandFailure(command string, failure *CommandFailure, timestamp time.T
 	if failure == nil {
 		return nil
 	}
-	return &plugin.Response{
+	response := &plugin.Response{
 		Status:   "error",
 		Metadata: commandResponseMetadata(command, timestamp),
 		Error: &plugin.ResponseError{
@@ -23,6 +23,8 @@ func MapCommandFailure(command string, failure *CommandFailure, timestamp time.T
 			Details: cloneResponseDetails(failure.Details),
 		},
 	}
+	attachLifecycleFailurePresentation(response, command, failure)
+	return response
 }
 
 func successTableResponse(command string, timestamp time.Time, items []map[string]any) *plugin.Response {
