@@ -55,6 +55,12 @@ type unitOverviewRow struct {
 	WorkingDirectory  string                `json:"working_directory,omitempty"`
 	Alignment         unitOverviewAlignment `json:"alignment"`
 	Issues            []unitOverviewIssue   `json:"issues"`
+	Kind              string                `json:"-"`
+	PluginName        string                `json:"-"`
+	PluginManifest    string                `json:"-"`
+	PluginAssetPrefix string                `json:"-"`
+	PluginBinaryName  string                `json:"-"`
+	DeclaredPaths     []string              `json:"-"`
 	ConfigPresent     bool                  `json:"-"`
 	StatePresent      bool                  `json:"-"`
 }

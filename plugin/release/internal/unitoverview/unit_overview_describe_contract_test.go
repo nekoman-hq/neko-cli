@@ -29,7 +29,7 @@ func TestUnitOverviewDefaultRetainsUsefulInventoryAndActionableIssues(t *testing
 	}
 
 	output := ansi.Strip(renderUnitOverviewContract(t, response, renderer.RenderOptions{
-		Format: renderer.FormatTable, WidthProvider: releasePlanOutputWidth{width: 100, available: true},
+		Format: renderer.FormatTable, WidthProvider: releasePlanOutputWidth{width: 180, available: true},
 	}))
 	for _, expected := range []string{
 		"Release Units", "api", "1.2.3", "ready", "worker", "has issues",
@@ -50,7 +50,7 @@ func TestUnitOverviewDescribeExposesCompleteOwnedFacts(t *testing.T) {
 	response := mapUnitOverviewResult(unitOverviewDescribeContractFixture(), time.Time{})
 	output := ansi.Strip(renderUnitOverviewContract(t, response, renderer.RenderOptions{
 		Format: renderer.FormatTable, Describe: true,
-		WidthProvider: releasePlanOutputWidth{width: 110, available: true},
+		WidthProvider: releasePlanOutputWidth{width: 180, available: true},
 	}))
 	for _, expected := range []string{
 		"Unit Details", "Source ownership", "Config and state", "Config only",

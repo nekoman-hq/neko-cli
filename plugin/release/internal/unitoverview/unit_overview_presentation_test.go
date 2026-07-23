@@ -25,7 +25,7 @@ func TestUnitOverviewReadableOutputKeepsEssentialColumnsAndInvalidUnitsVisible(t
 	response := runUnitOverview(t, root)
 
 	normal := ansi.Strip(renderReleasePlanForTest(t, response, renderer.FormatTable, releasePlanOutputWidth{width: 120, available: true}))
-	for _, want := range []string{"Unit", "Version", "Status", "Name", "Tag prefix", "Executor", "Delivery", "api", "not-semver", "invalid"} {
+	for _, want := range []string{"Unit", "Version", "Status", "Kind", "Executor", "Delivery", "api", "not-semver", "has issues"} {
 		if !strings.Contains(normal, want) {
 			t.Fatalf("normal unit overview omitted %q:\n%s", want, normal)
 		}
@@ -33,7 +33,7 @@ func TestUnitOverviewReadableOutputKeepsEssentialColumnsAndInvalidUnitsVisible(t
 
 	narrow := renderReleasePlanForTest(t, response, renderer.FormatTable, releasePlanOutputWidth{width: 28, available: true})
 	narrowPlain := ansi.Strip(narrow)
-	for _, want := range []string{"Unit", "Version", "Status", "api", "not-semver", "invalid", "worker", "2.0.0", "aligned"} {
+	for _, want := range []string{"Unit", "Version", "Status", "api", "not-semver", "has issues", "worker", "2.0.0", "ready"} {
 		if !strings.Contains(narrowPlain, want) {
 			t.Fatalf("narrow unit overview omitted %q:\n%s", want, narrowPlain)
 		}
@@ -61,13 +61,19 @@ func TestUnitOverviewReadableOutputIsDeterministicAtUnknownWidthAndWrapsWideDeta
 		t.Fatalf("unknown-width unit overview is nondeterministic:\nfirst=%q\nsecond=%q", first, second)
 	}
 	unknown := ansi.Strip(first)
-	for _, want := range []string{"Unit: api", "Version: 1.2.3", "Status: aligned", "Workflow:", unit.Executor.Workflow} {
+	for _, want := range []string{"Unit: api", "Version: 1.2.3", "Status: ready"} {
 		if !strings.Contains(unknown, want) {
 			t.Fatalf("unknown-width unit overview omitted %q:\n%s", want, unknown)
 		}
 	}
+	if strings.Contains(unknown, unit.Executor.Workflow) {
+		t.Fatalf("default unit overview exposed describe-only workflow:\n%s", unknown)
+	}
 
-	wide := renderReleasePlanForTest(t, response, renderer.FormatWide, releasePlanOutputWidth{width: 54, available: true})
+	wide := renderUnitOverviewContract(t, response, renderer.RenderOptions{
+		Format: renderer.FormatWide, Describe: true,
+		WidthProvider: releasePlanOutputWidth{width: 54, available: true},
+	})
 	widePlain := ansi.Strip(wide)
 	if compact := strings.Join(strings.Fields(widePlain), ""); !strings.Contains(compact, strings.ReplaceAll(unit.Executor.Workflow, " ", "")) {
 		t.Fatalf("wide unit overview lost the configured workflow path:\n%s", widePlain)

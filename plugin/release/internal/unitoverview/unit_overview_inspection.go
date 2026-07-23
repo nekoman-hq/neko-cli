@@ -95,14 +95,22 @@ func newConfiguredUnitOverviewRow(unit releaseconfig.V2Unit) unitOverviewRow {
 	if workingDirectory == "" {
 		workingDirectory = "."
 	}
-	return unitOverviewRow{
+	row := unitOverviewRow{
 		ID: unit.ID, DisplayName: unit.DisplayName,
 		TagPrefix: unit.TagPrefix, Executor: string(unit.Executor.Type),
 		Delivery: string(unit.Executor.Delivery), WorkflowPath: unit.Executor.Workflow,
 		WorkingDirectory: workingDirectory,
-		Alignment:        unitOverviewConfigOnly, Issues: make([]unitOverviewIssue, 0),
+		Alignment:        unitOverviewConfigOnly, Issues: make([]unitOverviewIssue, 0), Kind: string(unit.Kind),
+		DeclaredPaths: append([]string(nil), unit.Paths...),
 		ConfigPresent: true,
 	}
+	if unit.Plugin != nil {
+		row.PluginName = unit.Plugin.Name
+		row.PluginManifest = unit.Plugin.Manifest
+		row.PluginAssetPrefix = unit.Plugin.AssetPrefix
+		row.PluginBinaryName = unit.Plugin.BinaryName
+	}
+	return row
 }
 
 func applyUnitOverviewVersion(row *unitOverviewRow, configured string) {
