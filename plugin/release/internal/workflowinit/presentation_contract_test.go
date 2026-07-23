@@ -219,6 +219,30 @@ func TestWorkflowInitVerbosePhasesDistinguishDryRunCreateIdenticalAndConflict(t 
 	}
 }
 
+func TestWorkflowInitPresentationRemainsReadableAtNarrowAndUnknownWidth(t *testing.T) {
+	root := newWorkflowScaffoldRepository(t, map[string]string{"api": ".github/workflows/release.yml"})
+	response, err := HandleGitHubWorkflowInitAt(root, plugin.Request{Command: githubWorkflowInitCommandName})
+	if err != nil || response.Status != "success" {
+		t.Fatalf("create response=%#v err=%v", response, err)
+	}
+	for _, width := range []workflowInitPresentationWidthState{{width: 34, available: true}, {available: false}} {
+		var output bytes.Buffer
+		if renderErr := renderer.RenderWithOptionsTo(response, renderer.RenderOptions{
+			Format: renderer.FormatTable, Describe: true, WidthProvider: width,
+		}, &output); renderErr != nil {
+			t.Fatalf("render workflow width %#v: %v", width, renderErr)
+		}
+		for _, want := range []string{"GitHub Workflow Initialization", "Workflow Identity", ".github/workflows/rel", "Limitations"} {
+			if !strings.Contains(output.String(), want) {
+				t.Fatalf("workflow width %#v omitted %q:\n%s", width, want, output.String())
+			}
+		}
+		if strings.Contains(output.String(), root.Path()) || strings.Contains(output.String(), "\x1b[") {
+			t.Fatalf("workflow width %#v exposed unsafe output:\n%s", width, output.String())
+		}
+	}
+}
+
 func renderWorkflowInitResponse(t *testing.T, response *plugin.Response, describe bool) string {
 	t.Helper()
 	var output bytes.Buffer
@@ -297,4 +321,13 @@ type workflowInitPresentationWidth int
 
 func (width workflowInitPresentationWidth) Width(io.Writer) (int, bool) {
 	return int(width), true
+}
+
+type workflowInitPresentationWidthState struct {
+	width     int
+	available bool
+}
+
+func (width workflowInitPresentationWidthState) Width(io.Writer) (int, bool) {
+	return width.width, width.available
 }

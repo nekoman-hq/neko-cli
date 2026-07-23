@@ -69,7 +69,9 @@ func TestReleaseSetupCommandsPreserveDomainJSONAcrossGlobalModes(t *testing.T) {
 		{name: "init", command: "init", fixture: newReleaseSetupInitRepository},
 		{name: "unit add", command: "unit-add", fixture: newReleaseSetupUnitAddRepository},
 		{name: "migrate dry run", command: "migrate", fixture: newReleaseSetupMigrationRepository},
+		{name: "migrate actual", command: "migrate", fixture: newReleaseSetupMigrationActualRepository},
 		{name: "workflow dry run", command: "github-workflow-init", fixture: newReleaseSetupWorkflowRepository},
+		{name: "workflow actual", command: "github-workflow-init", fixture: newReleaseSetupWorkflowActualRepository},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -575,6 +577,43 @@ func TestReleaseSetupCommandHelpDeclaresSupportedCoreFormats(t *testing.T) {
 	}
 }
 
+func TestReleaseSetupCombinedOutputIsSafeWhenRedirectedWithNoColor(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	manifest := installReleaseSetupHelperPlugin(t)
+	tests := []struct {
+		fixture func(*testing.T) (string, []string)
+		name    string
+		command string
+	}{
+		{name: "init", command: "init", fixture: newReleaseSetupInitRepository},
+		{name: "unit add", command: "unit-add", fixture: newReleaseSetupUnitAddRepository},
+		{name: "migrate", command: "migrate", fixture: newReleaseSetupMigrationRepository},
+		{name: "workflow init", command: "github-workflow-init", fixture: newReleaseSetupWorkflowMissingRepository},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root, flags := test.fixture(t)
+			output, err := executeReleaseReadonlyCommand(
+				t, manifest, root, test.command, flags,
+				releaseReadonlyMode{describe: true, verbose: true},
+			)
+			if err != nil {
+				t.Fatalf("%s combined redirected output: %v\n%s", test.command, err, output)
+			}
+			if strings.TrimSpace(output) == "" {
+				t.Fatalf("%s combined redirected output is empty", test.command)
+			}
+			for _, forbidden := range []string{
+				root, "\x1b[", "setup-transport-secret", "GITHUB_TOKEN", "GH_TOKEN", "Authorization", "Bearer",
+			} {
+				if strings.Contains(output, forbidden) {
+					t.Fatalf("%s redirected NO_COLOR output contains %q:\n%s", test.command, forbidden, output)
+				}
+			}
+		})
+	}
+}
+
 func normalizeReleaseSetupData(t *testing.T, data map[string]any, root string) map[string]any {
 	t.Helper()
 	encoded, err := json.Marshal(data)
@@ -710,6 +749,12 @@ func newReleaseSetupWorkflowMissingRepository(t *testing.T) (string, []string) {
 		t.Fatalf("remove workflow fixture target: %v", err)
 	}
 	return root, flags
+}
+
+func newReleaseSetupWorkflowActualRepository(t *testing.T) (string, []string) {
+	t.Helper()
+	root, flags := newReleaseSetupWorkflowMissingRepository(t)
+	return root, flags[:len(flags)-1]
 }
 
 func newReleaseSetupRepository(t *testing.T) string {

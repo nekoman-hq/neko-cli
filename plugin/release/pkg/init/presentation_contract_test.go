@@ -69,8 +69,70 @@ func TestAddV2UnitPresentationSeparatesDefaultAndDescribe(t *testing.T) {
 	assertSetupJSONPresentationInvariant(t, response)
 }
 
+func TestInitializationDescribeIncludesPluginAndForceFactsWithoutChangingDomainData(t *testing.T) {
+	unit := setupPresentationUnit("release")
+	unit.Kind = pluginKind
+	unit.Plugin = releaseconfig.V2Plugin{
+		Name: "release", Manifest: "plugin/release/manifest.json",
+		AssetPrefix: "release", BinaryName: "plugin-release",
+	}
+	created := mapInitializeV2Response(initializeV2Result{
+		Unit: unit, ConfigAction: "created", StateAction: "created",
+	}, nil, time.Time{})
+	replaced := mapInitializeV2Response(initializeV2Result{
+		Unit: unit, ConfigAction: "replaced", StateAction: "replaced", Force: true,
+	}, nil, time.Time{})
+	if !reflect.DeepEqual(created.Data, replaced.Data) {
+		t.Fatalf("force presentation changed initialization domain data:\ncreated=%#v\nreplaced=%#v", created.Data, replaced.Data)
+	}
+	plain := renderSetupResponse(t, replaced, false)
+	described := renderSetupResponse(t, replaced, true)
+	for _, hidden := range []string{"Plugin name", "Plugin manifest", "Plugin asset prefix", "Plugin binary", "Force behavior"} {
+		if strings.Contains(plain, hidden) || !strings.Contains(described, hidden) {
+			t.Fatalf("plugin/force describe visibility for %q is incorrect:\nplain:\n%s\ndescribed:\n%s", hidden, plain, described)
+		}
+	}
+	for _, want := range []string{
+		"release", "plugin/release/manifest.json", "plugin-release",
+		"Enabled; existing V2 artifacts may be replaced", "Replace",
+	} {
+		if !strings.Contains(described, want) {
+			t.Fatalf("plugin/force describe omitted %q:\n%s", want, described)
+		}
+	}
+}
+
+func TestInitializationPresentationsRemainReadableAtNarrowAndUnknownWidth(t *testing.T) {
+	responses := []*plugin.Response{
+		mapInitializeV2Response(initializeV2Result{Unit: setupPresentationUnit("api")}, nil, time.Time{}),
+		mapAddV2UnitResponse(addV2UnitResult{Unit: setupPresentationUnit("web"), ExistingUnitCount: 1}, nil, time.Time{}),
+	}
+	widths := []setupPresentationWidthState{
+		{width: 32, available: true},
+		{available: false},
+	}
+	for _, response := range responses {
+		for _, width := range widths {
+			var output bytes.Buffer
+			if err := renderer.RenderWithOptionsTo(response, renderer.RenderOptions{
+				Format: renderer.FormatTable, Describe: true, WidthProvider: width,
+			}, &output); err != nil {
+				t.Fatalf("render setup width %#v: %v", width, err)
+			}
+			for _, want := range []string{"Configuration", ".neko/release", "Limitations"} {
+				if !strings.Contains(output.String(), want) {
+					t.Fatalf("setup width %#v omitted %q:\n%s", width, want, output.String())
+				}
+			}
+			if strings.Contains(output.String(), "\x1b[") {
+				t.Fatalf("setup width %#v emitted ANSI to redirected output:\n%s", width, output.String())
+			}
+		}
+	}
+}
+
 func TestInitializationConflictsHaveActionablePresentation(t *testing.T) {
-	tests := []struct {
+	tests := []struct { //nolint:govet // Failure cases read clearly in name, input, and expectation order.
 		name        string
 		failure     *commandFailure
 		want        []string
@@ -244,16 +306,16 @@ func captureSetupLogs(t *testing.T, run func()) string {
 	previousStderr := os.Stderr
 	os.Stderr = writer
 	run()
-	if err := writer.Close(); err != nil {
-		t.Fatalf("close stderr writer: %v", err)
+	if closeErr := writer.Close(); closeErr != nil {
+		t.Fatalf("close stderr writer: %v", closeErr)
 	}
 	os.Stderr = previousStderr
 	content, err := io.ReadAll(reader)
 	if err != nil {
 		t.Fatalf("read stderr: %v", err)
 	}
-	if err := reader.Close(); err != nil {
-		t.Fatalf("close stderr reader: %v", err)
+	if closeErr := reader.Close(); closeErr != nil {
+		t.Fatalf("close stderr reader: %v", closeErr)
 	}
 	return ansi.Strip(string(content))
 }
@@ -277,4 +339,13 @@ type setupPresentationWidth int
 
 func (width setupPresentationWidth) Width(io.Writer) (int, bool) {
 	return int(width), true
+}
+
+type setupPresentationWidthState struct {
+	width     int
+	available bool
+}
+
+func (width setupPresentationWidthState) Width(io.Writer) (int, bool) {
+	return width.width, width.available
 }
