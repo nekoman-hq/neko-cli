@@ -204,6 +204,27 @@ func TestGitHubWorkflowScaffoldManifestContract(t *testing.T) {
 	}
 }
 
+func TestSetupAndMigrationManifestOutputContracts(t *testing.T) {
+	commands := loadManifestCommands(t)
+	for _, name := range []string{"init", "unit-add", "migrate", "github-workflow-init"} {
+		command, present := commands[name]
+		if !present {
+			t.Fatalf("%s command is missing", name)
+		}
+		if !reflect.DeepEqual(command.Outputs, []string{"table", "json"}) {
+			t.Errorf("%s outputs = %#v, want table and json", name, command.Outputs)
+		}
+		for _, flag := range command.Flags {
+			if flag.Name == "describe" || flag.Name == "verbose" || flag.Name == "output" {
+				t.Errorf("%s duplicates inherited Core flag %q", name, flag.Name)
+			}
+		}
+	}
+	if outputs := commands["init-options"].Outputs; !reflect.DeepEqual(outputs, []string{"json"}) {
+		t.Fatalf("init-options outputs changed outside scope: %#v", outputs)
+	}
+}
+
 func TestIntegrationDoctorManifestContract(t *testing.T) {
 	command, present := loadManifestCommands(t)["doctor"]
 	if !present {

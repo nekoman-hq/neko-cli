@@ -538,6 +538,43 @@ func TestReleaseWorkflowInitCorePresentationAndIdempotencyContracts(t *testing.T
 	}
 }
 
+func TestReleaseSetupCommandHelpDeclaresSupportedCoreFormats(t *testing.T) {
+	manifestData, err := os.ReadFile(filepath.Join("..", "plugin", "release", "manifest.json"))
+	if err != nil {
+		t.Fatalf("read release manifest: %v", err)
+	}
+	var manifest plugin.Manifest
+	if err := json.Unmarshal(manifestData, &manifest); err != nil {
+		t.Fatalf("decode release manifest: %v", err)
+	}
+	for _, command := range []string{"init", "unit-add", "migrate", "github-workflow-init"} {
+		t.Run(command, func(t *testing.T) {
+			root := testRootWithPluginResponseFlags()
+			root.AddCommand(CreatePluginCommand(manifest))
+			output, executeErr := executeTestCommand(root, "release", command, "--help")
+			if executeErr != nil {
+				t.Fatalf("%s help: %v", command, executeErr)
+			}
+			if !strings.Contains(output, "Outputs: table, json") || strings.Contains(output, "Outputs: text") {
+				t.Fatalf("%s help declares unsupported outputs:\n%s", command, output)
+			}
+			commandStart := strings.Index(output, "\nCommand flags:\n")
+			globalStart := strings.Index(output, "\nGlobal plugin-response flags:\n")
+			usageStart := strings.Index(output, "\nUsage:")
+			if commandStart < 0 || globalStart <= commandStart || usageStart <= globalStart {
+				t.Fatalf("%s help sections are malformed:\n%s", command, output)
+			}
+			commandFlags := output[commandStart:globalStart]
+			globalFlags := output[globalStart:usageStart]
+			for _, inherited := range []string{"--describe", "--verbose", "--output"} {
+				if strings.Contains(commandFlags, inherited) || !strings.Contains(globalFlags, inherited) {
+					t.Fatalf("%s help does not keep %s inherited:\n%s", command, inherited, output)
+				}
+			}
+		})
+	}
+}
+
 func normalizeReleaseSetupData(t *testing.T, data map[string]any, root string) map[string]any {
 	t.Helper()
 	encoded, err := json.Marshal(data)

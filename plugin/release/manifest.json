@@ -6,9 +6,9 @@
   "commands": [
     {
       "name": "init",
-      "description": "Initialize release system with project configuration",
+      "description": "Initialize Release V2 configuration and state; default output is concise, global --describe adds resolved configuration and artifact facts, and global --verbose adds safe execution phases",
       "outputs": [
-        "text",
+        "table",
         "json"
       ],
       "flags": [
@@ -113,11 +113,10 @@
     },
     {
       "name": "unit-add",
-      "description": "Add a release unit to an existing V2 release configuration",
+      "description": "Add a unit to existing Release V2 configuration and state; default output is concise, global --describe adds resolved unit and write facts, and global --verbose adds safe execution phases",
       "outputs": [
         "table",
-        "json",
-        "text"
+        "json"
       ],
       "flags": [
         {
@@ -220,7 +219,7 @@
     },
     {
       "name": "migrate",
-      "description": "Safely migrate a root V1 release configuration to V2",
+      "description": "Safely migrate a root V1 release configuration to V2; default output summarizes the result, global --describe adds the ordered plan and artifact facts, and global --verbose adds safe planning and write phases",
       "outputs": [
         "table",
         "json"
@@ -416,7 +415,7 @@
     },
     {
       "name": "github-workflow-init",
-      "description": "Create or preview the configured canonical GitHub Actions release workflow without overwriting different content",
+      "description": "Create or preview the configured canonical GitHub Actions release workflow without overwriting different content; global --describe adds comparison and write-plan facts, and global --verbose adds safe execution phases",
       "outputs": [
         "table",
         "json"
