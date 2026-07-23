@@ -91,10 +91,11 @@ means strict decoding and repository-wide validation of both
 `.neko/release.config.json` and `.neko/release.state.json`, even when `--unit`
 is supplied. `--unit` only focuses displayed V2 details.
 
-Default human output is a concise `Release Configuration Validation` responsive
-`PROPERTY` / `VALUE` table with status, source, schema, config path, V2 state
-path, an explicit selected unit when supplied, and the complete configured-unit
-count for V2. It does not include a unit-detail table.
+Default human output is a concise `Release Configuration Validation` property
+summary with status, source, schema, config/state paths, selected unit when
+supplied, and configured-unit count. It does not include healthy unit details.
+Global `--describe` adds the responsive `Validated Units` view with complete
+per-unit facts plus `Validation Scope`; Validate remains local and read-only.
 
 `--show` adds a responsive V2 unit table. Its essential columns are `Unit`,
 `Version`, and `Kind`; optional columns are considered in `Executor`,
@@ -105,6 +106,12 @@ manifest, asset prefix, and binary are appended only for plugin units. V1 uses
 one virtual `default`
 row with essential `Unit`, `Version`, and `Project type`, optional `Release
 system`, and legacy-only details.
+
+`--show` remains the compatibility switch for the established detailed human
+and mode-sensitive JSON view. `--describe` without `--show` does not broaden
+JSON. `--show --describe` renders the unit view once and adds only the
+describe-only scope section. Validate owns no execution narration, so
+`--verbose` is a deterministic no-op.
 
 The existing Core semantic roles color only focused facts in an interactive
 terminal: success status, emphasized unit IDs, informational versions and
@@ -192,7 +199,17 @@ stateCommitGuarantee
 executorStart
 ```
 
-`neko release plan --change <patch|minor|major> [--unit <unit>]` is a dedicated local plan inspection command. It reports the selected release source and unit, current version, requested change, next version, tag, planned materialized files, known release files, local readiness, local blockers, and explicit limitations. Human-readable output gives every limitation its own semantic label instead of one pipe-delimited value. At a known width, property labels are bounded and long values wrap with aligned continuation lines; very narrow or width-unknown output uses vertical properties. The typed plan facts and established JSON `data.items` projection are unchanged. The command does not read tokens, inspect remotes, inspect execution or dispatch journals, write files, mutate Git, dispatch workflows, publish releases, or start executors. It is separate from `--dry-run`: dry-run keeps the existing release preview contract, while `plan` is for stable local planning facts.
+`neko release plan --change <patch|minor|major> [--unit <unit>]` is a dedicated
+local plan inspection command. Default human output keeps the resolved release
+identity, readiness, every blocker, the ordered principal operations, mutation
+boundary, and planned materialized files needed to understand the preview.
+Global `--describe` adds source ownership, complete planning/preflight facts,
+complete materialized and known-file facts, and individually labeled
+assumptions and limitations. Absolute repository paths are not rendered.
+`--verbose` adds no query narration. The typed facts and established JSON
+`data.items` order remain unchanged. The command does not read tokens, inspect
+remotes or journals, write files, mutate Git, dispatch workflows, publish, or
+start executors. It remains separate from lifecycle `--dry-run`.
 
 `neko release doctor [--unit <unit-id>] [--verify-remote]` is a Release V2
 integration inspection. By default it remains strictly local, offline, and
@@ -219,10 +236,12 @@ discovery, automatically retry, or select workflow runs without a durable exact
 run ID. It never dispatches, uploads, publishes, writes settings, mutates Git,
 or changes config/state/workflows/journals/Evidence.
 
-Human-readable output presents readiness and counts first, followed by a compact
-diagnostic index and complete responsive details. `Severity` and `Code` are
-essential index columns; optional `Target` then `Scope` are admitted while the
-actual width permits. Details retain the full workflow path, message, and
+Human-readable output presents readiness and counts first, followed only by
+actionable diagnostics and verification facts. Global `--describe` adds
+`Complete Diagnostics`, `Verification Facts`, configured units/workflows, safe
+evidence, guidance, deferred facts, and limitations. Essential finding columns
+are `Check`, `Status`, and `Scope`; optional `Subject`, `Evidence`, and
+`Guidance` are admitted while width permits. Details retain the workflow path, message, and
 remediation and wrap at known widths. Narrow output can use vertical records,
 and width-unknown or non-terminal output uses the deterministic vertical
 fallback. These layout choices do not alter JSON or raw JSON.
@@ -291,10 +310,13 @@ fields, `alignment`, `issues`, and `issue_codes`. Empty issue lists remain JSON
 arrays; absent optional facts are omitted. Units sort by ID, issues by severity,
 unit, code, and message, and distinct workflow paths lexically.
 
-Human-readable output uses a responsive `presentation.Table`. `Unit`, `Version`,
-and `Status` are essential; name, tag prefix, executor, delivery, workflow, working directory,
-and concise issue codes are optional. Unknown width uses deterministic vertical
-records, and invalid units remain visible. `valid` exits `0`; `has_issues` and
+Human-readable default output keeps the useful unit inventory. `Unit`,
+`Version`, and `Status` are essential; `Kind`, executor, delivery, and concise
+issue codes are optional, and every issue also appears in an actionable
+`Issues` table. Global `--describe` adds `Unit Details` with source ownership,
+workflow/tag/plugin metadata and complete issue evidence plus `Limitations`.
+Unknown width uses deterministic vertical records, and invalid units remain
+visible. `--verbose` is a no-op. `valid` exits `0`; `has_issues` and
 `source_invalid` exit `1`. Missing, malformed, unsupported, V1-only, mixed, and
 recovery-blocked source states are nil-Go-error structured responses with a
 stable source issue. Source codes are `V2_SOURCE_INSPECTION_FAILED`,
@@ -609,9 +631,15 @@ it. Lightweight and annotated tags are accepted. Detached HEAD is accepted when
 it matches. Missing or incomplete local tag history fails with guidance; the
 command never fetches.
 
-Default table output is an ordered responsive property/value view. Long values
-wrap within the actual output width, and narrow or width-unknown output uses
-vertical properties. `--output json` returns the normal response envelope with
+Default output is a concise `Validated Release Context` summary containing the
+unit, version, tag, release commit and aggregate local Git consistency. On
+failure, every independently available failed check is shown; version and tag
+mismatches are evaluated together while the existing primary error code and
+exit remain stable. Global `--describe` adds every executed `Context Check`,
+the complete resolved context, GitHub-output mapping, and local/token-free/
+read-only limitations. `--verbose` is a deterministic no-op. Long values wrap
+within the actual width, and narrow or width-unknown tables use vertical
+records. `--output json` returns the unchanged response envelope with
 deterministic `data` keys:
 
 ```text

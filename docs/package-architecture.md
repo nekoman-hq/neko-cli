@@ -48,6 +48,9 @@ terminal styles. Global `--describe` selects structured details and metadata;
 global `--verbose` independently selects captured logs. Describe does not
 change public or raw JSON; verbose leaves domain data unchanged while public
 JSON logs may differ when the plugin produces additional verbose entries.
+Structured error responses retain the normal error block and may explicitly
+append the same neutral presentation sequence; errors without presentation
+metadata render exactly as before.
 Presentation declarations must never import the renderer, and the renderer
 must not import the logger.
 
