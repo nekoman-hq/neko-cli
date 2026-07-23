@@ -11,8 +11,11 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/nekoman-hq/neko-cli/pkg/log"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 	releasecmd "github.com/nekoman-hq/neko-cli/plugin/release/pkg/release"
 	validatecmd "github.com/nekoman-hq/neko-cli/plugin/release/pkg/validate"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
@@ -34,6 +37,7 @@ func TestReleaseReadonlyPluginHelperProcess(t *testing.T) {
 		t.Fatalf("decode plugin request: %v", err)
 	}
 	request.Context.WorkingDir = os.Getenv(releaseReadonlyRootEnvironment)
+	log.Verbose = request.Context.Verbose
 
 	var (
 		response *plugin.Response
@@ -52,6 +56,14 @@ func TestReleaseReadonlyPluginHelperProcess(t *testing.T) {
 		response, err = releasecmd.HandleReleaseContextValidation(request)
 	case "pipeline":
 		response, err = releasecmd.HandlePipeline(request)
+	case "patch":
+		response, err = releasecmd.HandleRelease(request, releasecmd.Patch)
+	case "minor":
+		response, err = releasecmd.HandleRelease(request, releasecmd.Minor)
+	case "major":
+		response, err = releasecmd.HandleRelease(request, releasecmd.Major)
+	case "resume":
+		response, err = releasecmd.HandleResume(request)
 	default:
 		t.Fatalf("unexpected helper command %q", request.Command)
 	}
@@ -487,4 +499,93 @@ func runReleaseReadonlyGit(t *testing.T, root string, args ...string) string {
 		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, output)
 	}
 	return string(bytes.TrimSpace(output))
+}
+
+func newReleaseLifecycleV1Repository(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	runReleaseReadonlyGit(t, root, "init")
+	runReleaseReadonlyGit(t, root, "config", "user.email", "lifecycle@example.invalid")
+	runReleaseReadonlyGit(t, root, "config", "user.name", "Lifecycle Contract")
+	if err := releaseconfig.V1SaveConfigAt(root, releaseconfig.V1ReleaseConfig{
+		ProjectName:   "legacy",
+		ProjectOwner:  "example",
+		ProjectType:   releaseconfig.V1ProjectTypeBackend,
+		ReleaseSystem: releaseconfig.V1ReleaseTypeGoReleaser,
+		Version:       "1.2.3",
+	}); err != nil {
+		t.Fatalf("write V1 release config: %v", err)
+	}
+	runReleaseReadonlyGit(t, root, "add", ".")
+	runReleaseReadonlyGit(t, root, "commit", "-m", "V1 lifecycle fixture")
+	runReleaseReadonlyGit(t, root, "tag", "v1.2.3")
+	return root
+}
+
+func newReleaseLifecycleV2Repository(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	runReleaseReadonlyGit(t, root, "init")
+	runReleaseReadonlyGit(t, root, "config", "user.email", "lifecycle@example.invalid")
+	runReleaseReadonlyGit(t, root, "config", "user.name", "Lifecycle Contract")
+	if err := os.MkdirAll(filepath.Join(root, ".neko"), 0o755); err != nil {
+		t.Fatalf("create release directory: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, ".github", "workflows"), 0o755); err != nil {
+		t.Fatalf("create workflow directory: %v", err)
+	}
+	files := map[string]string{
+		".goreleaser.yml":                   "{}\n",
+		".github/workflows/release-api.yml": "name: release\n",
+		".neko/release.config.json": `{"schemaVersion":2,"units":[{"id":"api","displayName":"API","paths":["**"],"workingDirectory":".","tagPrefix":"api/v","executor":{"type":"goreleaser","delivery":"github-actions","workflow":".github/workflows/release-api.yml"}}]}
+`,
+		".neko/release.state.json": `{"schemaVersion":2,"units":{"api":{"version":"2.3.4"}}}
+`,
+	}
+	for path, contents := range files {
+		if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(path)), []byte(contents), 0o644); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	runReleaseReadonlyGit(t, root, "add", ".")
+	runReleaseReadonlyGit(t, root, "commit", "-m", "V2 lifecycle fixture")
+	runReleaseReadonlyGit(t, root, "remote", "add", "origin", "https://github.com/example/repository.git")
+	branch := strings.TrimSpace(runReleaseReadonlyGit(t, root, "symbolic-ref", "--short", "HEAD"))
+	runReleaseReadonlyGit(t, root, "config", "branch."+branch+".remote", "origin")
+	runReleaseReadonlyGit(t, root, "config", "branch."+branch+".merge", "refs/heads/"+branch)
+	return root
+}
+
+func newReleaseLifecycleResumeRepository(t *testing.T) string {
+	t.Helper()
+	root := newReleaseLifecycleV2Repository(t)
+	repository, err := releaseconfig.LoadV2Repository(root)
+	if err != nil {
+		t.Fatalf("load V2 release repository: %v", err)
+	}
+	execution, err := releasecmd.BuildReleaseExecutionContext(repository, repository.Units[0], releasecmd.Patch, false)
+	if err != nil {
+		t.Fatalf("build release execution context: %v", err)
+	}
+	knownFiles, err := releasecmd.NewKnownReleaseFiles(execution, nil)
+	if err != nil {
+		t.Fatalf("build known release files: %v", err)
+	}
+	baseCommit := strings.TrimSpace(runReleaseReadonlyGit(t, root, "rev-parse", "HEAD"))
+	remote := strings.TrimSpace(runReleaseReadonlyGit(t, root, "remote", "get-url", "origin"))
+	journal, err := releasecmd.BuildReleaseExecutionJournal(
+		execution,
+		releasecmd.BuildReleasePlan(execution),
+		knownFiles,
+		baseCommit,
+		remote,
+		time.Date(2026, time.July, 22, 12, 0, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatalf("build release execution journal: %v", err)
+	}
+	if _, err := releasecmd.NewReleaseExecutionJournalStore(root).Prepare(journal); err != nil {
+		t.Fatalf("prepare release execution journal: %v", err)
+	}
+	return root
 }
