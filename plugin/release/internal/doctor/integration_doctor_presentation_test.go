@@ -25,20 +25,16 @@ func TestIntegrationDoctorPresentationUsesSummaryIndexAndCompleteDetails(t *test
 		{Label: "Locally verified", Value: 0},
 		{Label: "Inspected units", Value: 2},
 		{Label: "Inspected workflows", Value: 2},
+		{Label: "Inspection scope", Value: "Local verification only"},
+		{Label: "Local verification", Value: "0 verified, 0 require attention"},
 	}
 	if response.PresentationProperties == nil || response.PresentationProperties.Title != integrationDoctorPresentationTitle ||
 		!reflect.DeepEqual(response.PresentationProperties.Properties, wantSummary) {
 		t.Fatalf("summary properties = %#v, want %#v", response.PresentationProperties, wantSummary)
 	}
-	wantColumns := []presentation.Column{
-		{Key: "severity", Label: "Severity", RoleKey: integrationDoctorSemanticRoleKey, Essential: true},
-		{Key: "code", Label: "Code", RoleKey: integrationDoctorSemanticRoleKey, Essential: true},
-		{Key: "target", Label: "Target", RoleKey: integrationDoctorDefaultRoleKey},
-		{Key: "scope", Label: "Scope", RoleKey: integrationDoctorDefaultRoleKey},
-	}
-	if response.PresentationTable == nil || response.PresentationTable.Title != integrationDoctorDiagnosticsTitle ||
-		!reflect.DeepEqual(response.PresentationTable.Columns, wantColumns) {
-		t.Fatalf("diagnostic columns = %#v, want %#v", response.PresentationTable, wantColumns)
+	if response.PresentationTable == nil || response.PresentationTable.Title != integrationDoctorFindingsTitle ||
+		!reflect.DeepEqual(response.PresentationTable.Columns, integrationDoctorFactColumns) {
+		t.Fatalf("finding columns = %#v, want %#v", response.PresentationTable, integrationDoctorFactColumns)
 	}
 
 	output := ansi.Strip(renderReleasePlanForTest(
@@ -49,24 +45,36 @@ func TestIntegrationDoctorPresentationUsesSummaryIndexAndCompleteDetails(t *test
 	))
 	titleAt := strings.Index(output, integrationDoctorPresentationTitle)
 	readinessAt := strings.Index(output, "Readiness")
-	diagnosticsAt := strings.Index(output, integrationDoctorDiagnosticsTitle)
-	indexAt := strings.Index(output, "Severity")
-	firstHeading := strings.ToUpper(string(result.Diagnostics[0].Severity)) + " · " + result.Diagnostics[0].Code
-	detailsAt := strings.Index(output, firstHeading)
-	if titleAt < 0 || readinessAt <= titleAt || diagnosticsAt <= readinessAt || indexAt <= diagnosticsAt || detailsAt <= indexAt {
-		t.Fatalf("human sections are not summary -> index -> details:\n%s", output)
+	findingsAt := strings.Index(output, integrationDoctorFindingsTitle)
+	indexAt := strings.Index(output, "Check")
+	if titleAt < 0 || readinessAt <= titleAt || findingsAt <= readinessAt || indexAt <= findingsAt {
+		t.Fatalf("human sections are not summary -> actionable findings:\n%s", output)
 	}
-	index := output[indexAt:detailsAt]
+	if strings.Contains(output, integrationDoctorDiagnosticsTitle) || strings.Contains(output, "ERROR ·") {
+		t.Fatalf("default Doctor output exposed complete diagnostics:\n%s", output)
+	}
+
+	describeOutput := ansi.Strip(renderDoctorContract(t, response, renderer.RenderOptions{
+		Format: renderer.FormatTable, Describe: true,
+		WidthProvider: releasePlanOutputWidth{width: 140, available: true},
+	}))
+	diagnosticsAt := strings.Index(describeOutput, integrationDoctorDiagnosticsTitle)
+	firstHeading := strings.ToUpper(string(result.Diagnostics[0].Severity)) + " · " + result.Diagnostics[0].Code
+	detailsAt := strings.Index(describeOutput, firstHeading)
+	if diagnosticsAt < 0 || detailsAt <= diagnosticsAt {
+		t.Fatalf("describe sections are not complete diagnostics -> details:\n%s", describeOutput)
+	}
+	index := describeOutput[diagnosticsAt:detailsAt]
 	if strings.Contains(index, "Message") || strings.Contains(index, "Remediation") {
 		t.Fatalf("compact index contains long diagnostic fields:\n%s", index)
 	}
 
-	detailOutput := strings.Join(strings.Fields(output[detailsAt:]), " ")
+	detailOutput := strings.Join(strings.Fields(describeOutput[detailsAt:]), " ")
 	previousCodeAt := -1
 	for _, diagnostic := range result.Diagnostics {
 		heading := strings.ToUpper(string(diagnostic.Severity)) + " · " + diagnostic.Code
-		if got := strings.Count(output[detailsAt:], heading); got != 1 {
-			t.Fatalf("detail heading %q count = %d, want 1:\n%s", heading, got, output)
+		if got := strings.Count(describeOutput[detailsAt:], heading); got != 1 {
+			t.Fatalf("detail heading %q count = %d, want 1:\n%s", heading, got, describeOutput)
 		}
 		codeAt := strings.Index(detailOutput, diagnostic.Code)
 		if codeAt <= previousCodeAt {
@@ -94,13 +102,24 @@ func TestIntegrationDoctorPresentationFitsKnownWidthsAndUnknownWriter(t *testing
 			)
 			assertReleasePlanLinesFit(t, output, width)
 			plain := ansi.Strip(output)
-			if !strings.Contains(plain, "Readiness") || !strings.Contains(plain, "Diagnostic") {
+			if !strings.Contains(plain, "Readiness") || !strings.Contains(plain, "Findings") {
 				t.Fatalf("width %d lost presentation sections:\n%s", width, plain)
 			}
 			for _, diagnostic := range result.Diagnostics {
-				assertDoctorTokenPreserved(t, plain, diagnostic.Code, "code", diagnostic.Code)
-				assertDoctorTextPreserved(t, plain, diagnostic.Message, "message", diagnostic.Code)
-				assertDoctorTextPreserved(t, plain, diagnostic.Remediation, "remediation", diagnostic.Code)
+				assertDoctorTextPreserved(
+					t, plain, integrationDoctorReadableLabel(diagnostic.Code), "check", diagnostic.Code,
+				)
+			}
+
+			describe := ansi.Strip(renderDoctorContract(t, response, renderer.RenderOptions{
+				Format: renderer.FormatTable, Describe: true,
+				WidthProvider: releasePlanOutputWidth{width: width, available: true},
+			}))
+			assertReleasePlanLinesFit(t, describe, width)
+			for _, diagnostic := range result.Diagnostics {
+				assertDoctorTokenPreserved(t, describe, diagnostic.Code, "code", diagnostic.Code)
+				assertDoctorTextPreserved(t, describe, diagnostic.Message, "message", diagnostic.Code)
+				assertDoctorTextPreserved(t, describe, diagnostic.Remediation, "remediation", diagnostic.Code)
 			}
 		})
 	}
@@ -122,11 +141,12 @@ func TestIntegrationDoctorPresentationFitsKnownWidthsAndUnknownWriter(t *testing
 func TestIntegrationDoctorDiagnosticDetailsPreserveExactFieldOrder(t *testing.T) {
 	result := integrationDoctorHighVolumePresentationFixture()
 	response := mapIntegrationDoctorResultForTest(result)
-	if response.PresentationTable == nil || response.PresentationTable.Details == nil {
+	diagnosticTable := integrationDoctorTableByTitle(response.PresentationTable, integrationDoctorDiagnosticsTitle)
+	if diagnosticTable == nil || diagnosticTable.Details == nil {
 		t.Fatal("Doctor response omitted diagnostic details")
 	}
 
-	properties := response.PresentationTable.Details.Properties
+	properties := diagnosticTable.Details.Properties
 	offset := 0
 	for _, diagnostic := range result.Diagnostics {
 		want := []presentation.Property{
@@ -183,8 +203,8 @@ func TestIntegrationDoctorCompactTargetsShortenOnlyUnambiguousWorkflowBasenames(
 		presentation.StyleError,
 	}
 	for index, want := range wantTargets {
-		if got := rows[index]["target"]; got != want {
-			t.Fatalf("target %d = %#v, want %q", index, got, want)
+		if got := rows[index]["subject"]; got != want {
+			t.Fatalf("subject %d = %#v, want %q", index, got, want)
 		}
 		if got := rows[index][integrationDoctorSemanticRoleKey]; got != string(wantRoles[index]) {
 			t.Fatalf("semantic role %d = %#v, want %q", index, got, wantRoles[index])
@@ -193,6 +213,16 @@ func TestIntegrationDoctorCompactTargetsShortenOnlyUnambiguousWorkflowBasenames(
 			t.Fatalf("default role %d = %#v, want %q", index, got, presentation.StyleDefault)
 		}
 	}
+}
+
+func integrationDoctorTableByTitle(table *presentation.Table, title string) *presentation.Table {
+	for table != nil {
+		if table.Title == title {
+			return table
+		}
+		table = table.Following
+	}
+	return nil
 }
 
 func TestIntegrationDoctorSummaryHandlesNoFindingsWithoutSyntheticTableRows(t *testing.T) {

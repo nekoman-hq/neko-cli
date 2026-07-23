@@ -98,9 +98,14 @@ func TestRepositoryDoctorMachineOutputsContainTypedLocalEvidenceOnly(t *testing.
 
 func TestRepositoryDoctorHumanOutputJustifiesNarrowedLimitations(t *testing.T) {
 	response := runIntegrationDoctor(t, repositoryInspectionRoot(t), nil)
-	output := ansi.Strip(renderReleasePlanForTest(
-		t, response, renderer.FormatTable, releasePlanOutputWidth{width: 140, available: true},
-	))
+	var rendered bytes.Buffer
+	if err := renderer.RenderWithOptionsTo(response, renderer.RenderOptions{
+		Format: renderer.FormatTable, Describe: true,
+		WidthProvider: releasePlanOutputWidth{width: 140, available: true},
+	}, &rendered); err != nil {
+		t.Fatalf("render described Doctor output: %v", err)
+	}
+	output := ansi.Strip(rendered.String())
 	for _, required := range []string{
 		"Readiness", "ready", "Locally verified", "15", "Not verifiable", "21",
 		"locally verified", "local workflow was inspected", "locally identified",

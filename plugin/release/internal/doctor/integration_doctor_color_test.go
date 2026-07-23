@@ -59,10 +59,10 @@ func TestIntegrationDoctorSeveritiesAndCountsUseSemanticRoles(t *testing.T) {
 		severity string
 		code     string
 	}{
-		{color: "\x1b[31m", severity: "ERROR", code: "ERROR_CODE"},
-		{color: "\x1b[33m", severity: "WARNING", code: "WARNING_CODE"},
-		{color: "\x1b[36m", severity: "RECOMMENDATION", code: "RECOMMENDATION_CODE"},
-		{color: "\x1b[90m", severity: "NOT_VERIFIABLE", code: "NOT_VERIFIABLE_CODE"},
+		{color: "\x1b[31m", severity: "Error", code: "Error Code"},
+		{color: "\x1b[33m", severity: "Warning", code: "Warning Code"},
+		{color: "\x1b[36m", severity: "Recommendation", code: "Recommendation Code"},
+		{color: "\x1b[90m", severity: "Not Verifiable", code: "Not Verifiable Code"},
 	} {
 		for _, value := range []string{expected.severity, expected.code} {
 			if !strings.Contains(output, expected.color+value+"\x1b[0m") {
@@ -110,11 +110,21 @@ func TestIntegrationDoctorStylesHeadingsWithoutColoringOrdinaryFields(t *testing
 	finalizeIntegrationDoctorResult(&result)
 	output := renderIntegrationDoctorWithColorForTest(t, mapIntegrationDoctorResultForTest(result), 100, true)
 
-	for _, heading := range []string{integrationDoctorPresentationTitle, integrationDoctorDiagnosticsTitle} {
+	for _, heading := range []string{integrationDoctorPresentationTitle, integrationDoctorFindingsTitle} {
 		sequence := "\x1b[1m" + heading + "\x1b[0m"
 		if strings.Count(output, sequence) != 1 {
 			t.Fatalf("heading %q is not rendered once with neutral emphasis:\n%q", heading, output)
 		}
+	}
+
+	describeOutput := renderDoctorContract(t, mapIntegrationDoctorResultForTest(result), renderer.RenderOptions{
+		Format:        renderer.FormatTable,
+		Describe:      true,
+		WidthProvider: releasePlanOutputWidth{width: 100, available: true},
+		ColorProvider: integrationDoctorTestColorProvider(true),
+	})
+	if sequence := "\x1b[1m" + integrationDoctorDiagnosticsTitle + "\x1b[0m"; strings.Count(describeOutput, sequence) != 1 {
+		t.Fatalf("describe heading is not rendered once with neutral emphasis:\n%q", describeOutput)
 	}
 	for _, ordinary := range []string{
 		"versioned-unit",
@@ -124,18 +134,18 @@ func TestIntegrationDoctorStylesHeadingsWithoutColoringOrdinaryFields(t *testing
 		"v1 remains ordinary.",
 	} {
 		for _, color := range []string{"\x1b[31m", "\x1b[33m", "\x1b[36m", "\x1b[90m"} {
-			if strings.Contains(output, color+ordinary) {
-				t.Fatalf("ordinary Doctor field %q received semantic color %q:\n%q", ordinary, color, output)
+			if strings.Contains(describeOutput, color+ordinary) {
+				t.Fatalf("ordinary Doctor field %q received semantic color %q:\n%q", ordinary, color, describeOutput)
 			}
 		}
 	}
-	if strings.Contains(output, "\x1b[35m") {
-		t.Fatalf("ordinary Doctor values received legacy version-prefix color:\n%q", output)
+	if strings.Contains(describeOutput, "\x1b[35m") {
+		t.Fatalf("ordinary Doctor values received legacy version-prefix color:\n%q", describeOutput)
 	}
-	if !strings.Contains(output, "\x1b[31mERROR\x1b[0m") ||
-		!strings.Contains(output, "\x1b[31mCHECKOUT_REF_INVALID\x1b[0m") ||
-		!strings.Contains(output, "\x1b[31m\x1b[1mERROR · CHECKOUT_REF_INVALID\x1b[0m") {
-		t.Fatalf("Doctor severity tokens and record heading are not independently reset:\n%q", output)
+	if !strings.Contains(output, "\x1b[31mError\x1b[0m") ||
+		!strings.Contains(output, "\x1b[31mCheckout Ref Invalid\x1b[0m") ||
+		!strings.Contains(describeOutput, "\x1b[31m\x1b[1mERROR · CHECKOUT_REF_INVALID\x1b[0m") {
+		t.Fatalf("Doctor severity tokens and record heading are not independently reset:\ndefault=%q\ndescribe=%q", output, describeOutput)
 	}
 }
 

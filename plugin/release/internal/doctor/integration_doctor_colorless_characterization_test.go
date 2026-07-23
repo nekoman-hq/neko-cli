@@ -47,43 +47,15 @@ Not verifiable       0
 Locally verified     0
 Inspected units      0
 Inspected workflows  0
+Inspection scope     Local verification only
+Local verification   0 verified, 0 require attention
 
-Diagnostics
+Findings
 
-Severity  Code                 Target                 Scope
-────────────────────────────────────────────────────────────────
-ERROR     V2_CONFIG_INVALID    source                 source
-WARNING   CONCURRENCY_MISSING  api · release-api.yml  workflow
-
-ERROR · V2_CONFIG_INVALID
-
-Scope
-  source
-
-Message
-  Release V2 configuration is invalid.
-
-Remediation
-  Correct the local Release V2 configuration.
-
-────────────────────────────────
-
-WARNING · CONCURRENCY_MISSING
-
-Scope
-  workflow
-
-Unit
-  api
-
-Workflow
-  .github/workflows/release-api.yml
-
-Message
-  The workflow has no explicit release concurrency policy.
-
-Remediation
-  Add a release concurrency group.`
+Check                Status   Scope     Subject
+───────────────────────────────────────────────────────────────
+V2 Config Invalid    Error    Source    source
+Concurrency Missing  Warning  Workflow  api · release-api.yml`
 	if got := trimDoctorBaselineLinePadding(output); got != want {
 		t.Fatalf("colorless Doctor presentation changed:\nwant:\n%s\n\ngot:\n%s", want, got)
 	}
