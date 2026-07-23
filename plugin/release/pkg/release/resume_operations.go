@@ -52,6 +52,7 @@ func (operation resumeFromCommitCreatedOperation) Resume(ctx context.Context, ex
 	if failure != nil {
 		return nil, failure
 	}
+	resumeProgress("Inspecting local unit-tag evidence before continuation")
 	tagCommit, err := operation.tags.TagCommit(release.Context.RepositoryRoot, release.Context.Tag)
 	if err != nil {
 		return nil, failureFromError("RESUME_FAILED", err)
@@ -62,9 +63,12 @@ func (operation resumeFromCommitCreatedOperation) Resume(ctx context.Context, ex
 		}
 		return nil, failureFromError("RESUME_FAILED", fmt.Errorf("resume from state %s requires manual inspection before continuing", ReleaseExecutionCommitCreated))
 	}
+	resumeProgress("Local unit-tag evidence validated; the expected tag is absent")
+	resumeProgress("Creating the missing unit tag for the confirmed release commit")
 	if err := operation.creator.Create(release.Context, release.Execution, release.CommitSHA); err != nil {
 		return nil, failureFromError("RESUME_FAILED", err)
 	}
+	resumeProgress("Missing unit tag created and journal phase confirmed")
 	return operation.continuation.ResumePrepared(ctx, release)
 }
 
@@ -119,22 +123,30 @@ func (operation resumeFromTagCreatedOperation) Resume(ctx context.Context, execu
 }
 
 func (operation resumeFromTagCreatedOperation) ResumePrepared(ctx context.Context, release reconstructedResumeRelease) (*GitHubActionsReleaseResult, *CommandFailure) {
+	resumeProgress("Assessing dispatch-journal linkage before push continuation")
 	dispatch, err := operation.dispatches.Assess(release)
 	if err != nil {
 		return nil, failureFromError("RESUME_FAILED", err)
 	}
+	resumeProgress("Dispatch-journal linkage assessed: state=%s", releaseLifecycleReadableValue(string(dispatch.Journal.State)))
 	if resolution := resolveResumeDispatch(dispatch.Journal); resolution.Refusal != nil {
 		return nil, failureForResumeDispatchRefusal(resolution.Refusal)
 	}
+	resumeProgress("Preparing the dispatch journal for the confirmed release identity")
 	if _, err := operation.dispatchPreparer.Prepare(release.Context, release.Execution, release.Preflight, release.Files, release.CommitSHA); err != nil {
 		return nil, failureFromError("RESUME_FAILED", err)
 	}
+	resumeProgress("Dispatch journal preparation completed")
+	resumeProgress("Continuing the pending release commit push")
 	if err := operation.commitPusher.Push(release.Context, release.Execution, release.Preflight, release.CommitSHA); err != nil {
 		return nil, failureFromError("RESUME_FAILED", err)
 	}
+	resumeProgress("Release commit push continuation completed")
+	resumeProgress("Continuing the pending unit tag push")
 	if err := operation.tagPusher.Push(release.Context, release.Execution, release.Preflight, release.CommitSHA); err != nil {
 		return nil, failureFromError("RESUME_FAILED", err)
 	}
+	resumeProgress("Unit tag push continuation completed")
 	return operation.continuation.ResumePrepared(ctx, release)
 }
 
@@ -173,19 +185,26 @@ func (operation resumeFromTagPushedOperation) Resume(ctx context.Context, execut
 }
 
 func (operation resumeFromTagPushedOperation) ResumePrepared(ctx context.Context, release reconstructedResumeRelease) (*GitHubActionsReleaseResult, *CommandFailure) {
+	resumeProgress("Assessing dispatch evidence after the confirmed tag push")
 	dispatch, err := operation.dispatches.Assess(release)
 	if err != nil {
 		return nil, failureFromError("RESUME_FAILED", err)
 	}
+	resumeProgress("Dispatch evidence assessed: state=%s", releaseLifecycleReadableValue(string(dispatch.Journal.State)))
 	resolution := resolveResumeDispatch(dispatch.Journal)
 	if resolution.Refusal != nil {
 		return nil, failureForResumeDispatchRefusal(resolution.Refusal)
 	}
+	resumeProgress("Selecting the safe dispatch continuation")
 	selected, err := operation.selector.Select(resolution.Operation)
 	if err != nil {
 		return nil, failureFromError("RESUME_FAILED", err)
 	}
-	return selected.Complete(ctx, release, dispatch)
+	result, failure := selected.Complete(ctx, release, dispatch)
+	if failure == nil {
+		resumeProgress("Dispatch continuation completed")
+	}
+	return result, failure
 }
 
 type requestFreshGitHubActionsResumeDispatch struct {
@@ -195,20 +214,26 @@ type requestFreshGitHubActionsResumeDispatch struct {
 }
 
 func (operation requestFreshGitHubActionsResumeDispatch) Complete(ctx context.Context, release reconstructedResumeRelease, dispatch assessedGitHubActionsResumeDispatch) (*GitHubActionsReleaseResult, *CommandFailure) {
+	resumeProgress("Resolving the dispatch token without printing it")
 	token, err := operation.tokens.ResolveGitHubActionsDispatchToken(ctx)
 	if err != nil {
 		return nil, failureFromError("TOKEN_MISSING", err)
 	}
+	resumeProgress("Dispatch token available")
+	resumeProgress("Dispatching the existing immutable workflow request")
 	result, err := operation.dispatcher.Dispatch(ctx, release.Context, release.Execution, dispatch.Dispatch, token)
 	if err != nil {
 		return nil, failureFromError("RESUME_FAILED", err)
 	}
 	if !result.Accepted {
+		resumeProgress("Workflow dispatch was not accepted; automatic continuation stopped")
 		return nil, failureFromError("RESUME_FAILED", errors.New(result.RecoveryGuidance))
 	}
+	resumeProgress("Workflow dispatch accepted; confirming the release handoff")
 	if err := operation.handoff.Confirm(release.Execution); err != nil {
 		return nil, failureFromError("RESUME_FAILED", err)
 	}
+	resumeProgress("Workflow handoff continuation completed")
 	return acceptedGitHubActionsReleaseResult(release.Context, release.Execution, release.CommitSHA, result), nil
 }
 
@@ -217,16 +242,19 @@ type reuseAcceptedGitHubActionsResumeDispatch struct {
 }
 
 func (operation reuseAcceptedGitHubActionsResumeDispatch) Complete(_ context.Context, release reconstructedResumeRelease, dispatch assessedGitHubActionsResumeDispatch) (*GitHubActionsReleaseResult, *CommandFailure) {
+	resumeProgress("Reusing accepted dispatch evidence without sending another request")
 	result := dispatchResultFromJournal(dispatch.Dispatch.Path, dispatch.Journal, false)
 	if err := operation.handoff.Confirm(release.Execution); err != nil {
 		return nil, failureFromError("RESUME_FAILED", err)
 	}
+	resumeProgress("Accepted dispatch handoff confirmed")
 	return acceptedGitHubActionsReleaseResult(release.Context, release.Execution, release.CommitSHA, result), nil
 }
 
 type returnCompletedReleaseHandoffOperation struct{}
 
 func (returnCompletedReleaseHandoffOperation) Resume(_ context.Context, execution *resumableReleaseExecution) (*GitHubActionsReleaseResult, *CommandFailure) {
+	resumeProgress("Existing workflow handoff is already complete; no continuation was performed")
 	journal := execution.Discovered.resolution.Journal
 	return &GitHubActionsReleaseResult{
 		Unit:                 journal.UnitID,

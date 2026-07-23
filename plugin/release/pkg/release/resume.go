@@ -36,38 +36,76 @@ type resumeReleaseUseCase struct {
 }
 
 func (useCase resumeReleaseUseCase) Resume(ctx context.Context, request ResumeCommandRequest) (ResumeCommandOutcome, *CommandFailure) {
+	resumeProgress("Discovering release execution journals for unit=%s", lifecycleFallback(request.UnitID, "automatic selection"))
 	execution, failure := useCase.locator.Find(request.UnitID)
 	if failure != nil {
+		resumeProgress("Journal discovery refused: code=%s", resumeFailureCode(failure))
 		return nil, failure
 	}
+	resumeProgress(
+		"Selected exact release execution: identity=%s unit=%s state=%s pending=%s",
+		resumeSelectedIdentity(execution),
+		resumeSelectedUnit(execution),
+		resumeSelectedState(execution),
+		resumeSelectedPendingAction(execution),
+	)
+	resumeProgress("Evaluating local recovery evidence for the selected execution")
 	assessment, failure := useCase.assessor.Assess(execution)
 	if failure != nil {
+		resumeProgress("Recovery evaluation failed: code=%s", resumeFailureCode(failure))
 		return nil, failure
 	}
+	resumeProgress(
+		"Recovery evaluation completed: status=%s eligible=%t pending=%s",
+		resumeAssessmentStatus(assessment),
+		assessment.SafeToContinue,
+		resumeSelectedPendingAction(execution),
+	)
 	if request.DryRun {
 		result, err := newResumeAssessment(execution.resolution.Path, execution.resolution.Journal, assessment)
 		if err != nil {
+			resumeProgress("Dry-run recovery assessment failed: code=RECOVERY_ASSESSMENT_FAILED")
 			return nil, failureFromError("RECOVERY_ASSESSMENT_FAILED", err)
 		}
+		resumeProgress("Dry-run recovery assessment completed; no continuation was performed")
 		return result, nil
 	}
 
+	resumeProgress("Resolving the pending action with the authoritative recovery policy")
 	resolution := useCase.resolver.Resolve(execution.resolution.Journal, assessment)
 	if resolution.Refusal != nil && resolution.Refusal.blocksBeforeContextReconstruction() {
+		resumeProgress("Resume refused before context reconstruction: %s", resumeRefusalName(resolution.Refusal))
 		return nil, failureForResumeRecoveryRefusal(resolution.Refusal)
 	}
+	resumeProgress("Validating the selected journal identity against current V2 configuration")
 	compatible, failure := useCase.contexts.Reconstruct(execution)
 	if failure != nil {
+		resumeProgress("Journal and configuration validation failed: code=%s", resumeFailureCode(failure))
 		return nil, failure
 	}
+	resumeProgress("Journal and current V2 configuration identity validated")
 	if resolution.Refusal != nil {
+		resumeProgress("Resume refused after context validation: %s", resumeRefusalName(resolution.Refusal))
 		return nil, failureForResumeRecoveryRefusal(resolution.Refusal)
 	}
+	resumeProgress("Selecting continuation operation: %s", resumeOperationName(resolution.Operation))
 	operation, err := useCase.selector.Select(resolution.Operation)
 	if err != nil {
+		resumeProgress("Continuation selection failed: code=RESUME_FAILED")
 		return nil, failureFromError("RESUME_FAILED", err)
 	}
-	return operation.Resume(ctx, compatible)
+	resumeProgress("Invoking selected continuation: %s", resumeOperationName(resolution.Operation))
+	result, operationFailure := operation.Resume(ctx, compatible)
+	if operationFailure != nil {
+		resumeProgress("Selected continuation stopped: code=%s", resumeFailureCode(operationFailure))
+		return nil, operationFailure
+	}
+	resumeProgress(
+		"Resume continuation completed: execution=%s dispatch=%s",
+		releaseLifecycleReadableValue(string(result.ExecutionState)),
+		releaseLifecycleReadableValue(string(result.DispatchState)),
+	)
+	return result, nil
 }
 
 // resumableExecution contains only discovered facts for one existing release
@@ -165,6 +203,7 @@ type prepareResumeRelease struct {
 }
 
 func (preparer prepareResumeRelease) Prepare(execution *resumableReleaseExecution) (reconstructedResumeRelease, *CommandFailure) {
+	resumeProgress("Validating local Git preconditions for the selected continuation")
 	branch, err := preparer.git.CurrentBranch(execution.Context.RepositoryRoot)
 	if err != nil {
 		return reconstructedResumeRelease{}, failureFromError("RESUME_FAILED", err)
@@ -177,6 +216,7 @@ func (preparer prepareResumeRelease) Prepare(execution *resumableReleaseExecutio
 	if journal.ReleaseCommitSHA == "" {
 		return reconstructedResumeRelease{}, failureFromError("RESUME_FAILED", fmt.Errorf("resume before release commit is not yet safe for automatic continuation; use --dry-run and inspect recovery guidance"))
 	}
+	resumeProgress("Local Git preconditions validated: branch=%s upstream=%s", branch, upstreamBranch)
 	return reconstructedResumeRelease{
 		Context: execution.Context,
 		Execution: preparedGitHubActionsReleaseExecution{

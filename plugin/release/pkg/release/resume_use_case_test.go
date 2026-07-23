@@ -3,7 +3,10 @@ package release
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/nekoman-hq/neko-cli/pkg/log"
 )
 
 func TestResumeReleaseUseCaseRunsDiscoveryAssessmentSelectionAndOperation(t *testing.T) {
@@ -50,6 +53,117 @@ func TestResumeReleaseUseCaseDryRunReturnsAssessmentBeforeContinuation(t *testin
 	}
 	if want := []string{"locate", "assess"}; !reflect.DeepEqual(trace.calls, want) {
 		t.Fatalf("calls=%#v want=%#v", trace.calls, want)
+	}
+}
+
+func TestResumeReleaseUseCaseVerboseDryRunLogsAssessmentWithoutContinuation(t *testing.T) {
+	originalVerbose := log.Verbose
+	log.Verbose = true
+	t.Cleanup(func() { log.Verbose = originalVerbose })
+	trace := &resumeUseCaseTrace{}
+	execution := resumeUseCaseExecution(ReleaseExecutionPrepared)
+	execution.resolution.Journal.Identity.SHA256 = strings.Repeat("a", 64)
+	execution.resolution.Journal.UnitID = "api"
+	useCase := resumeReleaseUseCase{
+		locator: recordingResumableExecutionLocator{trace: trace, execution: execution},
+		assessor: recordingResumableExecutionAssessor{
+			trace: trace,
+			assessment: &ReleaseExecutionRecoveryAssessment{
+				Status: ReleaseExecutionRecoveryNotStarted, SafeToContinue: true,
+			},
+		},
+		contexts: recordingResumeExecutionContextReconstructor{
+			trace: trace, failure: failureFromMessage("UNEXPECTED", "must not continue"),
+		},
+		resolver: recordingResumeRecoveryResolver{
+			trace: trace, resolution: resumeRecoveryResolution{Operation: resumeReleaseFromTagCreated},
+		},
+	}
+
+	_, stderr := captureReleaseProgressOutput(t, func() {
+		outcome, failure := useCase.Resume(context.Background(), ResumeCommandRequest{UnitID: "api", DryRun: true})
+		if failure != nil || outcome == nil {
+			t.Fatalf("outcome=%#v failure=%#v", outcome, failure)
+		}
+	})
+
+	assertOrderedSubstrings(t, stderr,
+		"Discovering release execution journals for unit=api",
+		"Selected exact release execution: identity="+strings.Repeat("a", 64)+" unit=api state=prepared pending=none",
+		"Evaluating local recovery evidence for the selected execution",
+		"Recovery evaluation completed: status=not-started eligible=true pending=none",
+		"Dry-run recovery assessment completed; no continuation was performed",
+	)
+	for _, forbidden := range []string{
+		"/tmp/execution.json",
+		"Invoking selected continuation",
+		"Resume continuation completed",
+		"push continuation completed",
+	} {
+		if strings.Contains(stderr, forbidden) {
+			t.Fatalf("resume dry-run verbose output contained %q:\n%s", forbidden, stderr)
+		}
+	}
+	if want := []string{"locate", "assess"}; !reflect.DeepEqual(trace.calls, want) {
+		t.Fatalf("dry-run orchestration changed: calls=%#v want=%#v", trace.calls, want)
+	}
+}
+
+func TestResumeReleaseUseCaseVerboseExecutionFollowsAuthoritativeCallOrder(t *testing.T) {
+	originalVerbose := log.Verbose
+	log.Verbose = true
+	t.Cleanup(func() { log.Verbose = originalVerbose })
+	trace := &resumeUseCaseTrace{}
+	execution := resumeUseCaseExecution(ReleaseExecutionTagCreated)
+	execution.resolution.Journal.Identity.SHA256 = strings.Repeat("b", 64)
+	execution.resolution.Journal.UnitID = "api"
+	result := &GitHubActionsReleaseResult{
+		ExecutionState: ReleaseExecutionHandoffReady,
+		DispatchState:  DispatchJournalAccepted,
+	}
+	useCase := resumeReleaseUseCase{
+		locator: recordingResumableExecutionLocator{trace: trace, execution: execution},
+		assessor: recordingResumableExecutionAssessor{
+			trace: trace,
+			assessment: &ReleaseExecutionRecoveryAssessment{
+				Status: ReleaseExecutionRecoveryInterruptedAfterTag, SafeToContinue: true,
+			},
+		},
+		contexts: recordingResumeExecutionContextReconstructor{
+			trace: trace,
+			execution: &resumableReleaseExecution{
+				Discovered: execution, Context: &ReleaseExecutionContext{},
+			},
+		},
+		resolver: recordingResumeRecoveryResolver{
+			trace: trace, resolution: resumeRecoveryResolution{Operation: resumeReleaseFromTagCreated},
+		},
+		selector: resumeReleaseOperationSelector{
+			fromTagCreated: &recordingResumeReleaseOperation{trace: trace, result: result},
+		},
+	}
+
+	_, stderr := captureReleaseProgressOutput(t, func() {
+		outcome, failure := useCase.Resume(context.Background(), ResumeCommandRequest{UnitID: "api"})
+		if failure != nil || outcome != result {
+			t.Fatalf("outcome=%#v failure=%#v", outcome, failure)
+		}
+	})
+
+	assertOrderedSubstrings(t, stderr,
+		"Discovering release execution journals for unit=api",
+		"Selected exact release execution:",
+		"Evaluating local recovery evidence",
+		"Recovery evaluation completed:",
+		"Resolving the pending action with the authoritative recovery policy",
+		"Validating the selected journal identity against current V2 configuration",
+		"Journal and current V2 configuration identity validated",
+		"Selecting continuation operation: continue after unit tag",
+		"Invoking selected continuation: continue after unit tag",
+		"Resume continuation completed: execution=Handoff Ready dispatch=Accepted",
+	)
+	if want := []string{"locate", "assess", "resolve-policy", "reconstruct-context", "resume-operation"}; !reflect.DeepEqual(trace.calls, want) {
+		t.Fatalf("verbose orchestration changed: calls=%#v want=%#v", trace.calls, want)
 	}
 }
 
