@@ -179,7 +179,7 @@ func inspectV2ReleasePlan(repository *releaseconfig.ReleaseRepository, request R
 	if err != nil {
 		return nil, failureFromError("EXECUTION_CONTEXT_FAILED", err)
 	}
-	facts, failure := planV2ReleaseFacts(execCtx)
+	facts, failure := planV2ReleaseFactsForInspection(execCtx)
 	if failure != nil {
 		return nil, failure
 	}

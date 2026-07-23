@@ -10,10 +10,21 @@ type v2ReleasePlanningFacts struct {
 }
 
 func planV2ReleaseFacts(execCtx *ReleaseExecutionContext) (v2ReleasePlanningFacts, *CommandFailure) {
+	return planV2ReleaseFactsWithRequirements(execCtx, ValidateRequirementsForContext)
+}
+
+func planV2ReleaseFactsForInspection(execCtx *ReleaseExecutionContext) (v2ReleasePlanningFacts, *CommandFailure) {
+	return planV2ReleaseFactsWithRequirements(execCtx, validateRequirementsForContextInspection)
+}
+
+func planV2ReleaseFactsWithRequirements(
+	execCtx *ReleaseExecutionContext,
+	validateRequirements func(*ReleaseExecutionContext) error,
+) (v2ReleasePlanningFacts, *CommandFailure) {
 	if execCtx == nil {
 		return v2ReleasePlanningFacts{}, failureFromMessage("EXECUTION_CONTEXT_FAILED", "release execution context is missing")
 	}
-	if err := ValidateRequirementsForContext(execCtx); err != nil {
+	if err := validateRequirements(execCtx); err != nil {
 		return v2ReleasePlanningFacts{}, failureFromError("VALIDATION_FAILED", err)
 	}
 	plan := BuildReleasePlan(execCtx)

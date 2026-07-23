@@ -160,6 +160,24 @@ func TestReleasePlanVerboseIsNoOpForLegacyAndCurrentSources(t *testing.T) {
 	if strings.TrimSpace(stderr) != "" {
 		t.Fatalf("verbose release plan emitted generic execution narration:\n%s", stderr)
 	}
+
+	currentRoot, err := workspace.ValidateRepositoryRoot("../../../..")
+	if err != nil {
+		t.Fatalf("validate current repository root: %v", err)
+	}
+	stderr = captureReleaseUseCaseStderr(t, func() {
+		response, handleErr := HandlePlanAt(currentRoot, plugin.Request{
+			Command: "plan",
+			Flags:   map[string]any{"change": "patch", "unit": "cli"},
+			Context: plugin.Context{Verbose: true},
+		})
+		if handleErr != nil || response == nil || response.Status != "success" {
+			t.Fatalf("HandlePlanAt current source: response=%#v err=%v", response, handleErr)
+		}
+	})
+	if strings.TrimSpace(stderr) != "" {
+		t.Fatalf("verbose current release plan emitted generic execution narration:\n%s", stderr)
+	}
 }
 
 func TestReleasePlanReadableOutputUsesVerticalLayoutAtNarrowAndUnknownWidths(t *testing.T) {

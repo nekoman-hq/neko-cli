@@ -61,6 +61,13 @@ func ValidateRequirementsForContext(ctx *ReleaseExecutionContext) error {
 	return validateRequirementsForExecutor(ctx.Executor, ctx.UnitRoot, !ctx.DryRun)
 }
 
+func validateRequirementsForContextInspection(ctx *ReleaseExecutionContext) error {
+	if ctx == nil {
+		return fmt.Errorf("release execution context is missing")
+	}
+	return validateRequirementsForExecutor(ctx.Executor, ctx.UnitRoot, false)
+}
+
 func validateRequirementsForExecutor(executor, unitRoot string, requireToken bool) error {
 	if requireToken {
 		if _, err := coreconfig.GetPAT(); err != nil {
