@@ -122,7 +122,7 @@ func TestResumePresentationUsesDeterministicResponsiveRecords(t *testing.T) {
 		Format: renderer.FormatTable, Describe: true,
 		WidthProvider: releasePlanOutputWidth{width: 34, available: true},
 	})
-	for _, want := range []string{"Resume Summary", "Pending action", "Planned Continuation", "Action:"} {
+	for _, want := range []string{"Resume Summary", "Pending", "Push Unit Tag", "Planned Continuation", "Action:"} {
 		if !strings.Contains(ansi.Strip(narrow), want) {
 			t.Fatalf("narrow resume output omitted %q:\n%s", want, ansi.Strip(narrow))
 		}

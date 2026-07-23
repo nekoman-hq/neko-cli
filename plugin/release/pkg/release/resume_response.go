@@ -12,7 +12,7 @@ import (
 func MapResumeCommandOutcome(outcome ResumeCommandOutcome, timestamp time.Time) (*plugin.Response, error) {
 	switch result := outcome.(type) {
 	case *ResumeAssessment:
-		return successTableResponse("resume", timestamp, []map[string]any{
+		response := successTableResponse("resume", timestamp, []map[string]any{
 			{"property": "Unit", "value": result.UnitID},
 			{"property": "Version", "value": result.NextVersion},
 			{"property": "Tag", "value": result.Tag},
@@ -23,9 +23,13 @@ func MapResumeCommandOutcome(outcome ResumeCommandOutcome, timestamp time.Time) 
 			{"property": "Safe To Continue", "value": fmt.Sprintf("%t", result.SafeToContinue)},
 			{"property": "Known Files", "value": strings.Join(result.KnownFilePaths, ", ")},
 			{"property": "Next Step", "value": result.Guidance},
-		}), nil
+		})
+		attachResumePresentation(response, outcome)
+		return response, nil
 	case *GitHubActionsReleaseResult:
-		return mapGitHubActionsReleaseResult("resume", result, timestamp), nil
+		response := mapGitHubActionsReleaseResult("resume", result, timestamp)
+		attachResumePresentation(response, outcome)
+		return response, nil
 	default:
 		return nil, fmt.Errorf("unsupported resume command outcome %T", outcome)
 	}
