@@ -1,6 +1,10 @@
 package migrate
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/nekoman-hq/neko-cli/pkg/log"
+)
 
 type migrationJournalOperations interface {
 	Start(plan migrationPlan) (journal, error)
@@ -44,6 +48,7 @@ func newMigrationPlanExecution() migrationPlanExecution {
 }
 
 func (execution migrationPlanExecution) Execute(plan migrationPlan) error {
+	log.PluginV(log.Exec, "Preparing migration recovery journal")
 	currentJournal, startErr := execution.journal.Start(plan)
 	if startErr != nil {
 		return newMigrationExecutionFailure(migrationJournalFailure, startErr)
@@ -51,6 +56,7 @@ func (execution migrationPlanExecution) Execute(plan migrationPlan) error {
 
 	switch plan.targetOperation {
 	case persistMigrationTarget:
+		log.PluginV(log.Exec, "Writing V2 configuration and state")
 		if persistErr := execution.targets.Persist(plan.repositoryRoot, plan.target); persistErr != nil {
 			return newMigrationExecutionFailure(migrationTargetPersistenceFailure, persistErr)
 		}
@@ -59,8 +65,10 @@ func (execution migrationPlanExecution) Execute(plan migrationPlan) error {
 			return newMigrationExecutionFailure(migrationJournalFailure, confirmErr)
 		}
 		currentJournal = confirmedJournal
+		log.PluginV(log.Exec, "V2 configuration and state written")
 	case retainMigrationTarget:
 		// Recovery planning already proved that both target files match the journal.
+		log.PluginV(log.Exec, "Existing V2 configuration and state retained for recovery")
 	default:
 		return newMigrationExecutionFailure(
 			migrationTargetPersistenceFailure,
@@ -68,20 +76,24 @@ func (execution migrationPlanExecution) Execute(plan migrationPlan) error {
 		)
 	}
 
+	log.PluginV(log.Exec, "Validating persisted V2 migration artifacts")
 	if verifyTargetErr := execution.targetVerifier.Verify(plan); verifyTargetErr != nil {
 		return newMigrationExecutionFailure(migrationTargetVerificationFailure, verifyTargetErr)
 	}
 
 	switch plan.sourceOperation {
 	case archiveMigrationSource:
+		log.PluginV(log.Exec, "Archiving legacy V1 configuration")
 		if archiveErr := execution.sourceArchiver.Archive(plan); archiveErr != nil {
 			return newMigrationExecutionFailure(migrationSourceCleanupFailure, archiveErr)
 		}
 		if _, confirmErr := execution.journal.ConfirmSourceArchived(plan, currentJournal); confirmErr != nil {
 			return newMigrationExecutionFailure(migrationJournalFailure, confirmErr)
 		}
+		log.PluginV(log.Exec, "Legacy V1 configuration archived")
 	case retainArchivedMigrationSource:
 		// Recovery planning already selected the hash-matched backup as the source.
+		log.PluginV(log.Exec, "Existing legacy V1 archive retained for recovery")
 	default:
 		return newMigrationExecutionFailure(
 			migrationSourceCleanupFailure,
@@ -92,8 +104,10 @@ func (execution migrationPlanExecution) Execute(plan migrationPlan) error {
 	if err := execution.sourceVerifier.Verify(plan); err != nil {
 		return newMigrationExecutionFailure(migrationSourceVerificationFailure, err)
 	}
+	log.PluginV(log.Exec, "Completing migration journal")
 	if err := execution.journal.Remove(plan); err != nil {
 		return newMigrationExecutionFailure(migrationJournalFailure, err)
 	}
+	log.PluginV(log.Exec, "Migration execution completed")
 	return nil
 }

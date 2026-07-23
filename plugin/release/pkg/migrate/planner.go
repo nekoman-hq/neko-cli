@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/nekoman-hq/neko-cli/pkg/log"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
@@ -28,6 +29,7 @@ func constructMigrationPlan(
 		return migrationPlan{}, fmt.Errorf("migration conflict: existing backup %s differs from active V1 config", paths.backup)
 	}
 
+	log.PluginV(log.Config, "Validating V1 migration source")
 	var v1 releaseconfig.V1ReleaseConfig
 	if err := json.Unmarshal(source.data, &v1); err != nil {
 		return migrationPlan{}, fmt.Errorf("parse V1 config %s: %w", paths.source, err)
@@ -36,31 +38,36 @@ func constructMigrationPlan(
 		return migrationPlan{}, err
 	}
 
-	target := migrationTarget{
-		config: releaseconfig.V2ReleaseConfig{
-			SchemaVersion: 2,
-			Units: []releaseconfig.V2Unit{
-				{
-					ID:               "default",
-					DisplayName:      v1.ProjectName,
-					Paths:            []string{"**"},
-					WorkingDirectory: ".",
-					TagPrefix:        "v",
-					Executor: releaseconfig.V2Executor{
-						Type:     releaseconfig.ExecutorType(v1.ReleaseSystem),
-						Delivery: releaseconfig.DeliveryGitHubActions,
-						Workflow: defaultMigratedWorkflow,
-					},
+	log.PluginV(log.Config, "Deriving V2 release configuration")
+	targetConfig := releaseconfig.V2ReleaseConfig{
+		SchemaVersion: 2,
+		Units: []releaseconfig.V2Unit{
+			{
+				ID:               "default",
+				DisplayName:      v1.ProjectName,
+				Paths:            []string{"**"},
+				WorkingDirectory: ".",
+				TagPrefix:        "v",
+				Executor: releaseconfig.V2Executor{
+					Type:     releaseconfig.ExecutorType(v1.ReleaseSystem),
+					Delivery: releaseconfig.DeliveryGitHubActions,
+					Workflow: defaultMigratedWorkflow,
 				},
 			},
 		},
-		state: releaseconfig.V2ReleaseState{
-			SchemaVersion: 2,
-			Units: map[string]releaseconfig.V2UnitState{
-				"default": {Version: v1.Version},
-			},
+	}
+	log.PluginV(log.Config, "Deriving V2 release state")
+	targetState := releaseconfig.V2ReleaseState{
+		SchemaVersion: 2,
+		Units: map[string]releaseconfig.V2UnitState{
+			"default": {Version: v1.Version},
 		},
 	}
+	target := migrationTarget{
+		config: targetConfig,
+		state:  targetState,
+	}
+	log.PluginV(log.Config, "Validating generated V2 migration artifacts")
 	if err := releaseconfig.ValidateV2("", &target.config, &target.state); err != nil {
 		return migrationPlan{}, fmt.Errorf("validate planned V2 configuration: %w", err)
 	}
@@ -76,6 +83,7 @@ func constructMigrationPlan(
 	target.configJSON = append([]byte(nil), configJSON...)
 	target.stateJSON = append([]byte(nil), stateJSON...)
 
+	log.PluginV(log.Config, "Planning archive and migration journal actions")
 	return migrationPlan{
 		repositoryRoot:  root,
 		sourceFormat:    migrationSourceV1,

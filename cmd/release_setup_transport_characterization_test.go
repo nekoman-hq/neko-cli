@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -26,38 +25,36 @@ func TestReleaseSetupPluginHelperProcess(t *testing.T) {
 
 	var request plugin.Request
 	if err := json.NewDecoder(os.Stdin).Decode(&request); err != nil {
-		fmt.Fprintf(os.Stderr, "decode plugin request: %v\n", err)
 		t.Fatalf("decode plugin request: %v", err)
 	}
 	request.Context.WorkingDir = os.Getenv(releaseReadonlyRootEnvironment)
 	log.Verbose = request.Context.Verbose
 
-	root, err := workspace.ResolveRepositoryRoot(request.Context.WorkingDir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "resolve setup repository: %v\n", err)
-		t.Fatalf("resolve setup repository: %v", err)
-	}
 	var response *plugin.Response
-	switch request.Command {
-	case "init":
-		response, err = initcmd.HandleInitAt(root, request)
-	case "unit-add":
-		response, err = initcmd.HandleUnitAddAt(root, request)
-	case "migrate":
-		response, err = migrate.HandleMigrate(request)
-	case "github-workflow-init":
-		response, err = releasecmd.HandleGitHubWorkflowInitAt(root, request)
-	default:
-		fmt.Fprintf(os.Stderr, "unexpected setup helper command %q\n", request.Command)
-		t.Fatalf("unexpected setup helper command %q", request.Command)
+	var executeErr error
+	if request.Command == "migrate" {
+		response, executeErr = migrate.HandleMigrate(request)
+	} else {
+		root, resolveErr := workspace.ResolveRepositoryRoot(request.Context.WorkingDir)
+		if resolveErr != nil {
+			t.Fatalf("resolve setup repository: %v", resolveErr)
+		}
+		switch request.Command {
+		case "init":
+			response, executeErr = initcmd.HandleInitAt(root, request)
+		case "unit-add":
+			response, executeErr = initcmd.HandleUnitAddAt(root, request)
+		case "github-workflow-init":
+			response, executeErr = releasecmd.HandleGitHubWorkflowInitAt(root, request)
+		default:
+			t.Fatalf("unexpected setup helper command %q", request.Command)
+		}
 	}
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "execute %s: %v\n", request.Command, err)
-		t.Fatalf("execute %s: %v", request.Command, err)
+	if executeErr != nil {
+		t.Fatalf("execute %s: %v", request.Command, executeErr)
 	}
-	if err := json.NewEncoder(os.Stdout).Encode(response); err != nil {
-		fmt.Fprintf(os.Stderr, "encode %s response: %v\n", request.Command, err)
-		t.Fatalf("encode %s response: %v", request.Command, err)
+	if encodeErr := json.NewEncoder(os.Stdout).Encode(response); encodeErr != nil {
+		t.Fatalf("encode %s response: %v", request.Command, encodeErr)
 	}
 	os.Exit(0)
 }
@@ -65,9 +62,9 @@ func TestReleaseSetupPluginHelperProcess(t *testing.T) {
 func TestReleaseSetupCommandsPreserveDomainJSONAcrossGlobalModes(t *testing.T) {
 	manifest := installReleaseSetupHelperPlugin(t)
 	tests := []struct {
+		fixture func(*testing.T) (string, []string)
 		name    string
 		command string
-		fixture func(*testing.T) (string, []string)
 	}{
 		{name: "init", command: "init", fixture: newReleaseSetupInitRepository},
 		{name: "unit add", command: "unit-add", fixture: newReleaseSetupUnitAddRepository},
@@ -278,6 +275,136 @@ func TestReleaseInitAndUnitAddConflictsRemainActionableAndWriteNothing(t *testin
 	}
 }
 
+func TestReleaseMigrateCorePresentationAndMutationContracts(t *testing.T) {
+	manifest := installReleaseSetupHelperPlugin(t)
+
+	defaultRoot, flags := newReleaseSetupMigrationRepository(t)
+	defaultOutput, defaultErr := executeReleaseReadonlyCommand(
+		t, manifest, defaultRoot, "migrate", flags, releaseReadonlyMode{},
+	)
+	describeRoot, flags := newReleaseSetupMigrationRepository(t)
+	describeOutput, describeErr := executeReleaseReadonlyCommand(
+		t, manifest, describeRoot, "migrate", flags, releaseReadonlyMode{describe: true},
+	)
+	verboseRoot, flags := newReleaseSetupMigrationRepository(t)
+	verboseOutput, verboseErr := executeReleaseReadonlyCommand(
+		t, manifest, verboseRoot, "migrate", flags, releaseReadonlyMode{verbose: true},
+	)
+	combinedRoot, flags := newReleaseSetupMigrationRepository(t)
+	combinedOutput, combinedErr := executeReleaseReadonlyCommand(
+		t, manifest, combinedRoot, "migrate", flags, releaseReadonlyMode{describe: true, verbose: true},
+	)
+	if defaultErr != nil || describeErr != nil || verboseErr != nil || combinedErr != nil {
+		t.Fatalf("migrate exits: default=%v describe=%v verbose=%v combined=%v", defaultErr, describeErr, verboseErr, combinedErr)
+	}
+	for _, want := range []string{
+		"Release Migration", "Dry run", "Yes", "Source contract", "V1", "Destination contract", "V2",
+		"Planned actions", "Configuration", ".neko/release.config.json", "Archive", ".release.neko.json.v1.bak",
+	} {
+		if !strings.Contains(defaultOutput, want) {
+			t.Fatalf("migrate default omitted %q:\n%s", want, defaultOutput)
+		}
+	}
+	for _, hidden := range []string{"Source Facts", "Resolved V2 Configuration", "Ordered Migration Plan", "Validation Facts", "Limitations"} {
+		if strings.Contains(defaultOutput, hidden) ||
+			!strings.Contains(describeOutput, hidden) || !strings.Contains(combinedOutput, hidden) {
+			t.Fatalf("migrate describe visibility for %q is incorrect:\ndefault:\n%s\ndescribe:\n%s\ncombined:\n%s", hidden, defaultOutput, describeOutput, combinedOutput)
+		}
+	}
+	for _, want := range []string{
+		"Resolving migration repository root", "Locating V1 release configuration",
+		"Validating V1 migration source", "Deriving V2 release configuration",
+		"Planning archive and migration journal actions", "Dry-run selected; no migration files written",
+	} {
+		if !strings.Contains(verboseOutput, want) || !strings.Contains(combinedOutput, want) {
+			t.Fatalf("migrate verbose modes omitted %q:\nverbose:\n%s\ncombined:\n%s", want, verboseOutput, combinedOutput)
+		}
+	}
+	outputs := []struct {
+		root   string
+		output string
+	}{
+		{root: defaultRoot, output: defaultOutput},
+		{root: describeRoot, output: describeOutput},
+		{root: verboseRoot, output: verboseOutput},
+		{root: combinedRoot, output: combinedOutput},
+	}
+	for _, result := range outputs {
+		for _, forbidden := range []string{result.root, "\x1b[", "setup-transport-secret", "Authorization", "Bearer", `"schemaVersion"`} {
+			if strings.Contains(result.output, forbidden) {
+				t.Fatalf("migrate human output contains %q:\n%s", forbidden, result.output)
+			}
+		}
+		if !existsReleaseSetupFile(filepath.Join(result.root, ".release.neko.json")) ||
+			existsReleaseSetupFile(filepath.Join(result.root, ".neko", "release.config.json")) ||
+			existsReleaseSetupFile(filepath.Join(result.root, ".neko", "release.state.json")) ||
+			existsReleaseSetupFile(filepath.Join(result.root, ".release.neko.json.v1.bak")) ||
+			existsReleaseSetupFile(filepath.Join(result.root, ".neko", "release.migration.json")) {
+			t.Fatalf("migrate dry-run changed fixture %s", result.root)
+		}
+	}
+
+	actualRoot, actualFlags := newReleaseSetupMigrationActualRepository(t)
+	unrelated := filepath.Join(actualRoot, "unrelated.txt")
+	writeReleaseSetupFile(t, unrelated, "unchanged\n")
+	actualOutput, actualErr := executeReleaseReadonlyCommand(
+		t, manifest, actualRoot, "migrate", actualFlags, releaseReadonlyMode{verbose: true},
+	)
+	if actualErr != nil {
+		t.Fatalf("actual migrate exit: %v\n%s", actualErr, actualOutput)
+	}
+	for _, want := range []string{
+		"Migration completed", "Writing V2 configuration and state", "V2 configuration and state written",
+		"Archiving legacy V1 configuration", "Legacy V1 configuration archived", "Migration execution completed",
+	} {
+		if !strings.Contains(actualOutput, want) {
+			t.Fatalf("actual migrate omitted %q:\n%s", want, actualOutput)
+		}
+	}
+	if existsReleaseSetupFile(filepath.Join(actualRoot, ".release.neko.json")) ||
+		!existsReleaseSetupFile(filepath.Join(actualRoot, ".neko", "release.config.json")) ||
+		!existsReleaseSetupFile(filepath.Join(actualRoot, ".neko", "release.state.json")) ||
+		!existsReleaseSetupFile(filepath.Join(actualRoot, ".release.neko.json.v1.bak")) ||
+		existsReleaseSetupFile(filepath.Join(actualRoot, ".neko", "release.migration.json")) {
+		t.Fatal("actual migration did not create/archive exactly the expected artifacts")
+	}
+	if content, err := os.ReadFile(unrelated); err != nil || string(content) != "unchanged\n" {
+		t.Fatalf("actual migration changed unrelated file: content=%q err=%v", content, err)
+	}
+}
+
+func TestReleaseMigrateConflictIsActionableAndWriteFree(t *testing.T) {
+	manifest := installReleaseSetupHelperPlugin(t)
+	root, _ := newReleaseSetupMigrationRepository(t)
+	writeReleaseSetupFile(t, filepath.Join(root, ".neko", "release.config.json"), releaseSetupMigratedConfig)
+	writeReleaseSetupFile(t, filepath.Join(root, ".neko", "release.state.json"), releaseSetupMigratedState)
+	before := snapshotReleaseSetupFiles(t, root)
+
+	output, err := executeReleaseReadonlyCommand(
+		t, manifest, root, "migrate", nil, releaseReadonlyMode{},
+	)
+	if err != nil {
+		t.Fatalf("migrate conflict changed characterized Core exit behavior: %v", err)
+	}
+	for _, want := range []string{
+		"MIGRATION_FAILED", "Migration Blocked", "V1/V2 source conflict", "Refused",
+		"No files written", "migration will not overwrite V2",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("migrate conflict omitted %q:\n%s", want, output)
+		}
+	}
+	for _, forbidden := range []string{root, "\x1b[", "setup-transport-secret", "Authorization", "Bearer"} {
+		if strings.Contains(output, forbidden) {
+			t.Fatalf("migrate conflict output contains %q:\n%s", forbidden, output)
+		}
+	}
+	after := snapshotReleaseSetupFiles(t, root)
+	if !reflect.DeepEqual(before, after) {
+		t.Fatal("migrate conflict changed fixture files")
+	}
+}
+
 func normalizeReleaseSetupData(t *testing.T, data map[string]any, root string) map[string]any {
 	t.Helper()
 	encoded, err := json.Marshal(data)
@@ -381,6 +508,7 @@ func newReleaseSetupMigrationRepository(t *testing.T) (string, []string) {
 	t.Helper()
 	root := t.TempDir()
 	runReleaseReadonlyGit(t, root, "init")
+	writeReleaseSetupFile(t, filepath.Join(root, ".github", "workflows", "release-default.yml"), "name: release default\n")
 	writeReleaseSetupFile(t, filepath.Join(root, ".release.neko.json"), `{
   "project-name": "example",
   "project-owner": "example-owner",
@@ -390,6 +518,12 @@ func newReleaseSetupMigrationRepository(t *testing.T) (string, []string) {
 }
 `)
 	return root, []string{"--dry-run"}
+}
+
+func newReleaseSetupMigrationActualRepository(t *testing.T) (string, []string) {
+	t.Helper()
+	root, _ := newReleaseSetupMigrationRepository(t)
+	return root, nil
 }
 
 func newReleaseSetupWorkflowRepository(t *testing.T) (string, []string) {
@@ -416,3 +550,65 @@ func writeReleaseSetupFile(t *testing.T, path, content string) {
 		t.Fatalf("write %s: %v", path, err)
 	}
 }
+
+func existsReleaseSetupFile(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func snapshotReleaseSetupFiles(t *testing.T, root string) map[string]string {
+	t.Helper()
+	result := make(map[string]string)
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			if entry.Name() == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		result[filepath.ToSlash(relative)] = string(content)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("snapshot setup fixture: %v", err)
+	}
+	return result
+}
+
+const releaseSetupMigratedConfig = `{
+  "schemaVersion": 2,
+  "units": [
+    {
+      "id": "default",
+      "displayName": "example",
+      "paths": ["**"],
+      "workingDirectory": ".",
+      "tagPrefix": "v",
+      "executor": {
+        "type": "jreleaser",
+        "delivery": "github-actions",
+        "workflow": ".github/workflows/release-default.yml"
+      }
+    }
+  ]
+}
+`
+
+const releaseSetupMigratedState = `{
+  "schemaVersion": 2,
+  "units": {
+    "default": {"version": "1.2.3"}
+  }
+}
+`

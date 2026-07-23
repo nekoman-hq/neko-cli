@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/nekoman-hq/neko-cli/pkg/log"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
@@ -15,6 +16,8 @@ type filesystemMigrationPlanResolver struct{}
 
 func (filesystemMigrationPlanResolver) Resolve(root string) (migrationPlan, error) {
 	paths := migrationPaths(root)
+	log.PluginV(log.Config, "Inspecting migration repository state")
+	log.PluginV(log.Config, "Locating V1 release configuration")
 	evidence := migrationRepositoryEvidence{
 		journalExists:      exists(paths.journal),
 		pairRecoveryExists: exists(paths.pairRecovery),

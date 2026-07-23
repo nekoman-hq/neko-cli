@@ -19,7 +19,7 @@ func mapMigrationCommandResponse(
 		Timestamp: timestamp,
 	}
 	if failure != nil {
-		return &plugin.Response{
+		response := &plugin.Response{
 			Status:   "error",
 			Metadata: responseMetadata,
 			Error: &plugin.ResponseError{
@@ -27,13 +27,16 @@ func mapMigrationCommandResponse(
 				Message: failure.Error(),
 			},
 		}
+		response.PresentationProperties = migrationFailureProperties()
+		response.PresentationTable = migrationFailurePresentation(failure)
+		return response
 	}
 
 	plan := result.plan.compatibilityPlan()
 	if result.outcome == migrationCompleted {
 		plan.Actions = append(plan.Actions, "migration completed")
 	}
-	return &plugin.Response{
+	response := &plugin.Response{
 		Status:   "success",
 		Metadata: responseMetadata,
 		Data: map[string]any{
@@ -44,6 +47,9 @@ func mapMigrationCommandResponse(
 		},
 		RendererHint: "table",
 	}
+	response.PresentationProperties = migrationSummaryPresentation(result)
+	response.PresentationTable = migrationDetailPresentation(result)
+	return response
 }
 
 func planItems(plan *Plan, outcome migrationCommandOutcome) []map[string]any {
