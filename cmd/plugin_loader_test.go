@@ -151,6 +151,19 @@ func TestPluginIndexHelpKeepsKnownLocalGlobalOutputCollisionVisible(t *testing.T
 	}
 }
 
+func TestCoreCommandHelpDoesNotReceiveCustomPluginFlagSections(t *testing.T) {
+	root := testRootWithPluginResponseFlags()
+	root.AddCommand(&cobra.Command{Use: "version", Short: "Show CLI version"})
+
+	output, err := executeTestCommand(root, "version", "--help")
+	if err != nil {
+		t.Fatalf("expected Core command help to render without error: %v", err)
+	}
+	assertNotContains(t, output, "Command flags:")
+	assertNotContains(t, output, "Global plugin-response flags:")
+	assertContains(t, output, "Show CLI version")
+}
+
 func TestExtractFlagsSerializesOnlyCommandLocalNonPersistentFlags(t *testing.T) {
 	root := testRootWithPluginResponseFlags()
 	command := &cobra.Command{Use: "inspect"}

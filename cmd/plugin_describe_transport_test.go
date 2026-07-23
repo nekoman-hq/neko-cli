@@ -100,6 +100,25 @@ func TestPluginDescribeTransportKeepsPublicJSONIdentical(t *testing.T) {
 	}
 }
 
+func TestPluginVerboseTransportKeepsDomainJSONStable(t *testing.T) {
+	manifest, _ := installDescribeTransportPlugin(t)
+	plain := executeDescribeTransportCommand(t, manifest, false, false, "json")
+	verboseOutput := executeDescribeTransportCommand(t, manifest, false, true, "json")
+
+	var plainResponse, verboseResponse struct {
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(plain), &plainResponse); err != nil {
+		t.Fatalf("decode plain public JSON: %v", err)
+	}
+	if err := json.Unmarshal([]byte(verboseOutput), &verboseResponse); err != nil {
+		t.Fatalf("decode verbose public JSON: %v", err)
+	}
+	if !reflect.DeepEqual(plainResponse.Data, verboseResponse.Data) {
+		t.Fatalf("verbose changed domain JSON\nplain: %#v\nverbose: %#v", plainResponse.Data, verboseResponse.Data)
+	}
+}
+
 func TestPluginTransportDoesNotInjectEnvironmentCredentials(t *testing.T) {
 	manifest, requestPath := installDescribeTransportPlugin(t)
 	t.Setenv("GITHUB_TOKEN", "transport-secret-token")
