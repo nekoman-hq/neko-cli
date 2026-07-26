@@ -522,7 +522,7 @@
     },
     {
       "name": "evidence",
-      "description": "Inspect release evidence journals without mutating recovery state",
+      "description": "Inspect concise release evidence classifications without mutating recovery state",
       "outputs": [
         "table",
         "json"
@@ -544,13 +544,13 @@
           "name": "identity",
           "type": "string",
           "required": false,
-          "description": "Inspect one complete Evidence record by an unambiguous 8-64 character lowercase hexadecimal identity prefix after family and unit filters"
+          "description": "Filter to one Evidence record by an unambiguous 8-64 character lowercase hexadecimal identity prefix after family and unit filters"
         }
       ]
     },
     {
       "name": "evidence-archive",
-      "description": "Archive one completed release evidence file after explicit confirmation",
+      "description": "Archive one exact completed release evidence file through explicit guards",
       "outputs": [
         "table",
         "json"

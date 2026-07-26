@@ -956,7 +956,9 @@ neko release evidence [flags]
 | `--unit` | string | | Filter records by release unit when the evidence records one |
 | `--identity` | string | | Inspect one record using an unambiguous 8-64 character lowercase hexadecimal identity prefix after family and unit filters |
 
-The command reports redacted summaries plus diagnostics for corrupt, unsupported, conflicting, unresolved, terminal, and completed evidence. Human summaries prioritize `Family`, `State`, `Classification`, `Resume`, and `Recovery`; `Unit`, `Version`, `Tag`, `Pending action`, `Automatic`, and `Lifecycle` are optional in that order. Table output uses the actual terminal width, omits optional columns that do not fit, and switches to vertical records when the essential columns do not fit or width is unavailable. `--output wide` permits all of those summary fields but never adds full identity, digest, owner, path, guidance, or timestamps.
+The command is read-only, offline, and token-free. Default human output contains an `Evidence Summary` and concise inventory. `Family`, exact `Identity`, `State`, `Classification`, and `Action` are essential; `Unit`, `Version`, `Tag`, and `Linked execution` are optional. Every actionable classification and diagnostic remains visible, including corrupt, unsupported, conflicting, ambiguous, unlinked, active, resumable, uncertain, terminal, and manual-recovery conditions. Narrow output keeps essential fields, while redirected or width-unknown output uses deterministic vertical records.
+
+Global `--describe` adds focused `Execution Evidence`, `Dispatch Evidence`, `Linkage`, `Local Git Evidence`, `Classification`, `Recovery Relevance`, and `Limitations` sections. These contain only facts retained by the evidence model, safe repository-relative path labels, and digests. Evidence does not perform a second local Git inspection; missing or mismatched commit/tag validation remains owned by Resume and Pipeline. Global `--verbose` is an intentional no-op, so it does not narrate deterministic reads.
 
 Use JSON to obtain the complete identity, then inspect all safe fields for one record:
 
@@ -965,9 +967,9 @@ neko release evidence --family release-execution --unit api --output json
 neko release evidence --family release-execution --unit api --identity 0123abcd
 ```
 
-Identity inspection is read-only. The prefix is trimmed, must contain 8 through 64 lowercase hexadecimal characters, and is not case-normalized. Family and unit filters are applied first; zero matches and multiple matches are errors, and a full 64-character identity is accepted. Human detail uses the existing property/value format. Detail JSON retains `items`, `evidence`, and `diagnostics`, with the complete typed Evidence record under `evidence`.
+Identity inspection is read-only. The prefix is trimmed, must contain 8 through 64 lowercase hexadecimal characters, and is not case-normalized. Family and unit filters are applied first; zero matches and multiple matches are errors, and a full 64-character identity is accepted.
 
-Existing summary JSON is unchanged: it still contains complete `data.items`, typed `data.evidence`, and `data.diagnostics`; human presentation metadata is excluded. The command does not print tokens, request headers, raw response bodies, process output, environment values, or full evidence files.
+The legacy JSON contract is frozen exactly: summary and identity-filtered responses retain complete `data.items`, typed `data.evidence`, and `data.diagnostics`, including established duplicated representations, field casing, value types, ordering, and nullability. `--describe`, `--verbose`, and their combination do not alter domain data or status; human presentation metadata and logs remain excluded. Human output does not print tokens, authorization headers, raw response bodies, raw Git output, absolute developer roots, or full evidence files.
 
 ### `neko release evidence-archive`
 
@@ -987,7 +989,11 @@ neko release evidence-archive --family <family> --identity <sha256> --digest-sha
 | `--digest-sha256` | string | | Current evidence digest from inspection output |
 | `--confirm-archive` | bool | `false` | Required explicit confirmation |
 
-Only completed `release-execution`, completed `v1-compensation`, and completed `v2-pair-recovery` evidence can be archived. The command re-inspects the evidence, rejects stale digests, writes an exact `0600` archive copy in a private `0700` archive directory, verifies the copy, and only then removes the completed source evidence. It does not support force, repair, retry, arbitrary paths, dispatch archival, or migration archival.
+Only completed `release-execution`, completed `v1-compensation`, and completed `v2-pair-recovery` evidence can be archived. Default success output reports the selected family and identity, confirmation state, digest match, archive result, safe source and target labels, and next action. Missing or invalid family, missing or invalid identity/digest, absent confirmation, unknown identity, stale digest, ineligible or missing source, existing target, and filesystem errors retain specific actionable failures.
+
+Global `--describe` adds existing validation facts, source classification, confirmation contract, guarded write plan, final outcome, and limitations. Global `--verbose` reports the chronological guarded phases: request validation, family resolution, evidence read/classification, exact identity resolution, digest verification, target check, private write preparation/completion, byte verification, selected-source removal, completion, or the refusal phase. Logs abbreviate identities/digests and use safe repository-relative labels.
+
+The command re-observes the evidence, rejects stale digests, writes an exact `0600` archive copy in a private `0700` archive directory, verifies the copy, and only then removes the completed source evidence. No mutation occurs before confirmation, on identity/digest refusal, on a missing source, or on target conflict. It changes no repository worktree/index, commit, tag, remote, or unrelated evidence. Existing JSON, error envelopes, exits, idempotency, conflict handling, and rollback limits are unchanged. It does not support force, repair, retry, arbitrary paths, dispatch archival, or migration archival.
 
 ---
 
