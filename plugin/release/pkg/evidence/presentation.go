@@ -326,7 +326,7 @@ func evidenceLocalGitTable(result evidenceQueryResult) *presentation.Table {
 			map[string]any{
 				"identity": record.Identity, "evidence": "Release commit",
 				"status": evidenceJournalGitStatus(record.releaseCommitSHA),
-				"value":  abbreviatedEvidenceHash(record.releaseCommitSHA),
+				"value":  evidenceValue(record.releaseCommitSHA),
 			},
 			map[string]any{
 				"identity": record.Identity, "evidence": "Unit tag",
@@ -364,7 +364,7 @@ func evidenceTagJournalValue(record EvidenceRecord) string {
 	if strings.TrimSpace(record.tagTargetSHA) == "" {
 		return evidenceValue(record.Tag)
 	}
-	return record.Tag + " → " + abbreviatedEvidenceHash(record.tagTargetSHA)
+	return record.Tag + " → " + record.tagTargetSHA
 }
 
 func evidenceClassificationTable(result evidenceQueryResult) *presentation.Table {

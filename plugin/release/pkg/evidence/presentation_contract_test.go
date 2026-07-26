@@ -72,6 +72,8 @@ func TestEvidenceDescribeShowsCompleteSafeInventory(t *testing.T) {
 		"Digest SHA-256",
 		".git/neko/release/executions/",
 		".git/neko/release/dispatches/",
+		strings.Repeat("c", 40),
+		"api/v1.2.4 → " + strings.Repeat("d", 40),
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("Evidence describe omitted %q:\n%s", want, output)
@@ -200,9 +202,11 @@ func evidencePresentationFixture() evidenceQueryResult {
 				Unit: "api", Version: "1.2.4", Tag: "api/v1.2.4", State: "commit-created",
 				PendingAction: "none", Classification: ClassificationResumable,
 				SafeToResume: true, AutomaticContinuation: true,
-				Guidance:     "Existing resume policy can continue after local checks.",
-				Path:         "/private/tmp/evidence-contract/.git/neko/release/executions/" + strings.Repeat("a", 64) + ".json",
-				DigestSHA256: strings.Repeat("c", 64),
+				Guidance:         "Existing resume policy can continue after local checks.",
+				Path:             "/private/tmp/evidence-contract/.git/neko/release/executions/" + strings.Repeat("a", 64) + ".json",
+				DigestSHA256:     strings.Repeat("c", 64),
+				releaseCommitSHA: strings.Repeat("c", 40),
+				tagTargetSHA:     strings.Repeat("d", 40),
 			},
 		},
 		Diagnostics: []EvidenceDiagnostic{{
