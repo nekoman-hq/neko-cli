@@ -16,6 +16,7 @@ import (
 	"github.com/nekoman-hq/neko-cli/pkg/log"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
+	evidencecmd "github.com/nekoman-hq/neko-cli/plugin/release/pkg/evidence"
 	releasecmd "github.com/nekoman-hq/neko-cli/plugin/release/pkg/release"
 	validatecmd "github.com/nekoman-hq/neko-cli/plugin/release/pkg/validate"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
@@ -64,6 +65,10 @@ func TestReleaseReadonlyPluginHelperProcess(t *testing.T) {
 		response, err = releasecmd.HandleRelease(request, releasecmd.Major)
 	case "resume":
 		response, err = releasecmd.HandleResume(request)
+	case "evidence":
+		response, err = evidencecmd.HandleEvidence(request)
+	case "evidence-archive":
+		response, err = evidencecmd.HandleEvidenceArchive(request)
 	default:
 		t.Fatalf("unexpected helper command %q", request.Command)
 	}

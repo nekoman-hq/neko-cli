@@ -92,14 +92,33 @@ func TestEvidenceArchiveRequestGuardErrorsRemainExact(t *testing.T) {
 			want:  `evidence family "dispatch" has no archival lifecycle operation`,
 		},
 		{
+			name:  "invalid family",
+			flags: map[string]any{"family": "unknown"},
+			want:  "--family must name a supported evidence family",
+		},
+		{
 			name:  "missing identity",
 			flags: map[string]any{"family": FamilyReleaseExecution},
 			want:  "--identity must be a sha256 evidence identity from inspection output",
 		},
 		{
+			name: "invalid identity",
+			flags: map[string]any{
+				"family": FamilyReleaseExecution, "identity": "not-an-identity",
+			},
+			want: "--identity must be a sha256 evidence identity from inspection output",
+		},
+		{
 			name:  "missing digest",
 			flags: map[string]any{"family": FamilyReleaseExecution, "identity": identity},
 			want:  "--digest-sha256 must be the current digest from inspection output",
+		},
+		{
+			name: "invalid digest",
+			flags: map[string]any{
+				"family": FamilyReleaseExecution, "identity": identity, "digest-sha256": "not-a-digest",
+			},
+			want: "--digest-sha256 must be the current digest from inspection output",
 		},
 		{
 			name: "missing confirmation",
@@ -155,22 +174,64 @@ func TestEvidenceArchiveResponseJSONRemainsCanonical(t *testing.T) {
 }
 
 func TestEvidenceArchiveHandlerStopsBeforeMutationOnInvalidRequest(t *testing.T) {
-	archiver := &recordingEvidenceArchiver{}
-	handler := evidenceArchiveCommandHandler{
-		archive: archiver,
-		clock:   fixedEvidenceResponseClock{timestamp: time.Date(2026, time.July, 26, 10, 1, 0, 0, time.UTC)},
-	}
-	response, err := handler.Handle(plugin.Request{
-		Flags: map[string]any{"family": FamilyReleaseExecution},
-		Context: plugin.Context{
-			WorkingDir: "/repo",
+	identity := strings.Repeat("a", 64)
+	digest := strings.Repeat("b", 64)
+	//nolint:govet // Table fields follow readable name/input order.
+	tests := []struct {
+		name  string
+		flags map[string]any
+	}{
+		{name: "missing family", flags: map[string]any{}},
+		{name: "invalid family", flags: map[string]any{"family": "unknown"}},
+		{name: "missing identity", flags: map[string]any{"family": FamilyReleaseExecution}},
+		{
+			name: "invalid identity",
+			flags: map[string]any{
+				"family": FamilyReleaseExecution, "identity": "invalid",
+			},
 		},
-	})
-	if response != nil || err == nil || archiver.called {
-		t.Fatalf("invalid request = (%#v, %v), archiver called=%t", response, err, archiver.called)
+		{
+			name: "missing digest",
+			flags: map[string]any{
+				"family": FamilyReleaseExecution, "identity": identity,
+			},
+		},
+		{
+			name: "digest invalid",
+			flags: map[string]any{
+				"family": FamilyReleaseExecution, "identity": identity, "digest-sha256": "invalid",
+			},
+		},
+		{
+			name: "missing confirmation",
+			flags: map[string]any{
+				"family": FamilyReleaseExecution, "identity": identity, "digest-sha256": digest,
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			archiver := &recordingEvidenceArchiver{}
+			handler := evidenceArchiveCommandHandler{
+				archive: archiver,
+				clock: fixedEvidenceResponseClock{
+					timestamp: time.Date(2026, time.July, 26, 10, 1, 0, 0, time.UTC),
+				},
+			}
+			response, err := handler.Handle(plugin.Request{
+				Flags: test.flags,
+				Context: plugin.Context{
+					WorkingDir: "/repo",
+				},
+			})
+			if response != nil || err == nil || archiver.called {
+				t.Fatalf("invalid request = (%#v, %v), archiver called=%t", response, err, archiver.called)
+			}
+		})
 	}
 }
 
+//nolint:govet // Test fake fields follow call/result/error observation order.
 type recordingEvidenceArchiver struct {
 	result evidenceArchiveResult
 	err    error
