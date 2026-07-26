@@ -204,8 +204,8 @@ func TestEvidenceHandlerRoutesIdentityInspectionToCompleteDetail(t *testing.T) {
 	if runner.request.IdentityPrefix != identity[:8] || runner.request.Family != FamilyDispatch || runner.request.Unit != "api" {
 		t.Fatalf("detail query request changed: %#v", runner.request)
 	}
-	if response.PresentationTable != nil {
-		t.Fatalf("detail response unexpectedly opted into summary table: %#v", response.PresentationTable)
+	if response.PresentationTable == nil || response.PresentationProperties == nil {
+		t.Fatalf("detail response omitted Evidence presentation: %#v", response)
 	}
 	if items, ok := response.Data["items"].([]map[string]any); !ok || len(items) == 0 || items[1]["value"] != identity {
 		t.Fatalf("detail response omitted complete identity: %#v", response.Data["items"])
@@ -229,16 +229,14 @@ func TestEvidenceSummaryDeclaresSemanticColumnPriority(t *testing.T) {
 	response := mapEvidenceQueryResponse(evidenceQueryResult{Records: []EvidenceRecord{{Family: FamilyDispatch}}}, time.Now())
 	want := []presentation.Column{
 		{Key: "family", Label: "Family", Essential: true},
+		{Key: "identity", Label: "Identity", Essential: true},
 		{Key: "state", Label: "State", Essential: true},
 		{Key: "classification", Label: "Classification", Essential: true},
-		{Key: "safe_to_resume", Label: "Resume", Essential: true},
-		{Key: "manual_recovery", Label: "Recovery", Essential: true},
+		{Key: "action", Label: "Action", Essential: true},
 		{Key: "unit", Label: "Unit"},
 		{Key: "version", Label: "Version"},
 		{Key: "tag", Label: "Tag"},
-		{Key: "pending_action", Label: "Pending action"},
-		{Key: "automatic_continuation", Label: "Automatic"},
-		{Key: "lifecycle", Label: "Lifecycle"},
+		{Key: "linked_execution", Label: "Linked execution"},
 	}
 	if response.PresentationTable == nil || !reflect.DeepEqual(response.PresentationTable.Columns, want) {
 		t.Fatalf("human table columns = %#v, want %#v", response.PresentationTable, want)
@@ -277,8 +275,8 @@ func TestEvidenceDetailResponseShowsEverySafeFieldAndCompleteTypedRecord(t *test
 	}
 
 	response := mapEvidenceDetailResponse(result, time.Date(2026, time.July, 18, 12, 30, 0, 0, time.UTC))
-	if response.PresentationTable != nil || response.RendererHint != "table" {
-		t.Fatalf("detail response should use existing property/value rendering: %#v", response)
+	if response.PresentationTable == nil || response.PresentationProperties == nil || response.RendererHint != "table" {
+		t.Fatalf("detail response should retain data and add Evidence presentation: %#v", response)
 	}
 	items, ok := response.Data["items"].([]map[string]any)
 	if !ok {
@@ -325,20 +323,21 @@ func TestEvidenceSummaryRendersResponsiveLayoutsWithoutForensicColumns(t *testin
 	}}}, time.Now())
 
 	wide := renderEvidenceAtWidth(t, response, renderer.FormatWide, 240)
-	wideHeader := strings.Split(ansi.Strip(wide), "\n")[0]
-	for _, label := range []string{"Family", "State", "Classification", "Resume", "Recovery", "Unit", "Version", "Tag", "Pending action", "Automatic", "Lifecycle"} {
-		if !strings.Contains(wideHeader, label) {
-			t.Fatalf("wide Evidence header missing %q: %q", label, wideHeader)
+	widePlain := ansi.Strip(wide)
+	for _, label := range []string{"Evidence Summary", "Evidence Inventory", "Family", "Identity", "State", "Classification", "Action", "Unit", "Version", "Tag", "Linked execution"} {
+		if !strings.Contains(widePlain, label) {
+			t.Fatalf("wide Evidence output missing %q:\n%s", label, widePlain)
 		}
 	}
-	for _, forensic := range []string{"Identity", "Digest", "Owner", "Path", "Guidance", strings.Repeat("a", 16)} {
-		if strings.Contains(ansi.Strip(wide), forensic) {
-			t.Fatalf("Evidence summary leaked detail-only value %q:\n%s", forensic, ansi.Strip(wide))
+	for _, forensic := range []string{"Digest SHA-256", "Source path", "/repo/private/evidence.json"} {
+		if strings.Contains(widePlain, forensic) {
+			t.Fatalf("Evidence summary leaked describe-only value %q:\n%s", forensic, widePlain)
 		}
 	}
 
 	narrow := ansi.Strip(renderEvidenceAtWidth(t, response, renderer.FormatTable, 24))
-	if !strings.Contains(narrow, "Family: dispatch") || !strings.Contains(narrow, "Recovery: false") || strings.Contains(narrow, "────") {
+	if !strings.Contains(narrow, "Family: dispatch") || !strings.Contains(narrow, "Identity:") ||
+		!strings.Contains(narrow, "Action:") || strings.Contains(narrow, "────") {
 		t.Fatalf("narrow Evidence output is not a vertical summary:\n%s", narrow)
 	}
 }

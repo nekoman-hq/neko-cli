@@ -21,8 +21,9 @@ type evidenceCommandHandler struct {
 }
 
 type evidenceArchiveCommandHandler struct {
-	archive evidenceArchiver
-	clock   evidenceResponseClock
+	archive  evidenceArchiver
+	progress evidenceArchiveProgress
+	clock    evidenceResponseClock
 }
 
 // HandleEvidence inspects release evidence without mutating journals or files.
@@ -57,9 +58,11 @@ func HandleEvidenceArchive(req plugin.Request) (*plugin.Response, error) {
 // repository root.
 func HandleEvidenceArchiveAt(root workspace.RepositoryRoot, req plugin.Request) (*plugin.Response, error) {
 	req.Context.WorkingDir = root.Path()
+	progress := terminalEvidenceArchiveProgress{}
 	handler := evidenceArchiveCommandHandler{
-		archive: newEvidenceArchiveUseCase(),
-		clock:   systemEvidenceResponseClock{},
+		archive:  newEvidenceArchiveUseCaseWithProgress(progress),
+		progress: progress,
+		clock:    systemEvidenceResponseClock{},
 	}
 	return handler.Handle(req)
 }
@@ -74,16 +77,23 @@ func (handler evidenceCommandHandler) Handle(req plugin.Request) (*plugin.Respon
 		return nil, err
 	}
 	if request.IdentityPrefix != "" {
-		return mapEvidenceDetailResponse(result, handler.clock.Now()), nil
+		return mapEvidenceDetailResponseForRequest(request, result, handler.clock.Now()), nil
 	}
-	return mapEvidenceQueryResponse(result, handler.clock.Now()), nil
+	return mapEvidenceQueryResponseForRequest(request, result, handler.clock.Now()), nil
 }
 
 func (handler evidenceArchiveCommandHandler) Handle(req plugin.Request) (*plugin.Response, error) {
+	reportEvidenceArchiveProgress(handler.progress, evidenceArchiveProgressEvent{Kind: evidenceArchiveValidatingRequest})
 	request, err := parseEvidenceArchiveRequest(req.Flags, req.Context.WorkingDir)
 	if err != nil {
+		reportEvidenceArchiveProgress(handler.progress, evidenceArchiveProgressEvent{
+			Kind: evidenceArchiveRefused, Phase: "request validation",
+		})
 		return nil, err
 	}
+	reportEvidenceArchiveProgress(handler.progress, evidenceArchiveProgressEvent{
+		Kind: evidenceArchiveRequestValidated, Family: request.Family, Identity: request.Identity,
+	})
 	result, err := handler.archive.Archive(context.Background(), request)
 	if err != nil {
 		return nil, err

@@ -18,29 +18,55 @@ type evidenceArchiveResult struct {
 }
 
 type evidenceArchiveUseCase struct {
-	query evidenceQueryRunner
+	query    evidenceQueryRunner
+	progress evidenceArchiveProgress
 }
 
 func newEvidenceArchiveUseCase() evidenceArchiveUseCase {
-	return evidenceArchiveUseCase{query: newEvidenceQueryUseCase()}
+	return newEvidenceArchiveUseCaseWithProgress(terminalEvidenceArchiveProgress{})
+}
+
+func newEvidenceArchiveUseCaseWithProgress(progress evidenceArchiveProgress) evidenceArchiveUseCase {
+	return evidenceArchiveUseCase{query: newEvidenceQueryUseCase(), progress: progress}
 }
 
 func (useCase evidenceArchiveUseCase) Archive(ctx context.Context, request evidenceArchiveRequest) (evidenceArchiveResult, error) {
+	reportEvidenceArchiveProgress(useCase.progress, evidenceArchiveProgressEvent{
+		Kind: evidenceArchiveResolvingFamily, Family: request.Family,
+	})
+	reportEvidenceArchiveProgress(useCase.progress, evidenceArchiveProgressEvent{Kind: evidenceArchiveReadingEvidence})
 	result, err := useCase.query.Query(ctx, evidenceQueryRequest{
 		RepositoryRoot: request.RepositoryRoot,
 		Family:         request.Family,
 	})
 	if err != nil {
+		reportEvidenceArchiveProgress(useCase.progress, evidenceArchiveProgressEvent{
+			Kind: evidenceArchiveRefused, Phase: "evidence read",
+		})
 		return evidenceArchiveResult{}, err
 	}
+	reportEvidenceArchiveProgress(useCase.progress, evidenceArchiveProgressEvent{
+		Kind: evidenceArchiveResolvingIdentity, Identity: request.Identity,
+	})
+	reportEvidenceArchiveProgress(useCase.progress, evidenceArchiveProgressEvent{
+		Kind: evidenceArchiveVerifyingDigest, Digest: request.DigestSHA256,
+	})
 	record, err := selectArchivableEvidenceRecord(result, request)
 	if err != nil {
+		reportEvidenceArchiveProgress(useCase.progress, evidenceArchiveProgressEvent{
+			Kind: evidenceArchiveRefused, Phase: "identity or digest validation",
+		})
 		return evidenceArchiveResult{}, err
 	}
-	source, archive, err := archiveCompletedEvidence(record)
+	reportEvidenceArchiveProgress(useCase.progress, evidenceArchiveProgressEvent{Kind: evidenceArchiveDigestVerified})
+	source, archive, err := archiveCompletedEvidence(record, useCase.progress)
 	if err != nil {
+		reportEvidenceArchiveProgress(useCase.progress, evidenceArchiveProgressEvent{
+			Kind: evidenceArchiveRefused, Phase: "guarded filesystem operation",
+		})
 		return evidenceArchiveResult{}, err
 	}
+	reportEvidenceArchiveProgress(useCase.progress, evidenceArchiveProgressEvent{Kind: evidenceArchiveCompleted})
 	return evidenceArchiveResult{
 		Family:       record.Family,
 		Identity:     record.Identity,
@@ -71,7 +97,7 @@ func selectArchivableEvidenceRecord(result evidenceQueryResult, request evidence
 	return EvidenceRecord{}, fmt.Errorf("matching evidence record was not found")
 }
 
-func archiveCompletedEvidence(record EvidenceRecord) (string, string, error) {
+func archiveCompletedEvidence(record EvidenceRecord, progress evidenceArchiveProgress) (string, string, error) {
 	info, err := os.Lstat(record.Path)
 	if err != nil {
 		return "", "", fmt.Errorf("re-observe evidence file: %w", err)
@@ -94,14 +120,23 @@ func archiveCompletedEvidence(record EvidenceRecord) (string, string, error) {
 		return "", "", fmt.Errorf("secure evidence archive directory: %w", chmodErr)
 	}
 	archivePath := filepath.Join(archiveDir, record.Identity+"-"+record.DigestSHA256+".json")
+	reportEvidenceArchiveProgress(progress, evidenceArchiveProgressEvent{
+		Kind: evidenceArchiveCheckingTarget, Archive: archivePath,
+	})
 	if _, statErr := os.Lstat(archivePath); statErr == nil {
 		return "", "", fmt.Errorf("evidence archive already exists")
 	} else if !os.IsNotExist(statErr) {
 		return "", "", fmt.Errorf("inspect evidence archive path: %w", statErr)
 	}
+	reportEvidenceArchiveProgress(progress, evidenceArchiveProgressEvent{Kind: evidenceArchiveTargetAvailable})
+	reportEvidenceArchiveProgress(progress, evidenceArchiveProgressEvent{Kind: evidenceArchivePreparingWrite})
 	if writeErr := releaseconfig.AtomicWriteFile(archivePath, data, 0600); writeErr != nil {
 		return "", "", fmt.Errorf("write evidence archive: %w", writeErr)
 	}
+	reportEvidenceArchiveProgress(progress, evidenceArchiveProgressEvent{
+		Kind: evidenceArchiveWriteCompleted, Archive: archivePath,
+	})
+	reportEvidenceArchiveProgress(progress, evidenceArchiveProgressEvent{Kind: evidenceArchiveVerifyingResult})
 	archived, err := os.ReadFile(archivePath)
 	if err != nil {
 		return "", "", fmt.Errorf("verify evidence archive: %w", err)
@@ -109,8 +144,13 @@ func archiveCompletedEvidence(record EvidenceRecord) (string, string, error) {
 	if string(archived) != string(data) {
 		return "", "", fmt.Errorf("evidence archive bytes do not match source")
 	}
+	reportEvidenceArchiveProgress(progress, evidenceArchiveProgressEvent{Kind: evidenceArchiveResultVerified})
+	reportEvidenceArchiveProgress(progress, evidenceArchiveProgressEvent{
+		Kind: evidenceArchiveRemovingSource, Source: record.Path,
+	})
 	if removeErr := os.Remove(record.Path); removeErr != nil {
 		return "", "", fmt.Errorf("remove archived evidence source: %w", removeErr)
 	}
+	reportEvidenceArchiveProgress(progress, evidenceArchiveProgressEvent{Kind: evidenceArchiveSourceRemoved})
 	return record.Path, archivePath, nil
 }

@@ -62,6 +62,9 @@ func releaseExecutionRecord(path string, data []byte, journal release.ReleaseExe
 		DigestSHA256:          sha256Hex(data),
 		CreatedAt:             formatEvidenceTime(journal.CreatedAt.String()),
 		UpdatedAt:             formatEvidenceTime(journal.UpdatedAt.String()),
+		dispatchIdentity:      journal.DispatchJournalIdentity,
+		releaseCommitSHA:      journal.ReleaseCommitSHA,
+		tagTargetSHA:          journal.TagTargetSHA,
 	}
 }
 

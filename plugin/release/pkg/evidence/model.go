@@ -43,6 +43,9 @@ type EvidenceRecord struct {
 	Guidance              string
 	Path                  string
 	DigestSHA256          string
+	dispatchIdentity      string
+	releaseCommitSHA      string
+	tagTargetSHA          string
 }
 
 type EvidenceDiagnostic struct {

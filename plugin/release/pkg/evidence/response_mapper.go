@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
-	"github.com/nekoman-hq/neko-cli/pkg/presentation"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata"
 )
 
@@ -20,7 +19,11 @@ func (systemEvidenceResponseClock) Now() time.Time {
 }
 
 func mapEvidenceQueryResponse(result evidenceQueryResult, timestamp time.Time) *plugin.Response {
-	return &plugin.Response{
+	return mapEvidenceQueryResponseForRequest(evidenceQueryRequest{}, result, timestamp)
+}
+
+func mapEvidenceQueryResponseForRequest(request evidenceQueryRequest, result evidenceQueryResult, timestamp time.Time) *plugin.Response {
+	response := &plugin.Response{
 		Status: "success",
 		Metadata: plugin.ResponseMetadata{
 			Plugin:    metadata.PluginName,
@@ -33,14 +36,19 @@ func mapEvidenceQueryResponse(result evidenceQueryResult, timestamp time.Time) *
 			"evidence":    result.Records,
 			"diagnostics": result.Diagnostics,
 		},
-		RendererHint:      "table",
-		PresentationTable: evidenceSummaryTable(),
+		RendererHint: "table",
 	}
+	attachEvidencePresentation(response, request, result)
+	return response
 }
 
 func mapEvidenceDetailResponse(result evidenceQueryResult, timestamp time.Time) *plugin.Response {
+	return mapEvidenceDetailResponseForRequest(evidenceQueryRequest{}, result, timestamp)
+}
+
+func mapEvidenceDetailResponseForRequest(request evidenceQueryRequest, result evidenceQueryResult, timestamp time.Time) *plugin.Response {
 	record := result.Records[0]
-	return &plugin.Response{
+	response := &plugin.Response{
 		Status: "success",
 		Metadata: plugin.ResponseMetadata{
 			Plugin:    metadata.PluginName,
@@ -55,22 +63,8 @@ func mapEvidenceDetailResponse(result evidenceQueryResult, timestamp time.Time) 
 		},
 		RendererHint: "table",
 	}
-}
-
-func evidenceSummaryTable() *presentation.Table {
-	return &presentation.Table{Columns: []presentation.Column{
-		{Key: "family", Label: "Family", Essential: true},
-		{Key: "state", Label: "State", Essential: true},
-		{Key: "classification", Label: "Classification", Essential: true},
-		{Key: "safe_to_resume", Label: "Resume", Essential: true},
-		{Key: "manual_recovery", Label: "Recovery", Essential: true},
-		{Key: "unit", Label: "Unit"},
-		{Key: "version", Label: "Version"},
-		{Key: "tag", Label: "Tag"},
-		{Key: "pending_action", Label: "Pending action"},
-		{Key: "automatic_continuation", Label: "Automatic"},
-		{Key: "lifecycle", Label: "Lifecycle"},
-	}}
+	attachEvidencePresentation(response, request, result)
+	return response
 }
 
 func evidenceDetailItems(record EvidenceRecord) []map[string]any {
@@ -98,7 +92,7 @@ func evidenceDetailItems(record EvidenceRecord) []map[string]any {
 }
 
 func mapEvidenceArchiveResponse(result evidenceArchiveResult, timestamp time.Time) *plugin.Response {
-	return &plugin.Response{
+	response := &plugin.Response{
 		Status: "success",
 		Metadata: plugin.ResponseMetadata{
 			Plugin:    metadata.PluginName,
@@ -118,6 +112,8 @@ func mapEvidenceArchiveResponse(result evidenceArchiveResult, timestamp time.Tim
 		},
 		RendererHint: "table",
 	}
+	attachEvidenceArchivePresentation(response, result)
+	return response
 }
 
 func evidenceResponseItems(result evidenceQueryResult) []map[string]any {
