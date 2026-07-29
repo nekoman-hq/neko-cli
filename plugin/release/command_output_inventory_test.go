@@ -21,11 +21,11 @@ type releaseCommandOutputInventoryEntry struct {
 var characterizedReleaseCommandOutputInventory = []releaseCommandOutputInventoryEntry{
 	{Name: "init", Scope: "V2", Access: "mutating", Network: "local-only", Response: "structured", Classification: "describe+verbose", Outputs: []string{"table", "json"}},
 	{Name: "unit-add", Scope: "V2", Access: "mutating", Network: "local-only", Response: "structured", Classification: "describe+verbose", Outputs: []string{"table", "json"}},
-	{Name: "init-options", Scope: "V2", Access: "read-only", Network: "local-only", Response: "structured", Classification: "neither", Outputs: []string{"json"}},
+	{Name: "init-options", Scope: "V2", Access: "read-only", Network: "local-only", Response: "structured", Classification: "neither", Outputs: []string{"table", "json"}},
 	{Name: "migrate", Scope: "shared", Access: "mutating", Network: "local-only", Response: "structured", Classification: "describe+verbose", Outputs: []string{"table", "json"}},
-	{Name: "patch", Scope: "shared", Access: "mutating", Network: "optionally-remote", Response: "lifecycle", Classification: "describe+verbose", Outputs: []string{"text", "json"}},
-	{Name: "minor", Scope: "shared", Access: "mutating", Network: "optionally-remote", Response: "lifecycle", Classification: "describe+verbose", Outputs: []string{"text", "json"}},
-	{Name: "major", Scope: "shared", Access: "mutating", Network: "optionally-remote", Response: "lifecycle", Classification: "describe+verbose", Outputs: []string{"text", "json"}},
+	{Name: "patch", Scope: "shared", Access: "mutating", Network: "optionally-remote", Response: "lifecycle", Classification: "describe+verbose", Outputs: []string{"table", "json"}},
+	{Name: "minor", Scope: "shared", Access: "mutating", Network: "optionally-remote", Response: "lifecycle", Classification: "describe+verbose", Outputs: []string{"table", "json"}},
+	{Name: "major", Scope: "shared", Access: "mutating", Network: "optionally-remote", Response: "lifecycle", Classification: "describe+verbose", Outputs: []string{"table", "json"}},
 	{Name: "plan", Scope: "shared", Access: "read-only", Network: "local-only", Response: "structured", Classification: "describe-only", Outputs: []string{"table", "json"}},
 	{Name: "doctor", Scope: "V2", Access: "read-only", Network: "explicit-remote-read", Response: "structured", Classification: "describe-only", Outputs: []string{"table", "json"}},
 	{Name: "units", Scope: "V2", Access: "read-only", Network: "local-only", Response: "structured", Classification: "describe-only", Outputs: []string{"table", "json"}},
@@ -33,8 +33,8 @@ var characterizedReleaseCommandOutputInventory = []releaseCommandOutputInventory
 	{Name: "ci-validate-context", Scope: "V2", Access: "read-only", Network: "local-only", Response: "structured", Classification: "describe-only", Outputs: []string{"table", "json", "github"}},
 	{Name: "github-workflow-init", Scope: "V2", Access: "mutating", Network: "local-only", Response: "structured", Classification: "describe+verbose", Outputs: []string{"table", "json"}},
 	{Name: "resume", Scope: "V2", Access: "mutating", Network: "optionally-remote", Response: "lifecycle", Classification: "describe+verbose", Outputs: []string{"table", "json"}},
-	{Name: "history", Scope: "shared", Access: "read-only", Network: "local-only", Response: "structured", Classification: "neither-with-generic-log-drift", Outputs: []string{"table", "json"}},
-	{Name: "contributors", Scope: "shared", Access: "read-only", Network: "local-only", Response: "structured", Classification: "neither-with-generic-log-drift", Outputs: []string{"table", "json"}},
+	{Name: "history", Scope: "shared", Access: "read-only", Network: "local-only", Response: "structured", Classification: "neither", Outputs: []string{"table", "json"}},
+	{Name: "contributors", Scope: "shared", Access: "read-only", Network: "local-only", Response: "structured", Classification: "neither", Outputs: []string{"table", "json"}},
 	{Name: "validate", Scope: "shared", Access: "read-only", Network: "local-only", Response: "mode-sensitive-structured", Classification: "describe-only", Outputs: []string{"table", "json"}},
 	{Name: "evidence", Scope: "shared", Access: "read-only", Network: "local-only", Response: "legacy-structured", Classification: "describe-only", Outputs: []string{"table", "json"}},
 	{Name: "evidence-archive", Scope: "shared", Access: "guarded-mutation", Network: "local-only", Response: "legacy-structured", Classification: "limited-describe+verbose", Outputs: []string{"table", "json"}},
@@ -121,7 +121,7 @@ func TestReleaseManifestCharacterizesNoAliasesAndGlobalFlagOwnership(t *testing.
 	}
 }
 
-func TestReleaseManifestCharacterizesSelectableRendererDrift(t *testing.T) {
+func TestReleaseManifestUsesOnlySelectableRendererDeclarations(t *testing.T) {
 	data, err := os.ReadFile("manifest.json")
 	if err != nil {
 		t.Fatalf("read manifest: %v", err)
@@ -132,7 +132,7 @@ func TestReleaseManifestCharacterizesSelectableRendererDrift(t *testing.T) {
 	if err := json.Unmarshal(data, &manifest); err != nil {
 		t.Fatalf("decode manifest: %v", err)
 	}
-	if !reflect.DeepEqual(manifest.RendererTypes, []string{"table", "json", "github", "text"}) {
+	if !reflect.DeepEqual(manifest.RendererTypes, []string{"table", "json", "github"}) {
 		t.Fatalf("renderer types = %v", manifest.RendererTypes)
 	}
 }

@@ -238,8 +238,8 @@ func TestSetupAndMigrationManifestOutputContracts(t *testing.T) {
 			}
 		}
 	}
-	if outputs := commands["init-options"].Outputs; !reflect.DeepEqual(outputs, []string{"json"}) {
-		t.Fatalf("init-options outputs changed outside scope: %#v", outputs)
+	if outputs := commands["init-options"].Outputs; !reflect.DeepEqual(outputs, []string{"table", "json"}) {
+		t.Fatalf("init-options outputs = %#v, want table and json", outputs)
 	}
 }
 
@@ -267,7 +267,7 @@ func TestValidateManifestClarifiesRepositoryWideValidation(t *testing.T) {
 	if !present {
 		t.Fatal("validate command is missing")
 	}
-	if command.Description != "Validate the complete release configuration" {
+	if command.Description != "Validate the complete release configuration; global --describe adds safe validation facts and global --verbose is a no-op" {
 		t.Fatalf("validate description = %q", command.Description)
 	}
 	want := map[string]string{
@@ -309,7 +309,7 @@ func TestPipelineManifestContract(t *testing.T) {
 		command.Flags[1].Name != "verify-remote" || command.Flags[1].Type != "bool" || command.Flags[1].Required {
 		t.Fatalf("pipeline flags = %#v", command.Flags)
 	}
-	for _, fragment := range []string{"default human output is concise", "actionable findings", "global --describe", "structured inspection details", "global --verbose", "execution logs", "--verify-remote", "GET-only"} {
+	for _, fragment := range []string{"default output is concise", "global --describe", "safe structured facts", "global --verbose is a no-op", "--verify-remote", "GET-only"} {
 		if !strings.Contains(command.Description, fragment) {
 			t.Fatalf("pipeline description omitted %q: %q", fragment, command.Description)
 		}
