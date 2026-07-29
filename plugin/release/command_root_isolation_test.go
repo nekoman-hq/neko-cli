@@ -74,8 +74,8 @@ func TestHandleRequestAtIsolatesPluginIndexAcrossRepositories(t *testing.T) {
 }
 
 func TestHandleRequestAtIsolatesPluginIndexOutputAcrossRepositories(t *testing.T) {
-	firstRoot := t.TempDir()
-	secondRoot := t.TempDir()
+	firstRoot := newReleasePluginIndexTempDir(t)
+	secondRoot := newReleasePluginIndexTempDir(t)
 	cwd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("get current cwd: %v", err)
@@ -105,6 +105,20 @@ func TestHandleRequestAtIsolatesPluginIndexOutputAcrossRepositories(t *testing.T
 	assertRootIsolationOutputItem(t, firstResp, "dist/plugin-index.json")
 	assertRootIsolationOutputItem(t, secondResp, "dist/plugin-index.json")
 	assertProcessWorkingDirectory(t, cwd)
+}
+
+func newReleasePluginIndexTempDir(t *testing.T) string {
+	t.Helper()
+	root, err := os.MkdirTemp("/private/tmp", "neko-plugin-index-root-*")
+	if err != nil {
+		t.Fatalf("create plugin-index root fixture: %v", err)
+	}
+	t.Cleanup(func() {
+		if removeErr := os.RemoveAll(root); removeErr != nil {
+			t.Errorf("remove plugin-index root fixture %s: %v", root, removeErr)
+		}
+	})
+	return root
 }
 
 func TestReleaseContextValidationCommandUsesNestedExplicitRootsWithoutMutation(t *testing.T) {
