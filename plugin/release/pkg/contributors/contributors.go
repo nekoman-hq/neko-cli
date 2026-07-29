@@ -1,7 +1,6 @@
 package contributors
 
 import (
-	"github.com/nekoman-hq/neko-cli/pkg/log"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
 )
@@ -34,12 +33,6 @@ func HandleContributorsAt(root workspace.RepositoryRoot, req plugin.Request) (*p
 }
 
 func (handler contributorsCommandHandler) Handle(req plugin.Request) (*plugin.Response, error) {
-	log.PluginPrint(log.Exec, "Collecting contributors")
-
 	result, failure := handler.query.Query(parseContributorsQueryRequest(req.Flags))
-	if failure == nil {
-		log.PluginPrint(log.Exec, "Successfully collected contributors")
-	}
-
 	return mapContributorsQueryResponse(result, failure, handler.clock.Now()), nil
 }

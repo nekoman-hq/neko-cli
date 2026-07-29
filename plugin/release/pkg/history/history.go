@@ -7,9 +7,7 @@ package history
 */
 
 import (
-	"github.com/nekoman-hq/neko-cli/pkg/log"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
-	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
 )
 
@@ -41,13 +39,6 @@ func HandleHistoryAt(root workspace.RepositoryRoot, req plugin.Request) (*plugin
 }
 
 func (handler historyCommandHandler) Handle(req plugin.Request) (*plugin.Response, error) {
-	log.PluginPrint(log.Exec, "Starting release history")
-
 	result, failure := handler.query.Query(parseHistoryQueryRequest(req.Flags))
-	if failure == nil && result.SourceFormat == config.SourceFormatV1 {
-		log.PluginV(log.Exec, "Found %d tags", len(result.Entries))
-		log.PluginPrint(log.Exec, "Release history completed")
-	}
-
 	return mapHistoryQueryResponse(result, failure, handler.clock.Now()), nil
 }

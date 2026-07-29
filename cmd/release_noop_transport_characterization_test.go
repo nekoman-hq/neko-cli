@@ -81,7 +81,7 @@ func TestReleaseInitOptionsCharacterizesIntentionalNoOpModes(t *testing.T) {
 	assertReleaseNoOpJSONInvariance(t, manifest, root, "init-options", nil)
 }
 
-func TestReleaseHistoryAndContributorsCharacterizeGenericVerboseLogDrift(t *testing.T) {
+func TestReleaseHistoryAndContributorsKeepIntentionalNoOpModes(t *testing.T) {
 	manifest := installReleaseReadonlyHelperPlugin(t)
 	root := newReleaseLifecycleV2Repository(t)
 	flags := []string{"--unit", "api"}
@@ -92,10 +92,9 @@ func TestReleaseHistoryAndContributorsCharacterizeGenericVerboseLogDrift(t *test
 
 	tests := []struct {
 		command string
-		logs    []string
 	}{
-		{command: "history", logs: []string{"Starting release history"}},
-		{command: "contributors", logs: []string{"Collecting contributors", "Successfully collected contributors"}},
+		{command: "history"},
+		{command: "contributors"},
 	}
 	for _, test := range tests {
 		t.Run(test.command, func(t *testing.T) {
@@ -108,16 +107,25 @@ func TestReleaseHistoryAndContributorsCharacterizeGenericVerboseLogDrift(t *test
 			if defaultErr != nil || verboseErr != nil {
 				t.Fatalf("%s exits: default=%v verbose=%v", test.command, defaultErr, verboseErr)
 			}
-			for _, logLine := range test.logs {
-				if strings.Contains(defaultOutput, logLine) || !strings.Contains(verboseOutput, logLine) {
-					t.Fatalf(
-						"%s generic log characterization for %q changed:\ndefault:\n%s\nverbose:\n%s",
-						test.command,
-						logLine,
-						defaultOutput,
-						verboseOutput,
-					)
-				}
+			if verboseOutput != defaultOutput {
+				t.Fatalf(
+					"%s verbose added generic query narration:\ndefault:\n%s\nverbose:\n%s",
+					test.command,
+					defaultOutput,
+					verboseOutput,
+				)
+			}
+			describeOutput, describeErr := executeReleaseReadonlyCommand(
+				t, manifest, root, test.command, flags, releaseReadonlyMode{describe: true},
+			)
+			combinedOutput, combinedErr := executeReleaseReadonlyCommand(
+				t, manifest, root, test.command, flags, releaseReadonlyMode{describe: true, verbose: true},
+			)
+			if describeErr != nil || combinedErr != nil {
+				t.Fatalf("%s describe exits: describe=%v combined=%v", test.command, describeErr, combinedErr)
+			}
+			if combinedOutput != describeOutput {
+				t.Fatalf("%s combined mode added content beyond ordinary describe metadata", test.command)
 			}
 			assertReleaseNoOpJSONInvariance(t, manifest, root, test.command, flags)
 		})
