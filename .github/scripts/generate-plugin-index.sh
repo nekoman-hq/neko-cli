@@ -40,7 +40,7 @@ cp plugin/release/manifest.json "$plugin_dir/release/manifest.json"
 
 NEKO_PLUGIN_DIR="$plugin_dir" \
   go run . release plugin-index \
-  --output "$INDEX_OUTPUT" \
+  --output-file "$INDEX_OUTPUT" \
   --repository "$GITHUB_REPOSITORY"
 
 if [[ ! -s "$INDEX_OUTPUT" ]]; then

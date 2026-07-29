@@ -592,24 +592,24 @@
       ],
       "flags": [
         {
-          "name": "output",
+          "name": "output-file",
           "type": "string",
           "required": false,
-          "description": "Optional file path to write plugin-index.json"
+          "description": "Write plugin-index.json to this file; omit to render raw schema-v1 JSON without persistence"
         },
         {
           "name": "check",
           "type": "bool",
           "required": false,
           "default": false,
-          "description": "Validate that the plugin index can be generated without writing a file"
+          "description": "Validate Plugin Index sources and schema without rendering or writing the artifact"
         },
         {
           "name": "pretty",
           "type": "bool",
           "required": false,
           "default": true,
-          "description": "Pretty-print generated JSON"
+          "description": "Pretty-print raw schema-v1 JSON on stdout or in the persisted file"
         },
         {
           "name": "repository",

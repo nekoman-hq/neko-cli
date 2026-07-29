@@ -24,7 +24,7 @@ func TestParsePluginIndexCommandRequestProducesTypedModesAndDefaults(t *testing.
 		},
 		{
 			name:  "wrong types keep defaults",
-			flags: map[string]any{"output": true, "check": "true", "pretty": "false", "repository": false},
+			flags: map[string]any{"output-file": true, "check": "true", "pretty": "false", "repository": false},
 			want:  pluginIndexCommandRequest{Repository: DefaultRepository, Mode: pluginIndexRenderMode, Pretty: true},
 		},
 		{
@@ -34,7 +34,7 @@ func TestParsePluginIndexCommandRequestProducesTypedModesAndDefaults(t *testing.
 		},
 		{
 			name:  "persist",
-			flags: map[string]any{"output": "build/plugin-index.json", "pretty": false},
+			flags: map[string]any{"output-file": "build/plugin-index.json", "pretty": false},
 			want: pluginIndexCommandRequest{
 				Repository: DefaultRepository,
 				OutputPath: "build/plugin-index.json",
@@ -44,7 +44,7 @@ func TestParsePluginIndexCommandRequestProducesTypedModesAndDefaults(t *testing.
 		},
 		{
 			name:    "conflicting modes",
-			flags:   map[string]any{"check": true, "output": "plugin-index.json"},
+			flags:   map[string]any{"check": true, "output-file": "plugin-index.json"},
 			wantErr: true,
 		},
 	}
@@ -66,7 +66,7 @@ func TestPluginIndexCommandHandlerStopsOnParserFailure(t *testing.T) {
 	runner := &recordingPluginIndexCommandRunner{}
 	handler := pluginIndexCommandHandler{useCase: runner, clock: fixedPluginIndexClock{}}
 
-	resp, err := handler.Handle(plugin.Request{Flags: map[string]any{"check": true, "output": "plugin-index.json"}})
+	resp, err := handler.Handle(plugin.Request{Flags: map[string]any{"check": true, "output-file": "plugin-index.json"}})
 	if resp != nil || err == nil {
 		t.Fatalf("Handle = (%#v, %v), want parser error", resp, err)
 	}
@@ -167,7 +167,7 @@ func TestGeneratePluginIndexUseCaseMakesModesAndStopPointsExplicit(t *testing.T)
 	})
 
 	t.Run("persist receives complete built bytes", func(t *testing.T) {
-		root := t.TempDir()
+		root := newPluginIndexTempDir(t)
 		query := &fakePluginIndexQuerier{index: sampleCommandIndex()}
 		builder := &fakePluginIndexOutputBuilder{output: []byte("complete output")}
 		persister := &fakePluginIndexOutputPersister{}
@@ -191,7 +191,7 @@ func TestGeneratePluginIndexUseCaseMakesModesAndStopPointsExplicit(t *testing.T)
 		query := &fakePluginIndexQuerier{index: sampleCommandIndex()}
 		builder := &fakePluginIndexOutputBuilder{output: []byte("complete output")}
 		persister := &fakePluginIndexOutputPersister{}
-		outputPath := filepath.Join(t.TempDir(), "plugin-index.json")
+		outputPath := filepath.Join(newPluginIndexTempDir(t), "plugin-index.json")
 		useCase := newGeneratePluginIndexUseCase(query, builder, persister)
 
 		result, err := useCase.Run(context.Background(), pluginIndexCommandRequest{

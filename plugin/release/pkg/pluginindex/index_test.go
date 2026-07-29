@@ -238,9 +238,9 @@ func TestHandlePluginIndexDefaultReturnsRawJSONIndex(t *testing.T) {
 func TestHandlePluginIndexWritesOutputFile(t *testing.T) {
 	root := newIndexTestRepo(t)
 	t.Chdir(root)
-	output := filepath.Join(t.TempDir(), "plugin-index.json")
+	output := filepath.Join(newPluginIndexTempDir(t), "plugin-index.json")
 
-	resp, err := HandlePluginIndex(pluginRequest(map[string]any{"output": output}))
+	resp, err := HandlePluginIndex(pluginRequest(map[string]any{"output-file": output}))
 	if err != nil {
 		t.Fatalf("HandlePluginIndex: %v", err)
 	}
@@ -264,11 +264,11 @@ func TestHandlePluginIndexRejectsCheckWithOutput(t *testing.T) {
 	root := newIndexTestRepo(t)
 	t.Chdir(root)
 
-	_, err := HandlePluginIndex(pluginRequest(map[string]any{"check": true, "output": filepath.Join(t.TempDir(), "plugin-index.json")}))
+	_, err := HandlePluginIndex(pluginRequest(map[string]any{"check": true, "output-file": filepath.Join(newPluginIndexTempDir(t), "plugin-index.json")}))
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if !strings.Contains(err.Error(), "--check cannot be used with --output") {
+	if !strings.Contains(err.Error(), "--check cannot be used with --output-file") {
 		t.Fatalf("error = %q", err.Error())
 	}
 }
@@ -280,9 +280,23 @@ func pluginRequest(flags map[string]any) plugin.Request {
 	return plugin.Request{Command: CommandName, Flags: flags}
 }
 
+func newPluginIndexTempDir(t *testing.T) string {
+	t.Helper()
+	root, err := os.MkdirTemp("/private/tmp", "neko-plugin-index-test-*")
+	if err != nil {
+		t.Fatalf("create plugin-index test directory: %v", err)
+	}
+	t.Cleanup(func() {
+		if removeErr := os.RemoveAll(root); removeErr != nil {
+			t.Errorf("remove plugin-index test directory %s: %v", root, removeErr)
+		}
+	})
+	return root
+}
+
 func newIndexTestRepo(t *testing.T) string {
 	t.Helper()
-	root := t.TempDir()
+	root := newPluginIndexTempDir(t)
 	writeFile(t, filepath.Join(root, ".neko", "release.config.json"), configJSON(
 		`{"id":"cli","paths":["**"],"workingDirectory":".","tagPrefix":"v","executor":{"type":"goreleaser"}}`,
 		pluginUnitJSON("plugin-ui", "plugin-ui/v", "ui", "plugin/ui/manifest.json", "plugin-ui", "plugin-ui"),

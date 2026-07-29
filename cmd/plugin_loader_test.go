@@ -113,14 +113,16 @@ func TestPluginCommandHelpSeparatesInheritedGlobalPluginResponseFlags(t *testing
 	assertOrderedHelpFlags(t, globalSection, "--describe", "--verbose", "--output", "--github-output-file")
 }
 
-func TestPluginIndexHelpKeepsKnownLocalGlobalOutputCollisionVisible(t *testing.T) {
+func TestPluginIndexHelpSeparatesFileDestinationFromGlobalOutputFormat(t *testing.T) {
 	manifest := plugin.Manifest{
 		Name: "release",
 		Commands: []plugin.Command{{
 			Name: "plugin-index",
 			Flags: []plugin.Flag{
-				{Name: "output", Type: "string", Description: "Optional file path to write plugin-index.json"},
+				{Name: "output-file", Type: "string", Description: "Write plugin-index.json to this file; omit to render without persistence"},
 				{Name: "check", Type: "bool", Description: "Check only"},
+				{Name: "pretty", Type: "bool", Description: "Pretty-print raw schema-v1 JSON", Default: true},
+				{Name: "repository", Type: "string", Description: "Repository identifier", Default: "nekoman-hq/neko-cli"},
 			},
 		}},
 	}
@@ -138,37 +140,46 @@ func TestPluginIndexHelpKeepsKnownLocalGlobalOutputCollisionVisible(t *testing.T
 	}
 	commandSection := output[commandIndex:globalIndex]
 	globalSection := output[globalIndex:]
-	assertContains(t, commandSection, "--output")
-	assertContains(t, commandSection, "Optional file path to write plugin-index.json")
-	if count := countHelpFlagDefinitions(globalSection, "--output"); count != 0 {
-		t.Fatalf("global plugin-index help defines shadowed --output %d times:\n%s", count, globalSection)
+	for _, name := range []string{"--output-file", "--check", "--pretty", "--repository"} {
+		assertContains(t, commandSection, name)
+		assertNotContains(t, globalSection, name)
 	}
 	for _, name := range []string{"--describe", "--verbose", "--github-output-file"} {
+		assertNotContains(t, commandSection, name)
 		assertContains(t, globalSection, name)
 	}
+	if count := countHelpFlagDefinitions(commandSection, "--output"); count != 0 {
+		t.Fatalf("command section defines local --output %d times:\n%s", count, commandSection)
+	}
+	assertContains(t, globalSection, "--output")
+	assertOrderedHelpFlags(t, commandSection, "--output-file", "--check", "--pretty", "--repository")
+	assertOrderedHelpFlags(t, globalSection, "--describe", "--verbose", "--output", "--github-output-file")
 	if count := countHelpFlagDefinitions(output, "--output"); count != 1 {
-		t.Fatalf("plugin-index --output occurrence count = %d, want one local collision surface:\n%s", count, output)
+		t.Fatalf("plugin-index global --output occurrence count = %d, want one:\n%s", count, output)
+	}
+	if count := countHelpFlagDefinitions(output, "--output-file"); count != 1 {
+		t.Fatalf("plugin-index local --output-file occurrence count = %d, want one:\n%s", count, output)
 	}
 }
 
-func TestPluginIndexCollisionSerializesShadowedOutputLocally(t *testing.T) {
+func TestPluginIndexSerializesOnlyOutputFileLocally(t *testing.T) {
 	root := testRootWithPluginResponseFlags()
 	command := &cobra.Command{Use: "plugin-index"}
-	command.Flags().String("output", "", "Optional file path to write plugin-index.json")
+	command.Flags().String("output-file", "", "Optional file path to write plugin-index.json")
 	var got map[string]any
 	command.RunE = func(cmd *cobra.Command, _ []string) error {
 		got = extractFlags(cmd)
 		return nil
 	}
 	root.AddCommand(command)
-	root.SetArgs([]string{"plugin-index", "--output", "json"})
+	root.SetArgs([]string{"plugin-index", "--output-file", "dist/plugin-index.json", "--output", "json"})
 	if err := root.Execute(); err != nil {
-		t.Fatalf("execute plugin-index collision characterization: %v", err)
+		t.Fatalf("execute plugin-index flag extraction: %v", err)
 	}
 
-	want := map[string]any{"output": "json"}
+	want := map[string]any{"output-file": "dist/plugin-index.json"}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("extracted collision flags = %#v, want %#v", got, want)
+		t.Fatalf("extracted plugin-index flags = %#v, want %#v", got, want)
 	}
 }
 
@@ -204,6 +215,25 @@ func TestExtractFlagsSerializesOnlyCommandLocalNonPersistentFlags(t *testing.T) 
 	want := map[string]any{"unit": "cli", "show": true}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("extracted flags = %#v, want %#v", got, want)
+	}
+}
+
+func TestValidatePluginOutputFormatUsesCoreSupportedVocabulary(t *testing.T) {
+	for _, format := range []string{"table", "json", "wide", "github"} {
+		t.Run(format, func(t *testing.T) {
+			if err := validatePluginOutputFormat(format); err != nil {
+				t.Fatalf("validatePluginOutputFormat(%q): %v", format, err)
+			}
+		})
+	}
+	for _, format := range []string{"", "plugin-index.json", "/private/tmp/plugin-index.json", "yaml"} {
+		t.Run("invalid "+format, func(t *testing.T) {
+			err := validatePluginOutputFormat(format)
+			if err == nil || !strings.Contains(err.Error(), `invalid output format "`+format+`"`) ||
+				!strings.Contains(err.Error(), "table, json, wide, github") {
+				t.Fatalf("validatePluginOutputFormat(%q) = %v", format, err)
+			}
+		})
 	}
 }
 

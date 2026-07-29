@@ -85,11 +85,11 @@ func TestHandleRequestAtIsolatesPluginIndexOutputAcrossRepositories(t *testing.T
 	first := mustValidateRepositoryRoot(t, firstRoot)
 	second := mustValidateRepositoryRoot(t, secondRoot)
 
-	firstResp, err := handleRequestAt(first, plugin.Request{Command: "plugin-index", Flags: map[string]any{"output": "dist/plugin-index.json"}}, nil)
+	firstResp, err := handleRequestAt(first, plugin.Request{Command: "plugin-index", Flags: map[string]any{"output-file": "dist/plugin-index.json"}}, nil)
 	if err != nil {
 		t.Fatalf("plugin-index output first: %v", err)
 	}
-	secondResp, err := handleRequestAt(second, plugin.Request{Command: "plugin-index", Flags: map[string]any{"output": "dist/plugin-index.json"}}, nil)
+	secondResp, err := handleRequestAt(second, plugin.Request{Command: "plugin-index", Flags: map[string]any{"output-file": "dist/plugin-index.json"}}, nil)
 	if err != nil {
 		t.Fatalf("plugin-index output second: %v", err)
 	}

@@ -18,10 +18,10 @@ type pluginIndexCommandRequest struct {
 }
 
 func parsePluginIndexCommandRequest(flags map[string]any) (pluginIndexCommandRequest, error) {
-	outputPath := pluginIndexFlagString(flags, "output")
+	outputPath := pluginIndexFlagString(flags, "output-file")
 	check := pluginIndexFlagBool(flags, "check")
 	if check && outputPath != "" {
-		return pluginIndexCommandRequest{}, fmt.Errorf("--check cannot be used with --output")
+		return pluginIndexCommandRequest{}, fmt.Errorf("--check cannot be used with --output-file")
 	}
 
 	repository := pluginIndexFlagString(flags, "repository")

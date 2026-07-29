@@ -357,6 +357,9 @@ func addFlagToCommand(cmd *cobra.Command, flag plugin.Flag) {
 //   - Plugin execution fails
 //   - Response rendering fails
 func executePlugin(pluginName string, cmd *cobra.Command, args []string) error {
+	if err := validatePluginOutputFormat(outputFormat); err != nil {
+		return err
+	}
 	d := dispatcher.NewDispatcher(PluginDir)
 
 	// Determine the command name - if we're on the root plugin command and have args,
@@ -419,6 +422,15 @@ func executePlugin(pluginName string, cmd *cobra.Command, args []string) error {
 		return err
 	}
 	return renderedPluginResponseExitError(cmd, resp)
+}
+
+func validatePluginOutputFormat(format string) error {
+	switch renderer.OutputFormat(format) {
+	case renderer.FormatTable, renderer.FormatJSON, renderer.FormatWide, renderer.FormatGitHub:
+		return nil
+	default:
+		return fmt.Errorf("invalid output format %q; supported formats: table, json, wide, github", format)
+	}
 }
 
 func renderedPluginResponseExitError(cmd *cobra.Command, response *plugin.Response) error {

@@ -124,10 +124,10 @@ func TestManifestMatchesPublicReleaseContract(t *testing.T) {
 			"confirm-archive": "bool",
 		},
 		"plugin-index": {
-			"output":     "string",
-			"check":      "bool",
-			"pretty":     "bool",
-			"repository": "string",
+			"output-file": "string",
+			"check":       "bool",
+			"pretty":      "bool",
+			"repository":  "string",
 		},
 	}
 
@@ -154,6 +154,24 @@ func TestManifestMatchesPublicReleaseContract(t *testing.T) {
 		if _, ok := commands[forbidden]; ok {
 			t.Fatalf("manifest must not expose unsupported command %q", forbidden)
 		}
+	}
+}
+
+func TestPluginIndexManifestSeparatesFileOutputFromCoreResponseOutput(t *testing.T) {
+	command, present := loadManifestCommands(t)["plugin-index"]
+	if !present {
+		t.Fatal("plugin-index command is missing")
+	}
+	got := make([]string, 0, len(command.Flags))
+	for _, flag := range command.Flags {
+		got = append(got, flag.Name)
+		if flag.Name == "output" {
+			t.Fatal("plugin-index manifest must not shadow Core --output")
+		}
+	}
+	want := []string{"output-file", "check", "pretty", "repository"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("plugin-index manifest flag order = %v, want %v", got, want)
 	}
 }
 

@@ -13,20 +13,20 @@ import (
 
 func TestHandlePluginIndexCharacterizesGoErrorBoundary(t *testing.T) {
 	t.Run("conflicting modes fail before discovery", func(t *testing.T) {
-		root := t.TempDir()
+		root := newPluginIndexTempDir(t)
 		t.Chdir(root)
 
 		resp, err := HandlePluginIndex(pluginRequest(map[string]any{
-			"check":  true,
-			"output": "plugin-index.json",
+			"check":       true,
+			"output-file": "plugin-index.json",
 		}))
-		if resp != nil || err == nil || !strings.Contains(err.Error(), "--check cannot be used with --output") {
+		if resp != nil || err == nil || !strings.Contains(err.Error(), "--check cannot be used with --output-file") {
 			t.Fatalf("HandlePluginIndex = (%#v, %v), want nil response and mode error", resp, err)
 		}
 	})
 
 	t.Run("discovery failure is a Go error", func(t *testing.T) {
-		root := t.TempDir()
+		root := newPluginIndexTempDir(t)
 		t.Chdir(root)
 
 		resp, err := HandlePluginIndex(pluginRequest(nil))
@@ -68,6 +68,23 @@ func TestHandlePluginIndexCheckContractIsReadOnly(t *testing.T) {
 	}
 }
 
+func TestHandlePluginIndexRawRenderContractIsReadOnly(t *testing.T) {
+	root := newIndexTestRepo(t)
+	t.Chdir(root)
+	before := snapshotIndexTree(t, root)
+
+	response, err := HandlePluginIndex(pluginRequest(nil))
+	if err != nil {
+		t.Fatalf("HandlePluginIndex: %v", err)
+	}
+	if response.RendererHint != "raw-json" {
+		t.Fatalf("raw renderer hint = %q", response.RendererHint)
+	}
+	if after := snapshotIndexTree(t, root); !reflect.DeepEqual(after, before) {
+		t.Fatalf("raw render mutated repository\nbefore: %#v\nafter:  %#v", before, after)
+	}
+}
+
 func TestGenerateReturnsContextCancellationWithoutMutation(t *testing.T) {
 	root := newIndexTestRepo(t)
 	before := snapshotIndexTree(t, root)
@@ -86,10 +103,10 @@ func TestGenerateReturnsContextCancellationWithoutMutation(t *testing.T) {
 func TestHandlePluginIndexOutputPathFormattingOverwriteAndModes(t *testing.T) {
 	root := newIndexTestRepo(t)
 	t.Chdir(root)
-	outputDir := filepath.Join(t.TempDir(), "nested", "registry")
+	outputDir := filepath.Join(newPluginIndexTempDir(t), "nested", "registry")
 	output := filepath.Join(outputDir, "plugin-index.json")
 
-	resp, err := HandlePluginIndex(pluginRequest(map[string]any{"output": output}))
+	resp, err := HandlePluginIndex(pluginRequest(map[string]any{"output-file": output}))
 	if err != nil {
 		t.Fatalf("HandlePluginIndex create: %v", err)
 	}
@@ -113,9 +130,9 @@ func TestHandlePluginIndexOutputPathFormattingOverwriteAndModes(t *testing.T) {
 		t.Fatalf("chmod output: %v", chmodErr)
 	}
 	resp, err = HandlePluginIndex(pluginRequest(map[string]any{
-		"output":     output,
-		"pretty":     false,
-		"repository": "example/project",
+		"output-file": output,
+		"pretty":      false,
+		"repository":  "example/project",
 	}))
 	if err != nil {
 		t.Fatalf("HandlePluginIndex replace: %v", err)
@@ -139,14 +156,14 @@ func TestHandlePluginIndexOutputPathFormattingOverwriteAndModes(t *testing.T) {
 func TestHandlePluginIndexOutputDirectoryFailurePreservesExistingFile(t *testing.T) {
 	root := newIndexTestRepo(t)
 	t.Chdir(root)
-	blocker := filepath.Join(t.TempDir(), "blocked")
+	blocker := filepath.Join(newPluginIndexTempDir(t), "blocked")
 	const original = "unrelated content"
 	if err := os.WriteFile(blocker, []byte(original), 0600); err != nil {
 		t.Fatalf("write blocker: %v", err)
 	}
 
 	resp, err := HandlePluginIndex(pluginRequest(map[string]any{
-		"output": filepath.Join(blocker, "plugin-index.json"),
+		"output-file": filepath.Join(blocker, "plugin-index.json"),
 	}))
 	if resp != nil || err == nil || !strings.Contains(err.Error(), "plugin index output parent") {
 		t.Fatalf("HandlePluginIndex = (%#v, %v), want output parent Go error", resp, err)
@@ -155,6 +172,27 @@ func TestHandlePluginIndexOutputDirectoryFailurePreservesExistingFile(t *testing
 		t.Fatalf("failure modified existing file: got %q want %q", got, original)
 	}
 	assertIndexMode(t, blocker, 0600)
+}
+
+func TestHandlePluginIndexInvalidSourceDoesNotCreateOutputOrPartialFile(t *testing.T) {
+	root := newIndexTestRepo(t)
+	t.Chdir(root)
+	writeManifest(t, root, "plugin/release/manifest.json", "release", "9.9.9", "invalid fixture")
+	before := snapshotIndexTree(t, root)
+	outputRoot := newPluginIndexTempDir(t)
+	output := filepath.Join(outputRoot, "nested", "plugin-index.json")
+
+	response, err := HandlePluginIndex(pluginRequest(map[string]any{"output-file": output}))
+	if response != nil || err == nil || !strings.Contains(err.Error(), "does not match state version") {
+		t.Fatalf("HandlePluginIndex = (%#v, %v), want source validation error", response, err)
+	}
+	if _, statErr := os.Stat(output); !os.IsNotExist(statErr) {
+		t.Fatalf("invalid source created output: %v", statErr)
+	}
+	if after := snapshotIndexTree(t, root); !reflect.DeepEqual(after, before) {
+		t.Fatalf("invalid source mutated repository\nbefore: %#v\nafter:  %#v", before, after)
+	}
+	assertNoPluginIndexTemporaryFiles(t, filepath.Dir(output), output)
 }
 
 type indexContractSnapshot struct {

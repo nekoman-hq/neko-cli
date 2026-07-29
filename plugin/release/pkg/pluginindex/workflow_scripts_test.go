@@ -51,7 +51,7 @@ func TestPluginIndexScriptsFailClearlyWhenEnvMissing(t *testing.T) {
 func TestGeneratePluginIndexScriptGeneratesAndValidatesIndex(t *testing.T) {
 	root := repositoryRoot(t)
 	installFakeGoAndJQ(t)
-	outputPath := filepath.Join(t.TempDir(), "plugin-index.json")
+	outputPath := filepath.Join(newPluginIndexTempDir(t), "plugin-index.json")
 
 	cmd := exec.Command("bash", filepath.Join(root, ".github/scripts/generate-plugin-index.sh"))
 	cmd.Dir = root
@@ -72,7 +72,7 @@ func TestGeneratePluginIndexScriptGeneratesAndValidatesIndex(t *testing.T) {
 func TestGeneratePluginIndexScriptFailsOnReleaseEntryMismatch(t *testing.T) {
 	root := repositoryRoot(t)
 	installFakeGoAndJQ(t)
-	outputPath := filepath.Join(t.TempDir(), "plugin-index.json")
+	outputPath := filepath.Join(newPluginIndexTempDir(t), "plugin-index.json")
 
 	cmd := exec.Command("bash", filepath.Join(root, ".github/scripts/generate-plugin-index.sh"))
 	cmd.Dir = root
@@ -186,6 +186,7 @@ func TestPluginIndexScriptsContainRequiredSafetyChecks(t *testing.T) {
 	root := repositoryRoot(t)
 	generateScript := readFile(t, filepath.Join(root, ".github/scripts/generate-plugin-index.sh"))
 	for _, want := range []string{
+		"--output-file \"$INDEX_OUTPUT\"",
 		".schemaVersion == 1",
 		".repository == $repository",
 		".unit == $unit",
@@ -198,6 +199,7 @@ func TestPluginIndexScriptsContainRequiredSafetyChecks(t *testing.T) {
 	} {
 		assertContains(t, generateScript, want)
 	}
+	assertNotContains(t, generateScript, "plugin-index \\\n  --output \"$INDEX_OUTPUT\"")
 
 	publishScript := readFile(t, filepath.Join(root, ".github/scripts/publish-plugin-index.sh"))
 	for _, want := range []string{
@@ -222,7 +224,7 @@ func repositoryRoot(t *testing.T) string {
 
 func installFakeGH(t *testing.T, viewExit string) string {
 	t.Helper()
-	dir := t.TempDir()
+	dir := newPluginIndexTempDir(t)
 	logPath := filepath.Join(dir, "gh.log")
 	fakeGH := `#!/bin/sh
 printf '%s\n' "$*" >> "$GH_FAKE_LOG"
@@ -242,7 +244,7 @@ exit 0
 
 func installFakeGoAndJQ(t *testing.T) {
 	t.Helper()
-	dir := t.TempDir()
+	dir := newPluginIndexTempDir(t)
 
 	fakeGo := `#!/bin/sh
 set -eu
@@ -266,7 +268,7 @@ if [ "$1" = "run" ]; then
   output=""
   repository=""
   while [ "$#" -gt 0 ]; do
-    if [ "$1" = "--output" ]; then
+    if [ "$1" = "--output-file" ]; then
       output="$2"
       shift 2
       continue
@@ -368,7 +370,7 @@ func generateScriptEnv(t *testing.T, outputPath, unit, version, tag string) []st
 		"RELEASE_UNIT="+unit,
 		"RELEASE_VERSION="+version,
 		"RELEASE_TAG="+tag,
-		"RUNNER_TEMP="+t.TempDir(),
+		"RUNNER_TEMP="+newPluginIndexTempDir(t),
 		"GITHUB_TOKEN=ghp_secret",
 	)
 }
@@ -387,7 +389,7 @@ func publishScriptEnv(t *testing.T, logPath, indexPath string) []string {
 
 func writeTempIndex(t *testing.T) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "plugin-index.json")
+	path := filepath.Join(newPluginIndexTempDir(t), "plugin-index.json")
 	if err := os.WriteFile(path, []byte(`{"schemaVersion":1,"repository":"nekoman-hq/neko-cli","plugins":[]}`), 0644); err != nil {
 		t.Fatalf("write temp index: %v", err)
 	}
