@@ -50,8 +50,20 @@ func GetTags() []string {
 
 // GetTagsAt returns all git tags from an explicit repository root.
 func GetTagsAt(repositoryRoot string) []string {
-	log.PluginV(log.Exec, "Fetching git tags: "+
-		log.ColorText(log.ColorGreen, "git tag"))
+	return getTagsAt(repositoryRoot, true)
+}
+
+// GetTagsAtForInspection returns the same legacy tag inventory without
+// lifecycle/query progress logs.
+func GetTagsAtForInspection(repositoryRoot string) []string {
+	return getTagsAt(repositoryRoot, false)
+}
+
+func getTagsAt(repositoryRoot string, reportProgress bool) []string {
+	if reportProgress {
+		log.PluginV(log.Exec, "Fetching git tags: "+
+			log.ColorText(log.ColorGreen, "git tag"))
+	}
 
 	cmd := gitCommandAt(repositoryRoot, "tag")
 	tagsOut, err := cmd.Output()
@@ -79,15 +91,29 @@ func CountCommitsBetween(from, to string) int {
 // CountCommitsBetweenAt counts commits between two references from an explicit
 // repository root.
 func CountCommitsBetweenAt(repositoryRoot, from, to string) int {
+	return countCommitsBetweenAt(repositoryRoot, from, to, true)
+}
+
+// CountCommitsBetweenAtForInspection returns the same legacy commit count
+// without lifecycle/query progress logs.
+func CountCommitsBetweenAtForInspection(repositoryRoot, from, to string) int {
+	return countCommitsBetweenAt(repositoryRoot, from, to, false)
+}
+
+func countCommitsBetweenAt(repositoryRoot, from, to string, reportProgress bool) int {
 	var cmd *exec.Cmd
 
 	if from == "" {
-		log.PluginV(log.Exec, fmt.Sprintf("Counting commits up to %s: %s",
-			to, log.ColorText(log.ColorGreen, fmt.Sprintf("git rev-list --count %s", to))))
+		if reportProgress {
+			log.PluginV(log.Exec, fmt.Sprintf("Counting commits up to %s: %s",
+				to, log.ColorText(log.ColorGreen, fmt.Sprintf("git rev-list --count %s", to))))
+		}
 		cmd = gitCommandAt(repositoryRoot, "rev-list", "--count", to)
 	} else {
-		log.PluginV(log.Exec, fmt.Sprintf("Counting commits between %s and %s: %s",
-			from, to, log.ColorText(log.ColorGreen, fmt.Sprintf("git rev-list --count %s..%s", from, to))))
+		if reportProgress {
+			log.PluginV(log.Exec, fmt.Sprintf("Counting commits between %s and %s: %s",
+				from, to, log.ColorText(log.ColorGreen, fmt.Sprintf("git rev-list --count %s..%s", from, to))))
+		}
 		cmd = gitCommandAt(repositoryRoot, "rev-list", "--count", fmt.Sprintf("%s..%s", from, to))
 	}
 
@@ -202,6 +228,16 @@ func ContributorsForPaths(paths []string) ([]Contributor, error) {
 // ContributorsForPathsAt returns contributors constrained to pathspecs from an
 // explicit repository root.
 func ContributorsForPathsAt(repositoryRoot string, paths []string) ([]Contributor, error) {
+	return contributorsForPathsAt(repositoryRoot, paths, true)
+}
+
+// ContributorsForPathsAtForInspection returns the same path-constrained
+// contributors without lifecycle/query progress logs.
+func ContributorsForPathsAtForInspection(repositoryRoot string, paths []string) ([]Contributor, error) {
+	return contributorsForPathsAt(repositoryRoot, paths, false)
+}
+
+func contributorsForPathsAt(repositoryRoot string, paths []string, reportProgress bool) ([]Contributor, error) {
 	args := []string{"shortlog", "-sne", "HEAD"}
 	args = append(args, gitPathspecArgs(paths)...)
 
@@ -209,7 +245,7 @@ func ContributorsForPathsAt(repositoryRoot string, paths []string) ([]Contributo
 	if err != nil {
 		return nil, err
 	}
-	return parseContributors(out), nil
+	return parseContributorsWithProgress(out, reportProgress), nil
 }
 
 func gitPathspecArgs(paths []string) []string {

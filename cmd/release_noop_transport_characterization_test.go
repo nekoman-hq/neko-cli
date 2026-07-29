@@ -96,65 +96,69 @@ func TestReleaseHistoryAndContributorsKeepIntentionalNoOpModes(t *testing.T) {
 	t.Setenv("GITHUB_TOKEN", "final-output-secret")
 	t.Setenv("GH_TOKEN", "final-output-secret")
 	manifest := installReleaseReadonlyHelperPlugin(t)
-	root := newReleaseLifecycleV2Repository(t)
-	flags := []string{"--unit", "api"}
-
-	statusBefore := runReleaseReadonlyGit(t, root, "status", "--short")
-	headBefore := runReleaseReadonlyGit(t, root, "rev-parse", "HEAD")
-	tagsBefore := runReleaseReadonlyGit(t, root, "tag", "--list")
-
-	tests := []struct {
-		command string
+	repositories := []struct {
+		name string
+		root string
+		unit string
 	}{
-		{command: "history"},
-		{command: "contributors"},
+		{name: "V1", root: newReleaseLifecycleV1Repository(t), unit: "default"},
+		{name: "V2", root: newReleaseLifecycleV2Repository(t), unit: "api"},
 	}
-	for _, test := range tests {
-		t.Run(test.command, func(t *testing.T) {
-			defaultOutput, defaultErr := executeReleaseReadonlyCommand(
-				t, manifest, root, test.command, flags, releaseReadonlyMode{},
-			)
-			verboseOutput, verboseErr := executeReleaseReadonlyCommand(
-				t, manifest, root, test.command, flags, releaseReadonlyMode{verbose: true},
-			)
-			if defaultErr != nil || verboseErr != nil {
-				t.Fatalf("%s exits: default=%v verbose=%v", test.command, defaultErr, verboseErr)
-			}
-			if verboseOutput != defaultOutput {
-				t.Fatalf(
-					"%s verbose added generic query narration:\ndefault:\n%s\nverbose:\n%s",
-					test.command,
-					defaultOutput,
-					verboseOutput,
-				)
-			}
-			describeOutput, describeErr := executeReleaseReadonlyCommand(
-				t, manifest, root, test.command, flags, releaseReadonlyMode{describe: true},
-			)
-			combinedOutput, combinedErr := executeReleaseReadonlyCommand(
-				t, manifest, root, test.command, flags, releaseReadonlyMode{describe: true, verbose: true},
-			)
-			if describeErr != nil || combinedErr != nil {
-				t.Fatalf("%s describe exits: describe=%v combined=%v", test.command, describeErr, combinedErr)
-			}
-			if combinedOutput != describeOutput {
-				t.Fatalf("%s combined mode added content beyond ordinary describe metadata", test.command)
-			}
-			for _, output := range []string{defaultOutput, verboseOutput, describeOutput, combinedOutput} {
-				assertReleaseNoOpOutputSafe(t, output, root)
-			}
-			assertReleaseNoOpJSONInvariance(t, manifest, root, test.command, flags)
-		})
-	}
+	for _, repository := range repositories {
+		t.Run(repository.name, func(t *testing.T) {
+			flags := []string{"--unit", repository.unit}
+			statusBefore := runReleaseReadonlyGit(t, repository.root, "status", "--short")
+			headBefore := runReleaseReadonlyGit(t, repository.root, "rev-parse", "HEAD")
+			tagsBefore := runReleaseReadonlyGit(t, repository.root, "tag", "--list")
 
-	if got := runReleaseReadonlyGit(t, root, "status", "--short"); got != statusBefore {
-		t.Fatalf("no-op characterization mutated worktree/index: before %q after %q", statusBefore, got)
-	}
-	if got := runReleaseReadonlyGit(t, root, "rev-parse", "HEAD"); got != headBefore {
-		t.Fatalf("no-op characterization moved HEAD: before %q after %q", headBefore, got)
-	}
-	if got := runReleaseReadonlyGit(t, root, "tag", "--list"); got != tagsBefore {
-		t.Fatalf("no-op characterization changed tags: before %q after %q", tagsBefore, got)
+			for _, command := range []string{"history", "contributors"} {
+				t.Run(command, func(t *testing.T) {
+					defaultOutput, defaultErr := executeReleaseReadonlyCommand(
+						t, manifest, repository.root, command, flags, releaseReadonlyMode{},
+					)
+					verboseOutput, verboseErr := executeReleaseReadonlyCommand(
+						t, manifest, repository.root, command, flags, releaseReadonlyMode{verbose: true},
+					)
+					if defaultErr != nil || verboseErr != nil {
+						t.Fatalf("%s exits: default=%v verbose=%v", command, defaultErr, verboseErr)
+					}
+					if verboseOutput != defaultOutput {
+						t.Fatalf(
+							"%s verbose added generic query narration:\ndefault:\n%s\nverbose:\n%s",
+							command,
+							defaultOutput,
+							verboseOutput,
+						)
+					}
+					describeOutput, describeErr := executeReleaseReadonlyCommand(
+						t, manifest, repository.root, command, flags, releaseReadonlyMode{describe: true},
+					)
+					combinedOutput, combinedErr := executeReleaseReadonlyCommand(
+						t, manifest, repository.root, command, flags, releaseReadonlyMode{describe: true, verbose: true},
+					)
+					if describeErr != nil || combinedErr != nil {
+						t.Fatalf("%s describe exits: describe=%v combined=%v", command, describeErr, combinedErr)
+					}
+					if combinedOutput != describeOutput {
+						t.Fatalf("%s combined mode added content beyond ordinary describe metadata", command)
+					}
+					for _, output := range []string{defaultOutput, verboseOutput, describeOutput, combinedOutput} {
+						assertReleaseNoOpOutputSafe(t, output, repository.root)
+					}
+					assertReleaseNoOpJSONInvariance(t, manifest, repository.root, command, flags)
+				})
+			}
+
+			if got := runReleaseReadonlyGit(t, repository.root, "status", "--short"); got != statusBefore {
+				t.Fatalf("no-op characterization mutated worktree/index: before %q after %q", statusBefore, got)
+			}
+			if got := runReleaseReadonlyGit(t, repository.root, "rev-parse", "HEAD"); got != headBefore {
+				t.Fatalf("no-op characterization moved HEAD: before %q after %q", headBefore, got)
+			}
+			if got := runReleaseReadonlyGit(t, repository.root, "tag", "--list"); got != tagsBefore {
+				t.Fatalf("no-op characterization changed tags: before %q after %q", tagsBefore, got)
+			}
+		})
 	}
 }
 

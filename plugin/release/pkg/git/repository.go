@@ -226,8 +226,20 @@ func Contributors() ([]Contributor, error) {
 // ContributorsAt returns a list of contributors with their commit counts from
 // an explicit repository root.
 func ContributorsAt(repositoryRoot string) ([]Contributor, error) {
-	log.PluginV(log.Exec, "Fetching contributors: "+
-		log.ColorText(log.ColorGreen, "git shortlog -sne HEAD"))
+	return contributorsAt(repositoryRoot, true)
+}
+
+// ContributorsAtForInspection returns the same legacy contributor inventory
+// without lifecycle/query progress logs.
+func ContributorsAtForInspection(repositoryRoot string) ([]Contributor, error) {
+	return contributorsAt(repositoryRoot, false)
+}
+
+func contributorsAt(repositoryRoot string, reportProgress bool) ([]Contributor, error) {
+	if reportProgress {
+		log.PluginV(log.Exec, "Fetching contributors: "+
+			log.ColorText(log.ColorGreen, "git shortlog -sne HEAD"))
+	}
 
 	cmd := gitCommandAt(repositoryRoot, "shortlog", "-sne", "HEAD")
 	contrib, err := cmd.Output()
@@ -238,12 +250,14 @@ func ContributorsAt(repositoryRoot string) ([]Contributor, error) {
 	}
 
 	contribLines := strings.Split(strings.TrimSpace(string(contrib)), "\n")
-	log.PluginV(log.Exec, fmt.Sprintf("Found %d contributors", len(contribLines)))
+	if reportProgress {
+		log.PluginV(log.Exec, fmt.Sprintf("Found %d contributors", len(contribLines)))
+	}
 
-	return parseContributors(string(contrib)), nil
+	return parseContributorsWithProgress(string(contrib), reportProgress), nil
 }
 
-func parseContributors(output string) []Contributor {
+func parseContributorsWithProgress(output string, reportProgress bool) []Contributor {
 	contribLines := strings.Split(strings.TrimSpace(output), "\n")
 	contributors := make([]Contributor, 0, len(contribLines))
 	for _, line := range contribLines {
@@ -252,7 +266,9 @@ func parseContributors(output string) []Contributor {
 		}
 		parts := strings.Fields(line)
 		if len(parts) < 2 {
-			log.PluginV(log.Exec, fmt.Sprintf("Skipping invalid contributor line: %s", line))
+			if reportProgress {
+				log.PluginV(log.Exec, fmt.Sprintf("Skipping invalid contributor line: %s", line))
+			}
 			continue
 		}
 

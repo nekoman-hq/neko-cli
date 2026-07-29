@@ -81,7 +81,7 @@ func contributorsFailure(code string, err error) *contributorsQueryFailure {
 type contributorsReleaseRepositoryReader struct{}
 
 func (contributorsReleaseRepositoryReader) Load(root string) (*config.ReleaseRepository, error) {
-	return config.LoadReleaseRepository(root)
+	return config.LoadReleaseRepositoryForInspection(root)
 }
 
 type contributorsGitAdapter struct {
@@ -89,12 +89,12 @@ type contributorsGitAdapter struct {
 }
 
 func (adapter contributorsGitAdapter) ForRepository() ([]contributorQueryEntry, error) {
-	contributors, err := git.ContributorsAt(adapter.repositoryRoot)
+	contributors, err := git.ContributorsAtForInspection(adapter.repositoryRoot)
 	return contributorEntries(contributors), err
 }
 
 func (adapter contributorsGitAdapter) ForPaths(paths []string) ([]contributorQueryEntry, error) {
-	contributors, err := git.ContributorsForPathsAt(adapter.repositoryRoot, paths)
+	contributors, err := git.ContributorsForPathsAtForInspection(adapter.repositoryRoot, paths)
 	return contributorEntries(contributors), err
 }
 

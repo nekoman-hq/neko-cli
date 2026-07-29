@@ -130,7 +130,7 @@ func historyFailure(code string, err error) *historyQueryFailure {
 type historyReleaseRepositoryReader struct{}
 
 func (historyReleaseRepositoryReader) Load(root string) (*config.ReleaseRepository, error) {
-	return config.LoadReleaseRepository(root)
+	return config.LoadReleaseRepositoryForInspection(root)
 }
 
 type historyGitAdapter struct {
@@ -138,11 +138,11 @@ type historyGitAdapter struct {
 }
 
 func (adapter historyGitAdapter) LegacyTags() []string {
-	return git.GetTagsAt(adapter.repositoryRoot)
+	return git.GetTagsAtForInspection(adapter.repositoryRoot)
 }
 
 func (adapter historyGitAdapter) LegacyCommitCount(from, to string) int {
-	return git.CountCommitsBetweenAt(adapter.repositoryRoot, from, to)
+	return git.CountCommitsBetweenAtForInspection(adapter.repositoryRoot, from, to)
 }
 
 func (adapter historyGitAdapter) UnitTags(spec config.TagSpec) ([]historyUnitTag, error) {
