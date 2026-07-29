@@ -8,7 +8,7 @@ import (
 )
 
 func TestResolvePluginIndexOutputTargetUsesRepositoryRootForRelativePaths(t *testing.T) {
-	root := t.TempDir()
+	root := newPluginIndexTempDir(t)
 	target, err := resolvePluginIndexOutputTarget(root, "nested/plugin-index.json", nil)
 	if err != nil {
 		t.Fatalf("resolvePluginIndexOutputTarget: %v", err)
@@ -20,8 +20,8 @@ func TestResolvePluginIndexOutputTargetUsesRepositoryRootForRelativePaths(t *tes
 }
 
 func TestResolvePluginIndexOutputTargetKeepsExplicitAbsoluteTargets(t *testing.T) {
-	root := t.TempDir()
-	output := filepath.Join(t.TempDir(), "plugin-index.json")
+	root := newPluginIndexTempDir(t)
+	output := filepath.Join(newPluginIndexTempDir(t), "plugin-index.json")
 	target, err := resolvePluginIndexOutputTarget(root, output, nil)
 	if err != nil {
 		t.Fatalf("resolvePluginIndexOutputTarget: %v", err)
@@ -32,7 +32,7 @@ func TestResolvePluginIndexOutputTargetKeepsExplicitAbsoluteTargets(t *testing.T
 }
 
 func TestResolvePluginIndexOutputTargetRejectsRepositoryRelativeTraversal(t *testing.T) {
-	root := t.TempDir()
+	root := newPluginIndexTempDir(t)
 	for _, output := range []string{
 		"../plugin-index.json",
 		"nested/../../plugin-index.json",
@@ -48,7 +48,7 @@ func TestResolvePluginIndexOutputTargetRejectsRepositoryRelativeTraversal(t *tes
 }
 
 func TestResolvePluginIndexOutputTargetRejectsProtectedRepositoryPaths(t *testing.T) {
-	root := t.TempDir()
+	root := newPluginIndexTempDir(t)
 	tests := []struct {
 		output string
 		want   string
@@ -84,7 +84,7 @@ func TestResolvePluginIndexOutputTargetRejectsProtectedRepositoryPaths(t *testin
 
 func TestResolvePluginIndexOutputTargetRejectsUnsafeFilesystemTargets(t *testing.T) {
 	t.Run("target is directory", func(t *testing.T) {
-		root := t.TempDir()
+		root := newPluginIndexTempDir(t)
 		output := filepath.Join(root, "dist", "plugin-index.json")
 		if err := os.MkdirAll(output, 0700); err != nil {
 			t.Fatalf("mkdir output directory: %v", err)
@@ -97,7 +97,7 @@ func TestResolvePluginIndexOutputTargetRejectsUnsafeFilesystemTargets(t *testing
 	})
 
 	t.Run("target is symlink", func(t *testing.T) {
-		root := t.TempDir()
+		root := newPluginIndexTempDir(t)
 		target := filepath.Join(root, "dist", "plugin-index.json")
 		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 			t.Fatalf("mkdir output parent: %v", err)
@@ -113,8 +113,8 @@ func TestResolvePluginIndexOutputTargetRejectsUnsafeFilesystemTargets(t *testing
 	})
 
 	t.Run("repository relative parent resolves outside root", func(t *testing.T) {
-		root := t.TempDir()
-		outside := t.TempDir()
+		root := newPluginIndexTempDir(t)
+		outside := newPluginIndexTempDir(t)
 		if err := os.Symlink(outside, filepath.Join(root, "dist")); err != nil {
 			t.Fatalf("symlink parent: %v", err)
 		}

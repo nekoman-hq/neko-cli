@@ -9,7 +9,7 @@ import (
 )
 
 func TestAtomicPluginIndexOutputPersisterCreatesAndReplacesCanonicalTarget(t *testing.T) {
-	root := t.TempDir()
+	root := newPluginIndexTempDir(t)
 	outputDir := filepath.Join(root, "nested", "registry")
 	outputPath := filepath.Join(outputDir, "plugin-index.json")
 	unrelatedPath := filepath.Join(root, "unrelated.txt")
@@ -46,7 +46,7 @@ func TestAtomicPluginIndexOutputPersisterPreservesOriginalOnRecoverableFailures(
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			root := t.TempDir()
+			root := newPluginIndexTempDir(t)
 			outputPath := filepath.Join(root, "plugin-index.json")
 			unrelatedPath := filepath.Join(root, "unrelated.txt")
 			if err := os.WriteFile(outputPath, []byte("original output\n"), 0600); err != nil {
@@ -113,7 +113,7 @@ func TestAtomicPluginIndexOutputPersisterStopsAtFilesystemFailures(t *testing.T)
 
 func TestAtomicPluginIndexOutputPersisterKeepsExistingFilesystemOnTargetCollisions(t *testing.T) {
 	t.Run("parent is a file", func(t *testing.T) {
-		root := t.TempDir()
+		root := newPluginIndexTempDir(t)
 		parent := filepath.Join(root, "registry")
 		outputPath := filepath.Join(parent, "plugin-index.json")
 		if err := os.WriteFile(parent, []byte("not a directory"), 0600); err != nil {
@@ -128,7 +128,7 @@ func TestAtomicPluginIndexOutputPersisterKeepsExistingFilesystemOnTargetCollisio
 	})
 
 	t.Run("target is a directory", func(t *testing.T) {
-		root := t.TempDir()
+		root := newPluginIndexTempDir(t)
 		outputPath := filepath.Join(root, "plugin-index.json")
 		if err := os.Mkdir(outputPath, 0700); err != nil {
 			t.Fatalf("mkdir target: %v", err)
