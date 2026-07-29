@@ -17,6 +17,7 @@ import (
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 	evidencecmd "github.com/nekoman-hq/neko-cli/plugin/release/pkg/evidence"
+	pluginindexcmd "github.com/nekoman-hq/neko-cli/plugin/release/pkg/pluginindex"
 	releasecmd "github.com/nekoman-hq/neko-cli/plugin/release/pkg/release"
 	validatecmd "github.com/nekoman-hq/neko-cli/plugin/release/pkg/validate"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
@@ -69,6 +70,8 @@ func TestReleaseReadonlyPluginHelperProcess(t *testing.T) {
 		response, err = evidencecmd.HandleEvidence(request)
 	case "evidence-archive":
 		response, err = evidencecmd.HandleEvidenceArchive(request)
+	case "plugin-index":
+		response, err = pluginindexcmd.HandlePluginIndex(request)
 	default:
 		t.Fatalf("unexpected helper command %q", request.Command)
 	}
@@ -158,6 +161,93 @@ func TestReleaseReadonlyCommandsKeepRedirectedAndNoColorOutputANSIAndCredentialF
 				t.Fatalf("%s output contains credential sentinel in mode %#v", test.command, mode)
 			}
 		}
+	}
+}
+
+func TestPluginIndexOutputCollisionCharacterizesCurrentTransport(t *testing.T) {
+	manifest := installReleaseReadonlyHelperPlugin(t)
+	repositoryRoot := newPluginIndexTransportRepository(t)
+
+	raw, rawErr := executeReleaseReadonlyCommand(
+		t, manifest, repositoryRoot, "plugin-index", nil, releaseReadonlyMode{},
+	)
+	pretty, prettyErr := executeReleaseReadonlyCommand(
+		t, manifest, repositoryRoot, "plugin-index", []string{"--pretty"}, releaseReadonlyMode{},
+	)
+	if rawErr != nil || prettyErr != nil {
+		t.Fatalf("raw plugin-index exits: default=%v pretty=%v", rawErr, prettyErr)
+	}
+	if raw != pretty || !strings.HasPrefix(raw, "{\n  \"schemaVersion\": 1,") || !strings.HasSuffix(raw, "\n") {
+		t.Fatalf("raw plugin-index contract changed:\ndefault=%q\npretty=%q", raw, pretty)
+	}
+
+	check, checkErr := executeReleaseReadonlyCommand(
+		t, manifest, repositoryRoot, "plugin-index", []string{"--check"}, releaseReadonlyMode{},
+	)
+	if checkErr != nil {
+		t.Fatalf("check plugin-index exit: %v", checkErr)
+	}
+	for _, want := range []string{"Status", "ok", "Plugins", "2", "Repository", "nekoman-hq/neko-cli"} {
+		if !strings.Contains(check, want) {
+			t.Fatalf("check output omitted %q:\n%s", want, check)
+		}
+	}
+
+	for _, format := range []string{"json", "table"} {
+		t.Run(format, func(t *testing.T) {
+			output, err := executeReleaseReadonlyCommand(
+				t,
+				manifest,
+				repositoryRoot,
+				"plugin-index",
+				[]string{"--output", format},
+				releaseReadonlyMode{},
+			)
+			if err != nil {
+				t.Fatalf("--output %s exit: %v", format, err)
+			}
+			target := filepath.Join(repositoryRoot, format)
+			data, readErr := os.ReadFile(target)
+			if readErr != nil {
+				t.Fatalf("--output %s did not create the shadowed local target: %v", format, readErr)
+			}
+			if removeErr := os.Remove(target); removeErr != nil {
+				t.Fatalf("remove test-owned collision file %s: %v", target, removeErr)
+			}
+			if string(data) != raw {
+				t.Fatalf("--output %s persisted bytes differ from raw output", format)
+			}
+			for _, want := range []string{"Status", "written", "Output", format} {
+				if !strings.Contains(output, want) {
+					t.Fatalf("--output %s structured response omitted %q:\n%s", format, want, output)
+				}
+			}
+			if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
+				t.Fatalf("test-owned collision file was not removed immediately: %v", statErr)
+			}
+		})
+	}
+
+	arbitraryTarget := filepath.Join(repositoryRoot, "arbitrary-plugin-index.json")
+	output, err := executeReleaseReadonlyCommand(
+		t,
+		manifest,
+		repositoryRoot,
+		"plugin-index",
+		[]string{"--output", arbitraryTarget},
+		releaseReadonlyMode{},
+	)
+	if err != nil {
+		t.Fatalf("arbitrary local --output exit: %v", err)
+	}
+	if _, statErr := os.Stat(arbitraryTarget); statErr != nil {
+		t.Fatalf("arbitrary local --output did not persist: %v", statErr)
+	}
+	if removeErr := os.Remove(arbitraryTarget); removeErr != nil {
+		t.Fatalf("remove arbitrary test-owned collision file: %v", removeErr)
+	}
+	if !strings.Contains(output, arbitraryTarget) {
+		t.Fatalf("arbitrary local --output response omitted target:\n%s", output)
 	}
 }
 
@@ -459,6 +549,96 @@ func samePluginExit(left, right error) bool {
 		return left == nil && right == nil
 	}
 	return errors.Is(left, right) || left.Error() == right.Error()
+}
+
+func newPluginIndexTransportRepository(t *testing.T) string {
+	t.Helper()
+	root, err := os.MkdirTemp("/private/tmp", "neko-plugin-index-collision-*")
+	if err != nil {
+		t.Fatalf("create plugin-index fixture: %v", err)
+	}
+	t.Cleanup(func() {
+		if removeErr := os.RemoveAll(root); removeErr != nil {
+			t.Errorf("remove plugin-index fixture %s: %v", root, removeErr)
+		}
+	})
+
+	files := map[string]string{
+		".neko/release.config.json": `{
+  "schemaVersion": 2,
+  "units": [
+    {
+      "id": "plugin-release",
+      "displayName": "Release Plugin",
+      "paths": ["plugin/release/**"],
+      "workingDirectory": ".",
+      "tagPrefix": "plugin-release/v",
+      "kind": "plugin",
+      "plugin": {
+        "name": "release",
+        "manifest": "plugin/release/manifest.json",
+        "assetPrefix": "plugin-release",
+        "binaryName": "plugin-release"
+      },
+      "executor": {
+        "type": "goreleaser",
+        "delivery": "github-actions",
+        "workflow": ".github/workflows/release-plugin-release.yml"
+      }
+    },
+    {
+      "id": "plugin-ui",
+      "displayName": "UI Plugin",
+      "paths": ["plugin/ui/**"],
+      "workingDirectory": ".",
+      "tagPrefix": "plugin-ui/v",
+      "kind": "plugin",
+      "plugin": {
+        "name": "ui",
+        "manifest": "plugin/ui/manifest.json",
+        "assetPrefix": "plugin-ui",
+        "binaryName": "plugin-ui"
+      },
+      "executor": {
+        "type": "goreleaser",
+        "delivery": "github-actions",
+        "workflow": ".github/workflows/release-plugin-ui.yml"
+      }
+    }
+  ]
+}
+`,
+		".neko/release.state.json": `{
+  "schemaVersion": 2,
+  "units": {
+    "plugin-release": {"version": "4.2.0"},
+    "plugin-ui": {"version": "1.0.1"}
+  }
+}
+`,
+		"plugin/release/manifest.json": `{
+  "name": "release",
+  "version": "4.2.0",
+  "description": "Release management plugin"
+}
+`,
+		"plugin/ui/manifest.json": `{
+  "name": "ui",
+  "version": "1.0.1",
+  "description": "UI component plugin"
+}
+`,
+	}
+	for name, contents := range files {
+		path := filepath.Join(root, filepath.FromSlash(name))
+		if mkdirErr := os.MkdirAll(filepath.Dir(path), 0o755); mkdirErr != nil {
+			t.Fatalf("create plugin-index fixture directory: %v", mkdirErr)
+		}
+		if writeErr := os.WriteFile(path, []byte(contents), 0o644); writeErr != nil {
+			t.Fatalf("write plugin-index fixture %s: %v", name, writeErr)
+		}
+	}
+	return root
 }
 
 func newReleaseReadonlyContextRepository(t *testing.T) (string, []string) {

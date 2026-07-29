@@ -151,6 +151,27 @@ func TestPluginIndexHelpKeepsKnownLocalGlobalOutputCollisionVisible(t *testing.T
 	}
 }
 
+func TestPluginIndexCollisionSerializesShadowedOutputLocally(t *testing.T) {
+	root := testRootWithPluginResponseFlags()
+	command := &cobra.Command{Use: "plugin-index"}
+	command.Flags().String("output", "", "Optional file path to write plugin-index.json")
+	var got map[string]any
+	command.RunE = func(cmd *cobra.Command, _ []string) error {
+		got = extractFlags(cmd)
+		return nil
+	}
+	root.AddCommand(command)
+	root.SetArgs([]string{"plugin-index", "--output", "json"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute plugin-index collision characterization: %v", err)
+	}
+
+	want := map[string]any{"output": "json"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("extracted collision flags = %#v, want %#v", got, want)
+	}
+}
+
 func TestCoreCommandHelpDoesNotReceiveCustomPluginFlagSections(t *testing.T) {
 	root := testRootWithPluginResponseFlags()
 	root.AddCommand(&cobra.Command{Use: "version", Short: "Show CLI version"})
