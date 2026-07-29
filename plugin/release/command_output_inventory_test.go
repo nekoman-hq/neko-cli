@@ -49,8 +49,8 @@ func TestReleaseCommandOutputInventoryCharacterizesManifestAndRouting(t *testing
 	var manifest struct {
 		Commands []manifestCommand `json:"commands"`
 	}
-	if err := json.Unmarshal(manifestData, &manifest); err != nil {
-		t.Fatalf("decode manifest: %v", err)
+	if decodeErr := json.Unmarshal(manifestData, &manifest); decodeErr != nil {
+		t.Fatalf("decode manifest: %v", decodeErr)
 	}
 
 	if len(manifest.Commands) != 20 {

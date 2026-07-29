@@ -122,10 +122,10 @@ func TestHandleRequestAtIsolatesUnitPlanAndEvidenceFactsAcrossRepositories(t *te
 	secondStatus := explicitRootGitOutput(t, secondRoot, "status", "--porcelain", "--untracked-files=all")
 	tests := []struct {
 		name          string
-		firstRequest  plugin.Request
-		secondRequest plugin.Request
 		firstNeedle   string
 		secondNeedle  string
+		firstRequest  plugin.Request
+		secondRequest plugin.Request
 	}{
 		{
 			name:          "units",
