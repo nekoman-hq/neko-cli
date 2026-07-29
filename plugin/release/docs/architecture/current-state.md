@@ -425,9 +425,9 @@ The public command contract is duplicated between `manifest.json` and the switch
   chained-table composition, group headings, notes, section titles, terminal
   width, wrapping, deterministic vertical fallback, and semantic TTY-only
   color. Global describe adds structured sections and metadata; global verbose
-  independently adds captured logs. These transport declarations are excluded
-  from public and raw JSON; Pipeline production code imports neither renderer
-  nor terminal code.
+  is a deterministic no-op for this read-only inspection. These transport
+  declarations are excluded from public and raw JSON; Pipeline production code
+  imports neither renderer nor terminal code.
 - Safety: root composition has read-only journal and bounded local Git query
   capability but no Git mutator, direct token resolver, HTTP/dispatch client,
   writer, release-tool runner, cwd mutation, or duplicated
@@ -536,7 +536,7 @@ The public command contract is duplicated between `manifest.json` and the switch
 
 ### `plugin-index`
 
-- Entry: `pluginindex.HandlePluginIndexAt` parses one typed render/check/persist mode, invokes `generatePluginIndexUseCase.Run` once, and maps a typed result. `HandlePluginIndex` remains a compatibility facade that resolves the root before delegating. `--check` with `--output`, discovery, building, and persistence failures intentionally remain Go errors and therefore top-level `EXECUTION_ERROR` values.
+- Entry: `pluginindex.HandlePluginIndexAt` parses one typed render/check/persist mode, invokes `generatePluginIndexUseCase.Run` once, and maps a typed result. `HandlePluginIndex` remains a compatibility facade that resolves the root before delegating. Invalid Core `--output` selection is rejected before dispatch; discovery, building, and persistence failures intentionally remain Go errors and therefore top-level `EXECUTION_ERROR` values.
 - Discovery and validation: `pluginIndexQueryUseCase` owns config/state/manifest reads through `pluginIndexSourceReader`; pure candidate/completion functions validate state SemVer and manifest identity, duplicate checks retain their prior order, and entries are stably sorted by plugin name. Public `Generate` is the compatibility facade over this query.
 - Root ownership: command composition passes the explicit root into `generatePluginIndexUseCase`; public `Generate` retains its existing `GenerateOptions.Root` contract.
 - Output building: `jsonPluginIndexOutputBuilder` alone creates complete pretty or compact JSON bytes with the stable schema/order and trailing newline. It chooses no path, reads no files, and constructs no response. `Write` and `WriteWithOptions` remain public compatibility wrappers over those complete bytes.

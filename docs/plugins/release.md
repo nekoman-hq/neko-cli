@@ -446,8 +446,6 @@ neko release pipeline --unit cli
 neko release pipeline --unit plugin-release
 neko release pipeline --unit plugin-ui
 neko release pipeline --unit cli --describe
-neko release pipeline --unit cli --verbose
-neko release pipeline --unit cli --describe --verbose
 neko release pipeline --unit cli --output json
 neko release pipeline --unit cli --verify-remote
 neko release pipeline --unit cli --verify-remote --describe
@@ -458,8 +456,8 @@ The command is V2-only. Multi-unit repositories require `--unit`; omission is
 accepted only for a single-unit repository. Default inspection is local,
 offline, token-free, and read-only. It always shows the concise Summary plus
 actionable Findings; global `--describe` adds complete structured evidence;
-global `--verbose` adds execution/debug logs only. Explicit `--verify-remote`
-is the sole bounded GitHub GET-only path and is independent from both global
+global `--verbose` is a deterministic no-op. Explicit `--verify-remote` is the
+sole bounded GitHub GET-only path and is independent from both global
 presentation flags.
 
 JSON remains the complete invariant schema-version-1 machine response in every

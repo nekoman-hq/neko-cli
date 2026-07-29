@@ -16,7 +16,7 @@
 ## ✨ Features
 
 - 🔌 **Plugin Architecture** - Extensible via standalone plugin executables
-- 📊 **kubectl-Style Output** - Consistent table, JSON, and text output formats across all plugins
+- 📊 **kubectl-Style Output** - Consistent manifest-declared table, JSON, and workflow output formats
 - 🔄 **Unified Interface** - One CLI to rule all your plugins
 - 📦 **Simple Plugin Management** - Drop-in plugin installation
 - 🛠️ **Developer Friendly** - Easy to create and distribute custom plugins
@@ -169,9 +169,9 @@ This repository releases itself with V2 multi-unit release state:
 - Dry-run release planning needs no token and writes nothing.
 - CLI version, update, and install checks use only stable CLI tags matching `vX.Y.Z`; plugin releases and `plugin-registry` are ignored for CLI updates.
 - Runtime plugin discovery, install, and update use `plugin-index.json` as the registry source of truth. The index is published as the `plugin-index.json` asset on the mutable `plugin-registry` GitHub Release after successful plugin releases; `/releases/latest` and release-prefix fallback discovery are not used for plugin discovery.
-- Use global `--describe` for structured inspection details and global `--verbose` for execution/debug logs. They are independent and may be combined.
+- Use global `--describe` for structured inspection details and global `--verbose` for execution/debug logs where the command owns useful phases. Static and complete read-only queries may intentionally treat either flag as a no-op. They are independent and may be combined.
 
-Copy-ready Release V2 and plugin registry examples live in [Release V2 Examples](docs/release/examples.md). The product boundary for release-ready GitHub Actions bootstrap lives in [Release V2 Bootstrap Product Boundary](docs/release/bootstrap-product-boundary.md).
+The complete Release command/output matrix lives in the canonical [Release CLI Reference](docs/release/cli-reference.md#canonical-command-and-output-contract). Copy-ready Release V2 and plugin registry examples live in [Release V2 Examples](docs/release/examples.md). The product boundary for release-ready GitHub Actions bootstrap lives in [Release V2 Bootstrap Product Boundary](docs/release/bootstrap-product-boundary.md).
 
 ### Global Flags
 

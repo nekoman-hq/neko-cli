@@ -389,13 +389,13 @@ The shared transport contract extends the same renderer with table chaining,
 presentation-only group keys, concise notes, property section titles, and a
 table-level describe-only marker. Core filters that marker only for human
 output. Global `--describe` adds structured sections and response metadata;
-global `--verbose` independently adds captured logs. Describe is not sent in
-the plugin request and therefore cannot enable remote verification or token
-resolution. These fields are not response data and are stripped from public
-and raw JSON, which remain identical with or without describe. Unknown width
-remains a deterministic vertical form, redirected output remains ANSI-free,
-and only a TTY receives semantic lifecycle/runtime color. Pipeline Inspection
-imports neither the renderer nor terminal packages.
+global `--verbose` is a deterministic no-op for Pipeline Inspection. Describe
+is not sent in the plugin request and therefore cannot enable remote
+verification or token resolution. These fields are not response data and are
+stripped from public and raw JSON, which remain identical with or without
+describe. Unknown width remains a deterministic vertical form, redirected
+output remains ANSI-free, and only a TTY receives semantic lifecycle/runtime
+color. Pipeline Inspection imports neither the renderer nor terminal packages.
 
 ### V2 local delivery evaluation
 

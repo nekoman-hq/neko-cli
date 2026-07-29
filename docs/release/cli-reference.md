@@ -1,4 +1,89 @@
 # Release CLI Reference
+
+## Canonical command and output contract
+
+This is the authoritative cross-command reference for Release CLI output.
+There are 20 plugin commands and one Core-owned overview path. The manifest and
+router declare no aliases.
+
+All plugin commands inherit the Core-owned `--describe`, `--verbose`,
+`--output`, and `--github-output-file` flags. These are transport flags, are
+never serialized as command-local request flags, and do not change domain JSON
+or command effects. `--output` selects a response renderer; it never names a
+file. The selectable Release renderers are `table`, `json`, and, only where
+declared, `github`. There is no selectable `text` renderer.
+
+| Command | Scope | Default | `--describe` | `--verbose` | Outputs |
+| --- | --- | --- | --- | --- | --- |
+| `release` | Core | Static command overview; no plugin request | No-op | No-op | Core overview; `--output json` does not convert it |
+| `release init` | V2 | Concise initialized-pair result and next action | Resolved configuration, write plan, validation, limitations | Safe initialization phases | `table`, `json` |
+| `release unit-add` | V2 | Concise added-unit result and next action | Resolved unit, comparison, write plan, validation, limitations | Safe add/write phases | `table`, `json` |
+| `release init-options` | V2 | Complete deterministic initialization choices | No command-owned additions | No-op | `table`, `json` |
+| `release migrate` | Shared | Migration result, targets, archive decision, next action | Complete source, generated-artifact, plan, validation, write, and limitation facts | Safe planning/write phases | `table`, `json` |
+| `release patch` | Shared | Concise lifecycle result; dry-run includes the ordered safe preview | Complete safe lifecycle facts | Chronological lifecycle phases | `table`, `json` |
+| `release minor` | Shared | Concise lifecycle result; dry-run includes the ordered safe preview | Complete safe lifecycle facts | Chronological lifecycle phases | `table`, `json` |
+| `release major` | Shared | Concise lifecycle result; dry-run includes the ordered safe preview | Complete safe lifecycle facts | Chronological lifecycle phases | `table`, `json` |
+| `release plan` | Shared | Useful local release-plan summary | Complete safe plan facts | No-op | `table`, `json` |
+| `release doctor` | V2 | Concise readiness summary and actionable findings | Complete safe diagnostics | No-op | `table`, `json` |
+| `release units` | V2 | Complete deterministic unit inventory | Complete safe unit facts | No-op | `table`, `json` |
+| `release pipeline` | V2 | Concise configured-pipeline summary and actionable findings | Complete safe pipeline facts | No-op | `table`, `json` |
+| `release ci-validate-context` | V2 | Concise validated-context summary or contradictions | Complete checks and resolved context | No-op | `table`, `json`, `github` |
+| `release github-workflow-init` | V2 | Create/current result or dry-run preview | Complete comparison, required-input, validation, and write-plan facts | Safe inspection/write phases | `table`, `json` |
+| `release resume` | V2 | Recovery decision, eligibility, retry safety, and next action | Safe journal, Git, recovery, continuation, and limitation facts | Chronological continuation/refusal phases | `table`, `json` |
+| `release history` | Shared | Complete deterministic release history | No command-owned additions | No-op; no generic Git narration | `table`, `json` |
+| `release contributors` | Shared | Complete deterministic contributor list | No command-owned additions | No-op; no generic Git narration | `table`, `json` |
+| `release validate` | Shared | Complete validation outcome and actionable errors | Safe validation facts | No-op | `table`, `json` |
+| `release evidence` | Shared | Concise evidence classifications | Complete safe evidence facts | No-op | `table`, `json` |
+| `release evidence-archive` | Shared | Exact guarded archive outcome | Existing limited safe write facts | Guarded archive phases | `table`, `json` |
+| `release plugin-index` | V2 | Raw: exact schema-v1 artifact; check/persist: concise structured result | Raw: no-op; check/persist: complete safe facts | Raw: no-op; check/persist: safe phases | `json`, `table`; raw stdout remains undecorated JSON |
+
+### Flags, effects, network, and compatibility
+
+Local flags are listed below exactly as help exposes them. Required flags are
+marked with `*`.
+
+| Command | Purpose | Local flags | Access and network | Exit and compatibility notes |
+| --- | --- | --- | --- | --- |
+| `release` | Discover Release commands | None | Read-only Core help; no plugin, token, network, or write | Success; Core output selection does not change the overview |
+| `release init` | Create the first V2 pair | `--unit`, `--display-name`, `--version`, `--executor`, `--delivery`, `--workflow`, `--tag-prefix`, `--working-directory`, `--paths`, `--kind`, `--plugin-name`, `--plugin-manifest`, `--plugin-asset-prefix`, `--plugin-binary-name`, `--force` | Local guarded pair write; no Git or network | Typed invalid/refusal responses retain their established exits; no V1 creation |
+| `release unit-add` | Add one unit to a V2 pair | Same unit/configuration flags as `init`, except `--force` | Local guarded pair write; no Git or network | Never overwrites an existing unit |
+| `release init-options` | List all accepted initialization choices | None | Read-only, local-only, token-free | JSON is the complete deterministic choice inventory |
+| `release migrate` | Convert root V1 configuration to V2 | `--dry-run` | Dry-run is read-only; actual mode writes the V2 pair, migration journal, and V1 archive locally | Refuses non-V1/unsafe sources; retains established recovery behavior |
+| `release patch` | Plan or execute a patch release | `--dry-run`, `--unit` | Dry-run is local/read-only; actual V1/V2 execution may mutate Git/files and use its configured remote delivery | V1/V2 outcome models and lifecycle exit behavior are unchanged |
+| `release minor` | Plan or execute a minor release | `--dry-run`, `--unit` | Same boundary as `patch` | Same lifecycle compatibility as `patch` |
+| `release major` | Plan or execute a major release | `--dry-run`, `--unit` | Same boundary as `patch` | Same lifecycle compatibility as `patch` |
+| `release plan` | Inspect a future patch/minor/major plan | `--change`*, `--unit` | Read-only, local-only, token-free; no journal or release execution | V1 uses the virtual `default` unit; V2 uses configured units |
+| `release doctor` | Diagnose V2 workflow readiness | `--unit`, `--verify-remote` | Default is local/offline/token-free; explicit `--verify-remote` enables bounded GitHub GET reads and optional token resolution | `ready`/warnings exit `0`; `not_ready` exits `1` |
+| `release units` | Inspect the V2 unit inventory | None | Strict local V2 reads only; no Git, token, network, or writes | `valid` exits `0`; `has_issues`/`source_invalid` exit `1` |
+| `release pipeline` | Inspect one configured V2 pipeline | `--unit`, `--verify-remote` | Default is local/offline/token-free/read-only; explicit `--verify-remote` reuses Doctor's bounded GET-only boundary | Typed invalid and structurally invalid evidence exit `1`; valid lifecycle observations, including blocked/uncertain/rejected, exit `0` |
+| `release ci-validate-context` | Validate dispatched V2 context against local config/state/Git | `--unit`*, `--version`*, `--tag`*, `--release-sha`* | Read-only local Git/config checks; no fetch, token, or network; Core writes GitHub output only to an explicit command file | Expected contradictions are structured nonzero responses |
+| `release github-workflow-init` | Preview or create the canonical configured workflow | `--unit`, `--path`, `--dry-run` | Dry-run is read-only; actual mode creates only a missing local file; no network or Git mutation | Byte-identical content is accepted; differing content is never overwritten |
+| `release resume` | Continue one journaled V2 release | `--unit`, `--dry-run` | Dry-run is local/read-only; actual continuation may mutate Git/journals and perform configured push/dispatch | No-journal, ambiguous, or unsafe continuation is refused; no new version is calculated |
+| `release history` | Read release history | `--unit` | Read-only local Git | V1 legacy tag/count behavior and V2 unit/path filtering are unchanged |
+| `release contributors` | Read contributors | `--unit` | Read-only local Git | V1 repository-wide and V2 selected-path behavior remain distinct and deterministic |
+| `release validate` | Validate V1 or V2 configuration | `--show`, `--unit` | Local/read-only; V1 compatibility may resolve `GITHUB_TOKEN` for legacy requirements but performs no network | Compatibility validation errors intentionally retain legacy exit `0`; V2 is token-independent |
+| `release evidence` | Inspect release evidence | `--family`, `--unit`, `--identity` | Read-only, local-only, token-free | Legacy Evidence JSON shape and filter failures are unchanged |
+| `release evidence-archive` | Archive one completed evidence file | `--family`*, `--identity`*, `--digest-sha256`*, `--confirm-archive`* | Guarded local mutation of only the selected fixture/file; no network or Git mutation | Guard failures preserve the source and established legacy response/exit behavior |
+| `release plugin-index` | Render, validate, or persist the plugin index | `--output-file`, `--check`, `--pretty`, `--repository` | Raw/check are read-only; persist writes only the explicit output file; local-only, token-free | Raw compact/pretty schema-v1 bytes are frozen; discovery/build/persist failures remain top-level `EXECUTION_ERROR`; Core `--output` errors occur before dispatch |
+
+Global presentation flags preserve the selected source, version/tag
+calculation, configured release tool, files, journals, Git ownership, workflow
+handoff, domain JSON, and exit behavior. Describe never adds reads, token
+resolution, network, or mutation. Verbose only exposes already-owned safe
+phases for commands classified as verbose; it is a deterministic no-op
+elsewhere. Combining the flags adds no duplicate sections or log records.
+
+V1 and V2 intentionally differ in source selection, unit model, tag policy,
+materialized files, lifecycle ownership, and validation requirements. Shared
+commands retain those domain differences. Presentation flags do not make their
+JSON outcomes or side effects converge and do not alter either path.
+
+Exit-status ownership is not normalized here. Successful responses normally
+exit `0`; the command-specific readiness and compatibility exceptions above,
+typed request failures, lifecycle rejections, Resume refusals, Evidence
+filters, archive guards, subprocess failures, and Core pre-dispatch failures
+retain their established behavior. Each error is rendered once.
+
 ## General
 
 ```bash
@@ -453,8 +538,6 @@ neko release pipeline --unit cli
 neko release pipeline --unit plugin-release
 neko release pipeline --unit plugin-ui
 neko release pipeline --unit cli --describe
-neko release pipeline --unit cli --verbose
-neko release pipeline --unit cli --describe --verbose
 neko release pipeline --unit cli --output json
 neko release pipeline --unit cli --verify-remote
 neko release pipeline --unit cli --verify-remote --describe
@@ -546,9 +629,10 @@ contract. Stages use essential `Stage`, `Runtime`, and `Owner` with optional
 deterministic vertical records. Semantic color is interactive-terminal-only,
 and redirected output is ANSI-free.
 
-Global `--verbose` adds captured execution/debug logs without exposing
-describe-only structured sections. Combining it with `--describe` shows both.
-Neither flag changes command exit behavior or enables a Pipeline capability.
+Global `--verbose` is a deterministic no-op because this read-only inspection
+has no useful chronological execution narration. Combining it with
+`--describe` is therefore equivalent to describe alone. Neither flag changes
+command exit behavior or enables a Pipeline capability.
 
 JSON keeps the existing response envelope and `schema_version: 1`. The original
 `status`, `unit`, `release`, `repository`, `workflow`, `stages`,
