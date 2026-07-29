@@ -19,7 +19,7 @@ func (systemPluginIndexResponseClock) Now() time.Time {
 
 func mapPluginIndexCommandResponse(result pluginIndexCommandResult, timestamp time.Time) *plugin.Response {
 	data, rendererHint := pluginIndexResponseData(result)
-	return &plugin.Response{
+	response := &plugin.Response{
 		Status: "success",
 		Metadata: plugin.ResponseMetadata{
 			Plugin:    metadata.PluginName,
@@ -30,6 +30,8 @@ func mapPluginIndexCommandResponse(result pluginIndexCommandResult, timestamp ti
 		Data:         data,
 		RendererHint: rendererHint,
 	}
+	attachPluginIndexPresentation(response, result)
+	return response
 }
 
 func pluginIndexResponseData(result pluginIndexCommandResult) (map[string]any, string) {

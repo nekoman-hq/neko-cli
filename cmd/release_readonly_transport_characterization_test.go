@@ -164,9 +164,12 @@ func TestReleaseReadonlyCommandsKeepRedirectedAndNoColorOutputANSIAndCredentialF
 	}
 }
 
-func TestPluginIndexOutputCollisionCharacterizesCurrentTransport(t *testing.T) {
+func TestPluginIndexOutputContractIsUnambiguousAcrossCoreAndLocalFlags(t *testing.T) {
 	manifest := installReleaseReadonlyHelperPlugin(t)
 	repositoryRoot := newPluginIndexTransportRepository(t)
+	t.Setenv("NO_COLOR", "1")
+	t.Setenv("GITHUB_TOKEN", "plugin-index-output-secret")
+	t.Setenv("GH_TOKEN", "plugin-index-output-secret")
 
 	raw, rawErr := executeReleaseReadonlyCommand(
 		t, manifest, repositoryRoot, "plugin-index", nil, releaseReadonlyMode{},
@@ -180,16 +183,28 @@ func TestPluginIndexOutputCollisionCharacterizesCurrentTransport(t *testing.T) {
 	if raw != pretty || !strings.HasPrefix(raw, "{\n  \"schemaVersion\": 1,") || !strings.HasSuffix(raw, "\n") {
 		t.Fatalf("raw plugin-index contract changed:\ndefault=%q\npretty=%q", raw, pretty)
 	}
-
-	check, checkErr := executeReleaseReadonlyCommand(
-		t, manifest, repositoryRoot, "plugin-index", []string{"--check"}, releaseReadonlyMode{},
+	compact, compactErr := executeReleaseReadonlyCommand(
+		t, manifest, repositoryRoot, "plugin-index", []string{"--pretty=false"}, releaseReadonlyMode{},
 	)
-	if checkErr != nil {
-		t.Fatalf("check plugin-index exit: %v", checkErr)
+	if compactErr != nil {
+		t.Fatalf("compact raw plugin-index exit: %v", compactErr)
 	}
-	for _, want := range []string{"Status", "ok", "Plugins", "2", "Repository", "nekoman-hq/neko-cli"} {
-		if !strings.Contains(check, want) {
-			t.Fatalf("check output omitted %q:\n%s", want, check)
+	if strings.Count(compact, "\n") != 1 ||
+		!strings.HasPrefix(compact, `{"schemaVersion":1,"repository":"nekoman-hq/neko-cli","plugins":[`) {
+		t.Fatalf("compact raw plugin-index bytes changed: %q", compact)
+	}
+	for _, mode := range []releaseReadonlyMode{{describe: true}, {verbose: true}, {describe: true, verbose: true}} {
+		output, err := executeReleaseReadonlyCommand(t, manifest, repositoryRoot, "plugin-index", nil, mode)
+		if err != nil {
+			t.Fatalf("raw plugin-index mode %#v exit: %v", mode, err)
+		}
+		if output != raw {
+			t.Fatalf("raw plugin-index mode %#v changed bytes:\nwant=%q\ngot=%q", mode, raw, output)
+		}
+	}
+	for _, forbidden := range []string{"\x1b[", "plugin-index-output-secret", "Command Metadata", "Execution Logs"} {
+		if strings.Contains(raw, forbidden) {
+			t.Fatalf("raw plugin-index contains %q:\n%s", forbidden, raw)
 		}
 	}
 
@@ -207,23 +222,18 @@ func TestPluginIndexOutputCollisionCharacterizesCurrentTransport(t *testing.T) {
 				t.Fatalf("--output %s exit: %v", format, err)
 			}
 			target := filepath.Join(repositoryRoot, format)
-			data, readErr := os.ReadFile(target)
-			if readErr != nil {
-				t.Fatalf("--output %s did not create the shadowed local target: %v", format, readErr)
-			}
-			if removeErr := os.Remove(target); removeErr != nil {
-				t.Fatalf("remove test-owned collision file %s: %v", target, removeErr)
-			}
-			if string(data) != raw {
-				t.Fatalf("--output %s persisted bytes differ from raw output", format)
-			}
-			for _, want := range []string{"Status", "written", "Output", format} {
-				if !strings.Contains(output, want) {
-					t.Fatalf("--output %s structured response omitted %q:\n%s", format, want, output)
-				}
-			}
 			if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
-				t.Fatalf("test-owned collision file was not removed immediately: %v", statErr)
+				t.Fatalf("global --output %s created a file: %v", format, statErr)
+			}
+			if format == "table" {
+				if output != raw {
+					t.Fatalf("raw table output changed bytes:\nwant=%q\ngot=%q", raw, output)
+				}
+				return
+			}
+			response := decodeReleaseReadonlyPublicResponse(t, output)
+			if response.Status != "success" || response.Data["raw"] != raw {
+				t.Fatalf("raw Core JSON response = %#v", response)
 			}
 		})
 	}
@@ -237,17 +247,198 @@ func TestPluginIndexOutputCollisionCharacterizesCurrentTransport(t *testing.T) {
 		[]string{"--output", arbitraryTarget},
 		releaseReadonlyMode{},
 	)
-	if err != nil {
-		t.Fatalf("arbitrary local --output exit: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "invalid output format") {
+		t.Fatalf("arbitrary global --output = (%q, %v), want invalid-format error", output, err)
 	}
-	if _, statErr := os.Stat(arbitraryTarget); statErr != nil {
-		t.Fatalf("arbitrary local --output did not persist: %v", statErr)
+	if _, statErr := os.Stat(arbitraryTarget); !os.IsNotExist(statErr) {
+		t.Fatalf("arbitrary global --output created a file: %v", statErr)
 	}
-	if removeErr := os.Remove(arbitraryTarget); removeErr != nil {
-		t.Fatalf("remove arbitrary test-owned collision file: %v", removeErr)
+
+	persistTarget := filepath.Join(repositoryRoot, "dist", "plugin-index.json")
+	persistOutput, persistErr := executeReleaseReadonlyCommand(
+		t,
+		manifest,
+		repositoryRoot,
+		"plugin-index",
+		[]string{"--output-file", "dist/plugin-index.json"},
+		releaseReadonlyMode{},
+	)
+	if persistErr != nil {
+		t.Fatalf("--output-file exit: %v", persistErr)
 	}
-	if !strings.Contains(output, arbitraryTarget) {
-		t.Fatalf("arbitrary local --output response omitted target:\n%s", output)
+	persisted, readErr := os.ReadFile(persistTarget)
+	if readErr != nil {
+		t.Fatalf("read --output-file target: %v", readErr)
+	}
+	if string(persisted) != raw {
+		t.Fatalf("--output-file bytes differ from raw output")
+	}
+	if !strings.Contains(persistOutput, "dist/plugin-index.json") {
+		t.Fatalf("--output-file response omitted safe target:\n%s", persistOutput)
+	}
+	compactTarget := filepath.Join(repositoryRoot, "dist", "plugin-index-compact.json")
+	_, compactPersistErr := executeReleaseReadonlyCommand(
+		t,
+		manifest,
+		repositoryRoot,
+		"plugin-index",
+		[]string{"--output-file", "dist/plugin-index-compact.json", "--pretty=false"},
+		releaseReadonlyMode{},
+	)
+	if compactPersistErr != nil {
+		t.Fatalf("compact --output-file exit: %v", compactPersistErr)
+	}
+	compactPersisted, compactReadErr := os.ReadFile(compactTarget)
+	if compactReadErr != nil {
+		t.Fatalf("read compact --output-file target: %v", compactReadErr)
+	}
+	if string(compactPersisted) != compact {
+		t.Fatalf("compact --output-file bytes differ from compact stdout")
+	}
+	assertPluginIndexFixtureFiles(t, repositoryRoot, []string{
+		".neko/release.config.json",
+		".neko/release.state.json",
+		"plugin/release/manifest.json",
+		"plugin/ui/manifest.json",
+		"dist/plugin-index.json",
+		"dist/plugin-index-compact.json",
+	})
+}
+
+func TestPluginIndexCheckAndPersistPresentationModesRemainStructured(t *testing.T) {
+	manifest := installReleaseReadonlyHelperPlugin(t)
+	repositoryRoot := newPluginIndexTransportRepository(t)
+	t.Setenv("NO_COLOR", "1")
+	t.Setenv("GITHUB_TOKEN", "plugin-index-presentation-secret")
+	t.Setenv("GH_TOKEN", "plugin-index-presentation-secret")
+
+	checkDefault, checkDefaultErr := executeReleaseReadonlyCommand(
+		t, manifest, repositoryRoot, "plugin-index", []string{"--check"}, releaseReadonlyMode{},
+	)
+	checkDescribe, checkDescribeErr := executeReleaseReadonlyCommand(
+		t, manifest, repositoryRoot, "plugin-index", []string{"--check"}, releaseReadonlyMode{describe: true},
+	)
+	checkVerbose, checkVerboseErr := executeReleaseReadonlyCommand(
+		t, manifest, repositoryRoot, "plugin-index", []string{"--check"}, releaseReadonlyMode{verbose: true},
+	)
+	checkJSON, checkJSONErr := executeReleaseReadonlyCommand(
+		t, manifest, repositoryRoot, "plugin-index", []string{"--check"}, releaseReadonlyMode{format: "json"},
+	)
+	if checkDefaultErr != nil || checkDescribeErr != nil || checkVerboseErr != nil || checkJSONErr != nil {
+		t.Fatalf(
+			"check exits: default=%v describe=%v verbose=%v json=%v",
+			checkDefaultErr,
+			checkDescribeErr,
+			checkVerboseErr,
+			checkJSONErr,
+		)
+	}
+	for _, want := range []string{
+		"Plugin Index Check", "Repository", "nekoman-hq/neko-cli", "Validation", "Valid",
+		"Repositories", "1", "Plugins", "2", "Next action",
+	} {
+		if !strings.Contains(checkDefault, want) {
+			t.Fatalf("check default omitted %q:\n%s", want, checkDefault)
+		}
+	}
+	for _, want := range []string{
+		"Source Resolution", "Repository Inventory", "Plugin Inventory", "Validation Checks", "Limitations",
+	} {
+		if strings.Contains(checkDefault, want) || !strings.Contains(checkDescribe, want) {
+			t.Fatalf("check describe visibility for %q is incorrect:\ndefault:\n%s\ndescribe:\n%s", want, checkDefault, checkDescribe)
+		}
+	}
+	for _, want := range []string{
+		"Resolving Plugin Index source",
+		"Deriving Plugin Index",
+		"Validating Plugin Index schema",
+		"Validating Plugin Index repositories",
+		"Validating Plugin Index plugins",
+		"Plugin Index validation completed",
+	} {
+		if !strings.Contains(checkVerbose, want) {
+			t.Fatalf("check verbose omitted %q:\n%s", want, checkVerbose)
+		}
+	}
+	checkResponse := decodeReleaseReadonlyPublicResponse(t, checkJSON)
+	assertPluginIndexMachineItems(t, checkResponse, []map[string]any{
+		{"property": "Status", "value": "ok"},
+		{"property": "Plugins", "value": float64(2)},
+		{"property": "Repository", "value": "nekoman-hq/neko-cli"},
+	})
+
+	persistFlags := []string{"--output-file", "dist/plugin-index.json"}
+	persistDefault, persistDefaultErr := executeReleaseReadonlyCommand(
+		t, manifest, repositoryRoot, "plugin-index", persistFlags, releaseReadonlyMode{},
+	)
+	persistDescribe, persistDescribeErr := executeReleaseReadonlyCommand(
+		t, manifest, repositoryRoot, "plugin-index", persistFlags, releaseReadonlyMode{describe: true},
+	)
+	persistVerbose, persistVerboseErr := executeReleaseReadonlyCommand(
+		t, manifest, repositoryRoot, "plugin-index", persistFlags, releaseReadonlyMode{verbose: true},
+	)
+	persistJSON, persistJSONErr := executeReleaseReadonlyCommand(
+		t, manifest, repositoryRoot, "plugin-index", persistFlags, releaseReadonlyMode{format: "json"},
+	)
+	if persistDefaultErr != nil || persistDescribeErr != nil || persistVerboseErr != nil || persistJSONErr != nil {
+		t.Fatalf(
+			"persist exits: default=%v describe=%v verbose=%v json=%v",
+			persistDefaultErr,
+			persistDescribeErr,
+			persistVerboseErr,
+			persistJSONErr,
+		)
+	}
+	for _, want := range []string{
+		"Plugin Index Write", "Result", "Written", "Output file", "dist/plugin-index.json",
+		"Format", "Pretty", "Repositories", "1", "Plugins", "2", "Validation", "Valid", "Next action",
+	} {
+		if !strings.Contains(persistDefault, want) {
+			t.Fatalf("persist default omitted %q:\n%s", want, persistDefault)
+		}
+	}
+	for _, want := range []string{
+		"Source Resolution", "Repository Inventory", "Plugin Inventory", "Validation Checks", "Write Plan", "Limitations",
+	} {
+		if strings.Contains(persistDefault, want) || !strings.Contains(persistDescribe, want) {
+			t.Fatalf("persist describe visibility for %q is incorrect:\ndefault:\n%s\ndescribe:\n%s", want, persistDefault, persistDescribe)
+		}
+	}
+	for _, want := range []string{
+		"Resolving Plugin Index source",
+		"Constructing Plugin Index",
+		"Validating Plugin Index schema",
+		"Validating Plugin Index repositories",
+		"Validating Plugin Index plugins",
+		"Resolving Plugin Index output target",
+		"Preparing atomic Plugin Index write",
+		"Plugin Index write completed",
+		"Confirming Plugin Index persistence result",
+		"Plugin Index persistence completed",
+	} {
+		if !strings.Contains(persistVerbose, want) {
+			t.Fatalf("persist verbose omitted %q:\n%s", want, persistVerbose)
+		}
+	}
+	persistResponse := decodeReleaseReadonlyPublicResponse(t, persistJSON)
+	assertPluginIndexMachineItems(t, persistResponse, []map[string]any{
+		{"property": "Status", "value": "written"},
+		{"property": "Output", "value": "dist/plugin-index.json"},
+		{"property": "Plugins", "value": float64(2)},
+		{"property": "Repository", "value": "nekoman-hq/neko-cli"},
+	})
+	for _, output := range []string{
+		checkDefault, checkDescribe, checkVerbose, checkJSON,
+		persistDefault, persistDescribe, persistVerbose, persistJSON,
+	} {
+		if strings.Contains(output, "\x1b[") {
+			t.Fatalf("redirected plugin-index output contains ANSI:\n%q", output)
+		}
+		for _, forbidden := range []string{"plugin-index-presentation-secret", repositoryRoot} {
+			if strings.Contains(output, forbidden) {
+				t.Fatalf("plugin-index output contains unsafe value %q:\n%s", forbidden, output)
+			}
+		}
 	}
 }
 
@@ -549,6 +740,58 @@ func samePluginExit(left, right error) bool {
 		return left == nil && right == nil
 	}
 	return errors.Is(left, right) || left.Error() == right.Error()
+}
+
+func assertPluginIndexMachineItems(
+	t *testing.T,
+	response releaseReadonlyPublicResponse,
+	want []map[string]any,
+) {
+	t.Helper()
+	rawItems, ok := response.Data["items"].([]any)
+	if !ok {
+		t.Fatalf("plugin-index machine items = %#v", response.Data["items"])
+	}
+	got := make([]map[string]any, 0, len(rawItems))
+	for _, rawItem := range rawItems {
+		item, itemOK := rawItem.(map[string]any)
+		if !itemOK {
+			t.Fatalf("plugin-index machine item = %#v", rawItem)
+		}
+		got = append(got, item)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("plugin-index machine items = %#v, want %#v", got, want)
+	}
+}
+
+func assertPluginIndexFixtureFiles(t *testing.T, root string, want []string) {
+	t.Helper()
+	got := map[string]struct{}{}
+	if err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		got[filepath.ToSlash(relative)] = struct{}{}
+		return nil
+	}); err != nil {
+		t.Fatalf("walk plugin-index fixture: %v", err)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("plugin-index fixture files = %#v, want %v", got, want)
+	}
+	for _, path := range want {
+		if _, ok := got[path]; !ok {
+			t.Fatalf("plugin-index fixture missing %s: %#v", path, got)
+		}
+	}
 }
 
 func newPluginIndexTransportRepository(t *testing.T) string {
