@@ -7,13 +7,13 @@ import (
 )
 
 type pluginIndexCommandResult struct {
+	Index      *Index
 	Repository string
 	OutputPath string
 	RawOutput  string
 	Mode       pluginIndexCommandMode
-	Plugins    int
-	Index      *Index
 	Target     pluginIndexOutputTarget
+	Plugins    int
 	Pretty     bool
 }
 
