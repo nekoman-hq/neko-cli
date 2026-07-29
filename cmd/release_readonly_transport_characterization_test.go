@@ -16,7 +16,10 @@ import (
 	"github.com/nekoman-hq/neko-cli/pkg/log"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
+	contributorscmd "github.com/nekoman-hq/neko-cli/plugin/release/pkg/contributors"
 	evidencecmd "github.com/nekoman-hq/neko-cli/plugin/release/pkg/evidence"
+	historycmd "github.com/nekoman-hq/neko-cli/plugin/release/pkg/history"
+	initcmd "github.com/nekoman-hq/neko-cli/plugin/release/pkg/init"
 	pluginindexcmd "github.com/nekoman-hq/neko-cli/plugin/release/pkg/pluginindex"
 	releasecmd "github.com/nekoman-hq/neko-cli/plugin/release/pkg/release"
 	validatecmd "github.com/nekoman-hq/neko-cli/plugin/release/pkg/validate"
@@ -46,6 +49,12 @@ func TestReleaseReadonlyPluginHelperProcess(t *testing.T) {
 		err      error
 	)
 	switch request.Command {
+	case "init-options":
+		response, err = initcmd.GetAvailableOptions()
+	case "history":
+		response, err = historycmd.HandleHistory(request)
+	case "contributors":
+		response, err = contributorscmd.HandleContributors(request)
 	case "doctor":
 		response, err = releasecmd.HandleDoctor(request)
 	case "units":
