@@ -517,8 +517,11 @@ Custom plugin command help reads the actually inherited Core flags and renders
 them after manifest-local command flags under a separate
 `Global plugin-response flags` heading. A manifest-local flag shadows an
 inherited flag with the same name and is shown only in the command section.
-The Release Plugin's existing manifest-local `plugin-index --output` collision
-is intentionally unchanged pending its own compatibility decision.
+Plugins must avoid such collisions. The Release Plugin uses
+`plugin-index --output-file <path>` for command-owned persistence, leaving
+Core `--output` exclusively responsible for `table`, `json`, `wide`, or
+`github` response rendering. Unsupported Core output values fail before plugin
+dispatch and are never reinterpreted as local paths.
 
 #### Property/value presentation
 

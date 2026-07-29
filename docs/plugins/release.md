@@ -824,27 +824,71 @@ Generate the public `plugin-index.json` registry artifact from V2 plugin units, 
 neko release plugin-index [flags]
 ```
 
-**Flags:**
+**Command flags:**
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--output` | string | | Optional file path to write `plugin-index.json` |
+| `--output-file` | string | | Persist `plugin-index.json` to an explicit file; omit for raw stdout |
 | `--check` | bool | `false` | Validate that the index can be generated without writing a file |
-| `--pretty` | bool | `true` | Pretty-print generated JSON |
+| `--pretty` | bool | `true` | Pretty-print raw schema-v1 JSON on stdout or in the persisted file |
 | `--repository` | string | `nekoman-hq/neko-cli` | Repository identifier to include in the generated index |
 
-`--output` accepts either a clean repository-root-relative path or an explicit absolute artifact path. Relative paths are resolved from the repository root, not from the shell's current directory. Absolute paths are retained for CI temporary artifacts such as `/tmp/plugin-index.json`. Repository-contained output cannot overwrite release config/state, release recovery evidence, Git internals, or plugin manifests used as index inputs. Existing target directories and target symlinks are rejected.
+**Global plugin-response flags:**
+
+| Flag | Ownership | Plugin Index behavior |
+|------|-----------|-----------------------|
+| `--describe` | Core | No-op for undecorated raw table output; complete structured facts for check and persist |
+| `--verbose` | Core transport; plugin log production through context | No-op for raw render; safe validation or persistence phases for check/persist |
+| `--output` | Core | Selects `table`, `json`, `wide`, or `github`; never a file path |
+| `--github-output-file` | Core | Destination only for Core GitHub response output; it is not the Plugin Index artifact path |
+
+`--output-file` accepts either a clean repository-root-relative path or an
+explicit absolute artifact path. Relative paths are resolved from the
+repository root, not from the shell's current directory. Absolute paths are
+retained for CI temporary artifacts such as `/tmp/plugin-index.json`.
+Repository-contained output cannot overwrite release config/state, release
+recovery evidence, Git internals, or plugin manifests used as index inputs.
+Existing target directories and target symlinks are rejected. Missing parents
+use mode `0755`, new files use `0644`, an existing file keeps its mode, and
+replacement is target-local and atomic.
+
+The former local `--output <path>` spelling is intentionally not retained.
+Core interprets `--output json` and `--output table` only as response formats;
+unsupported path-like values fail Core output validation before the plugin
+runs, and no file fallback occurs.
+
+**Mode and JSON contracts:**
+
+| Mode | Default | Describe | Verbose | JSON |
+|------|---------|----------|---------|------|
+| Raw render | Exact schema-v1 artifact; pretty by default and compact with `--pretty=false` | Intentional no-op for raw table output | Intentional no-op | `--output json` is the Core public response envelope containing `data.raw`, not a second index schema |
+| Check (`--check`) | Read-only validation summary with repository/plugin counts and next action | Source resolution, repository/plugin inventories, ordering/duplicate facts, validation checks, and limitations | Source derivation and validation phases only | Established public response with `Status=ok`, `Plugins`, and `Repository` rows |
+| Persist (`--output-file`) | Successful write summary with safe target label, formatting, counts, validation, and next action | Source/inventory facts, validated target and atomic write plan, outcome, and limitations | Construction, validation, target resolution, write preparation/completion, result confirmation | Established public response with `Status=written`, `Output`, `Plugins`, and `Repository` rows |
+
+The raw schema-v1 artifact keeps its exact top-level and plugin field order,
+plugin-name ordering, JSON escaping, empty-array behavior, pretty/compact
+formatting, and single trailing newline. Default raw stdout is not wrapped in a
+Core response and contains no logs, presentation metadata, timestamp, or ANSI.
 
 **Examples:**
 ```bash
 # Print the generated index JSON
 neko release plugin-index
 
+# Print compact schema-v1 JSON
+neko release plugin-index --pretty=false
+
 # Validate generation without writing
 neko release plugin-index --check
 
+# Render the structured check response as Core public JSON
+neko release plugin-index --check --output json
+
 # Write to a temporary artifact path
-neko release plugin-index --output /tmp/plugin-index.json
+neko release plugin-index --output-file /tmp/plugin-index.json
+
+# Render the structured write response as Core public JSON
+neko release plugin-index --output-file /tmp/plugin-index.json --output json
 ```
 
 New plugins appear in the generated index after adding a V2 unit with `kind: "plugin"`, matching plugin metadata, a matching `.neko/release.state.json` entry, and a manifest whose name and version match that metadata and state.

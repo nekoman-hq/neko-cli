@@ -241,17 +241,25 @@ neko release patch --unit plugin-foo --dry-run --verbose --describe
 
 ```bash
 neko release plugin-index --check
-neko release plugin-index --output /tmp/plugin-index.json
+neko release plugin-index --check --output json
+neko release plugin-index --output-file /tmp/plugin-index.json
 ```
 
 The generated `plugin-index.json` is not committed to the repository and this
 command does not publish it. Plugin release workflows generate and publish the
 index automatically after successful plugin releases by uploading or replacing
 the `plugin-index.json` asset on the mutable `plugin-registry` GitHub Release.
-Relative `--output` paths are resolved from the repository root. Absolute
+Relative `--output-file` paths are resolved from the repository root. Absolute
 artifact paths such as `/tmp/plugin-index.json` remain supported for CI and
 temporary files, while repository-contained output is blocked from overwriting
 release state, evidence, Git internals, or plugin manifest inputs.
+
+Core `--output` selects only the response format. `--output json` renders the
+public plugin-response JSON for check or persist results; it does not name a
+file. Raw mode prints the exact schema-v1 artifact by default, and
+`--pretty=false` selects its compact byte form. The former
+`plugin-index --output <path>` spelling is rejected as an invalid Core format
+and never falls back to persistence.
 
 ## Example F: Discover, Install, And Update Plugins
 

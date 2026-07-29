@@ -115,10 +115,36 @@ neko release evidence --family release-execution --unit api --identity 0123abcd
 neko release evidence-archive --family release-execution --identity <sha256> --digest-sha256 <sha256> --confirm-archive
 neko release plugin-index
 neko release plugin-index --check
-neko release plugin-index --output /tmp/plugin-index.json
+neko release plugin-index --output-file /tmp/plugin-index.json
+neko release plugin-index --check --output json
 ```
 
-For `plugin-index --output`, relative paths are resolved from the repository root. Explicit absolute paths remain supported for CI or temporary artifacts. Repository-contained output is blocked from overwriting release config/state, recovery evidence, Git internals, or plugin manifest inputs.
+`plugin-index` has three modes:
+
+| Mode | Selection | Default stdout | `--describe` | `--verbose` | Core `--output json` |
+| --- | --- | --- | --- | --- | --- |
+| Raw render | no `--check` or `--output-file` | Exact pretty schema-v1 JSON (`--pretty=false` selects compact JSON) | Intentional no-op for raw table output | Intentional no-op for raw table output | Core public plugin-response JSON containing the raw artifact |
+| Check | `--check` | Concise local validation result, repository/plugin counts, and next action | Source resolution, repository/plugin inventories, validation checks, and limitations | Safe validation phases | Core public plugin-response JSON with the established `data.items` fields |
+| Persist | `--output-file <path>` | Concise successful write result with safe target label, formatting, counts, validation, and next action | Source/inventory/validation facts, write plan, outcome, and limitations | Safe construction, validation, target, atomic-write, and completion phases | Core public plugin-response JSON with the established `data.items` fields |
+
+The raw artifact and Core public JSON are separate contracts. Default raw
+stdout has no response envelope, metadata, timestamp, log, ANSI sequence, or
+presentation declaration. Explicit `--output json` requests Core's public
+response envelope; it never selects a file. Check and persist use structured
+responses and keep their established `Status`, `Plugins`, `Repository`, and
+persist-only `Output` machine rows.
+
+For `plugin-index --output-file`, relative paths are resolved from the
+repository root. Explicit absolute paths remain supported for CI or temporary
+artifacts. Repository-contained output is blocked from overwriting release
+config/state, recovery evidence, Git internals, or plugin manifest inputs.
+Missing parents, overwrite mode preservation, and target-local atomic
+replacement retain their existing behavior.
+
+The former `plugin-index --output <path>` local spelling is not an alias.
+`--output` is exclusively Core's response-format flag: `json` and `table`
+follow Core rendering behavior, unsupported values are rejected before plugin
+dispatch, and no fallback file is written. Use `--output-file` for persistence.
 
 ### Patch, Minor, Major, and Resume presentation
 

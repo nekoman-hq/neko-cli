@@ -113,7 +113,25 @@ consumer-owned.
 
 Generated-output path policy is explicit per output family rather than shared through a universal path manager.
 
-`plugin-index --output` owns the generated integration artifact path. Relative paths are clean repository-root-relative paths resolved from the explicit `workspace.RepositoryRoot`, independent of process cwd, CLI nesting, or embedder mode. Explicit absolute paths remain supported for CI and temporary artifact targets, including the plugin release workflows' runner-temp output. Repository-contained targets cannot overwrite release config/state, recovery or migration evidence, legacy release config/backup, Git internals, or the plugin manifest inputs present in the generated index. Existing target directories and target symlinks are rejected before writing. Existing repository-relative parent symlinks are allowed only when their physical target remains inside the resolved repository root. Missing parents are created only by the persister, with mode `0755`; new files use `0644`, existing file mode is preserved, and replacement remains target-local atomic.
+`plugin-index --output-file` owns the generated integration artifact path. Relative paths are clean repository-root-relative paths resolved from the explicit `workspace.RepositoryRoot`, independent of process cwd, CLI nesting, or embedder mode. Explicit absolute paths remain supported for CI and temporary artifact targets, including the plugin release workflows' runner-temp output. Repository-contained targets cannot overwrite release config/state, recovery or migration evidence, legacy release config/backup, Git internals, or the plugin manifest inputs present in the generated index. Existing target directories and target symlinks are rejected before writing. Existing repository-relative parent symlinks are allowed only when their physical target remains inside the resolved repository root. Missing parents are created only by the persister, with mode `0755`; new files use `0644`, existing file mode is preserved, and replacement remains target-local atomic.
+
+The command no longer declares a manifest-local `--output`. Core owns that
+inherited name for response formats and rejects values outside
+`table`, `json`, `wide`, and `github` before plugin dispatch. The old
+`plugin-index --output <path>` spelling cannot reach persistence; only
+`--output-file <path>` selects the persist mode. No raw-argument interception,
+format/path guessing, compatibility alias, or command-specific renderer exists.
+
+Plugin Index now keeps three explicit presentation boundaries. Raw render
+returns the exact schema-v1 document through the existing `raw-json` hint;
+default/table rendering, `--describe`, and `--verbose` leave those bytes
+undecorated, while explicit Core `--output json` renders the established public
+plugin-response envelope containing the raw value. Check remains read-only and
+adds concise validation facts plus describe-only source, repository, plugin,
+validation, and limitation inventories. Persist retains the same atomic writer
+and stable `data.items` projection while adding a safe human target label,
+format/validation summary, describe-only write plan, and post-success verbose
+phases. Presentation declarations remain excluded from public JSON.
 
 GitHub workflow scaffolding has a deliberately narrower create-only path
 policy: the output must be an exact V2-configured direct child of

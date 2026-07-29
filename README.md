@@ -190,9 +190,11 @@ them to a plugin command's local flag map:
 `--verbose` is the only presentation-related global value sent to a plugin,
 through `Request.Context.Verbose`, because it controls plugin-side log
 production. `--describe`, `--output`, and `--github-output-file` stay in Core.
-The Release Plugin's manifest-local `plugin-index --output` remains its output
-file path option and currently shadows the global rendering flag for that one
-command.
+The Release Plugin uses the distinct manifest-local
+`plugin-index --output-file <path>` option for file persistence. Core
+`--output` therefore remains the response-format selector for this command as
+well. The former `plugin-index --output <path>` spelling no longer writes a
+file; non-format values are rejected by Core.
 
 ### Other Built-in Commands
 
