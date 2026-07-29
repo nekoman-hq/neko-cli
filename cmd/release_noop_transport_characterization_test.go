@@ -12,6 +12,9 @@ import (
 )
 
 func TestReleaseOverviewIsCoreOwnedAndPresentationFlagsAreNoOps(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	t.Setenv("GITHUB_TOKEN", "final-output-secret")
+	t.Setenv("GH_TOKEN", "final-output-secret")
 	manifest := installReleaseReadonlyHelperPlugin(t)
 	restorePluginDir(t, t.TempDir())
 
@@ -41,9 +44,13 @@ func TestReleaseOverviewIsCoreOwnedAndPresentationFlagsAreNoOps(t *testing.T) {
 			t.Fatalf("release overview contains plugin-response section %q:\n%s", forbidden, baseline)
 		}
 	}
+	assertReleaseNoOpOutputSafe(t, baseline, "")
 }
 
 func TestReleaseInitOptionsCharacterizesIntentionalNoOpModes(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	t.Setenv("GITHUB_TOKEN", "final-output-secret")
+	t.Setenv("GH_TOKEN", "final-output-secret")
 	manifest := installReleaseReadonlyHelperPlugin(t)
 	root := newReleaseLifecycleV2Repository(t)
 
@@ -77,11 +84,17 @@ func TestReleaseInitOptionsCharacterizesIntentionalNoOpModes(t *testing.T) {
 	if strings.Contains(describeOutput, "Execution Logs") {
 		t.Fatalf("init-options describe emitted execution logs:\n%s", describeOutput)
 	}
+	for _, output := range []string{defaultOutput, verboseOutput, describeOutput, combinedOutput} {
+		assertReleaseNoOpOutputSafe(t, output, root)
+	}
 
 	assertReleaseNoOpJSONInvariance(t, manifest, root, "init-options", nil)
 }
 
 func TestReleaseHistoryAndContributorsKeepIntentionalNoOpModes(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	t.Setenv("GITHUB_TOKEN", "final-output-secret")
+	t.Setenv("GH_TOKEN", "final-output-secret")
 	manifest := installReleaseReadonlyHelperPlugin(t)
 	root := newReleaseLifecycleV2Repository(t)
 	flags := []string{"--unit", "api"}
@@ -127,6 +140,9 @@ func TestReleaseHistoryAndContributorsKeepIntentionalNoOpModes(t *testing.T) {
 			if combinedOutput != describeOutput {
 				t.Fatalf("%s combined mode added content beyond ordinary describe metadata", test.command)
 			}
+			for _, output := range []string{defaultOutput, verboseOutput, describeOutput, combinedOutput} {
+				assertReleaseNoOpOutputSafe(t, output, root)
+			}
 			assertReleaseNoOpJSONInvariance(t, manifest, root, test.command, flags)
 		})
 	}
@@ -139,6 +155,15 @@ func TestReleaseHistoryAndContributorsKeepIntentionalNoOpModes(t *testing.T) {
 	}
 	if got := runReleaseReadonlyGit(t, root, "tag", "--list"); got != tagsBefore {
 		t.Fatalf("no-op characterization changed tags: before %q after %q", tagsBefore, got)
+	}
+}
+
+func assertReleaseNoOpOutputSafe(t *testing.T, output, root string) {
+	t.Helper()
+	for _, forbidden := range []string{"\x1b[", "final-output-secret", root} {
+		if forbidden != "" && strings.Contains(output, forbidden) {
+			t.Fatalf("no-op output exposed %q:\n%s", forbidden, output)
+		}
 	}
 }
 
