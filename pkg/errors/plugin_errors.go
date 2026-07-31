@@ -45,18 +45,7 @@ var (
 //
 // Note: This function does not return; it exits the program.
 func WriteError(code, message string) {
-	resp := plugin.Response{
-		Status: "error",
-		Metadata: plugin.ResponseMetadata{
-			Plugin:    PluginName,
-			Version:   PluginVersion,
-			Timestamp: time.Now(),
-		},
-		Error: &plugin.ResponseError{
-			Code:    code,
-			Message: message,
-		},
-	}
+	resp := NewErrorResponse(code, message)
 	_ = json.NewEncoder(os.Stdout).Encode(resp)
 	os.Exit(1)
 }
@@ -82,19 +71,7 @@ func WriteError(code, message string) {
 //
 // Note: This function does not return; it exits the program.
 func WriteErrorWithDetails(code, message string, details map[string]any) {
-	resp := plugin.Response{
-		Status: "error",
-		Metadata: plugin.ResponseMetadata{
-			Plugin:    PluginName,
-			Version:   PluginVersion,
-			Timestamp: time.Now(),
-		},
-		Error: &plugin.ResponseError{
-			Code:    code,
-			Message: message,
-			Details: details,
-		},
-	}
+	resp := NewErrorResponseWithDetails(code, message, details)
 	_ = json.NewEncoder(os.Stdout).Encode(resp)
 	os.Exit(1)
 }
@@ -110,7 +87,7 @@ func WriteErrorWithDetails(code, message string, details map[string]any) {
 // Returns a plugin.Response with status "warning". The caller is responsible
 // for writing this to stdout or incorporating it into a larger response.
 func WriteWarning(code, message string) *plugin.Response {
-	return &plugin.Response{
+	response := &plugin.Response{
 		Status: "warning",
 		Metadata: plugin.ResponseMetadata{
 			Plugin:    PluginName,
@@ -122,6 +99,8 @@ func WriteWarning(code, message string) *plugin.Response {
 			Message: message,
 		},
 	}
+	response.SetExitCode(0)
+	return response
 }
 
 // NewErrorResponse creates an error response without writing to stdout or exiting.
@@ -134,7 +113,11 @@ func WriteWarning(code, message string) *plugin.Response {
 //
 // Returns a plugin.Response with status "error" that can be returned to the caller.
 func NewErrorResponse(code, message string) *plugin.Response {
-	return &plugin.Response{
+	return newErrorResponse(code, message, nil)
+}
+
+func newErrorResponse(code, message string, details map[string]any) *plugin.Response {
+	response := &plugin.Response{
 		Status: "error",
 		Metadata: plugin.ResponseMetadata{
 			Plugin:    PluginName,
@@ -144,8 +127,11 @@ func NewErrorResponse(code, message string) *plugin.Response {
 		Error: &plugin.ResponseError{
 			Code:    code,
 			Message: message,
+			Details: details,
 		},
 	}
+	response.SetExitCode(1)
+	return response
 }
 
 // NewErrorResponseWithDetails creates an error response with additional details
@@ -159,17 +145,5 @@ func NewErrorResponse(code, message string) *plugin.Response {
 //
 // Returns a plugin.Response with status "error" that can be returned to the caller.
 func NewErrorResponseWithDetails(code, message string, details map[string]any) *plugin.Response {
-	return &plugin.Response{
-		Status: "error",
-		Metadata: plugin.ResponseMetadata{
-			Plugin:    PluginName,
-			Version:   PluginVersion,
-			Timestamp: time.Now(),
-		},
-		Error: &plugin.ResponseError{
-			Code:    code,
-			Message: message,
-			Details: details,
-		},
-	}
+	return newErrorResponse(code, message, details)
 }
