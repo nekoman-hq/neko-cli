@@ -45,11 +45,11 @@ marked with `*`.
 | Command | Purpose | Local flags | Access and network | Exit and compatibility notes |
 | --- | --- | --- | --- | --- |
 | `release` | Discover Release commands | None | Read-only Core help; no plugin, token, network, or write | Success; Core output selection does not change the overview |
-| `release init` | Create the first V2 pair | `--unit`, `--display-name`, `--version`, `--executor`, `--delivery`, `--workflow`, `--tag-prefix`, `--working-directory`, `--paths`, `--kind`, `--plugin-name`, `--plugin-manifest`, `--plugin-asset-prefix`, `--plugin-binary-name`, `--force` | Local guarded pair write; no Git or network | Typed invalid/refusal responses retain their established exits; no V1 creation |
-| `release unit-add` | Add one unit to a V2 pair | Same unit/configuration flags as `init`, except `--force` | Local guarded pair write; no Git or network | Never overwrites an existing unit |
+| `release init` | Create the first V2 pair | `--unit`, `--display-name`, `--version`, `--executor`, `--delivery`, `--workflow`, `--tag-prefix`, `--working-directory`, `--paths`, `--kind`, `--plugin-name`, `--plugin-manifest`, `--plugin-asset-prefix`, `--plugin-binary-name`, `--force` | Local guarded pair write; no Git or network | Success exits `0`; invalid input, an existing configuration, or persistence failure exits `1`; no V1 creation |
+| `release unit-add` | Add one unit to a V2 pair | Same unit/configuration flags as `init`, except `--force` | Local guarded pair write; no Git or network | Success exits `0`; invalid or duplicate units and persistence failures exit `1`; never overwrites an existing unit |
 | `release init-options` | List all accepted initialization choices | None | Read-only, local-only, token-free | JSON is the complete deterministic choice inventory |
 | `release migrate` | Convert root V1 configuration to V2 | `--dry-run` | Dry-run is read-only; actual mode writes the V2 pair, migration journal, and V1 archive locally | Refuses non-V1/unsafe sources; retains established recovery behavior |
-| `release patch` | Plan or execute a patch release | `--dry-run`, `--unit` | Dry-run is local/read-only; actual V1/V2 execution may mutate Git/files and use its configured remote delivery | V1/V2 outcome models and lifecycle exit behavior are unchanged |
+| `release patch` | Plan or execute a patch release | `--dry-run`, `--unit` | Dry-run is local/read-only; actual V1/V2 execution may mutate Git/files and use its configured remote delivery | Successful dry-run or execution exits `0`; invalid requests, refusals, and execution failures exit `1`; V1/V2 outcome models are unchanged |
 | `release minor` | Plan or execute a minor release | `--dry-run`, `--unit` | Same boundary as `patch` | Same lifecycle compatibility as `patch` |
 | `release major` | Plan or execute a major release | `--dry-run`, `--unit` | Same boundary as `patch` | Same lifecycle compatibility as `patch` |
 | `release plan` | Inspect a future patch/minor/major plan | `--change`*, `--unit` | Read-only, local-only, token-free; no journal or release execution | V1 uses the virtual `default` unit; V2 uses configured units |
@@ -61,10 +61,10 @@ marked with `*`.
 | `release resume` | Continue one journaled V2 release | `--unit`, `--dry-run` | Dry-run is local/read-only; actual continuation may mutate Git/journals and perform configured push/dispatch | No-journal, ambiguous, or unsafe continuation is refused; no new version is calculated |
 | `release history` | Read release history | `--unit` | Read-only local Git | V1 legacy tag/count behavior and V2 unit/path filtering are unchanged |
 | `release contributors` | Read contributors | `--unit` | Read-only local Git | V1 repository-wide and V2 selected-path behavior remain distinct and deterministic |
-| `release validate` | Validate V1 or V2 configuration | `--show`, `--unit` | Local/read-only; V1 compatibility may resolve `GITHUB_TOKEN` for legacy requirements but performs no network | Compatibility validation errors intentionally retain legacy exit `0`; V2 is token-independent |
-| `release evidence` | Inspect release evidence | `--family`, `--unit`, `--identity` | Read-only, local-only, token-free | Legacy Evidence JSON shape and filter failures are unchanged |
-| `release evidence-archive` | Archive one completed evidence file | `--family`*, `--identity`*, `--digest-sha256`*, `--confirm-archive`* | Guarded local mutation of only the selected fixture/file; no network or Git mutation | Guard failures preserve the source and established legacy response/exit behavior |
-| `release plugin-index` | Render, validate, or persist the plugin index | `--output-file`, `--check`, `--pretty`, `--repository` | Raw/check are read-only; persist writes only the explicit output file; local-only, token-free | Raw compact/pretty schema-v1 bytes are frozen; discovery/build/persist failures remain top-level `EXECUTION_ERROR`; Core `--output` errors occur before dispatch |
+| `release validate` | Validate V1 or V2 configuration | `--show`, `--unit` | Local/read-only; V1 compatibility may resolve `GITHUB_TOKEN` for legacy requirements but performs no network | Valid V1/V2 results exit `0`; invalid results and requests exit `1`; public mode-sensitive JSON is unchanged and V2 is token-independent |
+| `release evidence` | Inspect release evidence | `--family`, `--unit`, `--identity` | Read-only, local-only, token-free | Valid and empty inventories, including malformed-evidence diagnostics, exit `0`; invalid filters and ambiguous identities exit `1`; legacy Evidence JSON is unchanged |
+| `release evidence-archive` | Archive one completed evidence file | `--family`*, `--identity`*, `--digest-sha256`*, `--confirm-archive`* | Guarded local mutation of only the selected fixture/file; no network or Git mutation | Success exits `0`; confirmation, digest, target, and other archive guard failures exit `1` while preserving the source |
+| `release plugin-index` | Render, validate, or persist the plugin index | `--output-file`, `--check`, `--pretty`, `--repository` | Raw/check are read-only; persist writes only the explicit output file; local-only, token-free | Success exits `0`; check, discovery, build, and persistence failures exit `1`; raw compact/pretty schema-v1 bytes are frozen and Core `--output` errors occur before dispatch |
 
 Global presentation flags preserve the selected source, version/tag
 calculation, configured release tool, files, journals, Git ownership, workflow
@@ -78,11 +78,26 @@ materialized files, lifecycle ownership, and validation requirements. Shared
 commands retain those domain differences. Presentation flags do not make their
 JSON outcomes or side effects converge and do not alter either path.
 
-Exit-status ownership is not normalized here. Successful responses normally
-exit `0`; the command-specific readiness and compatibility exceptions above,
-typed request failures, lifecycle rejections, Resume refusals, Evidence
-filters, archive guards, subprocess failures, and Core pre-dispatch failures
-retain their established behavior. Each error is rendered once.
+Every in-repository Release response explicitly owns its semantic process
+status. Completed mutations, dry-runs, queries, checks, and successful negative
+observations exit `0`. Invalid requests, failed checks, actionable refusals,
+and execution failures exit `1`. In particular, blocked Plan and
+blocked/uncertain/rejected Pipeline observations, warning-only Doctor results,
+unsafe Resume dry-run assessments, malformed Evidence diagnostics, empty
+Evidence inventories, and legacy empty History observations remain successful.
+Doctor `not_ready`, Units issues, invalid Pipeline evidence, CI context
+mismatch, invalid Validate results, workflow conflicts, actual lifecycle or
+Resume refusals/failures, Evidence filter errors, archive guard failures, and
+Plugin Index check/persist failures exit `1`.
+
+Core validates a decoded response before output, renders it exactly once, then
+applies its explicit exit. A valid response owns the result even when the
+plugin subprocess also exits nonzero. Missing, malformed, or invalid responses,
+renderer/output failures, and pre-dispatch Core failures are Core-owned exit
+`1`. Exact explicit plugin values `0` through `125` are supported, although
+Release itself uses only `0` and `1`. Installed legacy plugins that omit the
+transport field temporarily retain implicit-success compatibility. The field
+does not appear in public command JSON or GitHub output.
 
 ## General
 
@@ -796,7 +811,7 @@ Global `--describe` adds focused safe sections for execution evidence, dispatch 
 
 `neko release evidence --identity <prefix>` applies family and unit filters before selecting exactly one record. Prefixes must be 8-64 lowercase hexadecimal characters; uppercase input is rejected rather than normalized, full identities are accepted, and zero or ambiguous matches fail. The legacy JSON compatibility shape is unchanged for both summary and identity-filtered results: `data.items`, typed `data.evidence`, and `data.diagnostics` retain their established fields, casing, duplication, values, ordering, and nullability. Describe and verbose metadata is excluded from JSON, and all global presentation modes leave domain data and status unchanged.
 
-`neko release evidence-archive` is the separate guarded mutation capability. It supports only `archive-completed` for completed `release-execution`, `v1-compensation`, and `v2-pair-recovery` evidence and requires `--family`, the exact 64-character `--identity`, the current `--digest-sha256`, and `--confirm-archive`; identity prefixes are inspection-only. Default success output reports family, identity, confirmation, digest match, archive result, safe source/target labels, and the next action. Guard failures preserve their specific actionable error. `--describe` adds validation facts, the guarded write plan, and limitations. `--verbose` reports chronological validation, lookup, digest, target, write, verification, source-removal, completion, or refusal phases without full digests or absolute paths. The operation writes and verifies an exact private archive before removing only the selected completed source; its established conflicts, idempotency, rollback limits, JSON, and exit behavior are unchanged.
+`neko release evidence-archive` is the separate guarded mutation capability. It supports only `archive-completed` for completed `release-execution`, `v1-compensation`, and `v2-pair-recovery` evidence and requires `--family`, the exact 64-character `--identity`, the current `--digest-sha256`, and `--confirm-archive`; identity prefixes are inspection-only. Default success output reports family, identity, confirmation, digest match, archive result, safe source/target labels, and the next action. Guard failures preserve their specific actionable error and exit `1`; successful archival exits `0`. `--describe` adds validation facts, the guarded write plan, and limitations. `--verbose` reports chronological validation, lookup, digest, target, write, verification, source-removal, completion, or refusal phases without full digests or absolute paths. The operation writes and verifies an exact private archive before removing only the selected completed source; its established conflicts, idempotency, rollback limits, and JSON remain unchanged.
 
 Neither command repairs, retries, resumes, infers remote state, commits, tags, pushes, dispatches, or archives dispatch/migration evidence.
 

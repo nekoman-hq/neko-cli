@@ -11,6 +11,7 @@ This guide explains how to create plugins for Neko CLI. Plugins are standalone e
 - [Getting Started](#getting-started)
 - [The Manifest File](#the-manifest-file)
 - [Request & Response Types](#request--response-types)
+- [Exit Status Ownership](#exit-status-ownership)
 - [Logging](#logging)
 - [Error Handling](#error-handling)
 - [Best Practices](#best-practices)
@@ -41,7 +42,8 @@ Neko CLI uses a **dispatcher architecture** where the core CLI acts as a router 
 4. Plugin executes the command logic
 5. Plugin writes logs to stderr (captured by CLI)
 6. Plugin writes a `Response` JSON to stdout
-7. CLI renders the response in the requested format (table, json, text)
+7. CLI validates and renders a valid response once in the requested format
+8. The response's explicit exit request becomes the CLI process exit
 
 ---
 
@@ -182,7 +184,7 @@ func handleHello(req plugin.Request) (*plugin.Response, error) {
 
     log.PluginV(log.Exec, "Greeting: %s", name)
 
-    return &plugin.Response{
+    response := &plugin.Response{
         Status: "success",
         Metadata: plugin.ResponseMetadata{
             Plugin:    pluginName,
@@ -194,7 +196,9 @@ func handleHello(req plugin.Request) (*plugin.Response, error) {
             "message": fmt.Sprintf("Hello, %s!", name),
         },
         RendererHint: "text",
-    }, nil
+    }
+    response.SetExitCode(0)
+    return response, nil
 }
 ```
 
@@ -367,6 +371,7 @@ type Response struct {
     PresentationTable      *presentation.Table      `json:"-"`
     PresentationProperties *presentation.Properties `json:"-"`
     PresentationText       *presentation.Text       `json:"-"`
+    ExitCode               int                      `json:"exit_code,omitempty"`
 }
 
 // Package presentation
@@ -441,6 +446,42 @@ response fields `HumanTable`, `HumanProperties`, and `HumanText`. New code must
 import `pkg/presentation` and populate only the canonical `Presentation*`
 response fields. Supplying conflicting canonical and deprecated response fields
 is rejected.
+
+## Exit Status Ownership
+
+A valid decoded response owns the final Neko CLI process status. Set the intent
+on every new response with `SetExitCode`; do not infer process success or
+failure from `Status`, `Error`, command names, or domain status strings.
+
+```sh
+response.SetExitCode(0) // successful command or successful observation
+response.SetExitCode(1) // invalid request, failed check, refusal, or execution failure
+
+code, present := response.ExplicitExitCode()
+```
+
+The plugin wire protocol accepts exact explicit values from `0` through `125`.
+Calling `SetExitCode(0)` is significant: it serializes `"exit_code":0`, and
+Core preserves its presence after decoding. A nonzero `ExitCode` in an existing
+keyed struct literal also remains explicit for Go source compatibility.
+
+Installed legacy plugins may omit `exit_code`; Core temporarily treats that
+unset value as implicit success. Omission is deprecated for plugin authors, so
+new and updated plugins must make every response explicit. Values below `0` or
+above `125`, a malformed response, and an error status without an error
+envelope are protocol failures owned by Core and exit `1`.
+
+Explicit zero covers completed mutations, successful dry-runs and queries, and
+successful negative observations such as an inspection reporting a blocked or
+uncertain domain state. Explicit failure covers invalid requests, failed
+diagnostics or checks, actionable refusals, and execution failures. The
+subprocess status is only a transport fallback when no valid response exists;
+it does not override a valid decoded response.
+
+Core validates before writing, renders a valid response exactly once, and only
+then applies its explicit exit. Renderer and output-writer failures remain
+Core-owned exit `1`. The transport-only `exit_code` is not included in public
+`--output json`, raw JSON, or GitHub output.
 
 ### Renderer Hints
 
@@ -616,7 +657,7 @@ log.PluginV(log.Exec, "Detailed info: %v", someValue)
 For recoverable errors (validation failures, missing config, etc.), return an error response:
 
 ```sh
-return &plugin.Response{
+response := &plugin.Response{
     Status: "error",
     Metadata: plugin.ResponseMetadata{
         Plugin:    pluginName,
@@ -632,7 +673,9 @@ return &plugin.Response{
             "hint":          "Run 'neko my-plugin init' first",
         },
     },
-}, nil
+}
+response.SetExitCode(1)
+return response, nil
 ```
 
 ### Fatal Errors
@@ -652,7 +695,9 @@ errors.WriteErrorWithDetails("PARSE_ERROR", "Invalid input", map[string]any{
 })
 ```
 
-These functions write an error response and exit immediately.
+These functions write an error response with explicit exit `1` and then exit
+the plugin process with `1`. Core treats the decoded response as authoritative,
+renders it once, and exits `1`; the subprocess status remains fallback evidence.
 
 ---
 

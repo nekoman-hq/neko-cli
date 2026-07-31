@@ -46,7 +46,45 @@ When `.neko/release.config.json` exists in the Git root, it is authoritative for
 
 Both formats use the `Release Configuration Validation` human title. The
 presentation declarations do not alter public `--output json`, its established
-`data.items` ordering, raw JSON behavior, error codes, or legacy exit behavior.
+`data.items` ordering, raw JSON behavior, or error codes. Valid results exit
+`0`; invalid V1 and V2 validation results now explicitly exit `1`.
+
+## Plugin Response Exit Compatibility
+
+The plugin transport now distinguishes an explicitly requested exit `0` from
+an omitted exit. New responses use the presence-aware `SetExitCode` API and may
+request exact portable values from `0` through `125`; the Release Plugin uses
+only `0` and `1`. Installed legacy plugins that omit `exit_code` temporarily
+remain implicit successes. That omission is deprecated for plugin authors.
+
+A valid decoded response owns the final Core process status, even when the
+plugin subprocess exits nonzero. The subprocess status is authoritative only
+when no valid response exists. Core validates before rendering, renders one
+valid result or error exactly once, and applies its exit only after rendering
+succeeds. Malformed or missing responses, invalid error envelopes, out-of-range
+exits, renderer failures, and JSON/GitHub writer failures are Core-owned exit
+`1`. `Status`, error-envelope presence, command names, and domain status text do
+not independently determine an exit.
+
+This corrects previously masked failures. The following now exit `1` instead
+of being observed as Core success where their response had omitted an explicit
+failure: invalid Validate results; invalid Init and duplicate Unit Add requests;
+migration refusals and filesystem failures; release lifecycle preflight
+refusals and execution failures; actual Resume refusals and continuation
+failures; CI context mismatches; Workflow Init conflicts; Doctor `not_ready`;
+Units issues; invalid Pipeline evidence; History and Contributors repository
+failures; Evidence filter/identity errors; Evidence Archive guard or filesystem
+failures; Plugin Index check/persistence failures; and fatal plugin preflight
+errors serialized through `WriteError`.
+
+Successful negative observations intentionally remain exit `0`: blocked Plan;
+blocked, uncertain, or rejected Pipeline inspection; warning-only or partially
+unavailable optional Doctor remote inspection; unsafe Resume dry-run
+assessment; malformed Evidence represented as diagnostics; empty Evidence
+inventories; and the retained legacy empty History observation. Public Release,
+Resume, Evidence, Validate, and Plugin Index JSON contracts are unchanged, and
+automation can now rely on normal shell and Make failure propagation without
+parsing JSON.
 
 ## V2 Commands
 

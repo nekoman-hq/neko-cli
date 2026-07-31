@@ -60,6 +60,39 @@ Explicit-root entry points exist for init, unit-add, release, resume, validate, 
 
 Isolation tests prove two in-process repositories can be validated and indexed without changing process cwd or leaking root-specific data. CI context validation additionally resolves nested invocations to the explicit root and keeps both repositories' Git/config facts isolated.
 
+### Response-owned process exits
+
+Plugin response exit ownership is split across the existing boundaries. The
+public `plugin.Response` numeric field retains Go source compatibility while a
+transport-owned presence marker distinguishes explicit zero from legacy
+omission. The wire includes an exit when nonzero or explicitly set, accepts the
+portable range `0` through `125`, and preserves temporary implicit-success
+compatibility for installed plugins that omit it. Public response JSON omits
+the transport field.
+
+The dispatcher still owns subprocess execution, stdout decode, sanitized
+stderr capture, and response precedence. A valid decoded response is retained
+even when the subprocess exits nonzero; subprocess failure becomes
+authoritative only when no valid response exists. The dispatcher does not
+interpret command names, Release statuses, response data, or error semantics.
+
+Core validates before output, renders one response exactly once, then converts
+a validated explicit exit into a narrow executable-boundary error whose exact
+code is applied by `main`. Legacy omission and explicit zero return success;
+generic Cobra, transport, protocol, renderer, JSON writer, and GitHub command-
+file failures return Core exit `1`. Error status without its required envelope
+and explicit exits outside the supported range fail before any response bytes
+are written. Status remains domain data and does not imply an exit.
+
+Every Release response mapper now assigns semantic `0` or `1`. Successful
+mutations, dry-runs, queries, checks, and negative observations use `0`;
+invalid requests, failed checks, actionable refusals, and execution failures
+use `1`. Fatal plugin helpers serialize explicit `1` before retaining their
+nonzero subprocess fallback. Response data, status, error envelopes,
+presentation, raw Plugin Index schema, Evidence JSON, GitHub outputs,
+describe/verbose behavior, workflow files, and release-tool configuration are
+unchanged.
+
 ### Typed dispatched-context validation
 
 `neko release ci-validate-context` now owns the reusable local validation

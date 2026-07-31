@@ -25,6 +25,27 @@ The `plugin-release` V2 unit declares `kind: "plugin"` metadata in `.neko/releas
 
 The complete consumer setup is the [Release V2 GitHub Actions Golden Path](../release/github-actions-golden-path.md). Additional Release V2 and plugin registry examples live in [Release V2 Examples](../release/examples.md). Bootstrap ownership across Neko CLI, GitHub Actions, adapters, and consumer workflows is defined in [Release V2 Bootstrap Product Boundary](../release/bootstrap-product-boundary.md).
 
+### Exit status contract
+
+Every Release response explicitly requests exit `0` or `1`. Successful
+mutations, dry-runs, queries, checks, and successful negative observations use
+`0`; invalid requests, failed checks, actionable refusals, and execution
+failures use `1`. Blocked Plan, blocked/uncertain/rejected Pipeline inspection,
+warning-only Doctor results, unsafe Resume dry-run assessment, malformed
+Evidence diagnostics, empty Evidence, and legacy empty History remain
+successful observations.
+
+A valid decoded response owns the final Neko CLI status even if the plugin
+process also exits nonzero. Core validates and renders it exactly once before
+applying the requested status. Missing, malformed, or invalid responses and
+render/output failures are Core-owned exit `1`. The transport exit is excluded
+from public Release JSON and GitHub output, so all established domain schemas
+remain unchanged. Installed legacy plugins that omit the exit temporarily
+retain implicit-success compatibility; new response producers must be
+explicit. See the [Plugin Development Guide](../plugin-development.md#exit-status-ownership)
+for the transport contract and the [Release CLI reference](../release/cli-reference.md)
+for command-specific semantics.
+
 ---
 
 ## Commands
@@ -1035,7 +1056,7 @@ Only completed `release-execution`, completed `v1-compensation`, and completed `
 
 Global `--describe` adds existing validation facts, source classification, confirmation contract, guarded write plan, final outcome, and limitations. Global `--verbose` reports the chronological guarded phases: request validation, family resolution, evidence read/classification, exact identity resolution, digest verification, target check, private write preparation/completion, byte verification, selected-source removal, completion, or the refusal phase. Logs abbreviate identities/digests and use safe repository-relative labels.
 
-The command re-observes the evidence, rejects stale digests, writes an exact `0600` archive copy in a private `0700` archive directory, verifies the copy, and only then removes the completed source evidence. No mutation occurs before confirmation, on identity/digest refusal, on a missing source, or on target conflict. It changes no repository worktree/index, commit, tag, remote, or unrelated evidence. Existing JSON, error envelopes, exits, idempotency, conflict handling, and rollback limits are unchanged. It does not support force, repair, retry, arbitrary paths, dispatch archival, or migration archival.
+The command re-observes the evidence, rejects stale digests, writes an exact `0600` archive copy in a private `0700` archive directory, verifies the copy, and only then removes the completed source evidence. No mutation occurs before confirmation, on identity/digest refusal, on a missing source, or on target conflict. It changes no repository worktree/index, commit, tag, remote, or unrelated evidence. Successful archival exits `0`; guard and filesystem failures exit `1`. Existing JSON, error envelopes, idempotency, conflict handling, and rollback limits are unchanged. It does not support force, repair, retry, arbitrary paths, dispatch archival, or migration archival.
 
 ---
 
