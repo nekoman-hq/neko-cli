@@ -22,13 +22,13 @@ func TestPluginExitOwnershipProcessMatrix(t *testing.T) {
 		name             string
 		response         string
 		pluginStderr     string
+		coreArgs         []string
 		pluginExit       int
-		wantDecoded      bool
-		wantExitPresent  bool
 		wantResponseExit int
 		wantCoreExit     int
 		wantRenderCount  int
-		coreArgs         []string
+		wantDecoded      bool
+		wantExitPresent  bool
 	}{
 		{name: "legacy response and zero subprocess", response: processResponse("success", "", "", ""), wantDecoded: true, wantCoreExit: 0, wantRenderCount: 1},
 		{name: "explicit zero and zero subprocess", response: processResponse("success", "", "", `,"exit_code":0`), wantDecoded: true, wantExitPresent: true, wantCoreExit: 0, wantRenderCount: 1},
