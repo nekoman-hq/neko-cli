@@ -156,6 +156,52 @@ func TestNonPluginCoreProcessExitBehaviorRemainsGeneric(t *testing.T) {
 	}
 }
 
+func TestShellAndMakeStopOnExplicitPluginFailure(t *testing.T) {
+	root := repositoryRootForProcessTest(t)
+	binary := buildCoreProcessTestBinary(t, root)
+	failureResponse := processResponse("error", "AUTOMATION_FAILED", "automation failed", `,"exit_code":1`)
+	pluginDir, _ := installProcessTestPlugin(t, failureResponse, "", 0)
+	environment := processTestEnvironment(pluginDir)
+
+	stdout, stderr, exitCode := runProcessTestCommand(
+		t,
+		"/bin/sh",
+		[]string{"-eu", "-c", `"$1" probe run --output json; printf 'SHELL_COMPLETED\n'`, "sh", binary},
+		environment,
+	)
+	if exitCode != 1 || strings.Contains(stdout, "SHELL_COMPLETED") || strings.Count(stdout, "AUTOMATION_FAILED") != 1 || stderr != "" {
+		t.Fatalf("set -e failure = exit %d, stdout %q, stderr %q", exitCode, stdout, stderr)
+	}
+
+	makefile := filepath.Join(t.TempDir(), "Makefile")
+	makefileContents := "all:\n\t@$(NEKO_TEST_CORE) probe run --output json\n\t@printf 'MAKE_COMPLETED\\n'\n"
+	if err := os.WriteFile(makefile, []byte(makefileContents), 0o600); err != nil {
+		t.Fatalf("write Makefile: %v", err)
+	}
+	makeEnvironment := append(append([]string(nil), environment...), "NEKO_TEST_CORE="+binary)
+	stdout, stderr, exitCode = runProcessTestCommand(t, "make", []string{"-f", makefile}, makeEnvironment)
+	if exitCode == 0 || strings.Contains(stdout, "MAKE_COMPLETED") || strings.Count(stdout, "AUTOMATION_FAILED") != 1 {
+		t.Fatalf("Make failure = exit %d, stdout %q, stderr %q", exitCode, stdout, stderr)
+	}
+}
+
+func TestShellContinuesAfterSuccessfulNegativeObservation(t *testing.T) {
+	root := repositoryRootForProcessTest(t)
+	binary := buildCoreProcessTestBinary(t, root)
+	observation := processResponse("success", "", "", `,"exit_code":0`)
+	pluginDir, _ := installProcessTestPlugin(t, observation, "", 7)
+
+	stdout, stderr, exitCode := runProcessTestCommand(
+		t,
+		"/bin/sh",
+		[]string{"-eu", "-c", `"$1" probe run --output json; printf 'SHELL_COMPLETED\n'`, "sh", binary},
+		processTestEnvironment(pluginDir),
+	)
+	if exitCode != 0 || strings.Count(stdout, "RENDER_MARKER") != 1 || strings.Count(stdout, "SHELL_COMPLETED") != 1 || stderr != "" {
+		t.Fatalf("successful observation automation = exit %d, stdout %q, stderr %q", exitCode, stdout, stderr)
+	}
+}
+
 func processResponse(status, code, message, exitField string) string {
 	errorField := ""
 	if code != "" {
