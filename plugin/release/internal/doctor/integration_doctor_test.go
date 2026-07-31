@@ -23,7 +23,8 @@ func TestIntegrationDoctorCanonicalScaffoldIsNotReadyOnlyForConsumerPlaceholder(
 
 	response := runIntegrationDoctor(t, root, nil)
 	result := integrationDoctorResultFromResponse(t, response)
-	if result.Readiness != integrationDoctorNotReady || response.ExitCode != 1 {
+	code, present := response.ExplicitExitCode()
+	if result.Readiness != integrationDoctorNotReady || !present || code != 1 {
 		t.Fatalf("readiness=%q exit=%d, want not_ready/1", result.Readiness, response.ExitCode)
 	}
 	if result.Summary.Errors != 1 || result.Summary.Warnings != 0 || result.Summary.NotVerifiable != 6 {
@@ -41,7 +42,8 @@ func TestIntegrationDoctorCustomEquivalentIsReadyWithExplicitNotVerifiableFacts(
 
 	response := runIntegrationDoctor(t, root, nil)
 	result := integrationDoctorResultFromResponse(t, response)
-	if result.Readiness != integrationDoctorReady || response.ExitCode != 0 {
+	code, present := response.ExplicitExitCode()
+	if result.Readiness != integrationDoctorReady || !present || code != 0 {
 		t.Fatalf("readiness=%q exit=%d, want ready/0", result.Readiness, response.ExitCode)
 	}
 	if result.Summary.Errors != 0 || result.Summary.Warnings != 0 || result.Summary.NotVerifiable != 7 {
@@ -96,7 +98,8 @@ func TestIntegrationDoctorWarningsRemainSuccessful(t *testing.T) {
 
 	response := runIntegrationDoctor(t, root, nil)
 	result := integrationDoctorResultFromResponse(t, response)
-	if result.Readiness != integrationDoctorReadyWithWarnings || response.ExitCode != 0 {
+	code, present := response.ExplicitExitCode()
+	if result.Readiness != integrationDoctorReadyWithWarnings || !present || code != 0 {
 		t.Fatalf("readiness=%q exit=%d, want ready_with_warnings/0", result.Readiness, response.ExitCode)
 	}
 	assertIntegrationDoctorCodes(t, result.Diagnostics, "PERMISSIONS_BROAD")

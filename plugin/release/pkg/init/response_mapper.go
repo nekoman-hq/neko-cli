@@ -44,6 +44,7 @@ func mapInitializeV2Response(result initializeV2Result, failure *commandFailure,
 	}
 	response.PresentationProperties = initializeV2SummaryPresentation(result)
 	response.PresentationTable = initializeV2DetailPresentation(result)
+	response.SetExitCode(0)
 	return response
 }
 
@@ -75,6 +76,7 @@ func mapAddV2UnitResponse(result addV2UnitResult, failure *commandFailure, times
 	}
 	response.PresentationProperties = addV2UnitSummaryPresentation(result)
 	response.PresentationTable = addV2UnitDetailPresentation(result)
+	response.SetExitCode(0)
 	return response
 }
 
@@ -103,6 +105,7 @@ func mapCommandFailure(failure *commandFailure, timestamp time.Time) *plugin.Res
 			{Label: "Status", Value: "No successful config/state write", Role: presentation.StyleError, Emphasized: true},
 		},
 	}
+	response.SetExitCode(1)
 	return response
 }
 

@@ -54,8 +54,9 @@ func mapUnitOverviewResult(result *unitOverviewResult, timestamp time.Time) *plu
 		}}
 		response.PresentationTable = unitOverviewLimitationsTable()
 	}
+	response.SetExitCode(0)
 	if result.Status != unitOverviewValid {
-		response.ExitCode = 1
+		response.SetExitCode(1)
 	}
 	return response
 }

@@ -33,6 +33,9 @@ func TestHandleHistoryCharacterizesGitFailureBoundaries(t *testing.T) {
 		if resp.Status != "success" || resp.Metadata.Command != "history" || resp.Metadata.Timestamp.IsZero() {
 			t.Fatalf("unexpected response: %#v", resp)
 		}
+		if code, present := resp.ExplicitExitCode(); !present || code != 0 {
+			t.Fatalf("empty V1 history exit = (%d, %t), want (0, true)", code, present)
+		}
 		items, ok := resp.Data["items"].([]map[string]any)
 		if !ok || len(items) != 0 {
 			t.Fatalf("items = %#v, want empty history", resp.Data["items"])

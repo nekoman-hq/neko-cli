@@ -48,7 +48,6 @@ func MapValidatedReleaseContext(result *ValidatedReleaseContext, timestamp time.
 			failureFromMessage("CONTEXT_VALIDATION_RESULT_INVALID", "release context validation did not produce a validated context"),
 			timestamp,
 		)
-		response.ExitCode = 1
 		return response
 	}
 	response := &plugin.Response{
@@ -90,6 +89,7 @@ func MapValidatedReleaseContext(result *ValidatedReleaseContext, timestamp time.
 	response.PresentationTable.Following = releaseContextDetailsTable(result)
 	response.PresentationTable.Following.Following = releaseContextGitHubMappingTable()
 	response.PresentationTable.Following.Following.Following = releaseContextLimitationsTable()
+	response.SetExitCode(0)
 	return response
 }
 

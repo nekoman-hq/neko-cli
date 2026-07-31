@@ -138,8 +138,8 @@ func TestReleaseResumeTransportDistinguishesRefusalAndResumableDryRun(t *testing
 		[]string{"--unit", "api", "--dry-run"},
 		releaseReadonlyMode{},
 	)
-	if refusalErr != nil {
-		t.Fatalf("resume no-journal exit changed: %v", refusalErr)
+	if refusalErr == nil || !isResponseProcessExitError(refusalErr) || ProcessExitCode(refusalErr) != 1 {
+		t.Fatalf("resume no-journal exit = %v, want explicit response exit 1", refusalErr)
 	}
 	for _, want := range []string{"Resume Refused", "NO_RESUMABLE_JOURNAL", "no resumable V2 release execution journal found for unit api"} {
 		if !strings.Contains(refusal, want) {

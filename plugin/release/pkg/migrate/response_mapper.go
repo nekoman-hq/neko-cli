@@ -29,6 +29,7 @@ func mapMigrationCommandResponse(
 		}
 		response.PresentationProperties = migrationFailureProperties()
 		response.PresentationTable = migrationFailurePresentation(failure)
+		response.SetExitCode(1)
 		return response
 	}
 
@@ -49,6 +50,7 @@ func mapMigrationCommandResponse(
 	}
 	response.PresentationProperties = migrationSummaryPresentation(result)
 	response.PresentationTable = migrationDetailPresentation(result)
+	response.SetExitCode(0)
 	return response
 }
 

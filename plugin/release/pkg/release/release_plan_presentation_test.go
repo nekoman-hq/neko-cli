@@ -113,6 +113,9 @@ func TestReleasePlanDefaultShowsEveryBlocker(t *testing.T) {
 		{Category: "unsupported-delivery", Message: "The selected delivery cannot execute this plan."},
 	}
 	response := MapReleasePlanInspection(result, time.Date(2026, time.July, 18, 18, 30, 30, 0, time.UTC))
+	if code, present := response.ExplicitExitCode(); !present || code != 0 {
+		t.Fatalf("blocked plan exit = (%d, %t), want (0, true)", code, present)
+	}
 	output := ansi.Strip(renderReleasePlanForTest(
 		t,
 		response,

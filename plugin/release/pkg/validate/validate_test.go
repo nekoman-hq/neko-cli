@@ -182,8 +182,9 @@ func TestHandleValidateV2FocusedFailureContracts(t *testing.T) {
 			if err != nil {
 				t.Fatalf("expected structured response, got Go error: %v", err)
 			}
-			if resp.Status != "error" || resp.Error == nil || resp.Error.Code != test.code || resp.ExitCode != 0 {
-				t.Fatalf("failure contract = %#v, want code %s and legacy exit 0", resp, test.code)
+			code, present := resp.ExplicitExitCode()
+			if resp.Status != "error" || resp.Error == nil || resp.Error.Code != test.code || !present || code != 1 {
+				t.Fatalf("failure contract = %#v, want code %s and explicit exit 1", resp, test.code)
 			}
 		})
 	}
@@ -196,7 +197,8 @@ func TestHandleValidateV2PreservesRecoveryEvidenceBoundary(t *testing.T) {
 	mustWrite(t, config.V2PairRecoveryPath("."), `{`)
 
 	resp, err := HandleValidate(plugin.Request{Flags: map[string]any{"show": true, "unit": "api"}})
-	if err != nil || resp.Status != "success" || resp.ExitCode != 0 {
+	code, present := resp.ExplicitExitCode()
+	if err != nil || resp.Status != "success" || !present || code != 0 {
 		t.Fatalf("validate unexpectedly expanded into recovery inspection: response=%#v error=%v", resp, err)
 	}
 }
@@ -219,6 +221,9 @@ func TestHandleValidateV1StillUsesLegacyConfig(t *testing.T) {
 	}
 	if resp.Status != "success" {
 		t.Fatalf("expected V1 success, got %#v", resp.Error)
+	}
+	if code, present := resp.ExplicitExitCode(); !present || code != 0 {
+		t.Fatalf("V1 success exit = (%d, %t), want (0, true)", code, present)
 	}
 }
 

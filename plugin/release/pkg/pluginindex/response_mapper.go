@@ -31,6 +31,7 @@ func mapPluginIndexCommandResponse(result pluginIndexCommandResult, timestamp ti
 		RendererHint: rendererHint,
 	}
 	attachPluginIndexPresentation(response, result)
+	response.SetExitCode(0)
 	return response
 }
 

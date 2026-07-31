@@ -29,7 +29,8 @@ func TestUnitOverviewListsCanonicalUnitsDeterministically(t *testing.T) {
 
 	response := runUnitOverview(t, root)
 	result := unitOverviewResponseResult(t, response)
-	if response.ExitCode != 0 || result.status != unitOverviewValid {
+	code, present := response.ExplicitExitCode()
+	if !present || code != 0 || result.status != unitOverviewValid {
 		t.Fatalf("status=%q exit=%d", result.status, response.ExitCode)
 	}
 	if got := unitOverviewRowIDs(result.units); !reflect.DeepEqual(got, []string{"api", "cli", "worker"}) {
@@ -75,7 +76,8 @@ func TestUnitOverviewKeepsIncompleteUnitsVisible(t *testing.T) {
 
 	response := runUnitOverview(t, root)
 	result := unitOverviewResponseResult(t, response)
-	if response.ExitCode != 1 || result.status != unitOverviewHasIssues || result.summary.Incomplete != 2 {
+	code, present := response.ExplicitExitCode()
+	if !present || code != 1 || result.status != unitOverviewHasIssues || result.summary.Incomplete != 2 {
 		t.Fatalf("status=%q summary=%#v exit=%d", result.status, result.summary, response.ExitCode)
 	}
 	if got := unitOverviewRowIDs(result.units); !reflect.DeepEqual(got, []string{"api", "worker"}) {

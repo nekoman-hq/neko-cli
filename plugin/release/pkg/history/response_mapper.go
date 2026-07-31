@@ -26,7 +26,7 @@ func mapHistoryQueryResponse(result historyQueryResult, failure *historyQueryFai
 		Timestamp: timestamp,
 	}
 	if failure != nil {
-		return &plugin.Response{
+		response := &plugin.Response{
 			Status:   "error",
 			Metadata: metadataValue,
 			Error: &plugin.ResponseError{
@@ -34,6 +34,8 @@ func mapHistoryQueryResponse(result historyQueryResult, failure *historyQueryFai
 				Message: failure.Message,
 			},
 		}
+		response.SetExitCode(1)
+		return response
 	}
 
 	items := make([]map[string]any, 0, len(result.Entries))
@@ -48,11 +50,13 @@ func mapHistoryQueryResponse(result historyQueryResult, failure *historyQueryFai
 		}
 		items = append(items, item)
 	}
-	return &plugin.Response{
+	response := &plugin.Response{
 		Status:   "success",
 		Metadata: metadataValue,
 		Data: map[string]any{
 			"items": items,
 		},
 	}
+	response.SetExitCode(0)
+	return response
 }

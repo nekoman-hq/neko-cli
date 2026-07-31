@@ -26,6 +26,9 @@ func TestResumeAssessmentPresentationSeparatesDecisionFromEvidence(t *testing.T)
 	if err != nil {
 		t.Fatalf("MapResumeCommandOutcome: %v", err)
 	}
+	if code, present := response.ExplicitExitCode(); !present || code != 0 {
+		t.Fatalf("resume dry-run assessment exit = (%d, %t), want (0, true)", code, present)
+	}
 
 	concise := ansi.Strip(renderLifecycleResponse(t, response, renderer.RenderOptions{
 		Format: renderer.FormatTable, WidthProvider: releasePlanOutputWidth{width: 84, available: true},
@@ -88,6 +91,9 @@ func TestResumePresentationKeepsDomainJSONInvariant(t *testing.T) {
 	}, time.Date(2026, time.July, 22, 13, 1, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("MapResumeCommandOutcome: %v", err)
+	}
+	if code, present := response.ExplicitExitCode(); !present || code != 0 {
+		t.Fatalf("unsafe resume dry-run exit = (%d, %t), want (0, true)", code, present)
 	}
 	plain := renderLifecycleResponse(t, response, renderer.RenderOptions{Format: renderer.FormatJSON})
 	for _, options := range []renderer.RenderOptions{

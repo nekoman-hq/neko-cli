@@ -39,6 +39,7 @@ func mapValidationQueryResponse(result validationQueryResult, failure *validatio
 		if failure.Hint != "" {
 			response.Error.Details = map[string]any{"hint": failure.Hint}
 		}
+		response.SetExitCode(1)
 		return response
 	}
 
@@ -50,6 +51,7 @@ func mapValidationQueryResponse(result validationQueryResult, failure *validatio
 	}
 	response.PresentationProperties = validationSummaryPresentation(result)
 	response.PresentationTable = validationUnitPresentation(result)
+	response.SetExitCode(0)
 	return response
 }
 

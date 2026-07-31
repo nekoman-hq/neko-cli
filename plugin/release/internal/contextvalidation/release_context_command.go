@@ -42,7 +42,6 @@ func (handler releaseContextValidationCommandHandler) Handle(ctx context.Context
 			presentationResult = result
 		}
 		attachFailedReleaseContextPresentation(response, presentationResult)
-		response.ExitCode = 1
 		return response, nil
 	}
 	return MapValidatedReleaseContext(result, timestamp), nil

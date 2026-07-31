@@ -85,14 +85,15 @@ func mapIntegrationDoctorRequestFailure(
 	if failure == nil {
 		return nil
 	}
-	return &plugin.Response{
+	response := &plugin.Response{
 		Status:   "error",
 		Metadata: integrationDoctorResponseMetadata(timestamp),
 		Error: &plugin.ResponseError{
 			Code: failure.Code, Message: failure.Message,
 		},
-		ExitCode: 1,
 	}
+	response.SetExitCode(1)
+	return response
 }
 
 func integrationDoctorResponseMetadata(timestamp time.Time) plugin.ResponseMetadata {

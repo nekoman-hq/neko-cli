@@ -24,16 +24,19 @@ func MapCommandFailure(command string, failure *CommandFailure, timestamp time.T
 		},
 	}
 	attachLifecycleFailurePresentation(response, command, failure)
+	response.SetExitCode(1)
 	return response
 }
 
 func successTableResponse(command string, timestamp time.Time, items []map[string]any) *plugin.Response {
-	return &plugin.Response{
+	response := &plugin.Response{
 		Status:       "success",
 		Metadata:     commandResponseMetadata(command, timestamp),
 		Data:         map[string]any{"items": items},
 		RendererHint: "table",
 	}
+	response.SetExitCode(0)
+	return response
 }
 
 func commandResponseMetadata(command string, timestamp time.Time) plugin.ResponseMetadata {

@@ -229,8 +229,8 @@ func TestReleaseInitAndUnitAddConflictsRemainActionableAndWriteNothing(t *testin
 	initOutput, initErr := executeReleaseReadonlyCommand(
 		t, manifest, initRoot, "init", initFlags, releaseReadonlyMode{},
 	)
-	if initErr != nil {
-		t.Fatalf("init conflict changed characterized Core exit behavior: %v", initErr)
+	if initErr == nil || !isResponseProcessExitError(initErr) || ProcessExitCode(initErr) != 1 {
+		t.Fatalf("init conflict exit = %v, want explicit response exit 1", initErr)
 	}
 	for _, want := range []string{"CONFIG_EXISTS", "Conflict", "Force applicable", "Yes", "--force"} {
 		if !strings.Contains(initOutput, want) {
@@ -262,8 +262,8 @@ func TestReleaseInitAndUnitAddConflictsRemainActionableAndWriteNothing(t *testin
 	unitOutput, unitErr := executeReleaseReadonlyCommand(
 		t, manifest, unitRoot, "unit-add", duplicateFlags, releaseReadonlyMode{},
 	)
-	if unitErr != nil {
-		t.Fatalf("duplicate conflict changed characterized Core exit behavior: %v", unitErr)
+	if unitErr == nil || !isResponseProcessExitError(unitErr) || ProcessExitCode(unitErr) != 1 {
+		t.Fatalf("duplicate conflict exit = %v, want explicit response exit 1", unitErr)
 	}
 	for _, want := range []string{"DUPLICATE_UNIT", "Conflict", "Duplicate unit", "Force applicable", "No", "Choose a new unit id"} {
 		if !strings.Contains(unitOutput, want) {
@@ -385,8 +385,8 @@ func TestReleaseMigrateConflictIsActionableAndWriteFree(t *testing.T) {
 	output, err := executeReleaseReadonlyCommand(
 		t, manifest, root, "migrate", nil, releaseReadonlyMode{},
 	)
-	if err != nil {
-		t.Fatalf("migrate conflict changed characterized Core exit behavior: %v", err)
+	if err == nil || !isResponseProcessExitError(err) || ProcessExitCode(err) != 1 {
+		t.Fatalf("migrate conflict exit = %v, want explicit response exit 1", err)
 	}
 	for _, want := range []string{
 		"MIGRATION_FAILED", "Migration Blocked", "V1/V2 source conflict", "Refused",
@@ -523,8 +523,8 @@ func TestReleaseWorkflowInitCorePresentationAndIdempotencyContracts(t *testing.T
 	conflictOutput, conflictErr := executeReleaseReadonlyCommand(
 		t, manifest, conflictRoot, "github-workflow-init", conflictFlags[:len(conflictFlags)-1], releaseReadonlyMode{},
 	)
-	if conflictErr == nil {
-		t.Fatal("workflow conflict changed non-zero exit policy")
+	if conflictErr == nil || !isResponseProcessExitError(conflictErr) || ProcessExitCode(conflictErr) != 1 {
+		t.Fatalf("workflow conflict exit = %v, want explicit response exit 1", conflictErr)
 	}
 	for _, want := range []string{
 		"Workflow Initialization Blocked", "WORKFLOW_TARGET_CONFLICT", "Different content",

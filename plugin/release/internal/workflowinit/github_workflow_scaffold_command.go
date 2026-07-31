@@ -116,7 +116,6 @@ func (handler githubWorkflowScaffoldCommandHandler) Handle(ctx context.Context, 
 func workflowScaffoldFailureResponse(failure *commandFailure, timestamp time.Time) *plugin.Response {
 	response := mapCommandFailure(githubWorkflowInitCommandName, failure, timestamp)
 	response.PresentationTable = githubWorkflowFailurePresentation(failure)
-	response.ExitCode = 1
 	return response
 }
 

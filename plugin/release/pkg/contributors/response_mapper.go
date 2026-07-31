@@ -25,7 +25,7 @@ func mapContributorsQueryResponse(result contributorsQueryResult, failure *contr
 		Timestamp: timestamp,
 	}
 	if failure != nil {
-		return &plugin.Response{
+		response := &plugin.Response{
 			Status:   "error",
 			Metadata: metadataValue,
 			Error: &plugin.ResponseError{
@@ -33,6 +33,8 @@ func mapContributorsQueryResponse(result contributorsQueryResult, failure *contr
 				Message: failure.Message,
 			},
 		}
+		response.SetExitCode(1)
+		return response
 	}
 
 	items := make([]map[string]any, 0, len(result.Contributors))
@@ -42,11 +44,13 @@ func mapContributorsQueryResponse(result contributorsQueryResult, failure *contr
 			"commits": contributor.Commits,
 		})
 	}
-	return &plugin.Response{
+	response := &plugin.Response{
 		Status:   "success",
 		Metadata: metadataValue,
 		Data: map[string]any{
 			"items": items,
 		},
 	}
+	response.SetExitCode(0)
+	return response
 }

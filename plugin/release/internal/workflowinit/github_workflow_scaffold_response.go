@@ -41,6 +41,7 @@ func mapGitHubWorkflowScaffoldResult(result *githubWorkflowScaffoldResult, times
 		response.PresentationProperties = nil
 		response.PresentationText = &presentation.Text{Content: githubWorkflowScaffoldPreviewText(result)}
 	}
+	response.SetExitCode(0)
 	return response
 }
 

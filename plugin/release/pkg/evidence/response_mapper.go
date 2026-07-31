@@ -39,6 +39,7 @@ func mapEvidenceQueryResponseForRequest(request evidenceQueryRequest, result evi
 		RendererHint: "table",
 	}
 	attachEvidencePresentation(response, request, result)
+	response.SetExitCode(0)
 	return response
 }
 
@@ -64,6 +65,7 @@ func mapEvidenceDetailResponseForRequest(request evidenceQueryRequest, result ev
 		RendererHint: "table",
 	}
 	attachEvidencePresentation(response, request, result)
+	response.SetExitCode(0)
 	return response
 }
 
@@ -113,6 +115,7 @@ func mapEvidenceArchiveResponse(result evidenceArchiveResult, timestamp time.Tim
 		RendererHint: "table",
 	}
 	attachEvidenceArchivePresentation(response, result)
+	response.SetExitCode(0)
 	return response
 }
 

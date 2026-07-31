@@ -102,7 +102,7 @@ func GetAvailableOptions() (*plugin.Response, error) {
 		},
 	}
 
-	return &plugin.Response{
+	response := &plugin.Response{
 		Status: "success",
 		Metadata: plugin.ResponseMetadata{
 			Plugin:    metadata.PluginName,
@@ -114,5 +114,7 @@ func GetAvailableOptions() (*plugin.Response, error) {
 			"items": items,
 		},
 		RendererHint: "table",
-	}, nil
+	}
+	response.SetExitCode(0)
+	return response, nil
 }

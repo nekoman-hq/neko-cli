@@ -74,7 +74,7 @@ func TestValidationMachineResponseRemainsStableAcrossHumanPresentationChanges(t 
 	}
 }
 
-func TestValidationFailureContractKeepsLegacyExitBehavior(t *testing.T) {
+func TestValidationFailureContractUsesExplicitFailureExit(t *testing.T) {
 	t.Parallel()
 
 	timestamp := time.Date(2026, time.July, 15, 9, 30, 0, 0, time.UTC)
@@ -84,8 +84,8 @@ func TestValidationFailureContractKeepsLegacyExitBehavior(t *testing.T) {
 		Hint:    missingConfigurationHint,
 	}, timestamp)
 
-	if response.ExitCode != 0 {
-		t.Fatalf("exit code = %d, want legacy value 0", response.ExitCode)
+	if code, present := response.ExplicitExitCode(); !present || code != 1 {
+		t.Fatalf("explicit exit = (%d, %t), want (1, true)", code, present)
 	}
 	got := validationPublicJSON(t, response)
 	want := `{"status":"error","metadata":{"timestamp":"2026-07-15T09:30:00Z","plugin":"release","version":"dev","command":"validate"},"error":{"details":{"hint":"Run 'neko release init' to create V2 config/state, or 'neko release migrate' to convert an existing V1 config"},"code":"CONFIG_NOT_FOUND","message":"No release configuration found"}}`

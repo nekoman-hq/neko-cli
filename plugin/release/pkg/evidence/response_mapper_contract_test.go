@@ -53,6 +53,9 @@ func TestEvidenceQueryResponsePreservesUnfilteredJSONContract(t *testing.T) {
 	if response.Status != "success" || response.RendererHint != "table" {
 		t.Fatalf("unexpected response envelope: %#v", response)
 	}
+	if code, present := response.ExplicitExitCode(); !present || code != 0 {
+		t.Fatalf("diagnostic Evidence exit = (%d, %t), want (0, true)", code, present)
+	}
 	if response.Metadata.Plugin != "release" || response.Metadata.Version != "dev" || response.Metadata.Command != CommandName || !response.Metadata.Timestamp.Equal(timestamp) {
 		t.Fatalf("unexpected response metadata: %#v", response.Metadata)
 	}
@@ -163,6 +166,15 @@ func TestEvidenceQueryResponsePreservesUnfilteredJSONContract(t *testing.T) {
 		"}\n"
 	if output.String() != want {
 		t.Fatalf("unfiltered Evidence JSON changed:\nwant:\n%s\ngot:\n%s", want, output.String())
+	}
+}
+
+func TestEvidenceNoRecordsRemainsExplicitSuccess(t *testing.T) {
+	t.Parallel()
+
+	response := mapEvidenceQueryResponse(evidenceQueryResult{}, time.Date(2026, time.July, 18, 12, 31, 0, 0, time.UTC))
+	if code, present := response.ExplicitExitCode(); !present || code != 0 {
+		t.Fatalf("no-records Evidence exit = (%d, %t), want (0, true)", code, present)
 	}
 }
 

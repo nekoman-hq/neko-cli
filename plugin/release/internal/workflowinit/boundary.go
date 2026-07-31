@@ -46,7 +46,7 @@ func mapCommandFailure(command string, failure *commandFailure, timestamp time.T
 	if failure == nil {
 		return nil
 	}
-	return &plugin.Response{
+	response := &plugin.Response{
 		Status:   "error",
 		Metadata: workflowInitResponseMetadata(command, timestamp),
 		Error: &plugin.ResponseError{
@@ -54,6 +54,8 @@ func mapCommandFailure(command string, failure *commandFailure, timestamp time.T
 			Details: cloneResponseDetails(failure.Details),
 		},
 	}
+	response.SetExitCode(1)
+	return response
 }
 
 func workflowInitResponseMetadata(command string, timestamp time.Time) plugin.ResponseMetadata {

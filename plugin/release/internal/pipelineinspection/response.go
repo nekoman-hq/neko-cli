@@ -19,8 +19,9 @@ func mapPipelineResult(result *pipelineResult) *plugin.Response {
 		PresentationProperties: properties,
 		PresentationTable:      table,
 	}
+	response.SetExitCode(0)
 	if result.InvalidEvidence {
-		response.ExitCode = 1
+		response.SetExitCode(1)
 	}
 	return response
 }
@@ -107,11 +108,12 @@ func pipelineVerificationStatusRole(status VerificationStatus) presentation.Styl
 }
 
 func mapPipelineFailure(failure *commandFailure) *plugin.Response {
-	return &plugin.Response{
+	response := &plugin.Response{
 		Status: "error", Metadata: pipelineResponseMetadata(),
-		Error:    &plugin.ResponseError{Code: failure.Code, Message: failure.Message},
-		ExitCode: 1,
+		Error: &plugin.ResponseError{Code: failure.Code, Message: failure.Message},
 	}
+	response.SetExitCode(1)
+	return response
 }
 
 func pipelineResponseMetadata() plugin.ResponseMetadata {

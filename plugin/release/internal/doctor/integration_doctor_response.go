@@ -49,8 +49,9 @@ func mapIntegrationDoctorResult(result *integrationDoctorResult, timestamp time.
 		},
 	}
 	response.PresentationTable = integrationDoctorPresentationTables(result)
+	response.SetExitCode(0)
 	if result.Readiness == integrationDoctorNotReady {
-		response.ExitCode = 1
+		response.SetExitCode(1)
 	}
 	return response
 }

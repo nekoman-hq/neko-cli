@@ -45,7 +45,8 @@ func TestPipelineMachineVocabularyAndExitPolicyAreFrozen(t *testing.T) {
 		if lifecycle == pipelineInvalid {
 			wantExit = 1
 		}
-		if response.ExitCode != wantExit || response.Status != "success" || response.Data["status"] != lifecycle {
+		code, present := response.ExplicitExitCode()
+		if !present || code != wantExit || response.Status != "success" || response.Data["status"] != lifecycle {
 			t.Errorf("lifecycle %q response = status %q, exit %d, data status %v", lifecycle, response.Status, response.ExitCode, response.Data["status"])
 		}
 	}
@@ -58,13 +59,15 @@ func TestPipelineMachineVocabularyAndExitPolicyAreFrozen(t *testing.T) {
 			Subject: "release", Source: "doctor", Scope: "repository",
 		}}})
 		response := mapPipelineResult(result)
-		if response.ExitCode != 0 || response.Data["status"] != pipelineCompleted {
+		code, present := response.ExplicitExitCode()
+		if !present || code != 0 || response.Data["status"] != pipelineCompleted {
 			t.Errorf("verification %q changed lifecycle or exit policy: %#v", status, response)
 		}
 	}
 
 	failure := mapPipelineFailure(&commandFailure{Code: "PIPELINE_SOURCE_INVALID", Message: "invalid source"})
-	if failure.Status != "error" || failure.ExitCode != 1 || failure.Error == nil {
+	code, present := failure.ExplicitExitCode()
+	if failure.Status != "error" || !present || code != 1 || failure.Error == nil {
 		t.Fatalf("typed command failure = %#v", failure)
 	}
 }

@@ -39,13 +39,15 @@ func mapCommandFailure(command string, failure *commandFailure, timestamp time.T
 	if failure == nil {
 		return nil
 	}
-	return &plugin.Response{
+	response := &plugin.Response{
 		Status:   "error",
 		Metadata: contextValidationResponseMetadata(command, timestamp),
 		Error: &plugin.ResponseError{
 			Code: failure.Code, Message: failure.Message,
 		},
 	}
+	response.SetExitCode(1)
+	return response
 }
 
 func contextValidationResponseMetadata(command string, timestamp time.Time) plugin.ResponseMetadata {
