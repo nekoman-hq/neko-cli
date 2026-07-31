@@ -28,10 +28,8 @@ var rootCmd = &cobra.Command{
 	Short: "Neko CLI - Plugin-based release and deployment tool",
 }
 
-func Execute() {
-	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
-	}
+func Execute() error {
+	return rootCmd.Execute()
 }
 
 func init() {

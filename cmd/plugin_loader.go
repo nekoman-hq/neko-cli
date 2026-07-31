@@ -435,20 +435,21 @@ func validatePluginOutputFormat(format string) error {
 
 func renderedPluginResponseExitError(cmd *cobra.Command, response *plugin.Response) error {
 	err := pluginResponseExitError(response)
-	if err != nil {
+	if isResponseProcessExitError(err) {
 		cmd.SilenceErrors = true
 	}
 	return err
 }
 
 func pluginResponseExitError(response *plugin.Response) error {
-	if response.ExitCode == 0 {
+	if err := plugin.ValidateResponse(response); err != nil {
+		return fmt.Errorf("invalid plugin response: %w", err)
+	}
+	code, present := response.ExplicitExitCode()
+	if !present || code == 0 {
 		return nil
 	}
-	if response.Error == nil {
-		return fmt.Errorf("plugin command requested exit code %d", response.ExitCode)
-	}
-	return fmt.Errorf("%s: %s", response.Error.Code, response.Error.Message)
+	return newResponseProcessExitError(code)
 }
 
 // validateRequiredFlagsFromManifest checks that all required flags from the manifest

@@ -55,6 +55,9 @@ func RenderWithOptions(resp *plugin.Response, opts RenderOptions) error {
 // RenderWithOptionsTo renders a plugin response to the supplied writer while
 // preserving the width of that writer as the responsive-layout input.
 func RenderWithOptionsTo(resp *plugin.Response, opts RenderOptions, w io.Writer) error {
+	if err := plugin.ValidateResponse(resp); err != nil {
+		return fmt.Errorf("invalid plugin response: %w", err)
+	}
 	if opts.Format == FormatGitHub {
 		if resp.Status == "error" {
 			return renderError(resp, w, plainPresentationStyler())
@@ -101,7 +104,7 @@ func Render(resp *plugin.Response, format OutputFormat) error {
 //
 // Returns an error if rendering fails.
 func RenderTo(resp *plugin.Response, format OutputFormat, w io.Writer) error {
-	return renderToWithOptions(resp, RenderOptions{Format: format}, w)
+	return RenderWithOptionsTo(resp, RenderOptions{Format: format}, w)
 }
 
 func renderToWithOptions(resp *plugin.Response, opts RenderOptions, w io.Writer) error {
@@ -140,7 +143,7 @@ func RenderDescribe(resp *plugin.Response, format OutputFormat) error {
 //
 // Returns an error if rendering fails.
 func RenderDescribeTo(resp *plugin.Response, format OutputFormat, w io.Writer) error {
-	return renderDescribeWithOptionsTo(resp, RenderOptions{Format: format, Describe: true, Verbose: true}, w)
+	return RenderWithOptionsTo(resp, RenderOptions{Format: format, Describe: true, Verbose: true}, w)
 }
 
 func renderDescribeWithOptionsTo(resp *plugin.Response, opts RenderOptions, w io.Writer) error {
