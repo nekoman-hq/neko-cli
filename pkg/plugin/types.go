@@ -56,7 +56,29 @@ type Response struct {
 	// compatibility and uses the established plugin protocol tag.
 	HumanText    *presentation.Text `json:"-"`
 	GitHubOutput *GitHubOutput      `json:"github_output,omitempty"` // Optional ordered declaration for GitHub Actions output
-	ExitCode     int                `json:"exit_code,omitempty"`     // Optional non-zero Core CLI exit request
+	ExitCode     int                `json:"exit_code,omitempty"`     // Optional Core CLI exit request in the range 0 through 125
+	exitCodeSet  bool
+}
+
+// SetExitCode assigns an explicit Core CLI exit request. Unlike direct zero-value
+// assignment, calling this method preserves an intentional exit code of zero on
+// the plugin transport.
+func (response *Response) SetExitCode(code int) {
+	if response == nil {
+		return
+	}
+	response.ExitCode = code
+	response.exitCodeSet = true
+}
+
+// ExplicitExitCode returns the requested Core CLI exit and whether the plugin
+// explicitly supplied one. Nonzero field values remain explicit so existing
+// keyed struct literals retain their established source behavior.
+func (response *Response) ExplicitExitCode() (code int, present bool) {
+	if response == nil {
+		return 0, false
+	}
+	return response.ExitCode, response.exitCodeSet || response.ExitCode != 0
 }
 
 // GitHubOutput declares an ordered set of response Data fields to encode for

@@ -24,7 +24,7 @@ type responseWire struct {
 	PresentationProperties *presentation.Properties `json:"human_properties,omitempty"`
 	PresentationText       *presentation.Text       `json:"human_text,omitempty"`
 	GitHubOutput           *GitHubOutput            `json:"github_output,omitempty"`
-	ExitCode               int                      `json:"exit_code,omitempty"`
+	ExitCode               *int                     `json:"exit_code,omitempty"`
 }
 
 // MarshalJSON preserves the established plugin wire tags while accepting both
@@ -42,6 +42,10 @@ func (response Response) MarshalJSON() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	var exitCode *int
+	if code, present := response.ExplicitExitCode(); present {
+		exitCode = &code
+	}
 	return json.Marshal(responseWire{
 		Status:                 response.Status,
 		Metadata:               response.Metadata,
@@ -53,7 +57,7 @@ func (response Response) MarshalJSON() ([]byte, error) {
 		PresentationProperties: properties,
 		PresentationText:       text,
 		GitHubOutput:           response.GitHubOutput,
-		ExitCode:               response.ExitCode,
+		ExitCode:               exitCode,
 	})
 }
 
@@ -78,7 +82,9 @@ func (response *Response) UnmarshalJSON(data []byte) error {
 		HumanProperties:        wire.PresentationProperties,
 		HumanText:              wire.PresentationText,
 		GitHubOutput:           wire.GitHubOutput,
-		ExitCode:               wire.ExitCode,
+	}
+	if wire.ExitCode != nil {
+		response.SetExitCode(*wire.ExitCode)
 	}
 	return nil
 }
