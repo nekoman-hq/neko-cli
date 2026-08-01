@@ -72,6 +72,15 @@ evidence. It does not create a workflow or executor configuration. Workflow
 creation is the separate create-only `github-workflow-init` capability; it
 accepts identical bytes and refuses to overwrite different content.
 
+### `neko release github-workflow-init`
+
+This command previews or creates exactly one configured canonical workflow.
+Creation uses an atomic no-clobber write: a missing target may be created,
+byte-identical content is accepted without rewriting, and different existing
+content is a conflict. Existing manually maintained workflow extensions remain
+consumer-owned and are never merged, overwritten, or managed by this command.
+It performs no Git or network operation and creates no GitHub Release.
+
 For multiple units, use `unit-add`. Normal units use the default `release`
 kind. Only Neko CLI plugins use `--kind plugin` and the four plugin metadata
 flags.
