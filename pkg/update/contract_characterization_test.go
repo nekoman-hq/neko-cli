@@ -10,9 +10,9 @@ func TestUpdateActionContract(t *testing.T) {
 		name      string
 		installed string
 		available string
-		force     bool
 		want      Action
 		wantError string
+		force     bool
 	}{
 		{name: "upgrade", installed: "1.0.0", available: "1.1.0", want: ActionUpgrade},
 		{name: "forced upgrade is unchanged", installed: "1.0.0", available: "1.1.0", force: true, want: ActionUpgrade},

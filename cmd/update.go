@@ -14,29 +14,38 @@ var (
 )
 
 // updateCmd represents the main update command for core tool
-var updateCmd = &cobra.Command{
-	Use:   "update",
-	Short: "Update neko-cli core tool",
-	Long: `Update the neko-cli core tool to the latest version.
+var updateCmd = newCoreUpdateCommand()
+
+var executeCoreUpdate = update.ExecuteCore
+
+func newCoreUpdateCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:   "update",
+		Short: "Update neko-cli core tool",
+		Long: `Update the neko-cli core tool to the latest version.
 	
 Example:
   neko update              # Update to latest version
   neko update --dry-run    # Check for updates without installing
   neko update --force      # Force update even if already on latest`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		opts := update.CoreOptions{
-			Force:  updateForce,
-			DryRun: updateDryRun,
-		}
-		cmd.SilenceUsage = true // Don't show usage on error
-		log.Print(log.Init, "Checking for neko-cli updates...")
-		result, err := update.ExecuteCore(cmd.Context(), opts)
-		if err != nil {
-			return err
-		}
-		renderCoreUpdateResult(result)
-		return nil
-	},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			opts := update.CoreOptions{
+				Force:  updateForce,
+				DryRun: updateDryRun,
+			}
+			cmd.SilenceUsage = true // Don't show usage on error
+			log.Print(log.Init, "Checking for neko-cli updates...")
+			result, err := executeCoreUpdate(cmd.Context(), opts)
+			if err != nil {
+				return err
+			}
+			renderCoreUpdateResult(result)
+			return nil
+		},
+	}
+	command.Flags().BoolVar(&updateForce, "force", false, "Reinstall the latest version when it matches the installed version")
+	command.Flags().BoolVar(&updateDryRun, "dry-run", false, "Check for updates without downloading or changing files")
+	return command
 }
 
 func renderCoreUpdateResult(result update.CoreResult) {
@@ -97,10 +106,6 @@ Examples:
 func init() {
 	// Add update command to root
 	rootCmd.AddCommand(updateCmd)
-
-	// Add update flags for core
-	updateCmd.Flags().BoolVar(&updateForce, "force", false, "Force update even if already on latest version")
-	updateCmd.Flags().BoolVar(&updateDryRun, "dry-run", false, "Check for updates without installing")
 
 	// Add plugin update command to plugin command
 	pluginCmd.AddCommand(pluginUpdateCmd)

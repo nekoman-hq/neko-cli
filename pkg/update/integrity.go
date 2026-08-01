@@ -150,7 +150,7 @@ func extractCoreBinary(archive []byte) ([]byte, error) {
 		if unsafeArchivePath(header.Name) {
 			return nil, newUpdateError(errorArchiveInvalid, fmt.Sprintf("release archive contains unsafe path %q", header.Name), nil)
 		}
-		if header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeRegA {
+		if header.Typeflag != tar.TypeReg {
 			return nil, newUpdateError(errorArchiveInvalid, fmt.Sprintf("release archive entry %q is not a regular file", header.Name), nil)
 		}
 		if !supportedBinaryName(path.Base(header.Name)) {

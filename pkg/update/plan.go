@@ -37,24 +37,26 @@ type platform struct {
 // updatePlan is built without downloading or mutating the filesystem. Callers
 // pass it by value and do not modify it after construction.
 type updatePlan struct {
-	installedVersion      string
-	selectedVersion       string
-	action                Action
-	runningExecutable     string
-	symlinkPath           string
-	canonicalTarget       string
-	targetParent          string
-	classification        installationClassification
-	manager               string
-	managerGuidance       string
-	targetMode            fs.FileMode
-	asset                 github.Asset
-	checksumAsset         github.Asset
-	downloadRequired      bool
-	replacementPermitted  bool
-	refusalReason         string
-	guidance              string
-	capabilityExplanation string
+	installedVersion     string
+	selectedVersion      string
+	action               Action
+	runningExecutable    string
+	symlinkPath          string
+	canonicalTarget      string
+	targetParent         string
+	classification       installationClassification
+	manager              string
+	managerGuidance      string
+	asset                github.Asset
+	checksumAsset        github.Asset
+	refusalReason        string
+	guidance             string
+	targetMode           fs.FileMode
+	targetOwnerUID       int
+	targetOwnerGID       int
+	downloadRequired     bool
+	replacementPermitted bool
+	ownerKnown           bool
 }
 
 func (plan updatePlan) withRefusal(reason, guidance string) updatePlan {

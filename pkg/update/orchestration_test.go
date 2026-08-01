@@ -14,7 +14,7 @@ import (
 )
 
 func TestExecuteCoreForceAndVersionMatrix(t *testing.T) {
-	tests := []struct {
+	tests := []struct { //nolint:govet // Field order mirrors the version-policy matrix.
 		name          string
 		installed     string
 		available     string
@@ -72,7 +72,7 @@ func TestExecuteCoreDevelopmentBuildPrecedesNetwork(t *testing.T) {
 }
 
 func TestExecuteCorePermissionAndManagerRefusalPrecedeDownloads(t *testing.T) {
-	for _, test := range []struct {
+	for _, test := range []struct { //nolint:govet // Field order mirrors the refusal scenarios.
 		name           string
 		classification installationClassification
 		manager        string
@@ -114,17 +114,111 @@ func TestExecuteCorePermissionAndManagerRefusalPrecedeDownloads(t *testing.T) {
 }
 
 func TestExecuteCoreDryRunNeverReservesOrDownloads(t *testing.T) {
-	for _, force := range []bool{false, true} {
-		deps, client, _, _ := coreFixture(t, "1.0.0", "1.1.0")
-		counter := &countingReplacement{}
-		deps.replacement = counter
-		result, err := executeCore(context.Background(), CoreOptions{Force: force, DryRun: true}, deps)
-		if err != nil || !result.DryRun || result.Action != ActionUpgrade {
-			t.Fatalf("result=%#v err=%v", result, err)
-		}
-		if counter.calls != 0 || len(client.downloads) != 0 {
-			t.Fatalf("force=%t reserve=%d downloads=%v", force, counter.calls, client.downloads)
-		}
+	for _, test := range []struct { //nolint:govet // Field order mirrors the dry-run scenarios.
+		name      string
+		installed string
+		available string
+		force     bool
+		action    Action
+	}{
+		{name: "upgrade", installed: "1.0.0", available: "1.1.0", action: ActionUpgrade},
+		{name: "forced reinstall", installed: "1.1.0", available: "1.1.0", force: true, action: ActionForcedReinstall},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			deps, client, _, _ := coreFixture(t, test.installed, test.available)
+			counter := &countingReplacement{}
+			deps.replacement = counter
+			result, err := executeCore(context.Background(), CoreOptions{Force: test.force, DryRun: true}, deps)
+			if err != nil || !result.DryRun || result.Action != test.action {
+				t.Fatalf("result=%#v err=%v", result, err)
+			}
+			if counter.calls != 0 || len(client.downloads) != 0 {
+				t.Fatalf("force=%t reserve=%d downloads=%v", test.force, counter.calls, client.downloads)
+			}
+		})
+	}
+}
+
+func TestExecuteCoreForceCannotBypassChecksumVerification(t *testing.T) {
+	deps, client, target, oldContent := coreFixture(t, "1.1.0", "1.1.0")
+	client.bodies["checksums"] = []byte(fmt.Sprintf("%x  neko-cli_Darwin_arm64.tar.gz\n", sha256.Sum256([]byte("wrong"))))
+	result, err := executeCore(context.Background(), CoreOptions{Force: true}, deps)
+	if err == nil || !strings.Contains(err.Error(), "checksum mismatch") || result.DestinationChanged {
+		t.Fatalf("result=%#v err=%v", result, err)
+	}
+	content, readErr := os.ReadFile(target)
+	if readErr != nil || string(content) != string(oldContent) {
+		t.Fatalf("target=%q err=%v", content, readErr)
+	}
+}
+
+func TestExecuteCoreForceCannotBypassPrivilegedInstallationPolicy(t *testing.T) {
+	deps, client, target, oldContent := coreFixture(t, "1.1.0", "1.1.0")
+	deps.inspector = staticInspector{installation: installation{
+		runningExecutable:    target,
+		canonicalTarget:      target,
+		targetParent:         filepath.Dir(target),
+		classification:       installationUnmanagedPrivileged,
+		targetMode:           0o755,
+		targetOwnerUID:       0,
+		targetOwnerGID:       0,
+		ownerKnown:           true,
+		targetReadable:       true,
+		parentCreateAllowed:  false,
+		parentReplaceAllowed: false,
+	}}
+	result, err := executeCore(context.Background(), CoreOptions{Force: true}, deps)
+	if err == nil || result.Action != ActionForcedReinstall || !strings.Contains(err.Error(), "owner uid 0 gid 0") {
+		t.Fatalf("result=%#v error=%v", result, err)
+	}
+	if len(client.downloads) != 0 {
+		t.Fatalf("permission refusal downloads=%v", client.downloads)
+	}
+	content, readErr := os.ReadFile(target)
+	if readErr != nil || string(content) != string(oldContent) {
+		t.Fatalf("target=%q err=%v", content, readErr)
+	}
+}
+
+func TestExecuteCoreUsesReservationAsAuthoritativeUnknownCapabilityCheck(t *testing.T) {
+	deps, client, target, oldContent := coreFixture(t, "1.0.0", "1.1.0")
+	deps.inspector = staticInspector{installation: installation{
+		runningExecutable:    target,
+		canonicalTarget:      target,
+		targetParent:         filepath.Dir(target),
+		classification:       installationUnknown,
+		targetMode:           0o755,
+		targetReadable:       true,
+		parentCreateAllowed:  false,
+		parentReplaceAllowed: false,
+	}}
+	deps.replacement = &osReplacementCapability{ops: &memoryReplacementOps{createErr: errors.New("exclusive sibling reservation denied")}}
+	_, err := executeCore(context.Background(), CoreOptions{}, deps)
+	if err == nil || !strings.Contains(err.Error(), "exclusive sibling reservation denied") {
+		t.Fatalf("error=%v", err)
+	}
+	if len(client.downloads) != 0 {
+		t.Fatalf("reservation refusal downloads=%v", client.downloads)
+	}
+	content, readErr := os.ReadFile(target)
+	if readErr != nil || string(content) != string(oldContent) {
+		t.Fatalf("target=%q err=%v", content, readErr)
+	}
+}
+
+func TestExecuteCoreReportsCleanupFailureWithoutChangingTarget(t *testing.T) {
+	deps, client, target, oldContent := coreFixture(t, "1.0.0", "1.1.0")
+	client.bodies["checksums"] = []byte(fmt.Sprintf("%x  neko-cli_Darwin_arm64.tar.gz\n", sha256.Sum256([]byte("wrong"))))
+	file := &faultReplacementFile{name: filepath.Join(filepath.Dir(target), ".neko-update-cleanup")}
+	ops := &memoryReplacementOps{file: file, removeErr: errors.New("frozen cleanup failure")}
+	deps.replacement = &osReplacementCapability{ops: ops}
+	_, err := executeCore(context.Background(), CoreOptions{}, deps)
+	if err == nil || !strings.Contains(err.Error(), "checksum mismatch") || !strings.Contains(err.Error(), "frozen cleanup failure") {
+		t.Fatalf("error = %v", err)
+	}
+	content, readErr := os.ReadFile(target)
+	if readErr != nil || string(content) != string(oldContent) {
+		t.Fatalf("target=%q err=%v", content, readErr)
 	}
 }
 
@@ -256,10 +350,10 @@ func coreFixture(t *testing.T, installed, available string) (coreDependencies, *
 type fakeReleaseClient struct {
 	release        *github.Release
 	metadataErr    error
-	metadataCalls  int
 	bodies         map[string][]byte
 	downloadErrors map[string]error
 	downloads      []string
+	metadataCalls  int
 }
 
 func (client *fakeReleaseClient) LatestRelease(context.Context, *github.RepoInfo) (*github.Release, error) {
@@ -276,8 +370,8 @@ func (client *fakeReleaseClient) Download(_ context.Context, url string, _ int64
 }
 
 type staticInspector struct {
-	installation installation
 	err          error
+	installation installation
 }
 
 func (inspector staticInspector) Inspect() (installation, error) {

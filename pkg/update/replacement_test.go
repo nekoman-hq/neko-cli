@@ -17,8 +17,8 @@ func TestAtomicReplacementPreservesModeAndHasNoBackup(t *testing.T) {
 	if err := os.WriteFile(target, oldContent, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	installation := installation{canonicalTarget: target, targetParent: root, targetMode: 0o700}
-	reservation, err := newOSReplacementCapability().Reserve(installation)
+	inspected := installation{canonicalTarget: target, targetParent: root, targetMode: 0o700}
+	reservation, err := newOSReplacementCapability().Reserve(inspected)
 	if err != nil {
 		t.Fatalf("Reserve: %v", err)
 	}
@@ -26,11 +26,11 @@ func TestAtomicReplacementPreservesModeAndHasNoBackup(t *testing.T) {
 	if filepath.Dir(reservedPath) != root || reservedPath == target {
 		t.Fatalf("reserved path = %q", reservedPath)
 	}
-	if err := reservation.Commit([]byte("new executable"), installation.targetMode); err != nil {
-		t.Fatalf("Commit: %v", err)
+	if commitErr := reservation.Commit([]byte("new executable"), inspected.targetMode); commitErr != nil {
+		t.Fatalf("Commit: %v", commitErr)
 	}
-	if err := reservation.Cleanup(); err != nil {
-		t.Fatalf("Cleanup: %v", err)
+	if cleanupErr := reservation.Cleanup(); cleanupErr != nil {
+		t.Fatalf("Cleanup: %v", cleanupErr)
 	}
 	content, err := os.ReadFile(target)
 	if err != nil {
@@ -67,11 +67,11 @@ func TestAtomicReplacementRenameFailureLeavesTargetByteIdentical(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := reservation.Commit([]byte("new executable"), 0o755); err == nil || !strings.Contains(err.Error(), "frozen rename failure") {
-		t.Fatalf("Commit error = %v", err)
+	if commitErr := reservation.Commit([]byte("new executable"), 0o755); commitErr == nil || !strings.Contains(commitErr.Error(), "frozen rename failure") {
+		t.Fatalf("Commit error = %v", commitErr)
 	}
-	if err := reservation.Cleanup(); err != nil {
-		t.Fatalf("Cleanup: %v", err)
+	if cleanupErr := reservation.Cleanup(); cleanupErr != nil {
+		t.Fatalf("Cleanup: %v", cleanupErr)
 	}
 	content, err := os.ReadFile(target)
 	if err != nil {
@@ -114,11 +114,11 @@ func TestReplacementPrecommitFailureCleanupIsAccurate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := reservation.Commit([]byte("new"), 0o755); err == nil || !strings.Contains(err.Error(), "frozen write failure") {
-		t.Fatalf("Commit error = %v", err)
+	if commitErr := reservation.Commit([]byte("new"), 0o755); commitErr == nil || !strings.Contains(commitErr.Error(), "frozen write failure") {
+		t.Fatalf("Commit error = %v", commitErr)
 	}
-	if err := reservation.Cleanup(); err != nil {
-		t.Fatalf("Cleanup: %v", err)
+	if cleanupErr := reservation.Cleanup(); cleanupErr != nil {
+		t.Fatalf("Cleanup: %v", cleanupErr)
 	}
 	if ops.removeCalls != 1 {
 		t.Fatalf("remove calls = %d", ops.removeCalls)
@@ -131,8 +131,59 @@ func TestReplacementPrecommitFailureCleanupIsAccurate(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = reservation.Commit([]byte("new"), 0o755)
-	if err := reservation.Cleanup(); err == nil || !strings.Contains(err.Error(), "frozen cleanup failure") {
-		t.Fatalf("Cleanup error = %v", err)
+	if cleanupErr := reservation.Cleanup(); cleanupErr == nil || !strings.Contains(cleanupErr.Error(), "frozen cleanup failure") {
+		t.Fatalf("Cleanup error = %v", cleanupErr)
+	}
+}
+
+func TestReplacementFailureStagesRemainPrecommit(t *testing.T) {
+	tests := []struct { //nolint:govet // Field order keeps fault stages readable.
+		name      string
+		kind      errorKind
+		file      *faultReplacementFile
+		configure func(*memoryReplacementOps)
+	}{
+		{name: "write", kind: errorSiblingWrite, file: &faultReplacementFile{name: "/fixture/.neko-update-write", writeErr: errors.New("write")}},
+		{name: "initial fsync", kind: errorFileSync, file: &faultReplacementFile{name: "/fixture/.neko-update-sync", syncErr: errors.New("sync")}},
+		{name: "close", kind: errorSiblingWrite, file: &faultReplacementFile{name: "/fixture/.neko-update-close", closeErr: errors.New("close")}},
+		{name: "chmod", kind: errorMode, file: &faultReplacementFile{name: "/fixture/.neko-update-mode"}, configure: func(ops *memoryReplacementOps) { ops.chmodErr = errors.New("chmod") }},
+		{name: "reopen", kind: errorFileSync, file: &faultReplacementFile{name: "/fixture/.neko-update-open"}, configure: func(ops *memoryReplacementOps) { ops.openErr = errors.New("open") }},
+		{name: "second fsync", kind: errorFileSync, file: &faultReplacementFile{name: "/fixture/.neko-update-second-sync"}, configure: func(ops *memoryReplacementOps) { ops.openFile = &faultSyncFile{syncErr: errors.New("second sync")} }},
+		{name: "rename", kind: errorRename, file: &faultReplacementFile{name: "/fixture/.neko-update-rename"}, configure: func(ops *memoryReplacementOps) { ops.renameErr = errors.New("rename") }},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ops := &memoryReplacementOps{file: test.file}
+			if test.configure != nil {
+				test.configure(ops)
+			}
+			reservation, err := (&osReplacementCapability{ops: ops}).Reserve(installation{canonicalTarget: "/fixture/neko", targetParent: "/fixture", targetMode: 0o700})
+			if err != nil {
+				t.Fatalf("Reserve: %v", err)
+			}
+			err = reservation.Commit([]byte("new"), 0o700)
+			var updateErr *updateError
+			if !errors.As(err, &updateErr) || updateErr.kind != test.kind || updateErr.changed {
+				t.Fatalf("error = %#v, want kind %q precommit", err, test.kind)
+			}
+			test.file.closeErr = nil
+			if cleanupErr := reservation.Cleanup(); cleanupErr != nil {
+				t.Fatalf("Cleanup: %v", cleanupErr)
+			}
+			if ops.removeCalls != 1 || ops.renameCalls > 1 {
+				t.Fatalf("remove=%d rename=%d", ops.removeCalls, ops.renameCalls)
+			}
+		})
+	}
+}
+
+func TestReplacementReservationFailureDoesNotCreateFallback(t *testing.T) {
+	ops := &memoryReplacementOps{createErr: errors.New("exclusive create denied")}
+	_, err := (&osReplacementCapability{ops: ops}).Reserve(installation{canonicalTarget: "/fixture/neko", targetParent: "/fixture", targetMode: 0o755})
+	var updateErr *updateError
+	if !errors.As(err, &updateErr) || updateErr.kind != errorParentNotWritable || ops.removeCalls != 0 {
+		t.Fatalf("error=%#v remove=%d", err, ops.removeCalls)
 	}
 }
 
@@ -157,17 +208,20 @@ func (ops *faultReplacementOps) OpenDirectory(path string) (syncFile, error) {
 }
 
 type faultSyncFile struct {
-	syncErr error
+	syncErr  error
+	closeErr error
 }
 
 func (file *faultSyncFile) Sync() error  { return file.syncErr }
-func (file *faultSyncFile) Close() error { return nil }
+func (file *faultSyncFile) Close() error { return file.closeErr }
 
 type faultReplacementFile struct {
-	bytes.Buffer
 	name     string
 	writeErr error
-	closed   bool
+	syncErr  error
+	closeErr error
+	bytes.Buffer
+	closed bool
 }
 
 func (file *faultReplacementFile) Write(body []byte) (int, error) {
@@ -178,29 +232,44 @@ func (file *faultReplacementFile) Write(body []byte) (int, error) {
 }
 
 func (file *faultReplacementFile) Name() string { return file.name }
-func (file *faultReplacementFile) Sync() error  { return nil }
+func (file *faultReplacementFile) Sync() error  { return file.syncErr }
 func (file *faultReplacementFile) Close() error {
 	file.closed = true
-	return nil
+	return file.closeErr
 }
 
 type memoryReplacementOps struct {
 	file        replacementFile
+	createErr   error
+	chmodErr    error
+	openErr     error
+	openFile    syncFile
+	renameErr   error
 	removeErr   error
 	removeCalls int
+	renameCalls int
 }
 
 func (ops *memoryReplacementOps) CreateTemp(string, string) (replacementFile, error) {
-	return ops.file, nil
+	return ops.file, ops.createErr
 }
-func (ops *memoryReplacementOps) Chmod(string, fs.FileMode) error { return nil }
+func (ops *memoryReplacementOps) Chmod(string, fs.FileMode) error { return ops.chmodErr }
 func (ops *memoryReplacementOps) Open(string) (syncFile, error) {
+	if ops.openErr != nil {
+		return nil, ops.openErr
+	}
+	if ops.openFile != nil {
+		return ops.openFile, nil
+	}
 	return &faultSyncFile{}, nil
 }
 func (ops *memoryReplacementOps) OpenDirectory(string) (syncFile, error) {
 	return &faultSyncFile{}, nil
 }
-func (ops *memoryReplacementOps) Rename(string, string) error { return nil }
+func (ops *memoryReplacementOps) Rename(string, string) error {
+	ops.renameCalls++
+	return ops.renameErr
+}
 func (ops *memoryReplacementOps) Remove(string) error {
 	ops.removeCalls++
 	return ops.removeErr

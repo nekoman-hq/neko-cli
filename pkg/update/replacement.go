@@ -124,23 +124,23 @@ func (reservation *replacementReservation) Commit(binary []byte, targetMode fs.F
 		return newUpdateError(errorMode, fmt.Sprintf("refusing replacement mode %#o without executable bits", mode), nil)
 	}
 
-	written, err := io.Copy(reservation.file, bytes.NewReader(binary))
-	if err != nil {
-		return newUpdateError(errorSiblingWrite, fmt.Sprintf("cannot write reserved update file beside %s", reservation.target), err)
+	written, writeErr := io.Copy(reservation.file, bytes.NewReader(binary))
+	if writeErr != nil {
+		return newUpdateError(errorSiblingWrite, fmt.Sprintf("cannot write reserved update file beside %s", reservation.target), writeErr)
 	}
 	if written != int64(len(binary)) {
 		return newUpdateError(errorSiblingWrite, fmt.Sprintf("reserved update file for %s was written incompletely", reservation.target), io.ErrShortWrite)
 	}
-	if err := reservation.file.Sync(); err != nil {
-		return newUpdateError(errorFileSync, fmt.Sprintf("cannot flush reserved update file for %s", reservation.target), err)
+	if syncErr := reservation.file.Sync(); syncErr != nil {
+		return newUpdateError(errorFileSync, fmt.Sprintf("cannot flush reserved update file for %s", reservation.target), syncErr)
 	}
-	if err := reservation.file.Close(); err != nil {
-		return newUpdateError(errorSiblingWrite, fmt.Sprintf("cannot close reserved update file for %s", reservation.target), err)
+	if closeErr := reservation.file.Close(); closeErr != nil {
+		return newUpdateError(errorSiblingWrite, fmt.Sprintf("cannot close reserved update file for %s", reservation.target), closeErr)
 	}
 	reservation.closed = true
 
-	if err := reservation.ops.Chmod(reservation.path, mode); err != nil {
-		return newUpdateError(errorMode, fmt.Sprintf("cannot apply mode %#o to reserved update file for %s", mode, reservation.target), err)
+	if chmodErr := reservation.ops.Chmod(reservation.path, mode); chmodErr != nil {
+		return newUpdateError(errorMode, fmt.Sprintf("cannot apply mode %#o to reserved update file for %s", mode, reservation.target), chmodErr)
 	}
 	stagedFile, err := reservation.ops.Open(reservation.path)
 	if err != nil {

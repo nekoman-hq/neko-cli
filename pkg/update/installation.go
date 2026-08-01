@@ -17,6 +17,9 @@ type installation struct {
 	symlinkPath          string
 	canonicalTarget      string
 	targetParent         string
+	classification       installationClassification
+	manager              string
+	managerGuidance      string
 	targetMode           fs.FileMode
 	targetOwnerUID       int
 	targetOwnerGID       int
@@ -24,9 +27,6 @@ type installation struct {
 	targetReadable       bool
 	parentCreateAllowed  bool
 	parentReplaceAllowed bool
-	classification       installationClassification
-	manager              string
-	managerGuidance      string
 }
 
 type installationInspector interface {
@@ -34,8 +34,8 @@ type installationInspector interface {
 }
 
 type identity struct {
-	uid    int
 	groups []int
+	uid    int
 	known  bool
 }
 
@@ -135,7 +135,7 @@ func (inspector *osInstallationInspector) Inspect() (installation, error) {
 		managerGuidance = fmt.Sprintf("brew upgrade %s (or brew reinstall %s)", formula, formula)
 	} else if ownerKnown && inspector.identity.known && targetUID == inspector.identity.uid {
 		classification = installationUnmanagedUser
-	} else if ownerKnown && targetUID == 0 || !parentWritable {
+	} else if (ownerKnown && targetUID == 0) || !parentWritable {
 		classification = installationUnmanagedPrivileged
 	}
 

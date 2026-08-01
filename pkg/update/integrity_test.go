@@ -68,7 +68,7 @@ func TestVerifyArchiveChecksum(t *testing.T) {
 		t.Fatalf("valid checksum: %v", err)
 	}
 
-	tests := []struct {
+	tests := []struct { //nolint:govet // Field order keeps archive cases readable.
 		name      string
 		manifest  string
 		wantError string

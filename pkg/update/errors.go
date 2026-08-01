@@ -1,6 +1,9 @@
 package update
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 type errorKind string
 
@@ -31,9 +34,9 @@ type updateError struct {
 	kind       errorKind
 	message    string
 	cause      error
+	cleanup    string
 	downloaded bool
 	changed    bool
-	cleanup    string
 }
 
 func (err *updateError) Error() string {
@@ -44,7 +47,17 @@ func (err *updateError) Error() string {
 	if err.cleanup != "" {
 		message = fmt.Sprintf("%s; cleanup: %s", message, err.cleanup)
 	}
+	if err.downloaded && !err.changed && !containsStateText(message, "archive was downloaded") {
+		message += "; the release archive was downloaded and the installed executable is unchanged"
+	}
+	if err.changed && !containsStateText(message, "replacement committed") {
+		message += "; replacement committed"
+	}
 	return message
+}
+
+func containsStateText(message, text string) bool {
+	return strings.Contains(strings.ToLower(message), strings.ToLower(text))
 }
 
 func (err *updateError) Unwrap() error {

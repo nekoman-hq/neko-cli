@@ -28,11 +28,11 @@ type CoreResult struct {
 	CanonicalTarget    string
 	Installation       string
 	Manager            string
+	CapabilityWarning  string
 	DryRun             bool
 	DevelopmentBuild   bool
 	ArchiveRequested   bool
 	DestinationChanged bool
-	CapabilityWarning  string
 }
 
 type releaseClient interface {
@@ -115,6 +115,9 @@ func executeCore(ctx context.Context, opts CoreOptions, deps coreDependencies) (
 		classification:       currentInstallation.classification,
 		manager:              currentInstallation.manager,
 		managerGuidance:      currentInstallation.managerGuidance,
+		targetOwnerUID:       currentInstallation.targetOwnerUID,
+		targetOwnerGID:       currentInstallation.targetOwnerGID,
+		ownerKnown:           currentInstallation.ownerKnown,
 		targetMode:           currentInstallation.targetMode,
 		downloadRequired:     downloadRequired,
 		replacementPermitted: currentInstallation.targetReadable && currentInstallation.parentCreateAllowed && currentInstallation.parentReplaceAllowed && currentInstallation.classification != installationManagerOwned,
@@ -136,9 +139,18 @@ func executeCore(ctx context.Context, opts CoreOptions, deps coreDependencies) (
 		return result, newUpdateError(errorManagerOwned, result.CapabilityWarning, nil)
 	}
 
-	if !currentInstallation.parentCreateAllowed || !currentInstallation.parentReplaceAllowed {
+	permissionRefusal := currentInstallation.classification == installationUnmanagedPrivileged ||
+		!currentInstallation.parentCreateAllowed || !currentInstallation.parentReplaceAllowed
+	if permissionRefusal && (opts.DryRun || currentInstallation.classification == installationUnmanagedPrivileged) {
+		refusalReason := fmt.Sprintf("parent directory %s is not writable by the current user", currentInstallation.targetParent)
+		if currentInstallation.classification == installationUnmanagedPrivileged {
+			refusalReason = "the target is owned by a privileged account"
+			if !currentInstallation.parentCreateAllowed || !currentInstallation.parentReplaceAllowed {
+				refusalReason += fmt.Sprintf(" and parent directory %s is not writable by the current user", currentInstallation.targetParent)
+			}
+		}
 		plan = plan.withRefusal(
-			fmt.Sprintf("parent directory %s is not writable by the current user", currentInstallation.targetParent),
+			refusalReason,
 			permissionGuidance(plan, opts.Force),
 		)
 		result.CapabilityWarning = permissionMessage(plan, opts.Force)
@@ -180,22 +192,22 @@ func executeCore(ctx context.Context, opts CoreOptions, deps coreDependencies) (
 		returnErr = fmt.Errorf("%w; cleanup: %v", returnErr, cleanupErr)
 	}()
 
-	checksumManifest, err := deps.releases.Download(ctx, assets.checksum.BrowserDownloadURL, maxChecksumBytes)
+	checksumManifest, err := deps.releases.Download(ctx, plan.checksumAsset.BrowserDownloadURL, maxChecksumBytes)
 	if err != nil {
-		return result, newUpdateError(errorDownload, fmt.Sprintf("failed to download checksum asset %s; no archive was downloaded and the installed executable is unchanged", assets.checksum.Name), err)
+		return result, newUpdateError(errorDownload, fmt.Sprintf("failed to download checksum asset %s; no archive was downloaded and the installed executable is unchanged", plan.checksumAsset.Name), err)
 	}
 	result.ArchiveRequested = true
-	archive, err := deps.releases.Download(ctx, assets.archive.BrowserDownloadURL, maxArchiveBytes)
+	archive, err := deps.releases.Download(ctx, plan.asset.BrowserDownloadURL, maxArchiveBytes)
 	if err != nil {
-		downloadError := newUpdateError(errorDownload, fmt.Sprintf("failed to download release archive %s; the installed executable is unchanged", assets.archive.Name), err)
+		downloadError := newUpdateError(errorDownload, fmt.Sprintf("failed to download release archive %s; the installed executable is unchanged", plan.asset.Name), err)
 		downloadError.downloaded = true
 		return result, downloadError
 	}
-	if err := verifyArchiveChecksum(assets.archive.Name, archive, checksumManifest); err != nil {
-		if updateErr, ok := err.(*updateError); ok {
+	if checksumErr := verifyArchiveChecksum(plan.asset.Name, archive, checksumManifest); checksumErr != nil {
+		if updateErr, ok := checksumErr.(*updateError); ok {
 			updateErr.downloaded = true
 		}
-		return result, err
+		return result, checksumErr
 	}
 	binary, err := extractCoreBinary(archive)
 	if err != nil {
@@ -219,7 +231,7 @@ func executeCore(ctx context.Context, opts CoreOptions, deps coreDependencies) (
 func managerOwnedMessage(plan updatePlan) string {
 	return fmt.Sprintf(
 		"refusing to self-update %s because it is managed by %s; the installed executable is unchanged and no archive was downloaded; use %s",
-		plan.canonicalTarget,
+		describeTarget(plan),
 		plan.manager,
 		plan.managerGuidance,
 	)
@@ -227,11 +239,23 @@ func managerOwnedMessage(plan updatePlan) string {
 
 func permissionMessage(plan updatePlan, force bool) string {
 	return fmt.Sprintf(
-		"cannot update %s: parent directory %s is not writable by the current user; atomic replacement requires create, rename, and remove capability in that directory; no archive was downloaded and the installed executable is unchanged; %s",
-		plan.canonicalTarget,
+		"cannot update %s: %s; atomic replacement requires create, rename, and remove capability in parent directory %s; no archive was downloaded and the installed executable is unchanged; %s",
+		describeTarget(plan),
+		plan.refusalReason,
 		plan.targetParent,
 		permissionGuidance(plan, force),
 	)
+}
+
+func describeTarget(plan updatePlan) string {
+	target := plan.canonicalTarget
+	if plan.symlinkPath != "" && plan.symlinkPath != plan.canonicalTarget {
+		target = fmt.Sprintf("%s (invoked through symlink %s)", target, plan.symlinkPath)
+	}
+	if plan.ownerKnown {
+		target += fmt.Sprintf(" (owner uid %d gid %d)", plan.targetOwnerUID, plan.targetOwnerGID)
+	}
+	return target
 }
 
 func permissionGuidance(plan updatePlan, force bool) string {
