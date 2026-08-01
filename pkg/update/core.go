@@ -1,379 +1,266 @@
 package update
 
 import (
-	"archive/tar"
-	"compress/gzip"
+	"context"
 	"errors"
 	"fmt"
-	"io"
-	"io/fs"
 	"net/http"
-	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
-	"github.com/nekoman-hq/neko-cli/pkg/git"
-	"github.com/nekoman-hq/neko-cli/pkg/log"
+	github "github.com/nekoman-hq/neko-cli/pkg/git"
 	"github.com/nekoman-hq/neko-cli/pkg/version"
-	"golang.org/x/mod/semver"
 )
 
-// CoreOptions holds options for core update
+// CoreOptions holds user intent for the Core self-update operation.
 type CoreOptions struct {
 	Force  bool
 	DryRun bool
 }
 
-// Core handles updating the neko-cli core tool
+// CoreResult reports the completed action without owning command rendering.
+type CoreResult struct {
+	Action             Action
+	InstalledVersion   string
+	SelectedVersion    string
+	RunningExecutable  string
+	CanonicalTarget    string
+	Installation       string
+	Manager            string
+	DryRun             bool
+	DevelopmentBuild   bool
+	ArchiveRequested   bool
+	DestinationChanged bool
+	CapabilityWarning  string
+}
+
+type releaseClient interface {
+	LatestRelease(context.Context, *github.RepoInfo) (*github.Release, error)
+	Download(context.Context, string, int64) ([]byte, error)
+}
+
+type coreDependencies struct {
+	installedVersion string
+	releases         releaseClient
+	inspector        installationInspector
+	replacement      replacementCapability
+	platform         platform
+}
+
+// ExecuteCore plans and executes a self-update using context-bound I/O.
+func ExecuteCore(ctx context.Context, opts CoreOptions) (CoreResult, error) {
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	return executeCore(ctx, opts, coreDependencies{
+		installedVersion: version.Version,
+		releases:         github.NewClient(httpClient),
+		inspector:        newOSInstallationInspector(),
+		replacement:      newOSReplacementCapability(),
+		platform:         platform{OS: runtime.GOOS, Arch: runtime.GOARCH},
+	})
+}
+
+// Core retains the established package entry point for callers that do not
+// need the structured result. Command code should use ExecuteCore.
 func Core(opts CoreOptions) error {
-	log.Print(log.Init, "Checking for neko-cli updates...")
+	_, err := ExecuteCore(context.Background(), opts)
+	return err
+}
 
-	// Check if running a development build
-	if isDevelopmentBuild(version.Version) {
-		log.Print(log.Exec, fmt.Sprintf("You are running a development build (%s)", version.Version))
-		log.Print(log.Exec, "Development builds cannot be updated automatically. Please build from source or download a release.")
-		return nil
+func executeCore(ctx context.Context, opts CoreOptions, deps coreDependencies) (result CoreResult, returnErr error) {
+	result.InstalledVersion = deps.installedVersion
+	result.DryRun = opts.DryRun
+	if isDevelopmentBuild(deps.installedVersion) {
+		result.Action = ActionUnsupported
+		result.DevelopmentBuild = true
+		return result, nil
 	}
 
-	// Get repository info for neko-cli
-	repoInfo := &github.RepoInfo{
-		Owner: "nekoman-hq",
-		Repo:  "neko-cli",
-	}
-
-	// Get latest stable CLI release
-	release, err := github.LatestRelease(repoInfo)
+	release, err := deps.releases.LatestRelease(ctx, &github.RepoInfo{Owner: "nekoman-hq", Repo: "neko-cli"})
 	if err != nil {
-		return fmt.Errorf("failed to check for updates: %w", err)
+		return result, newUpdateError(errorReleaseLookup, "failed to check for neko-cli updates; no archive was downloaded and the installed executable is unchanged", err)
 	}
-
 	if release == nil {
-		return fmt.Errorf("no releases found for repository %s/%s - check if you internet connection is working and if the repository has releases",
-			repoInfo.Owner, repoInfo.Repo)
+		return result, newUpdateError(errorReleaseLookup, "no stable neko-cli release was selected; no archive was downloaded and the installed executable is unchanged", nil)
+	}
+	result.SelectedVersion = strings.TrimPrefix(release.TagName, "v")
+	action, actionErr := classifyUpdateAction(deps.installedVersion, release.TagName, opts.Force)
+	result.Action = action
+	if actionErr != nil {
+		return result, newUpdateError(
+			errorDowngrade,
+			fmt.Sprintf("installed neko-cli %s is newer than selected latest %s; force is not a downgrade flag; no archive was downloaded and the installed executable is unchanged", deps.installedVersion, result.SelectedVersion),
+			actionErr,
+		)
 	}
 
-	// Compare versions
-	currentVersion := normalizeVersion(version.Version)
-	latestVersion := normalizeVersion(release.TagName)
+	currentInstallation, err := deps.inspector.Inspect()
+	if err != nil {
+		return result, err
+	}
+	result.RunningExecutable = currentInstallation.runningExecutable
+	result.CanonicalTarget = currentInstallation.canonicalTarget
+	result.Installation = string(currentInstallation.classification)
+	result.Manager = currentInstallation.manager
 
-	// Check if update is needed
-	needsUpdate := semver.Compare(currentVersion, latestVersion) < 0
-
-	if !needsUpdate && !opts.Force {
-		log.Print(log.Exec, fmt.Sprintf("You are already running the latest version (%s)", version.Version))
-		return nil
+	downloadRequired := action == ActionUpgrade || action == ActionForcedReinstall
+	plan := updatePlan{
+		installedVersion:     deps.installedVersion,
+		selectedVersion:      result.SelectedVersion,
+		action:               action,
+		runningExecutable:    currentInstallation.runningExecutable,
+		symlinkPath:          currentInstallation.symlinkPath,
+		canonicalTarget:      currentInstallation.canonicalTarget,
+		targetParent:         currentInstallation.targetParent,
+		classification:       currentInstallation.classification,
+		manager:              currentInstallation.manager,
+		managerGuidance:      currentInstallation.managerGuidance,
+		targetMode:           currentInstallation.targetMode,
+		downloadRequired:     downloadRequired,
+		replacementPermitted: currentInstallation.targetReadable && currentInstallation.parentCreateAllowed && currentInstallation.parentReplaceAllowed && currentInstallation.classification != installationManagerOwned,
 	}
 
-	if needsUpdate {
-		log.Print(log.Exec, fmt.Sprintf("Current version: %s → Latest version: %s",
-			version.Version, strings.TrimPrefix(latestVersion, "v")))
-	} else {
-		log.Print(log.Exec, fmt.Sprintf("Forcing update to %s (same version)",
-			strings.TrimPrefix(latestVersion, "v")))
+	if !downloadRequired {
+		return result, nil
 	}
 
-	// Dry run mode
+	if currentInstallation.classification == installationManagerOwned {
+		plan = plan.withRefusal(
+			fmt.Sprintf("%s owns %s", currentInstallation.manager, currentInstallation.canonicalTarget),
+			currentInstallation.managerGuidance,
+		)
+		result.CapabilityWarning = managerOwnedMessage(plan)
+		if opts.DryRun {
+			return result, nil
+		}
+		return result, newUpdateError(errorManagerOwned, result.CapabilityWarning, nil)
+	}
+
+	if !currentInstallation.parentCreateAllowed || !currentInstallation.parentReplaceAllowed {
+		plan = plan.withRefusal(
+			fmt.Sprintf("parent directory %s is not writable by the current user", currentInstallation.targetParent),
+			permissionGuidance(plan, opts.Force),
+		)
+		result.CapabilityWarning = permissionMessage(plan, opts.Force)
+		if opts.DryRun {
+			return result, nil
+		}
+		return result, newUpdateError(errorParentNotWritable, result.CapabilityWarning, nil)
+	}
+
+	assets, err := selectReleaseAssets(release, deps.platform)
+	if err != nil {
+		return result, err
+	}
+	plan = plan.withAssets(assets)
 	if opts.DryRun {
-		log.Print(log.Exec, "Update check complete (dry-run mode, not installing)")
-		return nil
+		return result, nil
 	}
 
-	// Download and install the update
-	if err := downloadAndInstallCore(release); err != nil {
-		return fmt.Errorf("failed to install update: %w", err)
-	}
-
-	log.Print(log.Exec, fmt.Sprintf("Successfully updated to version %s",
-		strings.TrimPrefix(latestVersion, "v")))
-
-	return nil
-}
-
-// isDevelopmentBuild checks if the version string indicates a development build
-func isDevelopmentBuild(v string) bool {
-	// Check for common development version patterns:
-	// - Contains "dirty" (uncommitted changes)
-	// - Contains git hash (e.g., "v2.1.9-1-gb615e10")
-	// - Contains "dev" or "devel"
-	return strings.Contains(v, "dirty") ||
-		strings.Contains(v, "-g") || // git hash indicator
-		strings.Contains(v, "dev") ||
-		strings.Contains(v, "devel")
-}
-
-// normalizeVersion ensures version has 'v' prefix for semver comparison
-func normalizeVersion(v string) string {
-	if !strings.HasPrefix(v, "v") {
-		return "v" + v
-	}
-	return v
-}
-
-// downloadAndInstallCore downloads and installs a new version of neko-cli
-func downloadAndInstallCore(release *github.Release) error {
-	downloadURL, err := getDownloadURL(release)
+	reservation, err := deps.replacement.Reserve(currentInstallation)
 	if err != nil {
-		return err
+		return result, err
 	}
+	defer func() {
+		cleanupErr := reservation.Cleanup()
+		if cleanupErr == nil {
+			return
+		}
+		if returnErr == nil {
+			cleanupFailure := newUpdateError(errorCleanup, fmt.Sprintf("update cleanup failed for %s", currentInstallation.canonicalTarget), cleanupErr)
+			cleanupFailure.changed = result.DestinationChanged
+			returnErr = cleanupFailure
+			return
+		}
+		var updateErr *updateError
+		if errors.As(returnErr, &updateErr) {
+			updateErr.cleanup = cleanupErr.Error()
+			return
+		}
+		returnErr = fmt.Errorf("%w; cleanup: %v", returnErr, cleanupErr)
+	}()
 
-	log.Print(log.Exec, fmt.Sprintf("Downloading from: %s", downloadURL))
-
-	resp, err := http.Get(downloadURL)
+	checksumManifest, err := deps.releases.Download(ctx, assets.checksum.BrowserDownloadURL, maxChecksumBytes)
 	if err != nil {
-		return fmt.Errorf("failed to download release: %w", err)
+		return result, newUpdateError(errorDownload, fmt.Sprintf("failed to download checksum asset %s; no archive was downloaded and the installed executable is unchanged", assets.checksum.Name), err)
 	}
-	defer func(Body io.ReadCloser) {
-		err = Body.Close()
-		if err != nil {
-			log.Print(log.Exec, fmt.Sprintf("Warning: failed to close response body: %v", err))
-		}
-	}(resp.Body)
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to download release: HTTP %d", resp.StatusCode)
-	}
-
-	tmpFile, err := os.CreateTemp("", "neko-update-*.tar.gz")
+	result.ArchiveRequested = true
+	archive, err := deps.releases.Download(ctx, assets.archive.BrowserDownloadURL, maxArchiveBytes)
 	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
+		downloadError := newUpdateError(errorDownload, fmt.Sprintf("failed to download release archive %s; the installed executable is unchanged", assets.archive.Name), err)
+		downloadError.downloaded = true
+		return result, downloadError
 	}
-	tmpName := tmpFile.Name()
-	defer func(name string) {
-		err := os.Remove(name)
-		if err != nil {
-			log.Print(log.Exec, fmt.Sprintf("Warning: failed to remove temp file %s: %v", name, err))
+	if err := verifyArchiveChecksum(assets.archive.Name, archive, checksumManifest); err != nil {
+		if updateErr, ok := err.(*updateError); ok {
+			updateErr.downloaded = true
 		}
-	}(tmpName)
-
-	if _, err := io.Copy(tmpFile, resp.Body); err != nil {
-		err := tmpFile.Close()
-		if err != nil {
-			return err
+		return result, err
+	}
+	binary, err := extractCoreBinary(archive)
+	if err != nil {
+		if updateErr, ok := err.(*updateError); ok {
+			updateErr.downloaded = true
 		}
-		return fmt.Errorf("failed to download file: %w", err)
+		return result, err
 	}
-
-	if err := tmpFile.Close(); err != nil {
-		return fmt.Errorf("failed to close temp file: %w", err)
+	if err := reservation.Commit(binary, currentInstallation.targetMode); err != nil {
+		var updateErr *updateError
+		if errors.As(err, &updateErr) {
+			updateErr.downloaded = true
+			result.DestinationChanged = updateErr.changed
+		}
+		return result, err
 	}
-
-	if err := extractAndInstall(tmpName); err != nil {
-		return fmt.Errorf("failed to extract and install: %w", err)
-	}
-
-	return nil
+	result.DestinationChanged = true
+	return result, nil
 }
 
-// extractAndInstall extracts the downloaded archive and installs the binary
-func extractAndInstall(archivePath string) error {
-	file, err := os.Open(archivePath)
-	if err != nil {
-		return fmt.Errorf("failed to open archive: %w", err)
-	}
-	defer func(file *os.File) {
-		err = file.Close()
-		if err != nil {
-			log.Print(log.Exec, fmt.Sprintf("Warning: failed to close archive file: %v", err))
-		}
-	}(file)
-
-	gzr, err := gzip.NewReader(file)
-	if err != nil {
-		return fmt.Errorf("failed to create gzip reader: %w", err)
-	}
-	defer func(gzr *gzip.Reader) {
-		err = gzr.Close()
-		if err != nil {
-			log.Print(log.Exec, fmt.Sprintf("Warning: failed to close gzip reader: %v", err))
-		}
-	}(gzr)
-
-	tr := tar.NewReader(gzr)
-
-	currentExe, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("failed to get current executable path: %w", err)
-	}
-
-	currentExe, err = filepath.EvalSymlinks(currentExe)
-	if err != nil {
-		return fmt.Errorf("failed to resolve executable path: %w", err)
-	}
-
-	log.Print(log.Exec, fmt.Sprintf("Installing to: %s", currentExe))
-
-	for {
-		header, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("failed to read tar entry: %w", err)
-		}
-
-		baseName := filepath.Base(header.Name)
-		if baseName == "neko" || baseName == "neko.exe" || baseName == "neko-cli" || baseName == "neko-cli.exe" {
-			return installBinary(tr, currentExe)
-		}
-	}
-
-	return fmt.Errorf("neko binary not found in archive")
+func managerOwnedMessage(plan updatePlan) string {
+	return fmt.Sprintf(
+		"refusing to self-update %s because it is managed by %s; the installed executable is unchanged and no archive was downloaded; use %s",
+		plan.canonicalTarget,
+		plan.manager,
+		plan.managerGuidance,
+	)
 }
 
-// installBinary installs the binary with backup and rollback support
-func installBinary(reader io.Reader, targetPath string) error {
-	backupPath := targetPath + ".backup"
-
-	if err := copyFile(targetPath, backupPath); err != nil {
-		if errors.Is(err, fs.ErrPermission) {
-			return fmt.Errorf(
-				"permission denied while updating %s.\n\nTry running:\n\nsudo neko update --force",
-				targetPath,
-			)
-		}
-		return fmt.Errorf("failed to create backup: %w", err)
-	}
-	defer func(name string) {
-		err := os.Remove(name)
-		if err != nil {
-			log.Print(log.Exec, fmt.Sprintf("Warning: failed to remove backup file %s: %v", name, err))
-		}
-	}(backupPath)
-
-	tmpBinary, err := os.CreateTemp(filepath.Dir(targetPath), "neko-new-*")
-	if err != nil {
-		if errors.Is(err, fs.ErrPermission) {
-			return fmt.Errorf(
-				"permission denied while writing to %s.\n\nTry running:\n\nsudo neko update --force",
-				filepath.Dir(targetPath),
-			)
-		}
-		return fmt.Errorf("failed to create temp binary: %w", err)
-	}
-
-	tmpPath := tmpBinary.Name()
-	defer func(name string) {
-		err := os.Remove(name)
-		if err != nil {
-			log.Print(log.Exec, fmt.Sprintf("Warning: failed to remove temp binary %s: %v", name, err))
-		}
-	}(tmpPath)
-
-	if _, err := io.Copy(tmpBinary, reader); err != nil {
-		err := tmpBinary.Close()
-		if err != nil {
-			return err
-		}
-		return fmt.Errorf("failed to extract binary: %w", err)
-	}
-
-	if err := tmpBinary.Close(); err != nil {
-		return fmt.Errorf("failed to close temp binary: %w", err)
-	}
-
-	if err := os.Chmod(tmpPath, 0755); err != nil {
-		return fmt.Errorf("failed to make binary executable: %w", err)
-	}
-
-	if err := os.Rename(tmpPath, targetPath); err != nil {
-		if errors.Is(err, fs.ErrPermission) {
-			return fmt.Errorf(
-				"permission denied while replacing %s.\n\nTry running:\n\nsudo neko update --force",
-				targetPath,
-			)
-		}
-
-		if restoreErr := copyFile(backupPath, targetPath); restoreErr != nil {
-			return fmt.Errorf("failed to replace binary: %w (rollback also failed: %v)", err, restoreErr)
-		}
-		return fmt.Errorf("failed to replace binary (rolled back): %w", err)
-	}
-
-	return nil
+func permissionMessage(plan updatePlan, force bool) string {
+	return fmt.Sprintf(
+		"cannot update %s: parent directory %s is not writable by the current user; atomic replacement requires create, rename, and remove capability in that directory; no archive was downloaded and the installed executable is unchanged; %s",
+		plan.canonicalTarget,
+		plan.targetParent,
+		permissionGuidance(plan, force),
+	)
 }
 
-// getDownloadURL finds the appropriate download URL for the current platform
-func getDownloadURL(release *github.Release) (string, error) {
-	osName := runtime.GOOS
-	arch := runtime.GOARCH
-	archName := mapArchName(arch)
-	osNameCap := releaseOSName(osName)
-
-	for _, asset := range release.Assets {
-		if isCompatibleCoreReleaseAsset(asset.Name, osNameCap, archName) {
-			return asset.BrowserDownloadURL, nil
-		}
+func permissionGuidance(plan updatePlan, force bool) string {
+	primary := "reinstall neko-cli into a user-owned directory such as $HOME/.local/bin"
+	command := fmt.Sprintf("sudo -- %s update", shellQuote(plan.runningExecutable))
+	if force && plan.action == ActionForcedReinstall {
+		command += " --force"
 	}
-
-	return "", fmt.Errorf("no compatible release found for %s/%s (expected patterns: %s)",
-		osName, arch, strings.Join(coreReleaseAssetPatterns(osNameCap, archName), " or "))
+	return fmt.Sprintf("%s; as a deliberate secondary choice for this unmanaged system installation, rerun %s", primary, command)
 }
 
-func isCompatibleCoreReleaseAsset(name, osName, archName string) bool {
-	for _, pattern := range coreReleaseAssetPatterns(osName, archName) {
-		if name == pattern {
-			return true
-		}
+func shellQuote(value string) string {
+	if value != "" && !strings.ContainsAny(value, " \t\n'\"\\$`!&|;<>()[]{}*?") {
+		return value
 	}
-	return strings.HasPrefix(name, "neko-cli_") &&
-		strings.HasSuffix(name, fmt.Sprintf("_%s_%s.tar.gz", osName, archName))
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }
 
-func coreReleaseAssetPatterns(osName, archName string) []string {
-	return []string{
-		fmt.Sprintf("neko-cli_%s_%s.tar.gz", osName, archName),
-		fmt.Sprintf("neko-cli_<version>_%s_%s.tar.gz", osName, archName),
-	}
+// isDevelopmentBuild preserves the established development-build policy.
+func isDevelopmentBuild(value string) bool {
+	return strings.Contains(value, "dirty") ||
+		strings.Contains(value, "-g") ||
+		strings.Contains(value, "dev") ||
+		strings.Contains(value, "devel")
 }
 
-func releaseOSName(osName string) string {
-	return strings.ToUpper(osName[:1]) + osName[1:]
-}
-
-// mapArchName maps Go architecture names to goreleaser naming conventions
-func mapArchName(arch string) string {
-	switch arch {
-	case "amd64":
-		return "x86_64"
-	case "arm64":
-		return "arm64"
-	default:
-		return arch
+func normalizeVersion(value string) string {
+	if !strings.HasPrefix(value, "v") {
+		return "v" + value
 	}
-}
-
-// copyFile copies a file from src to dst
-func copyFile(src, dst string) error {
-	sourceFile, err := os.Open(src)
-	if err != nil {
-		return fmt.Errorf("failed to open source file: %w", err)
-	}
-	defer func(sourceFile *os.File) {
-		err = sourceFile.Close()
-		if err != nil {
-			log.Print(log.Exec, fmt.Sprintf("Warning: failed to close source file: %v", err))
-		}
-	}(sourceFile)
-
-	destFile, err := os.Create(dst)
-	if err != nil {
-		return fmt.Errorf("failed to create destination file: %w", err)
-	}
-	defer func(destFile *os.File) {
-		err := destFile.Close()
-		if err != nil {
-			log.Print(log.Exec, fmt.Sprintf("Warning: failed to close destination file: %v", err))
-		}
-	}(destFile)
-
-	if _, err := io.Copy(destFile, sourceFile); err != nil {
-		return fmt.Errorf("failed to copy file content: %w", err)
-	}
-
-	if err := destFile.Sync(); err != nil {
-		return fmt.Errorf("failed to sync destination file: %w", err)
-	}
-
-	return nil
+	return value
 }

@@ -57,6 +57,19 @@ type updatePlan struct {
 	capabilityExplanation string
 }
 
+func (plan updatePlan) withRefusal(reason, guidance string) updatePlan {
+	plan.refusalReason = reason
+	plan.guidance = guidance
+	plan.replacementPermitted = false
+	return plan
+}
+
+func (plan updatePlan) withAssets(assets releaseAssets) updatePlan {
+	plan.asset = assets.archive
+	plan.checksumAsset = assets.checksum
+	return plan
+}
+
 func classifyUpdateAction(installed, available string, force bool) (Action, error) {
 	installedVersion := normalizeVersion(installed)
 	availableVersion := normalizeVersion(available)

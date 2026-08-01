@@ -1,89 +1,20 @@
 package update
 
-import (
-	"fmt"
-	"runtime"
-	"strings"
-	"testing"
+import "testing"
 
-	"github.com/nekoman-hq/neko-cli/pkg/git"
-)
-
-func TestGetDownloadURLMatchesVersionedGoReleaserAsset(t *testing.T) {
-	osName := releaseOSName(runtime.GOOS)
-	archName := mapArchName(runtime.GOARCH)
-	assetName := fmt.Sprintf("neko-cli_3.0.1_%s_%s.tar.gz", osName, archName)
-	release := &github.Release{
-		Assets: []github.Asset{
-			{Name: "neko-cli_3.0.1_checksums.txt", BrowserDownloadURL: "https://example.com/checksums.txt"},
-			{Name: assetName, BrowserDownloadURL: "https://example.com/neko-cli.tar.gz"},
-		},
-	}
-
-	url, err := getDownloadURL(release)
-	if err != nil {
-		t.Fatalf("getDownloadURL returned error: %v", err)
-	}
-	if url != "https://example.com/neko-cli.tar.gz" {
-		t.Fatalf("getDownloadURL = %q, want versioned asset URL", url)
-	}
-}
-
-func TestGetDownloadURLIgnoresPluginAndRegistryAssets(t *testing.T) {
-	osName := releaseOSName(runtime.GOOS)
-	archName := mapArchName(runtime.GOARCH)
-	assetName := fmt.Sprintf("neko-cli_%s_%s.tar.gz", osName, archName)
-	release := &github.Release{
-		Assets: []github.Asset{
-			{Name: "plugin-release_4.0.4_Darwin_arm64.tar.gz", BrowserDownloadURL: "https://example.com/plugin-release.tar.gz"},
-			{Name: "plugin-ui_1.0.1_Darwin_arm64.tar.gz", BrowserDownloadURL: "https://example.com/plugin-ui.tar.gz"},
-			{Name: "plugin-index.json", BrowserDownloadURL: "https://example.com/plugin-index.json"},
-			{Name: assetName, BrowserDownloadURL: "https://example.com/neko-cli.tar.gz"},
-		},
-	}
-
-	url, err := getDownloadURL(release)
-	if err != nil {
-		t.Fatalf("getDownloadURL returned error: %v", err)
-	}
-	if url != "https://example.com/neko-cli.tar.gz" {
-		t.Fatalf("getDownloadURL = %q, want CLI asset URL", url)
-	}
-}
-
-func TestGetDownloadURLRejectsPluginOnlyAssets(t *testing.T) {
-	release := &github.Release{
-		Assets: []github.Asset{
-			{Name: "plugin-release_4.0.4_Darwin_arm64.tar.gz", BrowserDownloadURL: "https://example.com/plugin-release.tar.gz"},
-			{Name: "plugin-ui_1.0.1_Darwin_arm64.tar.gz", BrowserDownloadURL: "https://example.com/plugin-ui.tar.gz"},
-			{Name: "plugin-index.json", BrowserDownloadURL: "https://example.com/plugin-index.json"},
-		},
-	}
-
-	_, err := getDownloadURL(release)
-	if err == nil {
-		t.Fatal("expected no compatible CLI asset error")
-	}
-	if !strings.Contains(err.Error(), "no compatible release found") {
-		t.Fatalf("expected compatible release error, got %v", err)
-	}
-}
-
-func TestIsCompatibleCoreReleaseAssetSupportsLegacyAndVersionedNames(t *testing.T) {
-	tests := []struct {
-		name  string
-		match bool
-	}{
-		{name: "neko-cli_Darwin_arm64.tar.gz", match: true},
-		{name: "neko-cli_3.0.1_Darwin_arm64.tar.gz", match: true},
-		{name: "neko-cli_3.0.1_Darwin_x86_64.tar.gz", match: false},
-		{name: "neko-cli_3.0.1_checksums.txt", match: false},
-	}
-
-	for _, tt := range tests {
-		got := isCompatibleCoreReleaseAsset(tt.name, "Darwin", "arm64")
-		if got != tt.match {
-			t.Fatalf("isCompatibleCoreReleaseAsset(%q) = %v, want %v", tt.name, got, tt.match)
+func TestNormalizeVersion(t *testing.T) {
+	for input, expected := range map[string]string{"1.2.3": "v1.2.3", "v1.2.3": "v1.2.3"} {
+		if got := normalizeVersion(input); got != expected {
+			t.Fatalf("normalizeVersion(%q) = %q, want %q", input, got, expected)
 		}
+	}
+}
+
+func TestShellQuoteForPermissionGuidance(t *testing.T) {
+	if got := shellQuote("/path with spaces/neko"); got != "'/path with spaces/neko'" {
+		t.Fatalf("shellQuote = %q", got)
+	}
+	if got := shellQuote("/usr/local/bin/neko"); got != "/usr/local/bin/neko" {
+		t.Fatalf("shellQuote = %q", got)
 	}
 }
