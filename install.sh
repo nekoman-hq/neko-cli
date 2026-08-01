@@ -2,16 +2,40 @@
 set -euo pipefail
 
 REPO="${NEKO_REPOSITORY:-nekoman-hq/neko-cli}"
-INSTALL_DIR="${NEKO_INSTALL_DIR:-/usr/local/bin}"
 API_BASE="${NEKO_GITHUB_API_BASE:-https://api.github.com}"
 OS_OVERRIDE="${NEKO_OS:-}"
 ARCH_OVERRIDE="${NEKO_ARCH:-}"
+INSTALL_DIR=""
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
     echo "Error: required command '$1' not found" >&2
     exit 1
   fi
+}
+
+resolve_install_dir() {
+  local effective_uid="$1"
+  local user_home="$2"
+
+  if [ "${NEKO_INSTALL_DIR+x}" = "x" ]; then
+    if [ -z "$NEKO_INSTALL_DIR" ]; then
+      echo "Error: NEKO_INSTALL_DIR must not be empty" >&2
+      return 1
+    fi
+    printf '%s\n' "$NEKO_INSTALL_DIR"
+    return
+  fi
+
+  if [ "$effective_uid" = "0" ]; then
+    printf '%s\n' "/usr/local/bin"
+    return
+  fi
+  if [ -z "$user_home" ]; then
+    echo "Error: HOME must be set when NEKO_INSTALL_DIR is not provided" >&2
+    return 1
+  fi
+  printf '%s/.local/bin\n' "$user_home"
 }
 
 normalize_version() {
@@ -172,56 +196,90 @@ extract_archive() {
   esac
 }
 
+prepare_install_dir() {
+  if ! mkdir -p "$INSTALL_DIR"; then
+    echo "Error: cannot create installation directory: ${INSTALL_DIR}" >&2
+    echo "Choose a user-owned directory with NEKO_INSTALL_DIR, for example: ${HOME:-\$HOME}/.local/bin" >&2
+    return 1
+  fi
+  if [ ! -d "$INSTALL_DIR" ] || [ ! -w "$INSTALL_DIR" ]; then
+    echo "Error: installation directory is not writable: ${INSTALL_DIR}" >&2
+    echo "The installer never invokes sudo. Choose a user-owned directory with NEKO_INSTALL_DIR." >&2
+    return 1
+  fi
+}
+
 install_binary() {
   local source="$1"
   local destination="${INSTALL_DIR}/neko"
 
-  mkdir -p "$INSTALL_DIR"
-  if [ -w "$INSTALL_DIR" ]; then
-    install -m 0755 "$source" "$destination"
-  else
-    sudo install -m 0755 "$source" "$destination"
-  fi
+  install -m 0755 "$source" "$destination"
 }
 
-require_command curl
-require_command jq
-require_command tar
-require_command find
-require_command install
+path_guidance() {
+  case ":${PATH:-}:" in
+    *":${INSTALL_DIR}:"*)
+      return
+      ;;
+  esac
+  echo "Add ${INSTALL_DIR} to PATH to run neko from a new shell."
+}
 
-version="${NEKO_VERSION:-}"
-if [ -n "$version" ]; then
-  version=$(normalize_version "$version")
-else
-  version=$(resolve_latest_cli_version)
+main() {
+  require_command curl
+  require_command jq
+  require_command tar
+  require_command find
+  require_command install
+  require_command id
+
+  INSTALL_DIR=$(resolve_install_dir "$(id -u)" "${HOME:-}")
+  prepare_install_dir
+
+  local version="${NEKO_VERSION:-}"
+  if [ -n "$version" ]; then
+    version=$(normalize_version "$version")
+  else
+    version=$(resolve_latest_cli_version)
+  fi
+
+  local os="${OS_OVERRIDE:-$(uname -s)}"
+  local arch="${ARCH_OVERRIDE:-$(uname -m)}"
+  local asset_name
+  local asset_url
+  asset_name=$(platform_asset "$os" "$arch")
+  asset_url=$(find_asset_url "$version" "$asset_name")
+
+  local tmp_dir
+  local archive
+  local extract_dir
+  local binary_path
+  tmp_dir=$(mktemp -d)
+  trap 'rm -rf -- "${tmp_dir:-}"' EXIT
+
+  archive="${tmp_dir}/${asset_name}"
+  extract_dir="${tmp_dir}/extract"
+  mkdir -p "$extract_dir"
+
+  echo "Downloading ${asset_name} from ${REPO} ${version}..."
+  if ! github_get "$asset_url" >"$archive"; then
+    echo "Error: failed to download ${asset_name}" >&2
+    return 1
+  fi
+  extract_archive "$archive" "$extract_dir"
+
+  binary_path=$(find "$extract_dir" -type f \( -name neko-cli -o -name neko-cli.exe -o -name neko -o -name neko.exe \) | head -n 1)
+  if [ -z "$binary_path" ]; then
+    echo "Error: downloaded archive did not contain neko-cli binary" >&2
+    return 1
+  fi
+
+  install_binary "$binary_path"
+
+  echo "neko-cli ${version} installed to ${INSTALL_DIR}/neko"
+  path_guidance
+}
+
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  main "$@"
 fi
-
-os="${OS_OVERRIDE:-$(uname -s)}"
-arch="${ARCH_OVERRIDE:-$(uname -m)}"
-asset_name=$(platform_asset "$os" "$arch")
-asset_url=$(find_asset_url "$version" "$asset_name")
-
-tmp_dir=$(mktemp -d)
-trap 'rm -rf "$tmp_dir"' EXIT
-
-archive="${tmp_dir}/${asset_name}"
-extract_dir="${tmp_dir}/extract"
-mkdir -p "$extract_dir"
-
-echo "Downloading ${asset_name} from ${REPO} ${version}..."
-if ! github_get "$asset_url" >"$archive"; then
-  echo "Error: failed to download ${asset_name}" >&2
-  exit 1
-fi
-extract_archive "$archive" "$extract_dir"
-
-binary_path=$(find "$extract_dir" -type f \( -name neko-cli -o -name neko-cli.exe -o -name neko -o -name neko.exe \) | head -n 1)
-if [ -z "$binary_path" ]; then
-  echo "Error: downloaded archive did not contain neko-cli binary" >&2
-  exit 1
-fi
-
-install_binary "$binary_path"
-
-echo "neko-cli ${version} installed to ${INSTALL_DIR}/neko"

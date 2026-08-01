@@ -126,6 +126,114 @@ func TestInstallScriptNormalizesExplicitVersionAndSkipsLatestLookup(t *testing.T
 	}
 }
 
+func TestInstallScriptDefaultsOrdinaryUsersToHomeLocalBin(t *testing.T) {
+	fixture := newInstallScriptFixture(t)
+	fixture.writeJSON("release-v3.0.4.json", `{
+		"tag_name":"v3.0.4",
+		"assets":[{"name":"neko-cli_Darwin_arm64.tar.gz","browser_download_url":"https://download.example/neko-cli_Darwin_arm64.tar.gz"}]
+	}`)
+	fixture.writeArchive("neko-cli_Darwin_arm64.tar.gz")
+	fixture.writeFakeCurl()
+	fixture.writeFakeID("501")
+	home := filepath.Join(fixture.root, "home with spaces")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	output, err := fixture.run(map[string]string{
+		"HOME":                 home,
+		"NEKO_GITHUB_API_BASE": "https://api.example",
+		"NEKO_VERSION":         "v3.0.4",
+		"NEKO_OS":              "Darwin",
+		"NEKO_ARCH":            "arm64",
+		"PATH":                 fixture.binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+	})
+	if err != nil {
+		t.Fatalf("install.sh failed: %v\n%s", err, output)
+	}
+	installDir := filepath.Join(home, ".local", "bin")
+	if _, err := os.Stat(filepath.Join(installDir, "neko")); err != nil {
+		t.Fatalf("default user install: %v", err)
+	}
+	if !strings.Contains(output, "Add "+installDir+" to PATH") {
+		t.Fatalf("missing PATH guidance:\n%s", output)
+	}
+}
+
+func TestInstallScriptPreservesExplicitPathWithSpacesAndSuppressesReachedPATHGuidance(t *testing.T) {
+	fixture := newInstallScriptFixture(t)
+	fixture.installDir = filepath.Join(fixture.root, "explicit install with spaces")
+	fixture.writeJSON("release-v3.0.4.json", `{
+		"tag_name":"v3.0.4",
+		"assets":[{"name":"neko-cli_Darwin_arm64.tar.gz","browser_download_url":"https://download.example/neko-cli_Darwin_arm64.tar.gz"}]
+	}`)
+	fixture.writeArchive("neko-cli_Darwin_arm64.tar.gz")
+	fixture.writeFakeCurl()
+	fixture.writeFakeID("501")
+
+	output, err := fixture.run(map[string]string{
+		"HOME":                 fixture.root,
+		"NEKO_GITHUB_API_BASE": "https://api.example",
+		"NEKO_INSTALL_DIR":     fixture.installDir,
+		"NEKO_VERSION":         "v3.0.4",
+		"NEKO_OS":              "Darwin",
+		"NEKO_ARCH":            "arm64",
+		"PATH":                 fixture.binDir + string(os.PathListSeparator) + fixture.installDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+	})
+	if err != nil {
+		t.Fatalf("install.sh failed: %v\n%s", err, output)
+	}
+	if _, err := os.Stat(filepath.Join(fixture.installDir, "neko")); err != nil {
+		t.Fatalf("explicit install: %v", err)
+	}
+	if strings.Contains(output, "to PATH") {
+		t.Fatalf("unexpected PATH guidance:\n%s", output)
+	}
+}
+
+func TestInstallScriptRootDefaultAndNoAutomaticSudoPolicy(t *testing.T) {
+	scriptPath, err := filepath.Abs("install.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command("bash", "-c", `unset NEKO_INSTALL_DIR; source "$1"; resolve_install_dir 0 "/unused home"`, "bash", scriptPath)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("resolve root default: %v\n%s", err, output)
+	}
+	if strings.TrimSpace(string(output)) != "/usr/local/bin" {
+		t.Fatalf("root default = %q", output)
+	}
+
+	fixture := newInstallScriptFixture(t)
+	fixture.writeFakeID("501")
+	fixture.writeFakeSudo()
+	if err := os.MkdirAll(fixture.installDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(fixture.installDir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(fixture.installDir, 0o755) })
+	installOutput, err := fixture.run(map[string]string{
+		"HOME":             fixture.root,
+		"NEKO_INSTALL_DIR": fixture.installDir,
+		"NEKO_VERSION":     "v3.0.4",
+		"NEKO_OS":          "Darwin",
+		"NEKO_ARCH":        "arm64",
+		"PATH":             fixture.binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+	})
+	if err == nil || !strings.Contains(installOutput, "never invokes sudo") {
+		t.Fatalf("non-writable explicit target result: err=%v\n%s", err, installOutput)
+	}
+	if _, statErr := os.Stat(fixture.sudoLog); !os.IsNotExist(statErr) {
+		t.Fatalf("sudo was invoked or marker stat failed: %v", statErr)
+	}
+	if log := fixture.curlLog(); log != "" {
+		t.Fatalf("network fake invoked before target refusal:\n%s", log)
+	}
+}
+
 func TestInstallScriptRejectsUnsupportedPlatform(t *testing.T) {
 	fixture := newInstallScriptFixture(t)
 
@@ -170,6 +278,7 @@ type installScriptFixture struct {
 	binDir     string
 	installDir string
 	logPath    string
+	sudoLog    string
 }
 
 func newInstallScriptFixture(t *testing.T) *installScriptFixture {
@@ -188,6 +297,30 @@ func newInstallScriptFixture(t *testing.T) *installScriptFixture {
 		binDir:     filepath.Join(tmp, "bin"),
 		installDir: filepath.Join(tmp, "install"),
 		logPath:    filepath.Join(tmp, "curl.log"),
+		sudoLog:    filepath.Join(tmp, "sudo.log"),
+	}
+}
+
+func (f *installScriptFixture) writeFakeID(uid string) {
+	f.t.Helper()
+	if err := os.MkdirAll(f.binDir, 0o755); err != nil {
+		f.t.Fatalf("create bin dir: %v", err)
+	}
+	script := "#!/usr/bin/env bash\nif [ \"${1:-}\" = \"-u\" ]; then printf '%s\\n' \"${FAKE_ID_UID}\"; else /usr/bin/id \"$@\"; fi\n"
+	if err := os.WriteFile(filepath.Join(f.binDir, "id"), []byte(script), 0o755); err != nil {
+		f.t.Fatalf("write fake id: %v", err)
+	}
+	f.t.Setenv("FAKE_ID_UID", uid)
+}
+
+func (f *installScriptFixture) writeFakeSudo() {
+	f.t.Helper()
+	if err := os.MkdirAll(f.binDir, 0o755); err != nil {
+		f.t.Fatalf("create bin dir: %v", err)
+	}
+	script := "#!/usr/bin/env bash\nprintf 'invoked\\n' >>\"${SUDO_LOG}\"\nexit 99\n"
+	if err := os.WriteFile(filepath.Join(f.binDir, "sudo"), []byte(script), 0o755); err != nil {
+		f.t.Fatalf("write fake sudo: %v", err)
 	}
 }
 
@@ -278,9 +411,17 @@ func (f *installScriptFixture) run(env map[string]string) (string, error) {
 
 	cmd := exec.Command("bash", filepath.Join(f.root, "install.sh"))
 	cmd.Dir = f.root
-	cmd.Env = append(os.Environ(),
+	baseEnvironment := make([]string, 0, len(os.Environ()))
+	for _, value := range os.Environ() {
+		if strings.HasPrefix(value, "NEKO_") || strings.HasPrefix(value, "GITHUB_TOKEN=") || strings.HasPrefix(value, "HOME=") {
+			continue
+		}
+		baseEnvironment = append(baseEnvironment, value)
+	}
+	cmd.Env = append(baseEnvironment,
 		"CURL_LOG="+f.logPath,
 		"FIXTURE_DIR="+f.fixtures,
+		"SUDO_LOG="+f.sudoLog,
 	)
 	for key, value := range env {
 		cmd.Env = append(cmd.Env, key+"="+value)
@@ -294,6 +435,9 @@ func (f *installScriptFixture) curlLog() string {
 	f.t.Helper()
 
 	log, err := os.ReadFile(f.logPath)
+	if os.IsNotExist(err) {
+		return ""
+	}
 	if err != nil {
 		f.t.Fatalf("read curl log: %v", err)
 	}
