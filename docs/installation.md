@@ -1,5 +1,8 @@
 # Installation
 
+For the repository-wide command and flag inventory, including direct-text Core
+commands and plugin-response flags, see the [CLI reference](cli-reference.md).
+
 ## Release Install Script
 
 `install.sh` installs the main `neko` CLI from GitHub Releases. It does not install plugins and does not read repository-local release files such as legacy V1 config or V2 state/config.
@@ -70,6 +73,12 @@ The updater first selects the newest stable `vX.Y.Z` CLI release and classifies 
 `--force` is only a same-version reinstall switch. It does not bypass installation permissions, package-manager ownership, platform compatibility, asset selection, checksum verification, archive validation, or atomic replacement.
 
 `--dry-run` performs release selection and static installation inspection, then reports the planned action and any statically detectable capability issue. It does not reserve a sibling file, download an archive, or change the filesystem.
+
+A successful update, successful no-op, and dry-run plan exit `0`. Unsupported
+or manager-owned installations, downgrade attempts, integrity failures,
+download failures, and replacement failures exit `1`. Core
+`neko update --force` is only a same-version reinstall switch: it does not
+bypass permissions and does not permit a Core downgrade.
 
 ### Installation ownership
 
