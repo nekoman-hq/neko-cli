@@ -239,7 +239,7 @@ neko <plugin> <command> --help
 Core supports `table`, `json`, `wide`, and explicit `github` response modes.
 Successful GitHub command-file output is response-specific; it is not a
 universal plugin format. See the [complete CLI
-reference](docs/cli-reference.md#output-exit-network-and-mutation-boundaries)
+reference](docs/cli-reference.md#output-and-process-exit)
 for the exact boundaries.
 
 ### Table (Default)

@@ -1,10 +1,23 @@
 # Release Plugin Refactor History
 
+> **Sequence:** 001
+> **Title:** Release Plugin Behavior-Preserving Refactor
+> **Status:** completed
+> **Created:** 2026-07-14
+> **Completed or superseded:** 2026-07-15
+> **Predecessor:** None
+> **Successor:** [002 — Post-Refactor Architecture Review](002-post-refactor-architecture-review.md)
+> **Current references:** [Current architecture](../architecture/current-state.md), [package ownership](../architecture/package-ownership.md), [maintainability policy](../architecture/maintainability-policy.md)
+> **Original source:** `plugin/release/docs/architecture/refactor-plan.md`; later condensed as `plugin/release/docs/architecture/refactor-history.md`
+
+> This is a historical record, not the current product or architecture source.
+> It preserves the completed refactor boundary and its original limitations.
+
 ## Purpose
 
 This document records the closed behavior-preserving Release Plugin refactor as durable architecture history. It avoids project-management labels and preserves the technical boundaries that were established.
 
-Current runtime behavior is authoritative in [current-state.md](current-state.md). Post-refactor dependency direction and remaining debt are maintained in [post-refactor-review.md](post-refactor-review.md). Future capability decisions are described in [architecture-evolution.md](architecture-evolution.md).
+Current runtime behavior is authoritative in [current-state.md](../architecture/current-state.md). Current dependency direction and remaining debt are maintained in [package-ownership.md](../architecture/package-ownership.md). Current architecture decisions are described in [architecture-decisions.md](../architecture/architecture-decisions.md).
 
 ## Global invariants preserved by the refactor
 
@@ -82,7 +95,7 @@ The serialized migration journal values remain compatible, while unknown or corr
 
 V1 release behavior was isolated behind typed intent, pure planning, preview/execution use cases, focused requirements/preflight/materialization/Git/compensation adapters, fixed executor composition, and executor-owned process/token/environment/clock ports.
 
-Active production bypasses mutable registry lookup. Registry-backed release entry points, service-style APIs, fatal preflight, tool interfaces, and concrete executor legacy methods remain compatibility surfaces governed by [v1-compatibility-policy.md](v1-compatibility-policy.md).
+Active production bypasses mutable registry lookup. Registry-backed release entry points, service-style APIs, fatal preflight, tool interfaces, and concrete executor legacy methods remain compatibility surfaces governed by [v1-compatibility-policy.md](../architecture/v1-compatibility-policy.md).
 
 ## Remaining historical limitations after the refactor
 
@@ -109,7 +122,7 @@ commits.
 
 No workflow YAML, GoReleaser configuration, journal schema, command contract,
 public release behavior, or active lifecycle order changed. The concise final
-architecture is recorded in [post-refactor-review.md](post-refactor-review.md).
+architecture is recorded in [package-ownership.md](../architecture/package-ownership.md).
 
 ## Validation baseline
 

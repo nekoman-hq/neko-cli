@@ -4,7 +4,7 @@
 
 This document describes the Release Plugin as it exists after the July 2026 code-quality refactor. It is the detailed behavioral and data-contract reference rather than a target design.
 
-The concise dependency view, responsibility map, lifecycle review, and terminology glossary are maintained in [post-refactor-review.md](post-refactor-review.md). Changed-code controls are in [maintainability-policy.md](maintainability-policy.md), preserved surfaces are summarized in [compatibility-notes.md](compatibility-notes.md), and future safety, compatibility, developer-experience, and feature decisions remain in [architecture-evolution.md](architecture-evolution.md).
+The concise dependency view and responsibility map are maintained in [package-ownership.md](package-ownership.md). Changed-code controls are in [maintainability-policy.md](maintainability-policy.md), preserved surfaces are summarized in [compatibility-notes.md](compatibility-notes.md), and unresolved architecture boundaries remain in [architecture-decisions.md](architecture-decisions.md). Historical plans and completion reviews are preserved in the [Release documentation history](../history/README.md).
 
 The V1 compatibility policy support decision and retired-path cleanup removal record for retained V1 compatibility surfaces are recorded in [v1-compatibility-policy.md](v1-compatibility-policy.md). That register is the authoritative source for Keep, Deprecate, Defer, Removed, and future-removal decisions.
 
@@ -861,7 +861,7 @@ Important missing seams include:
 - registry and version-evidence globals remain mutable only for compatibility tests/direct callers;
 - a command-decoding policy for wrong flag types; the command presentation extraction parsers deliberately preserve silent defaults because rejection would be a new public behavior.
 
-## Bounded post-refactor limitations, prioritized
+## Current bounded limitations, prioritized
 
 1. Active V1 compensation is interruption-safe for supported local actions, but deliberately requires manual recovery for pending/uncertain remote actions, pending revert, corrupt evidence, and uncertain executor outcomes; direct legacy rollback callers remain best-effort.
 2. Pair and migration crash recovery is evidence-driven for supported config/state and archival windows, but it still refuses corrupt, externally edited, unsupported, or owner-ambiguous evidence and does not claim cross-file atomicity.
@@ -884,16 +884,11 @@ Important missing seams include:
 - Do not activate V2 local execution, standalone dispatch/retry, or a new publication adapter as an incidental refactor.
 - Do not rename or move public symbols until callers and contract tests make that change explicit.
 
-## Final refactor status
+## Historical context
 
-The final architecture audit found no active V1/V2 mixed orchestration, scattered source-format selection in release execution, raw flags in application code, application-owned `plugin.Response`, generic workflow pipeline, dependency bag, versioned engine, boolean V1/V2 selector, replacement god function, duplicate active Git/journal implementation, or unbounded token/clock access in deterministic boundaries. Shared code is limited to identical contracts; V1-, V2-, migration-, and command-specific behavior remains isolated where semantics differ.
-
-Typed release progress reporting resolved the prior bounded presentation deviation: active V2 application and focused operation code now emits typed progress through `ReleaseProgress`, while terminal rendering is isolated in adapter files. This does not mix response construction into application code or create a second orchestrator; it keeps the completed refactor ledger closed and records ongoing architecture decisions in [post-refactor-review.md](post-refactor-review.md) and [architecture-evolution.md](architecture-evolution.md).
-
-- Completed stages: 9 / 9
-- Remaining stages: 0
-- Release Plugin refactor: completed
-- Completed capability records: V1 compensation interruption safety — Make V1 compensation interruption-safe; V2 pair and migration crash recovery — Make pair and migration crash recovery explicit; evidence inspection and archival — Add evidence-safe journal inspection and lifecycle support; V1 compatibility policy — Decide and deprecate V1 compatibility surfaces; retired-path cleanup — Retire superseded and inactive release paths; typed release progress reporting — Isolate release progress reporting; explicit-root composition — Make command roots explicit for embedders; generated-output path policy — Clarify generated-output path policy; release plan inspection — Add read-only release plan inspection; V2 local delivery evaluation — Evaluate V2 local delivery; GitHub Actions workflow scaffolding — Generate an idempotent create-only release workflow; Release V2 unit overview — Add deterministic read-only unit inventory; Release V2 pipeline inspection — Add local configured-stage inspection; Release V2 pipeline runtime inspection — Correlate local journals, local Git evidence, recovery, and resume/retry safety without mutation; Release V2 pipeline verification facts — Reuse local and explicit remote Doctor facts without changing lifecycle status
-- Deferred pipeline capability: durable workflow-run and publication-completion inspection (not implemented)
-
-V1 compensation interruption safety, V2 pair and migration crash recovery, evidence inspection and archival, V1 compatibility policy, retired-path cleanup, typed release progress reporting, explicit-root composition, generated-output path policy, release plan inspection, GitHub Actions workflow scaffolding, Release V2 unit overview, configured and runtime Release V2 pipeline inspection, and later architecture decisions are maintained in [architecture-evolution.md](architecture-evolution.md). Capability records are not refactor stages; the historical refactor ledger remains closed.
+The completed behavior-preserving refactor, its architecture review, the later
+code-quality consolidation, and the post-refactor capability sequence are
+preserved in the [Release documentation history](../history/README.md). Those
+records explain how the present boundaries were reached but do not override the
+current facts in this document. Current unresolved decisions are maintained in
+[architecture-decisions.md](architecture-decisions.md).

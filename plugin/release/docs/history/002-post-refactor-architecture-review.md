@@ -1,15 +1,29 @@
 # Release Plugin Architecture
 
+> **Sequence:** 002
+> **Title:** Release Plugin Post-Refactor Architecture Review
+> **Status:** completed
+> **Created:** 2026-07-15
+> **Completed or superseded:** 2026-07-21
+> **Predecessor:** [001 — Behavior-Preserving Refactor](001-behavior-preserving-refactor.md)
+> **Successor:** [003 — Post-Refactor Architecture Evolution](003-post-refactor-architecture-evolution.md)
+> **Current references:** [Current architecture](../architecture/current-state.md), [package ownership](../architecture/package-ownership.md), [maintainability policy](../architecture/maintainability-policy.md), [compatibility notes](../architecture/compatibility-notes.md)
+> **Original source:** `plugin/release/docs/architecture/post-refactor-review.md`
+
+> This is a historical record, not the current product or architecture source.
+> It preserves the final review snapshot of the completed refactor and the later
+> code-quality consolidation.
+
 ## Status
 
 This document describes the architecture established by the Release Plugin
 code-quality refactor completed in July 2026: ten planned structural commits,
 corrective follow-up Commit 11, and final corrective follow-up Commit 12. The
 final sequence contains twelve commits. This is the concise review entry point.
-[current-state.md](current-state.md) remains the detailed command,
+[current-state.md](../architecture/current-state.md) remains the detailed command,
 disk, and wire-contract reference;
-[maintainability-policy.md](maintainability-policy.md) defines the controls for
-future changes; and [compatibility-notes.md](compatibility-notes.md) records the
+[maintainability-policy.md](../architecture/maintainability-policy.md) defines the controls for
+future changes; and [compatibility-notes.md](../architecture/compatibility-notes.md) records the
 preserved surfaces.
 
 The architecture is a pragmatic hybrid. Stable public packages and compatibility
@@ -196,7 +210,7 @@ Doctor diagnostics, Unit Overview or Pipeline Inspection policy, Context
 Validation inspection, or workflow scaffolding. A new root production file
 must satisfy one of the five
 responsibilities above and pass the architecture review in
-[maintainability-policy.md](maintainability-policy.md).
+[maintainability-policy.md](../architecture/maintainability-policy.md).
 
 ## Release-tool ownership
 

@@ -1,10 +1,24 @@
 # Release Plugin Architecture Evolution
 
+> **Sequence:** 003
+> **Title:** Release Plugin Post-Refactor Architecture Evolution
+> **Status:** superseded
+> **Created:** 2026-07-15
+> **Completed or superseded:** 2026-08-01
+> **Predecessor:** [002 — Post-Refactor Architecture Review](002-post-refactor-architecture-review.md)
+> **Successor:** None
+> **Current references:** [Current architecture](../architecture/current-state.md), [current architecture decisions](../architecture/architecture-decisions.md), [Release V2 product boundary](../../../../docs/release/bootstrap-product-boundary.md)
+> **Original source:** `plugin/release/docs/architecture/post-refactor-roadmap.md`; later continued as `plugin/release/docs/architecture/architecture-evolution.md`
+
+> This is a historical record, not the current product or architecture source.
+> It preserves the post-refactor hardening, compatibility, developer-experience,
+> and capability sequence as it stood when the rolling record was closed.
+
 ## Purpose and scope
 
 This document records durable Release Plugin architecture decisions after the completed behavior-preserving refactor. It is not a project-management roadmap and does not track task status.
 
-Detailed runtime behavior and disk contracts live in [current-state.md](current-state.md). Dependency direction, debt ranking, and compatibility inventory live in [post-refactor-review.md](post-refactor-review.md). The closed refactor history lives in [refactor-history.md](refactor-history.md). V1 compatibility support decisions live in [v1-compatibility-policy.md](v1-compatibility-policy.md).
+Detailed runtime behavior and disk contracts live in [current-state.md](../architecture/current-state.md). Dependency direction, debt ranking, and compatibility inventory live in [package-ownership.md](../architecture/package-ownership.md). The preceding refactor history lives in [001-behavior-preserving-refactor.md](001-behavior-preserving-refactor.md). V1 compatibility support decisions live in [v1-compatibility-policy.md](../architecture/v1-compatibility-policy.md).
 
 Every future implementation remains subject to `plugin/release/RULES.md`.
 

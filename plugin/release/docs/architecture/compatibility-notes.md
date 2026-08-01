@@ -39,7 +39,7 @@ redaction are unchanged on both characterized paths.
 
 V2 continues to use GitHub Actions delivery. Active non-dry-run V2 never invokes
 a release tool locally. The operation order is documented in
-[post-refactor-review.md](post-refactor-review.md) and remains guarded by focused
+[current-state.md](current-state.md) and remains guarded by focused
 tests. Execution, dispatch, migration, V1 compensation, and V2 pair-recovery
 journals remain distinct schemas with their existing locations and modes.
 

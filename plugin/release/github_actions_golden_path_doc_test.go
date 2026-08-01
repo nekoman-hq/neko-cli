@@ -338,10 +338,10 @@ func TestGitHubWorkflowScaffoldingDocumentationContract(t *testing.T) {
 			"Plan: `githubWorkflowGenerationPlanner`",
 			"no writer",
 		},
-		"plugin/release/docs/architecture/architecture-evolution.md": {
-			"### GitHub Actions workflow scaffolding",
-			"no Git mutator",
-			"generic workflow DSL",
+		"plugin/release/docs/architecture/architecture-decisions.md": {
+			"Workflow scaffolding is focused",
+			"create-only",
+			"generic pipeline/state-machine",
 		},
 	}
 	for path, fragments := range documents {

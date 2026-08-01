@@ -14,9 +14,9 @@ func TestReleaseDocumentationHistoryInventory(t *testing.T) {
 		classification string
 		contains       string
 	}{
-		{"plugin/release/docs/architecture/refactor-history.md", "move", "closed behavior-preserving Release Plugin refactor"},
-		{"plugin/release/docs/architecture/post-refactor-review.md", "split", "code-quality refactor completed in July 2026"},
-		{"plugin/release/docs/architecture/architecture-evolution.md", "split", "records durable Release Plugin architecture decisions"},
+		{"plugin/release/docs/history/001-behavior-preserving-refactor.md", "move", "closed behavior-preserving Release Plugin refactor"},
+		{"plugin/release/docs/history/002-post-refactor-architecture-review.md", "split", "code-quality refactor completed in July 2026"},
+		{"plugin/release/docs/history/003-post-refactor-architecture-evolution.md", "split", "records durable Release Plugin architecture decisions"},
 		{"plugin/release/docs/architecture/current-state.md", "retain-current", "Release Plugin as it exists"},
 		{"plugin/release/docs/architecture/maintainability-policy.md", "retain-current", "applies to new or materially changed Release Plugin production code"},
 		{"plugin/release/docs/architecture/compatibility-notes.md", "retain-current", "Preserved contracts"},
@@ -48,8 +48,11 @@ func TestReleaseDocumentationHistoryInventory(t *testing.T) {
 	}
 
 	formerSources := map[string]string{
-		"plugin/release/docs/architecture/refactor-plan.md":         "plugin/release/docs/architecture/refactor-history.md",
-		"plugin/release/docs/architecture/post-refactor-roadmap.md": "plugin/release/docs/architecture/architecture-evolution.md",
+		"plugin/release/docs/architecture/refactor-plan.md":          "plugin/release/docs/history/001-behavior-preserving-refactor.md",
+		"plugin/release/docs/architecture/refactor-history.md":       "plugin/release/docs/history/001-behavior-preserving-refactor.md",
+		"plugin/release/docs/architecture/post-refactor-review.md":   "plugin/release/docs/history/002-post-refactor-architecture-review.md",
+		"plugin/release/docs/architecture/post-refactor-roadmap.md":  "plugin/release/docs/history/003-post-refactor-architecture-evolution.md",
+		"plugin/release/docs/architecture/architecture-evolution.md": "plugin/release/docs/history/003-post-refactor-architecture-evolution.md",
 	}
 	for former, replacement := range formerSources {
 		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(former))); !os.IsNotExist(err) {
@@ -72,6 +75,8 @@ func TestCanonicalReleaseDocumentationRemainsCurrent(t *testing.T) {
 		"docs/release/overview.md",
 		"docs/release/migration-v1-to-v2.md",
 		"plugin/release/docs/architecture/current-state.md",
+		"plugin/release/docs/architecture/package-ownership.md",
+		"plugin/release/docs/architecture/architecture-decisions.md",
 		"plugin/release/docs/architecture/maintainability-policy.md",
 		"plugin/release/docs/architecture/compatibility-notes.md",
 		"plugin/release/docs/architecture/v1-compatibility-policy.md",

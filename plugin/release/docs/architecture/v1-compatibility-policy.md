@@ -18,7 +18,7 @@ owners while preserving every listed facade and executor behavior. See
 - Repository evidence: `rg` reference audit, production composition in
   `plugin/release/main.go`, V1 compatibility extraction compatibility tests, V1 compatibility policy compatibility
   characterization tests, the retired-path cleanup removal guards, and the inventory in
-  `post-refactor-review.md`
+  [package-ownership.md](package-ownership.md)
 - Next cleanup gate: none scheduled; later removals need a new cleanup gate and
   fresh consumer evidence.
 

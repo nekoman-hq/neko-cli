@@ -865,18 +865,18 @@ neko my-plugin hello --output json
 
 ## Example: Complete Plugin
 
-See the [release plugin](../plugin/release/) for a complete example:
+See the [release plugin entry point](../plugin/release/main.go) for a complete example:
 
 - [`main.go`](../plugin/release/main.go) - Entry point with command routing
 - [`manifest.json`](../plugin/release/manifest.json) - Full manifest example
-- [`pkg/init/handler.go`](../plugin/release/pkg/init/handler.go) - Command handler example
+- [`pkg/init/init_handler.go`](../plugin/release/pkg/init/init_handler.go) - Command handler example
 - [`pkg/history/history.go`](../plugin/release/pkg/history/history.go) - Simple table output example
 
 ---
 
 ## Questions?
 
-- Check the [main documentation](README.md)
+- Check the [main documentation](../README.md)
 - Look at the [AI Context](ai_context.md) for additional development notes
 - Open an issue on [GitHub](https://github.com/nekoman-hq/neko-cli/issues)
 

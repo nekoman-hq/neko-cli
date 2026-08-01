@@ -6,7 +6,7 @@ Before modifying Release Plugin files:
 
 - Read `plugin/release/RULES.md` completely.
 - Consult `plugin/release/docs/architecture/current-state.md` for the affected flow.
-- Consult `plugin/release/docs/architecture/refactor-history.md` for completed boundary context and `plugin/release/docs/architecture/architecture-evolution.md` for pending architecture decisions.
+- Consult `plugin/release/docs/history/README.md` for completed boundary context and `plugin/release/docs/architecture/architecture-decisions.md` for pending architecture decisions.
 - Inspect the current implementation, tests, and `git status --short --branch`; current code is authoritative.
 
 Release correctness and long-term maintainability are joint acceptance criteria. Characterize risky behavior before refactoring version/tag selection, exact commit contents, side-effect ordering, journals, dispatch, retry/resume, error codes, responses, or secret handling.
