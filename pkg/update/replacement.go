@@ -146,19 +146,19 @@ func (reservation *replacementReservation) Commit(binary []byte, targetMode fs.F
 	if err != nil {
 		return newUpdateError(errorFileSync, fmt.Sprintf("cannot reopen reserved update file for %s", reservation.target), err)
 	}
-	if err := stagedFile.Sync(); err != nil {
+	if syncErr := stagedFile.Sync(); syncErr != nil {
 		_ = stagedFile.Close()
-		return newUpdateError(errorFileSync, fmt.Sprintf("cannot fsync reserved update file for %s", reservation.target), err)
+		return newUpdateError(errorFileSync, fmt.Sprintf("cannot fsync reserved update file for %s", reservation.target), syncErr)
 	}
-	if err := stagedFile.Close(); err != nil {
-		return newUpdateError(errorFileSync, fmt.Sprintf("cannot close fsynced update file for %s", reservation.target), err)
+	if closeErr := stagedFile.Close(); closeErr != nil {
+		return newUpdateError(errorFileSync, fmt.Sprintf("cannot close fsynced update file for %s", reservation.target), closeErr)
 	}
 
-	if err := reservation.ops.Rename(reservation.path, reservation.target); err != nil {
+	if renameErr := reservation.ops.Rename(reservation.path, reservation.target); renameErr != nil {
 		return newUpdateError(
 			errorRename,
 			fmt.Sprintf("cannot atomically replace %s; the installed executable is unchanged", reservation.target),
-			err,
+			renameErr,
 		)
 	}
 	reservation.committed = true

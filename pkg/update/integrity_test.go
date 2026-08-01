@@ -96,7 +96,7 @@ func TestExtractCoreBinaryValidatesEveryEntry(t *testing.T) {
 		t.Fatalf("valid archive: binary=%q err=%v", binary, err)
 	}
 
-	tests := []struct {
+	tests := []struct { //nolint:govet // Field order keeps archive cases readable.
 		name      string
 		archive   []byte
 		wantError string

@@ -20,9 +20,9 @@ type installation struct {
 	classification       installationClassification
 	manager              string
 	managerGuidance      string
-	targetMode           fs.FileMode
 	targetOwnerUID       int
 	targetOwnerGID       int
+	targetMode           fs.FileMode
 	ownerKnown           bool
 	targetReadable       bool
 	parentCreateAllowed  bool
@@ -42,14 +42,14 @@ type identity struct {
 type ownerLookup func(path string, info fs.FileInfo) (uid, gid int, ok bool)
 
 type osInstallationInspector struct {
+	managerPrefixes []string
 	executable      func() (string, error)
 	evalSymlinks    func(string) (string, error)
 	lstat           func(string) (fs.FileInfo, error)
 	stat            func(string) (fs.FileInfo, error)
 	open            func(string) (*os.File, error)
-	identity        identity
 	owner           ownerLookup
-	managerPrefixes []string
+	identity        identity
 }
 
 func newOSInstallationInspector() *osInstallationInspector {

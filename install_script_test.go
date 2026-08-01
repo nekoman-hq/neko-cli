@@ -208,11 +208,11 @@ func TestInstallScriptRootDefaultAndNoAutomaticSudoPolicy(t *testing.T) {
 	fixture := newInstallScriptFixture(t)
 	fixture.writeFakeID("501")
 	fixture.writeFakeSudo()
-	if err := os.MkdirAll(fixture.installDir, 0o755); err != nil {
-		t.Fatal(err)
+	if mkdirErr := os.MkdirAll(fixture.installDir, 0o755); mkdirErr != nil {
+		t.Fatal(mkdirErr)
 	}
-	if err := os.Chmod(fixture.installDir, 0o555); err != nil {
-		t.Fatal(err)
+	if chmodErr := os.Chmod(fixture.installDir, 0o555); chmodErr != nil {
+		t.Fatal(chmodErr)
 	}
 	t.Cleanup(func() { _ = os.Chmod(fixture.installDir, 0o755) })
 	installOutput, err := fixture.run(map[string]string{

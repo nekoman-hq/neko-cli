@@ -47,13 +47,13 @@ type updatePlan struct {
 	classification       installationClassification
 	manager              string
 	managerGuidance      string
-	asset                github.Asset
-	checksumAsset        github.Asset
 	refusalReason        string
 	guidance             string
-	targetMode           fs.FileMode
+	asset                github.Asset
+	checksumAsset        github.Asset
 	targetOwnerUID       int
 	targetOwnerGID       int
+	targetMode           fs.FileMode
 	downloadRequired     bool
 	replacementPermitted bool
 	ownerKnown           bool
