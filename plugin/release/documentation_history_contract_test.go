@@ -317,16 +317,16 @@ func documentHasAnchor(content, fragment string) bool {
 
 func githubHeadingSlug(heading string) string {
 	heading = strings.ToLower(strings.TrimSpace(heading))
-	var slug strings.Builder
+	slug := make([]rune, 0, len(heading))
 	for _, character := range heading {
 		switch {
 		case unicode.IsLetter(character), unicode.IsDigit(character), character == '-', character == '_':
-			slug.WriteRune(character)
+			slug = append(slug, character)
 		case unicode.IsSpace(character):
-			slug.WriteByte('-')
+			slug = append(slug, '-')
 		}
 	}
-	return slug.String()
+	return string(slug)
 }
 
 func resolveMarkdownTarget(source, target string) string {
