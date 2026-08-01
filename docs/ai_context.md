@@ -268,7 +268,11 @@ and exits are maintained in the
 loads plugin commands and local flags from manifests and supports `table`,
 `json`, `wide`, and explicit GitHub command-file rendering for compatible
 structured responses. Do not infer current implementation status from the
-older architecture sketches elsewhere in this context file.
+older architecture sketches elsewhere in this context file. Use the
+[Release Plugin current architecture](../plugin/release/docs/architecture/current-state.md)
+for implementation facts and the [Release documentation
+history](../plugin/release/docs/history/README.md) only for completed or
+superseded planning context.
 
 ## Author
 
