@@ -1,6 +1,11 @@
 package cmd
 
 import (
+	"fmt"
+	"os"
+	"time"
+
+	"github.com/nekoman-hq/neko-cli/internal/terminal"
 	"github.com/nekoman-hq/neko-cli/pkg/log"
 	"github.com/nekoman-hq/neko-cli/pkg/update"
 	"github.com/spf13/cobra"
@@ -34,7 +39,7 @@ Example:
 				DryRun: updateDryRun,
 			}
 			cmd.SilenceUsage = true // Don't show usage on error
-			log.Print(log.Init, "Checking for neko-cli updates...")
+			printCoreUpdateMessage(log.Init, "Checking for neko-cli updates...")
 			result, err := executeCoreUpdate(cmd.Context(), opts)
 			if err != nil {
 				return err
@@ -50,34 +55,42 @@ Example:
 
 func renderCoreUpdateResult(result update.CoreResult) {
 	if result.DevelopmentBuild {
-		log.Print(log.Exec, "You are running a development build ("+result.InstalledVersion+")")
-		log.Print(log.Exec, "Development builds cannot be updated automatically. Please build from source or download a release.")
+		printCoreUpdateMessage(log.Exec, "You are running a development build ("+result.InstalledVersion+")")
+		printCoreUpdateMessage(log.Exec, "Development builds cannot be updated automatically. Please build from source or download a release.")
 		return
 	}
 	if result.DryRun {
 		switch result.Action {
 		case update.ActionUpgrade:
-			log.Print(log.Exec, "Dry-run: would upgrade "+result.InstalledVersion+" to "+result.SelectedVersion+"; no archive downloaded and no files changed")
+			printCoreUpdateMessage(log.Exec, "Dry-run: would upgrade "+result.InstalledVersion+" to "+result.SelectedVersion+"; no archive downloaded and no files changed")
 		case update.ActionForcedReinstall:
-			log.Print(log.Exec, "Dry-run: would reinstall "+result.SelectedVersion+"; no archive downloaded and no files changed")
+			printCoreUpdateMessage(log.Exec, "Dry-run: would reinstall "+result.SelectedVersion+"; no archive downloaded and no files changed")
 		default:
-			log.Print(log.Exec, "Dry-run: no executable replacement required; no archive downloaded and no files changed")
+			printCoreUpdateMessage(log.Exec, "Dry-run: no executable replacement required; no archive downloaded and no files changed")
 		}
 		if result.CapabilityWarning != "" {
-			log.Print(log.Exec, "Warning: "+result.CapabilityWarning)
+			printCoreUpdateMessage(log.Exec, "Warning: "+result.CapabilityWarning)
 		}
 		return
 	}
 	switch result.Action {
 	case update.ActionAlreadyCurrent:
-		log.Print(log.Exec, "You are already running the latest version ("+result.InstalledVersion+")")
+		printCoreUpdateMessage(log.Exec, "You are already running the latest version ("+result.InstalledVersion+")")
 	case update.ActionInstalledNewer:
-		log.Print(log.Exec, "Installed version "+result.InstalledVersion+" is newer than latest stable "+result.SelectedVersion+"; no update performed")
+		printCoreUpdateMessage(log.Exec, "Installed version "+result.InstalledVersion+" is newer than latest stable "+result.SelectedVersion+"; no update performed")
 	case update.ActionUpgrade:
-		log.Print(log.Exec, "Successfully updated from "+result.InstalledVersion+" to "+result.SelectedVersion)
+		printCoreUpdateMessage(log.Exec, "Successfully updated from "+result.InstalledVersion+" to "+result.SelectedVersion)
 	case update.ActionForcedReinstall:
-		log.Print(log.Exec, "Successfully reinstalled version "+result.SelectedVersion)
+		printCoreUpdateMessage(log.Exec, "Successfully reinstalled version "+result.SelectedVersion)
 	}
+}
+
+func printCoreUpdateMessage(category log.Category, message string) {
+	if terminal.ColorEnabled(os.Stdout) {
+		log.Print(category, message)
+		return
+	}
+	_, _ = fmt.Fprintf(os.Stdout, "%s [%s] %s\n", time.Now().Format("15:04:05"), category, message)
 }
 
 // pluginUpdateCmd represents the plugin update command
