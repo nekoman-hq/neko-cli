@@ -59,7 +59,8 @@ func TestReleaseEvidenceUsesConciseDescribeAndVerboseNoOpAcrossCoreTransport(t *
 			)
 		}
 	}
-	if verboseOutput != defaultOutput || combinedOutput != describeOutput {
+	if verboseOutput != defaultOutput ||
+		normalizeReleaseNoOpMetadata(combinedOutput) != normalizeReleaseNoOpMetadata(describeOutput) {
 		t.Fatalf(
 			"Evidence verbose is not an intentional no-op:\ndefault:\n%s\nverbose:\n%s\ndescribe:\n%s\ncombined:\n%s",
 			defaultOutput, verboseOutput, describeOutput, combinedOutput,

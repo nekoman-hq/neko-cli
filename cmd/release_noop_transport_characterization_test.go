@@ -78,7 +78,7 @@ func TestReleaseInitOptionsCharacterizesIntentionalNoOpModes(t *testing.T) {
 	if verboseOutput != defaultOutput {
 		t.Fatalf("init-options verbose changed complete default output")
 	}
-	if combinedOutput != describeOutput {
+	if normalizeReleaseNoOpMetadata(combinedOutput) != normalizeReleaseNoOpMetadata(describeOutput) {
 		t.Fatalf("init-options combined mode added content beyond ordinary describe metadata")
 	}
 	if strings.Contains(describeOutput, "Execution Logs") {
@@ -139,7 +139,7 @@ func TestReleaseHistoryAndContributorsKeepIntentionalNoOpModes(t *testing.T) {
 					if describeErr != nil || combinedErr != nil {
 						t.Fatalf("%s describe exits: describe=%v combined=%v", command, describeErr, combinedErr)
 					}
-					if combinedOutput != describeOutput {
+					if normalizeReleaseNoOpMetadata(combinedOutput) != normalizeReleaseNoOpMetadata(describeOutput) {
 						t.Fatalf("%s combined mode added content beyond ordinary describe metadata", command)
 					}
 					for _, output := range []string{defaultOutput, verboseOutput, describeOutput, combinedOutput} {
@@ -160,6 +160,16 @@ func TestReleaseHistoryAndContributorsKeepIntentionalNoOpModes(t *testing.T) {
 			}
 		})
 	}
+}
+
+func normalizeReleaseNoOpMetadata(output string) string {
+	lines := strings.Split(output, "\n")
+	for index, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "Timestamp:") {
+			lines[index] = "Timestamp: <normalized>"
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func assertReleaseNoOpOutputSafe(t *testing.T, output, root string) {
