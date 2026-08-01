@@ -2,6 +2,24 @@
 
 The `ui` plugin is released as the independent V2 unit `plugin-ui`.
 
+## Public CLI surface
+
+The authoritative repository-wide command/flag and I/O matrix is the
+[CLI reference](../cli-reference.md). The UI manifest currently advertises
+`hello`, `init`, `list`, `add [component-name]`, and
+`remove [component-name]`. `hello --name` is manifest-declared but the current
+UI router has no `hello` handler, so execution fails; it is documented as an
+existing discrepancy, not as a working command.
+
+`init --components-path` and `init --force` write `.ui.neko.json` and the
+component directory locally. `list` is read-only locally but performs GitHub
+GET requests. `add [component-name]` or `add --all` performs GitHub reads and
+writes component files. `remove [component-name]` or `remove --all` is offline
+and recursively deletes selected component directories. UI responses retain
+legacy implicit-success exit compatibility when their valid transport omits an
+explicit exit; dispatch, transport, or malformed-response failures exit `1`.
+Core response flags select presentation and do not change these I/O boundaries.
+
 ## Release Model
 
 | Property | Value |

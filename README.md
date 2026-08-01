@@ -16,7 +16,7 @@
 ## ✨ Features
 
 - 🔌 **Plugin Architecture** - Extensible via standalone plugin executables
-- 📊 **kubectl-Style Output** - Consistent manifest-declared table, JSON, and workflow output formats
+- 📊 **kubectl-Style Output** - Core rendering in table, JSON, wide, and explicit GitHub command-file modes
 - 🔄 **Unified Interface** - One CLI to rule all your plugins
 - 📦 **Simple Plugin Management** - Drop-in plugin installation
 - 🛠️ **Developer Friendly** - Easy to create and distribute custom plugins
@@ -69,7 +69,9 @@ neko plugin available
 neko plugin install release
 ```
 
-See [Installation](docs/installation.md) for install script details.
+See [Installation](docs/installation.md) for install script details and the
+[complete CLI reference](docs/cli-reference.md) for every public command and
+flag.
 
 ### Updating the CLI
 
@@ -183,7 +185,15 @@ This repository releases itself with V2 multi-unit release state:
 - Runtime plugin discovery, install, and update use `plugin-index.json` as the registry source of truth. The index is published as the `plugin-index.json` asset on the mutable `plugin-registry` GitHub Release after successful plugin releases; `/releases/latest` and release-prefix fallback discovery are not used for plugin discovery.
 - Use global `--describe` for structured inspection details and global `--verbose` for execution/debug logs where the command owns useful phases. Static and complete read-only queries may intentionally treat either flag as a no-op. They are independent and may be combined.
 
-The complete Release command/output matrix lives in the canonical [Release CLI Reference](docs/release/cli-reference.md#canonical-command-and-output-contract). Copy-ready Release V2 and plugin registry examples live in [Release V2 Examples](docs/release/examples.md). The product boundary for release-ready GitHub Actions bootstrap lives in [Release V2 Bootstrap Product Boundary](docs/release/bootstrap-product-boundary.md).
+The complete Release V1/V2 command, flag, output, source, I/O, and exit matrix
+lives in the canonical [Release CLI Reference](docs/release/cli-reference.md).
+Existing V1 repositories use the [V1-to-V2 migration
+guide](docs/release/migration-v1-to-v2.md); new V2 integrations should follow
+the [GitHub Actions golden path](docs/release/github-actions-golden-path.md).
+Copy-ready Release V2 and plugin registry examples live in [Release V2
+Examples](docs/release/examples.md). The product boundary for release-ready
+GitHub Actions bootstrap lives in [Release V2 Bootstrap Product
+Boundary](docs/release/bootstrap-product-boundary.md).
 
 ### Global Flags
 
@@ -226,7 +236,11 @@ neko <plugin> <command> --help
 
 ## 📖 Output Formats
 
-Neko CLI provides consistent output formatting across all plugins:
+Core supports `table`, `json`, `wide`, and explicit `github` response modes.
+Successful GitHub command-file output is response-specific; it is not a
+universal plugin format. See the [complete CLI
+reference](docs/cli-reference.md#output-exit-network-and-mutation-boundaries)
+for the exact boundaries.
 
 ### Table (Default)
 ```bash
