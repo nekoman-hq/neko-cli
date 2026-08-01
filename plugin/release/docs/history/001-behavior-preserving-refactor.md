@@ -19,6 +19,32 @@ This document records the closed behavior-preserving Release Plugin refactor as 
 
 Current runtime behavior is authoritative in [current-state.md](../architecture/current-state.md). Current dependency direction and remaining debt are maintained in [package-ownership.md](../architecture/package-ownership.md). Current architecture decisions are described in [architecture-decisions.md](../architecture/architecture-decisions.md).
 
+## Git chronology and provenance
+
+- Created on 2026-07-14 in `a47df6a` as
+  `plugin/release/docs/architecture/refactor-plan.md`.
+- Revised on 2026-07-14 as command presentation, release orchestration, resume,
+  initialization, and adapter boundaries were characterized and extracted.
+- Revised and completed on 2026-07-15 as query, migration, and V1 compatibility
+  boundaries closed the defined scope; completion was recorded in `0e20a5c`.
+- Condensed without reopening the work on 2026-07-17 in `f38a4b3` as
+  `plugin/release/docs/architecture/refactor-history.md`.
+
+## Archival outcome
+
+- **Completed:** the defined behavior-preserving extraction completed, and the
+  command, lifecycle, persistence, Git, dispatch, migration, and V1 boundaries
+  below became explicit and tested.
+- **Changed decisions:** later work rejected executable V2 local delivery and
+  replaced several compatibility candidates, but did not change the completed
+  refactor's behavior-preserving result.
+- **Unfinished in this series:** none of the defined refactor scope remained;
+  bounded recovery, compatibility, and developer-experience work was explicitly
+  outside it.
+- **Transferred:** the immediate audit moved to entry 002, and subsequent
+  hardening and product-capability decisions moved to entry 003 and now to the
+  current architecture owners.
+
 ## Global invariants preserved by the refactor
 
 - V2 config owns unit architecture, and V2 state owns selected-unit versions.

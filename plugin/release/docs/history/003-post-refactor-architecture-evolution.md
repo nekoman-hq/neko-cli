@@ -22,6 +22,39 @@ Detailed runtime behavior and disk contracts live in [current-state.md](../archi
 
 Every future implementation remains subject to `plugin/release/RULES.md`.
 
+## Git chronology and provenance
+
+- Created on 2026-07-15 in `3c7b255` as
+  `plugin/release/docs/architecture/post-refactor-roadmap.md`, immediately after
+  the first architecture review.
+- Revised from 2026-07-15 through 2026-07-17 as compensation, pair/migration
+  recovery, evidence lifecycle, compatibility, path retirement, progress, and
+  explicit-root work completed.
+- Superseded as a task-oriented roadmap on 2026-07-17 in `f38a4b3` and continued
+  as `plugin/release/docs/architecture/architecture-evolution.md`, preserving
+  durable decisions without reopening the completed refactor ledger.
+- Extended from 2026-07-18 through 2026-07-31 with plan inspection, delivery,
+  workflow scaffolding, context validation, unit and Pipeline inspection,
+  output contracts, and process-exit ownership decisions.
+- Closed as a rolling historical record on 2026-08-01 when current decisions
+  moved to a dedicated non-historical owner.
+
+## Archival outcome
+
+- **Completed:** the safety, recovery, evidence, compatibility, cleanup,
+  explicit-root, generated-output, planning, workflow, inspection, presentation,
+  and exit-ownership decisions recorded below reached their documented outcomes.
+- **Changed decisions:** executable V2 local delivery was evaluated and rejected;
+  the earlier inactive scaffold was retained only as a bounded compatibility
+  refusal. The milestone-oriented roadmap became a decision record on
+  2026-07-17.
+- **Unfinished:** durable workflow-run and publication-completion observation
+  remain future capabilities; the record does not imply their implementation.
+- **Transferred:** the unresolved architecture boundary now lives in
+  [architecture-decisions.md](../architecture/architecture-decisions.md), while
+  bootstrap product scope remains in the
+  [Release V2 Product Boundary](../../../../docs/release/bootstrap-product-boundary.md).
+
 ## Completed architecture records
 
 ### V1 compensation interruption safety

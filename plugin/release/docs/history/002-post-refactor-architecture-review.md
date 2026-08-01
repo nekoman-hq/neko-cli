@@ -14,6 +14,37 @@
 > It preserves the final review snapshot of the completed refactor and the later
 > code-quality consolidation.
 
+## Git chronology and provenance
+
+- Created on 2026-07-15 in `588fd85` as the first post-refactor architecture
+  audit at `plugin/release/docs/architecture/post-refactor-review.md`.
+- Revised later that day in `787dce2` to rank the discovered debt and establish
+  the evidence behind the follow-on roadmap.
+- Updated from 2026-07-15 through 2026-07-18 as hardening, compatibility,
+  explicit-root, output-path, plan-inspection, and delivery decisions closed.
+- Substantially revised on 2026-07-21 in `87e0199`, `f28e675`, and `c2cc66d` to
+  record the twelve-commit code-quality consolidation and its two corrective
+  reviews.
+- Last substantive review update was 2026-07-22 in `610f98c`, when the current
+  Pipeline verification boundary was recorded.
+
+## Archival outcome
+
+- **Completed:** dependency direction, package ownership, responsibility moves,
+  root-package cohesion, active lifecycle order, restoration, state ownership,
+  read-only boundaries, and compatibility quarantine were reviewed against the
+  implementation and guards.
+- **Changed decisions:** the initial audit's progress-logging deviation was
+  later resolved; Pipeline Inspection gained bounded read-only composition while
+  remaining outside lifecycle execution policy.
+- **Unfinished in this review:** active compatibility prerequisites and bounded
+  architectural debt deliberately remained open rather than being presented as
+  refactor failures.
+- **Transferred:** current package direction and debt now live in
+  [package-ownership.md](../architecture/package-ownership.md), current runtime
+  facts in [current-state.md](../architecture/current-state.md), and changed-code
+  controls in [maintainability-policy.md](../architecture/maintainability-policy.md).
+
 ## Status
 
 This document describes the architecture established by the Release Plugin
