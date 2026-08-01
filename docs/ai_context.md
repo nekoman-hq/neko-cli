@@ -260,15 +260,15 @@ When refactoring old code to plugin style, these patterns indicate deprecated co
 
 ## Current State
 
-### Completed
-- ✅ Core plugin dispatcher
-- ✅ Release plugin: `init`, `init-options`, `history`, `contributors`, `validate`
-- ✅ Renderer with table/json/text output
-- ✅ Dynamic flag loading from manifest
-
-### In Progress / TODO
-- Release plugin: `release` command (partially implemented)
-- Other plugins (deploy, etc.)
+The repository-wide public inventory is maintained in the
+[CLI command and flag reference](cli-reference.md). The Release Plugin's
+20-command manifest, V1/V2 classifications, 66 local flags, output behavior,
+and exits are maintained in the
+[canonical Release CLI reference](release/cli-reference.md). Core dynamically
+loads plugin commands and local flags from manifests and supports `table`,
+`json`, `wide`, and explicit GitHub command-file rendering for compatible
+structured responses. Do not infer current implementation status from the
+older architecture sketches elsewhere in this context file.
 
 ## Author
 

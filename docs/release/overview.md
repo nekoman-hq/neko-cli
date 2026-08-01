@@ -16,7 +16,13 @@ V1 is the legacy format stored in `.release.neko.json`. It describes one global 
 }
 ```
 
-V1 remains supported for existing release repositories. Existing `patch`, `minor`, `major`, `history`, `contributors`, and `validate` flows continue to use this file when no V2 config exists. New `neko release init` is V2-only; use `neko release migrate` to convert a root V1 repository.
+V1 remains supported for existing release repositories. Shared `patch`,
+`minor`, `major`, `plan`, `history`, `contributors`, `validate`, `evidence`,
+and eligible `evidence-archive` flows continue to use this source when no V2
+authority exists. New `neko release init` is V2-only; use
+`neko release migrate` to convert a root V1 repository. The exact per-command
+support and evidence-family restrictions live in the
+[canonical CLI reference](cli-reference.md#release-support-status-matrix).
 
 ## V2
 
