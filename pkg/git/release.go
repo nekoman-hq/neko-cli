@@ -15,7 +15,6 @@ import (
 	"net/http"
 	"os"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/nekoman-hq/neko-cli/pkg/log"
@@ -28,6 +27,8 @@ var (
 	githubHTTPClient = &http.Client{Timeout: 30 * time.Second}
 	stableCLITagRE   = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+$`)
 )
+
+const maxReleaseMetadataBytes int64 = 8 << 20
 
 // Client owns bounded, context-aware GitHub release metadata and asset reads.
 type Client struct {
@@ -148,19 +149,18 @@ func doGitHubRequest(ctx context.Context, httpClient *http.Client, url string) (
 		_ = body.Close()
 	}(resp.Body)
 
-	body, err := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return nil, resp.StatusCode, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxReleaseMetadataBytes+1))
 	if err != nil {
 		return nil, resp.StatusCode, fmt.Errorf(
 			"response Read Failed: %w", err,
 		)
 	}
-
-	if resp.StatusCode != http.StatusOK {
-		return body, resp.StatusCode, fmt.Errorf(
-			"GitHub API returned status %d: %s",
-			resp.StatusCode,
-			strings.TrimSpace(string(body)),
-		)
+	if int64(len(body)) > maxReleaseMetadataBytes {
+		return nil, resp.StatusCode, fmt.Errorf("GitHub API response exceeds %d bytes", maxReleaseMetadataBytes)
 	}
 
 	return body, resp.StatusCode, nil

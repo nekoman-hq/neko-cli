@@ -58,6 +58,43 @@ func TestClientDownloadRejectsStatusAndOversize(t *testing.T) {
 	}
 }
 
+func TestReleaseMetadataReadIsBoundedAndStatusBodyIsNotExposed(t *testing.T) {
+	statusClient := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusBadGateway,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader("credential=frozen-secret")),
+			Request:    req,
+		}, nil
+	})}
+	_, _, err := doGitHubRequest(context.Background(), statusClient, "https://api.example/releases?token=frozen-secret")
+	if err == nil || !strings.Contains(err.Error(), "status 502") || strings.Contains(err.Error(), "frozen-secret") {
+		t.Fatalf("status error=%v", err)
+	}
+
+	oversizeClient := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(io.LimitReader(zeroReader{}, maxReleaseMetadataBytes+1)),
+			Request:    req,
+		}, nil
+	})}
+	_, _, err = doGitHubRequest(context.Background(), oversizeClient, "https://api.example/releases")
+	if err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("oversize error=%v", err)
+	}
+}
+
+type zeroReader struct{}
+
+func (zeroReader) Read(buffer []byte) (int, error) {
+	for index := range buffer {
+		buffer[index] = 0
+	}
+	return len(buffer), nil
+}
+
 type failingReadCloser struct {
 	closed bool
 }
