@@ -2,6 +2,13 @@
 
 Neko CLI currently supports two release configuration formats.
 
+This page and the [canonical CLI reference](cli-reference.md) describe the
+current product. Current implementation architecture lives in the
+[Release Plugin current-state reference](../../plugin/release/docs/architecture/current-state.md).
+Completed plans, hardening sequences, and completion reviews are preserved
+separately in the [Release documentation history](../../plugin/release/docs/history/README.md)
+and are not current product authority.
+
 ## V1
 
 V1 is the legacy format stored in `.release.neko.json`. It describes one global release stream:

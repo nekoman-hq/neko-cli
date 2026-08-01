@@ -5,6 +5,9 @@
 This policy applies to new or materially changed Release Plugin production code.
 Historical debt is not made a blanket failure, but a touched function or file
 must not add unexplained complexity or mix separable responsibilities.
+Completed refactor and hardening sequences are preserved in the
+[Release documentation history](../history/README.md); they are evidence, not
+active implementation instructions.
 
 ## File and function cohesion
 

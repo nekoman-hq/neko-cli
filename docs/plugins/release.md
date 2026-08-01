@@ -164,4 +164,6 @@ archive, GitHub Release, assets, and subsequent registry-index publication.
 - [Release V2 examples](../release/examples.md)
 - [GitHub Actions golden path](../release/github-actions-golden-path.md)
 - [Bootstrap ownership boundary](../release/bootstrap-product-boundary.md)
+- [Current Release Plugin architecture](../../plugin/release/docs/architecture/current-state.md)
+- [Historical Release planning and reviews](../../plugin/release/docs/history/README.md)
 - [Plugin development](../plugin-development.md)

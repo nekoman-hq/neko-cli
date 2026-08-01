@@ -1,5 +1,10 @@
 # Release Plugin Compatibility Notes
 
+This is the current compatibility inventory. Completed support decisions and
+cleanup sequences remain available in the
+[Release documentation history](../history/README.md), but the retained
+contracts and removal gates below remain authoritative.
+
 ## Preserved contracts
 
 The code-quality refactor preserves command names, flags, manifest/help

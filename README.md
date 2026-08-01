@@ -194,6 +194,10 @@ Copy-ready Release V2 and plugin registry examples live in [Release V2
 Examples](docs/release/examples.md). The product boundary for release-ready
 GitHub Actions bootstrap lives in [Release V2 Bootstrap Product
 Boundary](docs/release/bootstrap-product-boundary.md).
+Current implementation architecture lives in the [Release Plugin architecture
+reference](plugin/release/docs/architecture/current-state.md); completed
+roadmaps and reviews are preserved in the [Release documentation
+history](plugin/release/docs/history/README.md).
 
 ### Global Flags
 
