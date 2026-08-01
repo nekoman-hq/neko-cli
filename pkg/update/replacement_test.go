@@ -2,7 +2,9 @@ package update
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -17,6 +19,11 @@ func TestAtomicReplacementPreservesModeAndHasNoBackup(t *testing.T) {
 	if err := os.WriteFile(target, oldContent, 0o700); err != nil {
 		t.Fatal(err)
 	}
+	beforeInfo, err := os.Stat(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeHash := sha256.Sum256(oldContent)
 	inspected := installation{canonicalTarget: target, targetParent: root, targetMode: 0o700}
 	reservation, err := newOSReplacementCapability().Reserve(inspected)
 	if err != nil {
@@ -46,12 +53,69 @@ func TestAtomicReplacementPreservesModeAndHasNoBackup(t *testing.T) {
 	if info.Mode().Perm() != 0o700 {
 		t.Fatalf("mode = %#o", info.Mode().Perm())
 	}
+	afterHash := sha256.Sum256(content)
+	if os.SameFile(beforeInfo, info) {
+		t.Fatal("atomic replacement retained the original target inode")
+	}
+	t.Logf("atomic-commit before_sha256=%x after_sha256=%x before_mode=%#o after_mode=%#o inode_changed=true", beforeHash, afterHash, beforeInfo.Mode().Perm(), info.Mode().Perm())
 	if _, err := os.Stat(target + ".backup"); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("fixed backup exists or stat failed: %v", err)
 	}
 	if _, err := os.Stat(reservedPath); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("renamed reservation still exists: %v", err)
 	}
+}
+
+func TestReplacementPrecommitStagesPreserveHashModeAndInode(t *testing.T) {
+	for _, stage := range []string{"write", "initial-fsync", "close", "chmod", "reopen", "second-fsync", "rename"} {
+		t.Run(stage, func(t *testing.T) {
+			root := t.TempDir()
+			target := filepath.Join(root, "neko")
+			oldContent := []byte("authoritative old executable")
+			if err := os.WriteFile(target, oldContent, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			beforeInfo, beforeHash := fileEvidence(t, target)
+			ops := &filesystemFaultOps{stage: stage}
+			reservation, err := (&osReplacementCapability{ops: ops}).Reserve(installation{
+				canonicalTarget: target,
+				targetParent:    root,
+				targetMode:      0o700,
+			})
+			if err != nil {
+				t.Fatalf("Reserve: %v", err)
+			}
+			commitErr := reservation.Commit([]byte("candidate replacement executable"), 0o700)
+			if commitErr == nil || !strings.Contains(commitErr.Error(), stage) {
+				t.Fatalf("Commit error=%v, want stage %q", commitErr, stage)
+			}
+			if cleanupErr := reservation.Cleanup(); cleanupErr != nil {
+				t.Fatalf("Cleanup: %v", cleanupErr)
+			}
+			afterInfo, afterHash := fileEvidence(t, target)
+			if beforeHash != afterHash || beforeInfo.Mode().Perm() != afterInfo.Mode().Perm() || !os.SameFile(beforeInfo, afterInfo) {
+				t.Fatalf("precommit mutation: before_hash=%x after_hash=%x before_mode=%#o after_mode=%#o same_inode=%t", beforeHash, afterHash, beforeInfo.Mode().Perm(), afterInfo.Mode().Perm(), os.SameFile(beforeInfo, afterInfo))
+			}
+			temporary, globErr := filepath.Glob(filepath.Join(root, ".neko-update-*"))
+			if globErr != nil || len(temporary) != 0 {
+				t.Fatalf("temporary=%v err=%v", temporary, globErr)
+			}
+			t.Logf("stage=%s before_sha256=%x after_sha256=%x before_mode=%#o after_mode=%#o same_inode=true temporary=0", stage, beforeHash, afterHash, beforeInfo.Mode().Perm(), afterInfo.Mode().Perm())
+		})
+	}
+}
+
+func fileEvidence(t *testing.T, path string) (os.FileInfo, [sha256.Size]byte) {
+	t.Helper()
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return info, sha256.Sum256(content)
 }
 
 func TestAtomicReplacementRenameFailureLeavesTargetByteIdentical(t *testing.T) {
@@ -210,6 +274,90 @@ func (ops *faultReplacementOps) OpenDirectory(path string) (syncFile, error) {
 type faultSyncFile struct {
 	syncErr  error
 	closeErr error
+}
+
+type filesystemFaultOps struct {
+	osReplacementOps
+	stage string
+}
+
+func (ops *filesystemFaultOps) CreateTemp(dir, pattern string) (replacementFile, error) {
+	file, err := os.CreateTemp(dir, pattern)
+	if err != nil {
+		return nil, err
+	}
+	return &filesystemFaultFile{File: file, stage: ops.stage}, nil
+}
+
+func (ops *filesystemFaultOps) Chmod(path string, mode fs.FileMode) error {
+	if ops.stage == "chmod" {
+		return fmt.Errorf("frozen %s failure", ops.stage)
+	}
+	return ops.osReplacementOps.Chmod(path, mode)
+}
+
+func (ops *filesystemFaultOps) Open(path string) (syncFile, error) {
+	if ops.stage == "reopen" {
+		return nil, fmt.Errorf("frozen %s failure", ops.stage)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	return &filesystemFaultSyncFile{File: file, stage: ops.stage}, nil
+}
+
+func (ops *filesystemFaultOps) Rename(oldPath, newPath string) error {
+	if ops.stage == "rename" {
+		return fmt.Errorf("frozen %s failure", ops.stage)
+	}
+	return ops.osReplacementOps.Rename(oldPath, newPath)
+}
+
+type filesystemFaultFile struct {
+	*os.File
+	stage       string
+	closeFailed bool
+}
+
+func (file *filesystemFaultFile) Write(body []byte) (int, error) {
+	if file.stage == "write" {
+		return 0, fmt.Errorf("frozen %s failure", file.stage)
+	}
+	return file.File.Write(body)
+}
+
+func (file *filesystemFaultFile) Sync() error {
+	if file.stage == "initial-fsync" {
+		return fmt.Errorf("frozen %s failure", file.stage)
+	}
+	return file.File.Sync()
+}
+
+func (file *filesystemFaultFile) Close() error {
+	if file.stage == "close" && !file.closeFailed {
+		file.closeFailed = true
+		if err := file.File.Close(); err != nil {
+			return err
+		}
+		return fmt.Errorf("frozen %s failure", file.stage)
+	}
+	if file.closeFailed {
+		return nil
+	}
+	return file.File.Close()
+}
+
+type filesystemFaultSyncFile struct {
+	*os.File
+	stage string
+}
+
+func (file *filesystemFaultSyncFile) Sync() error {
+	if file.stage == "second-fsync" {
+		return fmt.Errorf("frozen %s failure", file.stage)
+	}
+	return file.File.Sync()
 }
 
 func (file *faultSyncFile) Sync() error  { return file.syncErr }

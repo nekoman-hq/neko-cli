@@ -28,6 +28,7 @@ const (
 	errorCleanup             errorKind = "cleanup"
 	errorCommittedSync       errorKind = "committed-directory-sync"
 	errorDowngrade           errorKind = "downgrade-refused"
+	errorVersionInvalid      errorKind = "version-invalid"
 )
 
 type updateError struct {

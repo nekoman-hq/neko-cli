@@ -87,6 +87,13 @@ func executeCore(ctx context.Context, opts CoreOptions, deps coreDependencies) (
 	action, actionErr := classifyUpdateAction(deps.installedVersion, release.TagName, opts.Force)
 	result.Action = action
 	if actionErr != nil {
+		if action != ActionDowngradeRefused {
+			return result, newUpdateError(
+				errorVersionInvalid,
+				fmt.Sprintf("cannot safely classify update from installed version %q to selected release %q; no archive was downloaded and the installed executable is unchanged", deps.installedVersion, release.TagName),
+				actionErr,
+			)
+		}
 		return result, newUpdateError(
 			errorDowngrade,
 			fmt.Sprintf("installed neko-cli %s is newer than selected latest %s; force is not a downgrade flag; no archive was downloaded and the installed executable is unchanged", deps.installedVersion, result.SelectedVersion),
@@ -141,8 +148,12 @@ func executeCore(ctx context.Context, opts CoreOptions, deps coreDependencies) (
 
 	permissionRefusal := currentInstallation.classification == installationUnmanagedPrivileged ||
 		!currentInstallation.parentCreateAllowed || !currentInstallation.parentReplaceAllowed
-	if permissionRefusal && (opts.DryRun || currentInstallation.classification == installationUnmanagedPrivileged) {
+	staticReplaceRefusal := currentInstallation.parentCreateAllowed && !currentInstallation.parentReplaceAllowed
+	if permissionRefusal && (opts.DryRun || currentInstallation.classification == installationUnmanagedPrivileged || staticReplaceRefusal) {
 		refusalReason := fmt.Sprintf("parent directory %s is not writable by the current user", currentInstallation.targetParent)
+		if staticReplaceRefusal {
+			refusalReason = fmt.Sprintf("parent directory %s permits sibling creation but not replacement of this target", currentInstallation.targetParent)
+		}
 		if currentInstallation.classification == installationUnmanagedPrivileged {
 			refusalReason = "the target is owned by a privileged account"
 			if !currentInstallation.parentCreateAllowed || !currentInstallation.parentReplaceAllowed {

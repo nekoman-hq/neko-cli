@@ -71,6 +71,22 @@ func TestExecuteCoreDevelopmentBuildPrecedesNetwork(t *testing.T) {
 	}
 }
 
+func TestExecuteCoreRejectsUnclassifiableVersionBeforeInspectionOrDownload(t *testing.T) {
+	client := &fakeReleaseClient{release: &github.Release{TagName: "v1.2.3"}}
+	counter := &countingInspector{}
+	result, err := executeCore(context.Background(), CoreOptions{}, coreDependencies{
+		installedVersion: "unknown",
+		releases:         client,
+		inspector:        counter,
+	})
+	if err == nil || result.Action != ActionUnsupported || !strings.Contains(err.Error(), "cannot safely classify update") {
+		t.Fatalf("result=%#v error=%v", result, err)
+	}
+	if counter.calls != 0 || len(client.downloads) != 0 {
+		t.Fatalf("inspections=%d downloads=%v", counter.calls, client.downloads)
+	}
+}
+
 func TestExecuteCorePermissionAndManagerRefusalPrecedeDownloads(t *testing.T) {
 	for _, test := range []struct { //nolint:govet // Field order mirrors the refusal scenarios.
 		name           string
@@ -284,6 +300,72 @@ func TestExecuteCoreSupportsWritableSymlinkTarget(t *testing.T) {
 	}
 }
 
+func TestExecuteCoreRefusesNonWritableSymlinkBeforeDownload(t *testing.T) {
+	deps, client, target, oldContent := coreFixture(t, "1.0.0", "1.1.0")
+	link := filepath.Join(t.TempDir(), "neko")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	deps.inspector = staticInspector{installation: installation{
+		runningExecutable:    link,
+		symlinkPath:          link,
+		canonicalTarget:      target,
+		targetParent:         filepath.Dir(target),
+		classification:       installationUnmanagedPrivileged,
+		targetMode:           0o755,
+		targetReadable:       true,
+		parentCreateAllowed:  false,
+		parentReplaceAllowed: false,
+	}}
+	_, err := executeCore(context.Background(), CoreOptions{}, deps)
+	if err == nil || !strings.Contains(err.Error(), "invoked through symlink") || len(client.downloads) != 0 {
+		t.Fatalf("error=%v downloads=%v", err, client.downloads)
+	}
+	content, readErr := os.ReadFile(target)
+	linkedTarget, linkErr := os.Readlink(link)
+	if readErr != nil || linkErr != nil || string(content) != string(oldContent) || linkedTarget != target {
+		t.Fatalf("content=%q readErr=%v link=%q linkErr=%v", content, readErr, linkedTarget, linkErr)
+	}
+}
+
+func TestExecuteCoreRefusesPositiveHomebrewSymlinkBeforeDownload(t *testing.T) {
+	deps, client, _, _ := coreFixture(t, "1.0.0", "1.1.0")
+	prefix := filepath.Join(t.TempDir(), "homebrew")
+	target := filepath.Join(prefix, "Cellar", "neko-cli", "1.1.0", "bin", "neko")
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	oldContent := []byte("manager-owned executable")
+	if err := os.WriteFile(target, oldContent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(prefix, "bin", "neko")
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	inspector := newOSInstallationInspector()
+	inspector.executable = func() (string, error) { return link, nil }
+	inspector.managerPrefixes = []string{prefix}
+	deps.inspector = inspector
+	counter := &countingReplacement{}
+	deps.replacement = counter
+	_, err := executeCore(context.Background(), CoreOptions{}, deps)
+	if err == nil || !strings.Contains(err.Error(), "managed by Homebrew") || !strings.Contains(err.Error(), "invoked through symlink") {
+		t.Fatalf("error=%v", err)
+	}
+	if len(client.downloads) != 0 || counter.calls != 0 {
+		t.Fatalf("downloads=%v reservations=%d", client.downloads, counter.calls)
+	}
+	content, readErr := os.ReadFile(target)
+	linkedTarget, linkErr := os.Readlink(link)
+	if readErr != nil || linkErr != nil || string(content) != string(oldContent) || linkedTarget != target {
+		t.Fatalf("content=%q readErr=%v link=%q linkErr=%v", content, readErr, linkedTarget, linkErr)
+	}
+}
+
 func TestExecuteCoreRejectsPlatformAndMissingAssetsWithoutDownload(t *testing.T) {
 	deps, client, _, _ := coreFixture(t, "1.0.0", "1.1.0")
 	deps.platform = platform{OS: "windows", Arch: "amd64"}
@@ -380,6 +462,15 @@ func (inspector staticInspector) Inspect() (installation, error) {
 
 type countingReplacement struct {
 	calls int
+}
+
+type countingInspector struct {
+	calls int
+}
+
+func (inspector *countingInspector) Inspect() (installation, error) {
+	inspector.calls++
+	return installation{}, errors.New("unexpected inspection")
 }
 
 func (replacement *countingReplacement) Reserve(installation) (*replacementReservation, error) {

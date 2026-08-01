@@ -125,6 +125,11 @@ func (inspector *osInstallationInspector) Inspect() (installation, error) {
 	targetUID, targetGID, ownerKnown := inspector.owner(canonicalTarget, targetInfo)
 	parentUID, parentGID, parentOwnerKnown := inspector.owner(parent, parentInfo)
 	parentWritable := modeAllowsDirectoryMutation(parentInfo.Mode(), parentUID, parentGID, parentOwnerKnown, inspector.identity)
+	parentReplaceAllowed := parentWritable
+	if parentWritable && parentInfo.Mode()&fs.ModeSticky != 0 && inspector.identity.known && inspector.identity.uid != 0 {
+		parentReplaceAllowed = (ownerKnown && targetUID == inspector.identity.uid) ||
+			(parentOwnerKnown && parentUID == inspector.identity.uid)
+	}
 
 	classification := installationUnknown
 	manager := ""
@@ -150,7 +155,7 @@ func (inspector *osInstallationInspector) Inspect() (installation, error) {
 		ownerKnown:           ownerKnown,
 		targetReadable:       readable,
 		parentCreateAllowed:  parentWritable,
-		parentReplaceAllowed: parentWritable,
+		parentReplaceAllowed: parentReplaceAllowed,
 		classification:       classification,
 		manager:              manager,
 		managerGuidance:      managerGuidance,

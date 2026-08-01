@@ -198,3 +198,32 @@ func TestInstallationInspectorSupportsInjectedPrivilegedOwnership(t *testing.T) 
 		t.Fatal("ordinary identity must not mutate root-owned 0755 parent")
 	}
 }
+
+func TestInstallationInspectorInfersStickyDirectoryReplacementPolicy(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "neko")
+	if err := os.WriteFile(target, []byte("fixture"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(root, 0o777|os.ModeSticky); err != nil {
+		t.Fatal(err)
+	}
+
+	inspector := newOSInstallationInspector()
+	inspector.executable = func() (string, error) { return target, nil }
+	inspector.identity = identity{uid: 501, groups: []int{20}, known: true}
+	inspector.owner = func(path string, _ os.FileInfo) (int, int, bool) {
+		if filepath.Base(path) == "neko" {
+			return 502, 20, true
+		}
+		return 0, 0, true
+	}
+	inspector.managerPrefixes = nil
+	inspected, err := inspector.Inspect()
+	if err != nil {
+		t.Fatalf("Inspect: %v", err)
+	}
+	if !inspected.parentCreateAllowed || inspected.parentReplaceAllowed {
+		t.Fatalf("create=%t replace=%t", inspected.parentCreateAllowed, inspected.parentReplaceAllowed)
+	}
+}
