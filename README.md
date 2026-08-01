@@ -47,7 +47,9 @@ Download the latest CLI release from the [releases page](https://github.com/neko
 curl -fsSL https://raw.githubusercontent.com/nekoman-hq/neko-cli/main/install.sh | bash
 ```
 
-The script installs the main CLI only. It reads GitHub Releases directly, ignores plugin releases such as `plugin-release/vX.Y.Z`, and selects the newest stable CLI tag matching `vX.Y.Z`. The built-in `neko version` and `neko update` commands use the same CLI-aware release rule. None of these paths read local release config or state files.
+The script installs the main CLI only. It reads GitHub Releases directly, ignores plugin releases such as `plugin-release/vX.Y.Z`, and selects the newest stable CLI tag matching `vX.Y.Z`. For an ordinary user the default destination is `$HOME/.local/bin`; when intentionally run as root it is `/usr/local/bin`. An explicit `NEKO_INSTALL_DIR` always wins, and the script never invokes `sudo`. If the selected directory is not on `PATH`, the script prints the required guidance.
+
+The built-in `neko version` and `neko update` commands use the same CLI-aware release rule. `neko update` verifies the selected archive against the release checksum manifest before validating its contents and atomically replacing an unmanaged, writable installation. It refuses package-manager-owned or privileged installations before downloading the archive. None of these paths read local release config or state files.
 
 ```bash
 # Install a specific CLI release
@@ -68,6 +70,16 @@ neko plugin install release
 ```
 
 See [Installation](docs/installation.md) for install script details.
+
+### Updating the CLI
+
+```bash
+neko update
+neko update --dry-run
+neko update --force
+```
+
+`--force` only reinstalls the selected latest version when it is already installed. It does not permit downgrades and cannot bypass permissions, package-manager ownership, platform support, checksum verification, archive validation, or atomic replacement requirements. A dry-run selects and reports the action without downloading an archive or changing files.
 
 ### Requirements
 
