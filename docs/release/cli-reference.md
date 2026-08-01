@@ -1,70 +1,183 @@
 # Release CLI Reference
 
-## Canonical command and output contract
+## Canonical ownership
 
-This is the authoritative cross-command reference for Release CLI output.
-There are 20 plugin commands and one Core-owned overview path. The manifest and
-router declare no aliases.
+This is the authoritative Release command, flag, output, exit, source, network,
+token, and mutation contract. There are 20 manifest commands and one
+Core-owned overview path. Other Release pages summarize a specific workflow
+and link here instead of owning another full matrix.
 
-All plugin commands inherit the Core-owned `--describe`, `--verbose`,
-`--output`, and `--github-output-file` flags. These are transport flags, are
-never serialized as command-local request flags, and do not change domain JSON
-or command effects. `--output` selects a response renderer; it never names a
-file. The selectable Release renderers are `table`, `json`, and, only where
-declared, `github`. There is no selectable `text` renderer.
+## Release V1 versus Release V2
 
-| Command | Scope | Default | `--describe` | `--verbose` | Outputs |
-| --- | --- | --- | --- | --- | --- |
-| `release` | Core | Static command overview; no plugin request | No-op | No-op | Core overview; `--output json` does not convert it |
-| `release init` | V2 | Concise initialized-pair result and next action | Resolved configuration, write plan, validation, limitations | Safe initialization phases | `table`, `json` |
-| `release unit-add` | V2 | Concise added-unit result and next action | Resolved unit, comparison, write plan, validation, limitations | Safe add/write phases | `table`, `json` |
-| `release init-options` | V2 | Complete deterministic initialization choices | No command-owned additions | No-op | `table`, `json` |
-| `release migrate` | Shared | Migration result, targets, archive decision, next action | Complete source, generated-artifact, plan, validation, write, and limitation facts | Safe planning/write phases | `table`, `json` |
-| `release patch` | Shared | Concise lifecycle result; dry-run includes the ordered safe preview | Complete safe lifecycle facts | Chronological lifecycle phases | `table`, `json` |
-| `release minor` | Shared | Concise lifecycle result; dry-run includes the ordered safe preview | Complete safe lifecycle facts | Chronological lifecycle phases | `table`, `json` |
-| `release major` | Shared | Concise lifecycle result; dry-run includes the ordered safe preview | Complete safe lifecycle facts | Chronological lifecycle phases | `table`, `json` |
-| `release plan` | Shared | Useful local release-plan summary | Complete safe plan facts | No-op | `table`, `json` |
-| `release doctor` | V2 | Concise readiness summary and actionable findings | Complete safe diagnostics | No-op | `table`, `json` |
-| `release units` | V2 | Complete deterministic unit inventory | Complete safe unit facts | No-op | `table`, `json` |
-| `release pipeline` | V2 | Concise configured-pipeline summary and actionable findings | Complete safe pipeline facts | No-op | `table`, `json` |
-| `release ci-validate-context` | V2 | Concise validated-context summary or contradictions | Complete checks and resolved context | No-op | `table`, `json`, `github` |
-| `release github-workflow-init` | V2 | Create/current result or dry-run preview | Complete comparison, required-input, validation, and write-plan facts | Safe inspection/write phases | `table`, `json` |
-| `release resume` | V2 | Recovery decision, eligibility, retry safety, and next action | Safe journal, Git, recovery, continuation, and limitation facts | Chronological continuation/refusal phases | `table`, `json` |
-| `release history` | Shared | Complete deterministic release history | No command-owned additions | No-op; no generic Git narration | `table`, `json` |
-| `release contributors` | Shared | Complete deterministic contributor list | No command-owned additions | No-op; no generic Git narration | `table`, `json` |
-| `release validate` | Shared | Complete validation outcome and actionable errors | Safe validation facts | No-op | `table`, `json` |
-| `release evidence` | Shared | Concise evidence classifications | Complete safe evidence facts | No-op | `table`, `json` |
-| `release evidence-archive` | Shared | Exact guarded archive outcome | Existing limited safe write facts | Guarded archive phases | `table`, `json` |
-| `release plugin-index` | V2 | Raw: exact schema-v1 artifact; check/persist: concise structured result | Raw: no-op; check/persist: complete safe facts | Raw: no-op; check/persist: safe phases | `json`, `table`; raw stdout remains undecorated JSON |
+Release V1 is a supported compatibility surface, not the preferred setup for a
+new repository. Its authority is the legacy root `.release.neko.json`, its
+unit model is one virtual `default` unit, and its configured legacy tool is
+GoReleaser, JReleaser, or release-it. V1 remains supported by `patch`, `minor`,
+`major`, `plan`, `history`, `contributors`, `validate`, and the relevant
+Evidence families. `--unit default` is accepted; another V1 unit is rejected.
+V1 lifecycle compatibility keeps its established tool-owned commit, tag, push,
+and publication boundaries.
 
-### Flags, effects, network, and compatibility
+Release V2 is the canonical active architecture. The immutable unit structure
+lives in `.neko/release.config.json`; current unit versions live in
+`.neko/release.state.json`. V2 owns explicit multi-unit selection, unit tag
+prefixes, materialization, GitHub Actions workflow handoff, execution and
+dispatch journals, Evidence, recovery, Doctor, Units, Pipeline, workflow
+initialization, dispatched-context validation, Resume, and Plugin Index.
+Executable V2 release delivery is `github-actions`; V2 `local` is rejected.
 
-Local flags are listed below exactly as help exposes them. Required flags are
-marked with `*`.
+V1 and V2 must not remain active as competing authorities. Canonical source
+loading selects one generation once. A complete valid V2 pair is preferred as
+the V2 source, but coexistence with V1 is a conflict; partial, malformed,
+schema-invalid, config/state-mismatched, or recovery-blocked V2 sources are
+reported rather than merged. Merging would make version, unit, tag, file, and
+recovery ownership ambiguous. Use `neko release migrate --dry-run`, complete a
+verified migration, then validate V2 before starting a V2 lifecycle command.
 
-| Command | Purpose | Local flags | Access and network | Exit and compatibility notes |
-| --- | --- | --- | --- | --- |
-| `release` | Discover Release commands | None | Read-only Core help; no plugin, token, network, or write | Success; Core output selection does not change the overview |
-| `release init` | Create the first V2 pair | `--unit`, `--display-name`, `--version`, `--executor`, `--delivery`, `--workflow`, `--tag-prefix`, `--working-directory`, `--paths`, `--kind`, `--plugin-name`, `--plugin-manifest`, `--plugin-asset-prefix`, `--plugin-binary-name`, `--force` | Local guarded pair write; no Git or network | Success exits `0`; invalid input, an existing configuration, or persistence failure exits `1`; no V1 creation |
-| `release unit-add` | Add one unit to a V2 pair | Same unit/configuration flags as `init`, except `--force` | Local guarded pair write; no Git or network | Success exits `0`; invalid or duplicate units and persistence failures exit `1`; never overwrites an existing unit |
-| `release init-options` | List all accepted initialization choices | None | Read-only, local-only, token-free | JSON is the complete deterministic choice inventory |
-| `release migrate` | Convert root V1 configuration to V2 | `--dry-run` | Dry-run is read-only; actual mode writes the V2 pair, migration journal, and V1 archive locally | Refuses non-V1/unsafe sources; retains established recovery behavior |
-| `release patch` | Plan or execute a patch release | `--dry-run`, `--unit` | Dry-run is local/read-only; actual V1/V2 execution may mutate Git/files and use its configured remote delivery | Successful dry-run or execution exits `0`; invalid requests, refusals, and execution failures exit `1`; V1/V2 outcome models are unchanged |
-| `release minor` | Plan or execute a minor release | `--dry-run`, `--unit` | Same boundary as `patch` | Same lifecycle compatibility as `patch` |
-| `release major` | Plan or execute a major release | `--dry-run`, `--unit` | Same boundary as `patch` | Same lifecycle compatibility as `patch` |
-| `release plan` | Inspect a future patch/minor/major plan | `--change`*, `--unit` | Read-only, local-only, token-free; no journal or release execution | V1 uses the virtual `default` unit; V2 uses configured units |
-| `release doctor` | Diagnose V2 workflow readiness | `--unit`, `--verify-remote` | Default is local/offline/token-free; explicit `--verify-remote` enables bounded GitHub GET reads and optional token resolution | `ready`/warnings exit `0`; `not_ready` exits `1` |
-| `release units` | Inspect the V2 unit inventory | None | Strict local V2 reads only; no Git, token, network, or writes | `valid` exits `0`; `has_issues`/`source_invalid` exit `1` |
-| `release pipeline` | Inspect one configured V2 pipeline | `--unit`, `--verify-remote` | Default is local/offline/token-free/read-only; explicit `--verify-remote` reuses Doctor's bounded GET-only boundary | Typed invalid and structurally invalid evidence exit `1`; valid lifecycle observations, including blocked/uncertain/rejected, exit `0` |
-| `release ci-validate-context` | Validate dispatched V2 context against local config/state/Git | `--unit`*, `--version`*, `--tag`*, `--release-sha`* | Read-only local Git/config checks; no fetch, token, or network; Core writes GitHub output only to an explicit command file | Expected contradictions are structured nonzero responses |
-| `release github-workflow-init` | Preview or create the canonical configured workflow | `--unit`, `--path`, `--dry-run` | Dry-run is read-only; actual mode creates only a missing local file; no network or Git mutation | Byte-identical content is accepted; differing content is never overwritten |
-| `release resume` | Continue one journaled V2 release | `--unit`, `--dry-run` | Dry-run is local/read-only; actual continuation may mutate Git/journals and perform configured push/dispatch | No-journal, ambiguous, or unsafe continuation is refused; no new version is calculated |
-| `release history` | Read release history | `--unit` | Read-only local Git | V1 legacy tag/count behavior and V2 unit/path filtering are unchanged |
-| `release contributors` | Read contributors | `--unit` | Read-only local Git | V1 repository-wide and V2 selected-path behavior remain distinct and deterministic |
-| `release validate` | Validate V1 or V2 configuration | `--show`, `--unit` | Local/read-only; V1 compatibility may resolve `GITHUB_TOKEN` for legacy requirements but performs no network | Valid V1/V2 results exit `0`; invalid results and requests exit `1`; public mode-sensitive JSON is unchanged and V2 is token-independent |
-| `release evidence` | Inspect release evidence | `--family`, `--unit`, `--identity` | Read-only, local-only, token-free | Valid and empty inventories, including malformed-evidence diagnostics, exit `0`; invalid filters and ambiguous identities exit `1`; legacy Evidence JSON is unchanged |
-| `release evidence-archive` | Archive one completed evidence file | `--family`*, `--identity`*, `--digest-sha256`*, `--confirm-archive`* | Guarded local mutation of only the selected fixture/file; no network or Git mutation | Success exits `0`; confirmation, digest, target, and other archive guard failures exit `1` while preserving the source |
-| `release plugin-index` | Render, validate, or persist the plugin index | `--output-file`, `--check`, `--pretty`, `--repository` | Raw/check are read-only; persist writes only the explicit output file; local-only, token-free | Success exits `0`; check, discovery, build, and persistence failures exit `1`; raw compact/pretty schema-v1 bytes are frozen and Core `--output` errors occur before dispatch |
+| Generation | Authoritative files | Unit model | Setup/status |
+| --- | --- | --- | --- |
+| V1 compatibility | `.release.neko.json` | One virtual `default` unit | Supported existing source; not created by current `init` |
+| V2 canonical | `.neko/release.config.json`, `.neko/release.state.json` | Explicit one or many units | Active setup and lifecycle architecture |
+| V2 recovery evidence | `.neko/release.pair-recovery.json` plus journals below the Git common directory | Exact persisted intent | Blocks unsafe source use until canonical recovery policy resolves it |
+
+## Release support-status matrix
+
+`Manifest outputs` records the plugin-declared output vocabulary. Core also
+accepts `wide` as the extended table renderer for every structured response.
+Successful `github` command-file output exists only for the context validator.
+
+<!-- release-support-matrix:start -->
+| Command | Support | Required files | Read or mutate | Network | Token | Git | Filesystem | Manifest outputs | Default | Describe | Verbose | Exit |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `neko release` | Core overview | Installed `manifest.json` | Read-only overview | Offline | None | None | Manifest inspect | `Core text` | Static command inventory | No-op | No-op | `0` |
+| `neko release init` | V2 only | No active source; or replaceable V2 pair | Guarded mutation | Offline | None | None | Create/replace V2 pair and recovery evidence | `table, json` | Concise pair result | Complete configuration/write/validation facts | Safe write phases | Success `0`; invalid/conflict/write failure `1` |
+| `neko release unit-add` | V2 only | Complete valid V2 pair | Guarded mutation | Offline | None | None | Append pair through recovery writer | `table, json` | Concise unit result | Complete unit/comparison/write facts | Safe append phases | Success `0`; invalid/duplicate/write failure `1` |
+| `neko release init-options` | V2 only | None | Read-only | Offline | None | None | None | `table, json` | Complete choice inventory | No-op | No-op | `0` |
+| `neko release migrate` | V1 to V2 migration | Root `.release.neko.json` | Dry-run or guarded migration | Offline | None | Inspect root only | Create V2 pair/journals; archive V1 | `table, json` | Migration result | Source/artifact/plan/write facts | Safe migration phases | Success/dry-run `0`; refusal/failure `1` |
+| `neko release patch` | Shared V1/V2 | Valid V1 or complete V2 pair | Dry-run or lifecycle mutation | Execution uses configured Git/provider remotes | `GITHUB_TOKEN` required for execution; none for dry-run | Execution may commit, tag, push | Materialize/write journals and release files | `table, json` | Lifecycle result/preview | Complete safe lifecycle facts | Chronological phases | Success/dry-run `0`; invalid/refusal/failure `1` |
+| `neko release minor` | Shared V1/V2 | Valid V1 or complete V2 pair | Dry-run or lifecycle mutation | Same as patch | Same as patch | Same as patch | Same as patch | `table, json` | Lifecycle result/preview | Complete safe lifecycle facts | Chronological phases | Same as patch |
+| `neko release major` | Shared V1/V2 | Valid V1 or complete V2 pair | Dry-run or lifecycle mutation | Same as patch | Same as patch | Same as patch | Same as patch | `table, json` | Lifecycle result/preview | Complete safe lifecycle facts | Chronological phases | Same as patch |
+| `neko release plan` | Shared V1/V2 | Valid V1 or complete V2 pair | Read-only | Offline | None | Local evidence only; no mutation | Inspect planned files | `table, json` | Local plan summary | Complete plan facts | No-op | Ready/blocked observation `0`; invalid `1` |
+| `neko release doctor` | V2 only | V2 inspection source/workflow | Read-only | Offline default; explicit bounded GitHub GET | Optional `GITHUB_TOKEN` only with remote verification | None | Inspect config/state/workflow | `table, json` | Readiness/actionable findings | Complete diagnostics | No-op | Ready/warning `0`; not ready `1` |
+| `neko release units` | V2 only | V2 inspection source | Read-only | Offline | None | None | Inspect config/state/recovery marker | `table, json` | Complete unit inventory | Complete unit facts | No-op | Valid `0`; issues/source invalid `1` |
+| `neko release pipeline` | V2 only | Complete valid V2 pair/workflow | Read-only | Offline default; explicit bounded GitHub GET | Optional `GITHUB_TOKEN` only with remote verification | Inspect local branch/objects/refs/index/worktree | Inspect journals/config/state/workflow | `table, json` | Summary/actionable findings | Complete pipeline facts | No-op | Valid observation including blocked `0`; invalid `1` |
+| `neko release ci-validate-context` | V2 only | Complete valid V2 pair and exact local commit/tag | Read-only domain check | Offline | None | Inspect only; never fetch | Core may append explicit GitHub command file | `table, json, github` | Validated context/contradictions | Complete checks/context | No-op | Valid `0`; contradiction/failure `1` |
+| `neko release github-workflow-init` | V2 only | Complete valid V2 pair/configured workflow | Dry-run or create-only guarded write | Offline | None | None | Create one missing workflow; never overwrite different bytes | `table, json` | Create/current/preview result | Comparison/input/write facts | Safe inspect/write phases | Success/identical/dry-run `0`; conflict/failure `1` |
+| `neko release resume` | V2 only | One matching unresolved execution journal | Dry-run or journaled continuation | Dry-run offline; continuation may push/dispatch | None for dry-run; `GITHUB_TOKEN` only for fresh dispatch | May tag/push; never plans new version | Read/update existing journals/evidence | `table, json` | Recovery decision | Complete journal/Git/recovery facts | Continuation/refusal phases | Safe dry-run/completion `0`; no journal/refusal/failure `1` |
+| `neko release history` | Shared V1/V2 | Valid V1 or complete V2 pair | Read-only | Offline | None | Inspect history/tags | Config/state inspect | `table, json` | Complete history | No-op | No-op | Valid/legacy empty `0`; structured failure `1` |
+| `neko release contributors` | Shared V1/V2 | Valid V1 or complete V2 pair | Read-only | Offline | None | Inspect shortlog | Config/state inspect | `table, json` | Complete contributors | No-op | No-op | Valid `0`; structured failure `1` |
+| `neko release validate` | Shared V1/V2 | V1 source or V2 inspection pair | Read-only | Offline | V1 requires `GITHUB_TOKEN` compatibility read; V2 none | None | Inspect source/config/state/tool file | `table, json` | Validation result | Safe validation facts | No-op | Valid `0`; invalid `1` |
+| `neko release evidence` | Shared V1/V2 | Supported evidence locations | Read-only | Offline | None | None | Inspect redacted evidence | `table, json` | Evidence classifications | Complete safe evidence | No-op | Valid/empty/malformed diagnostic `0`; invalid filter `1` |
+| `neko release evidence-archive` | Shared V1/V2 | Supported completed evidence | Guarded mutation | Offline | None | None | Write/verify private archive; remove exact source | `table, json` | Guarded archive result | Limited safe write facts | Guarded phases | Success `0`; guard/failure `1` |
+| `neko release plugin-index` | V2 only | Complete V2 plugin units/state/manifests | Raw/check read-only; explicit persist mutation | Offline | None | None | Persist only explicit output file | `json, table` | Raw schema-v1 or concise mode result | Raw no-op; check/persist complete facts | Raw no-op; check/persist safe phases | Success `0`; check/build/persist failure `1` |
+<!-- release-support-matrix:end -->
+
+## Global and inherited flag reference
+
+These flags are not manifest-local Release request fields. Core consumes
+`--describe`, `--output`, and `--github-output-file`; only verbose intent is
+transported as `Request.Context.Verbose`. Scalar flags may be repeated; the
+last occurrence wins.
+
+<!-- release-global-flag-inventory:start -->
+| Flag | Owner | Required | Default | Accepted values | Repeat | Sent to plugin | Restriction |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `--help, -h` | Cobra | no | `false` | boolean | Last wins | no | Render manifest-derived help and stop |
+| `--describe` | Core | no | `false` | boolean | Last wins | no | Human detail only; never enables reads or effects |
+| `--verbose, -v` | Core | no | `false` | boolean | Last wins | context only | Captured phases where command-owned |
+| `--output` | Core | no | `table` | `table`, `json`, `wide`, `github` | Last wins | no | Renderer selector; never a file path |
+| `--github-output-file` | Core | with GitHub output | `empty` | explicit path | Last wins | no | Used only with `--output github`; destination is never inferred |
+<!-- release-global-flag-inventory:end -->
+
+Core accepts exactly `table`, `json`, `wide`, and `github`. `wide` is Core's
+extended human table mode and need not be repeated in manifest `outputs`.
+Only `ci-validate-context` declares successful GitHub command-file output.
+Other successful responses fail safely instead of inventing output fields.
+`--describe` cannot be combined with `--output github`. `--github-output-file`
+is ignored outside GitHub mode and must name an explicit available command file
+inside it.
+
+## Command-local flag reference
+
+The following 66 rows are the complete Release manifest-local flag inventory.
+`Required` is the manifest/Cobra presence requirement; conditional domain
+requirements are stated separately. Every flag is scalar and uses pflag's
+last-value-wins repeat behavior.
+
+<!-- release-local-flag-inventory:start -->
+| Command | Flag | Type | Required | Default | Accepted values and restrictions | Repeat | Owner |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `neko release init` | `--unit` | string | false | `cli` | Valid unit ID; plugin kind must start `plugin-` | Last wins | Release manifest |
+| `neko release init` | `--display-name` | string | false | selected unit ID | Non-empty string | Last wins | Release manifest |
+| `neko release init` | `--version` | string | false | `0.1.0` | SemVer without leading `v` | Last wins | Release manifest |
+| `neko release init` | `--executor` | string | true | none; required | `goreleaser`, `jreleaser`, `release-it` | Last wins | Release manifest |
+| `neko release init` | `--delivery` | string | true | none; required | `github-actions` only | Last wins | Release manifest |
+| `neko release init` | `--workflow` | string | false | empty | Required for GitHub Actions; configured `.github/workflows` YAML path | Last wins | Release manifest |
+| `neko release init` | `--tag-prefix` | string | false | `v` | Valid non-overlapping tag prefix; plugin kind requires unit prefix plus `/v` | Last wins | Release manifest |
+| `neko release init` | `--working-directory` | string | false | `.` | Repository-confined relative unit directory | Last wins | Release manifest |
+| `neko release init` | `--paths` | string | false | `**` | One comma-separated path-glob string | Last wins | Release manifest |
+| `neko release init` | `--kind` | string | false | `release` | `release` or `plugin` | Last wins | Release manifest |
+| `neko release init` | `--plugin-name` | string | false | empty | Only with `--kind plugin`; required there | Last wins | Release manifest |
+| `neko release init` | `--plugin-manifest` | string | false | empty | Repository-relative manifest; only with plugin kind and required there | Last wins | Release manifest |
+| `neko release init` | `--plugin-asset-prefix` | string | false | empty | Only with plugin kind; required and equal to unit ID | Last wins | Release manifest |
+| `neko release init` | `--plugin-binary-name` | string | false | empty | Only with plugin kind and required there | Last wins | Release manifest |
+| `neko release init` | `--force` | bool | false | `false` | Boolean; replaces permitted V2 config/state, never V1 | Last wins | Release manifest |
+| `neko release unit-add` | `--unit` | string | true | none; required | Valid new unit ID; existing unit is rejected | Last wins | Release manifest |
+| `neko release unit-add` | `--display-name` | string | false | selected unit ID | Non-empty string | Last wins | Release manifest |
+| `neko release unit-add` | `--version` | string | false | `0.1.0` | SemVer without leading `v` | Last wins | Release manifest |
+| `neko release unit-add` | `--executor` | string | true | none; required | `goreleaser`, `jreleaser`, `release-it` | Last wins | Release manifest |
+| `neko release unit-add` | `--delivery` | string | true | none; required | `github-actions` only | Last wins | Release manifest |
+| `neko release unit-add` | `--workflow` | string | false | empty | Required for GitHub Actions; configured `.github/workflows` YAML path | Last wins | Release manifest |
+| `neko release unit-add` | `--tag-prefix` | string | false | `v` | Valid non-overlapping tag prefix; plugin kind requires unit prefix plus `/v` | Last wins | Release manifest |
+| `neko release unit-add` | `--working-directory` | string | false | `.` | Repository-confined relative unit directory | Last wins | Release manifest |
+| `neko release unit-add` | `--paths` | string | false | `**` | One comma-separated path-glob string | Last wins | Release manifest |
+| `neko release unit-add` | `--kind` | string | false | `release` | `release` or `plugin` | Last wins | Release manifest |
+| `neko release unit-add` | `--plugin-name` | string | false | empty | Only with `--kind plugin`; required there | Last wins | Release manifest |
+| `neko release unit-add` | `--plugin-manifest` | string | false | empty | Repository-relative manifest; only with plugin kind and required there | Last wins | Release manifest |
+| `neko release unit-add` | `--plugin-asset-prefix` | string | false | empty | Only with plugin kind; required and equal to unit ID | Last wins | Release manifest |
+| `neko release unit-add` | `--plugin-binary-name` | string | false | empty | Only with plugin kind and required there | Last wins | Release manifest |
+| `neko release migrate` | `--dry-run` | bool | false | `false` | Boolean; preview only | Last wins | Release manifest |
+| `neko release patch` | `--dry-run` | bool | false | `false` | Boolean; no mutation/token/network | Last wins | Release manifest |
+| `neko release patch` | `--unit` | string | false | V1 `default`; unique V2 unit | V1 only `default`; required for multi-unit V2 | Last wins | Release manifest |
+| `neko release minor` | `--dry-run` | bool | false | `false` | Boolean; no mutation/token/network | Last wins | Release manifest |
+| `neko release minor` | `--unit` | string | false | V1 `default`; unique V2 unit | V1 only `default`; required for multi-unit V2 | Last wins | Release manifest |
+| `neko release major` | `--dry-run` | bool | false | `false` | Boolean; no mutation/token/network | Last wins | Release manifest |
+| `neko release major` | `--unit` | string | false | V1 `default`; unique V2 unit | V1 only `default`; required for multi-unit V2 | Last wins | Release manifest |
+| `neko release plan` | `--change` | string | true | none; required | `patch`, `minor`, `major` | Last wins | Release manifest |
+| `neko release plan` | `--unit` | string | false | V1 `default`; unique V2 unit | V1 only `default`; required for multi-unit V2 | Last wins | Release manifest |
+| `neko release doctor` | `--unit` | string | false | all V2 units/workflows | Existing V2 unit; shared workflow scope is retained | Last wins | Release manifest |
+| `neko release doctor` | `--verify-remote` | bool | false | `false` | Boolean; explicit bounded GitHub GET mode | Last wins | Release manifest |
+| `neko release pipeline` | `--unit` | string | false | unique V2 unit | Existing unit; required for multi-unit V2 | Last wins | Release manifest |
+| `neko release pipeline` | `--verify-remote` | bool | false | `false` | Boolean; explicit bounded GitHub GET mode | Last wins | Release manifest |
+| `neko release ci-validate-context` | `--unit` | string | true | none; required | Exact dispatched V2 unit | Last wins | Release manifest |
+| `neko release ci-validate-context` | `--version` | string | true | none; required | Canonical SemVer without leading `v` | Last wins | Release manifest |
+| `neko release ci-validate-context` | `--tag` | string | true | none; required | Exact canonical unit tag | Last wins | Release manifest |
+| `neko release ci-validate-context` | `--release-sha` | string | true | none; required | Full lowercase commit object ID for repository object format | Last wins | Release manifest |
+| `neko release github-workflow-init` | `--unit` | string | false | unique configured workflow | Existing V2 unit | Last wins | Release manifest |
+| `neko release github-workflow-init` | `--path` | string | false | unique configured workflow | Exact configured direct `.github/workflows` YAML path; must agree with unit | Last wins | Release manifest |
+| `neko release github-workflow-init` | `--dry-run` | bool | false | `false` | Boolean; returns exact preview without write | Last wins | Release manifest |
+| `neko release resume` | `--unit` | string | false | unique matching unit | Existing V2 unit; required when selection is ambiguous | Last wins | Release manifest |
+| `neko release resume` | `--dry-run` | bool | false | `false` | Boolean; local assessment only | Last wins | Release manifest |
+| `neko release history` | `--unit` | string | false | V1 `default`; unique V2 unit | V1 only `default`; required for multi-unit V2 | Last wins | Release manifest |
+| `neko release contributors` | `--unit` | string | false | V1 `default`; unique V2 unit | V1 only `default`; required for multi-unit V2 | Last wins | Release manifest |
+| `neko release validate` | `--show` | bool | false | `false` | Boolean; detailed compatibility view | Last wins | Release manifest |
+| `neko release validate` | `--unit` | string | false | all repository units | Focus V2 display only; complete repository still validated | Last wins | Release manifest |
+| `neko release evidence` | `--family` | string | false | all families | `release-execution`, `dispatch`, `migration`, `v1-compensation`, `v2-pair-recovery` | Last wins | Release manifest |
+| `neko release evidence` | `--unit` | string | false | all units | Exact unit filter after family support | Last wins | Release manifest |
+| `neko release evidence` | `--identity` | string | false | all identities | Unique lowercase hexadecimal prefix, 8 to 64 characters | Last wins | Release manifest |
+| `neko release evidence-archive` | `--family` | string | true | none; required | Completed `release-execution`, `v1-compensation`, or `v2-pair-recovery` | Last wins | Release manifest |
+| `neko release evidence-archive` | `--identity` | string | true | none; required | Exact full 64-character identity; no prefix | Last wins | Release manifest |
+| `neko release evidence-archive` | `--digest-sha256` | string | true | none; required | Exact current SHA-256 digest | Last wins | Release manifest |
+| `neko release evidence-archive` | `--confirm-archive` | bool | true | none; required | Must be explicitly `true` | Last wins | Release manifest |
+| `neko release plugin-index` | `--output-file` | string | false | empty | Repository-relative or explicit absolute output path; persist mode | Last wins | Release manifest |
+| `neko release plugin-index` | `--check` | bool | false | `false` | Boolean; read-only validation mode; mutually exclusive with output file | Last wins | Release manifest |
+| `neko release plugin-index` | `--pretty` | bool | false | `true` | Boolean; pretty or compact schema-v1 bytes | Last wins | Release manifest |
+| `neko release plugin-index` | `--repository` | string | false | `nekoman-hq/neko-cli` | Non-empty repository identifier stored in artifact | Last wins | Release manifest |
+<!-- release-local-flag-inventory:end -->
+
+`release`, `init-options`, and `units` have no command-local flags. No public Release command or flag is deprecated. There are no public Release command aliases or compatibility flag aliases. `--project-type`, `--release-system`, and `--metadata` are not registered public flags; use `--executor`,
+`--delivery`, `--kind`, and the plugin metadata flags. Use `--output-file` to persist Plugin Index bytes; Core `--output` remains a renderer selector.
+`--check` and `--output-file` are mutually exclusive.
 
 Global presentation flags preserve the selected source, version/tag
 calculation, configured release tool, files, journals, Git ownership, workflow
@@ -94,10 +207,18 @@ Core validates a decoded response before output, renders it exactly once, then
 applies its explicit exit. A valid response owns the result even when the
 plugin subprocess also exits nonzero. Missing, malformed, or invalid responses,
 renderer/output failures, and pre-dispatch Core failures are Core-owned exit
-`1`. Exact explicit plugin values `0` through `125` are supported, although
+`1`. Core supports an explicit response exit `0` through `125`, although
 Release itself uses only `0` and `1`. Installed legacy plugins that omit the
 transport field temporarily retain implicit-success compatibility. The field
 does not appear in public command JSON or GitHub output.
+
+Representative semantic outcomes are intentionally exact:
+
+- Pipeline `blocked` -> `0`; invalid Pipeline evidence -> `1`.
+- Doctor warning -> `0`; Doctor `not_ready` -> `1`.
+- Resume unsafe dry-run -> `0`; Resume with no matching journal -> `1`.
+- Evidence malformed diagnostic -> `0`; Evidence invalid filter -> `1`.
+- Plugin Index failed check -> `1`.
 
 ## General
 
@@ -215,7 +336,7 @@ neko release evidence --family release-execution --unit api --identity 0123abcd
 neko release evidence-archive --family release-execution --identity <sha256> --digest-sha256 <sha256> --confirm-archive
 neko release plugin-index
 neko release plugin-index --check
-neko release plugin-index --output-file /tmp/plugin-index.json
+neko release plugin-index --output-file /private/tmp/plugin-index.json
 neko release plugin-index --check --output json
 ```
 
@@ -959,21 +1080,31 @@ JSON, and exit semantics.
 `--unit <unit-id>` is available on:
 
 ```text
+init
+unit-add
 patch
 minor
 major
 plan
+doctor
+pipeline
+ci-validate-context
+github-workflow-init
+resume
 history
 contributors
 validate
-resume
 evidence
-github-workflow-init
 ```
 
-It is required for unit-bound commands when a V2 repository defines multiple units.
-`validate` is not unit-bound: it validates the complete repository without a
-unit and treats `--unit` only as a presentation focus.
+The command-local flag matrix above is authoritative for presence and manifest
+requiredness. Domain selection can add a conditional requirement: unit-bound
+commands require `--unit` when a V2 repository defines multiple eligible
+units. `init` and `unit-add` use it as the unit being created;
+`ci-validate-context` always requires it. `validate` is not unit-bound: it
+validates the complete repository and treats `--unit` only as a presentation
+focus. Doctor may retain shared-workflow scope even when a unit filter is
+supplied.
 
 ## Migrate
 
