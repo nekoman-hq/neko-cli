@@ -2,13 +2,74 @@ package github
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	stderrors "errors"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestClientDownloadPreservesResponseReadErrorAndClosesBody(t *testing.T) {
+	body := &failingReadCloser{}
+	client := NewClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: body, Request: req}, nil
+	})})
+
+	_, err := client.Download(context.Background(), "https://downloads.example/neko.tar.gz", 1024)
+	if err == nil || !strings.Contains(err.Error(), "frozen read failure") {
+		t.Fatalf("Download error = %v", err)
+	}
+	if !body.closed {
+		t.Fatal("response body was not closed")
+	}
+}
+
+func TestClientDownloadUsesFiniteTimeout(t *testing.T) {
+	client := NewClient(&http.Client{
+		Timeout: 10 * time.Millisecond,
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			<-req.Context().Done()
+			return nil, req.Context().Err()
+		}),
+	})
+
+	_, err := client.Download(context.Background(), "https://downloads.example/neko.tar.gz", 1024)
+	if err == nil || !strings.Contains(err.Error(), "context deadline exceeded") {
+		t.Fatalf("Download error = %v", err)
+	}
+}
+
+func TestClientDownloadRejectsStatusAndOversize(t *testing.T) {
+	statusClient := NewClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusBadGateway, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("ignored")), Request: req}, nil
+	})})
+	if _, err := statusClient.Download(context.Background(), "https://downloads.example/archive?token=secret", 1024); err == nil || strings.Contains(err.Error(), "secret") || !strings.Contains(err.Error(), "HTTP 502") {
+		t.Fatalf("status error = %v", err)
+	}
+
+	oversizeClient := NewClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("too large")), Request: req}, nil
+	})})
+	if _, err := oversizeClient.Download(context.Background(), "https://downloads.example/archive", 3); err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("oversize error = %v", err)
+	}
+}
+
+type failingReadCloser struct {
+	closed bool
+}
+
+func (body *failingReadCloser) Read([]byte) (int, error) {
+	return 0, stderrors.New("frozen read failure")
+}
+
+func (body *failingReadCloser) Close() error {
+	body.closed = true
+	return nil
+}
 
 func TestNewGitHubRequestAddsOptionalToken(t *testing.T) {
 	t.Setenv("GITHUB_TOKEN", "secret-token")

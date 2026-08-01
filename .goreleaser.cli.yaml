@@ -40,6 +40,9 @@ archives:
     files:
       - none*
 
+checksum:
+  name_template: "neko-cli_{{ if index .Env \"CLI_VERSION\" }}{{ .Env.CLI_VERSION }}{{ else }}{{ .Version }}{{ end }}_checksums.txt"
+
 changelog:
   disable: true
 

@@ -30,6 +30,21 @@ func TestInstallScriptHasNoLocalReleaseConfigDependency(t *testing.T) {
 	}
 }
 
+func TestCLIReleaseDefinesAuthoritativeChecksums(t *testing.T) {
+	config, err := os.ReadFile(".goreleaser.cli.yaml")
+	if err != nil {
+		t.Fatalf("read CLI GoReleaser config: %v", err)
+	}
+	for _, required := range []string{
+		"checksum:",
+		`name_template: "neko-cli_{{ if index .Env \"CLI_VERSION\" }}{{ .Env.CLI_VERSION }}{{ else }}{{ .Version }}{{ end }}_checksums.txt"`,
+	} {
+		if !bytes.Contains(config, []byte(required)) {
+			t.Fatalf("CLI GoReleaser config missing %q", required)
+		}
+	}
+}
+
 func TestInstallScriptResolvesLatestStableCLIRelease(t *testing.T) {
 	fixture := newInstallScriptFixture(t)
 	fixture.writeJSON("releases.json", `[
