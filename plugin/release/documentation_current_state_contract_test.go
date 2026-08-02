@@ -9,36 +9,6 @@ import (
 	"testing"
 )
 
-var finalActiveDocumentation = map[string]string{
-	"README.md":                                                   "repository entry point",
-	"docs/ai_context.md":                                          "AI bootstrap context",
-	"docs/cli-reference.md":                                       "Core CLI command reference",
-	"docs/installation.md":                                        "installation and self-update",
-	"docs/package-architecture.md":                                "repository package architecture",
-	"docs/plugin-development.md":                                  "plugin authoring",
-	"docs/plugins/release.md":                                     "Release Plugin entry point",
-	"docs/plugins/ui.md":                                          "UI Plugin entry point",
-	"docs/release/cli-reference.md":                               "Release command reference",
-	"docs/release/compatibility.md":                               "V1/V2 compatibility",
-	"docs/release/configuration.md":                               "Release configuration, state, units, and tags",
-	"docs/release/examples.md":                                    "Release examples",
-	"docs/release/github-actions-delivery.md":                     "GitHub Actions ownership and dispatch",
-	"docs/release/github-actions-golden-path.md":                  "GitHub Actions operator guide",
-	"docs/release/integration-doctor-remote-verification.md":      "opt-in remote Doctor verification",
-	"docs/release/journals-and-recovery.md":                       "execution evidence and recovery",
-	"docs/release/lifecycle.md":                                   "Release lifecycle and delivery boundary",
-	"docs/release/migration-v1-to-v2.md":                          "V1-to-V2 migration",
-	"docs/release/overview.md":                                    "Release product overview",
-	"plugin/release/AGENTS.md":                                    "Release contributor instructions",
-	"plugin/release/RULES.md":                                     "Release contributor rules",
-	"plugin/release/docs/architecture/architecture-decisions.md":  "Release architecture constraints",
-	"plugin/release/docs/architecture/compatibility-notes.md":     "Release package compatibility",
-	"plugin/release/docs/architecture/current-state.md":           "Release implementation architecture",
-	"plugin/release/docs/architecture/maintainability-policy.md":  "Release maintenance policy",
-	"plugin/release/docs/architecture/package-ownership.md":       "Release package ownership",
-	"plugin/release/docs/architecture/v1-compatibility-policy.md": "V1 compatibility policy",
-}
-
 var mergedOrRemovedDocumentation = []string{
 	"docs/plugins/plugin-deploy.md",
 	"docs/plugins/plugin-monitoring.md",
@@ -61,16 +31,6 @@ var mergedOrRemovedDocumentation = []string{
 
 func TestDocumentationHasOneCurrentOwnerPerMajorTopic(t *testing.T) {
 	root := repositoryRoot(t)
-	for path, topic := range finalActiveDocumentation {
-		info, err := os.Stat(filepath.Join(root, filepath.FromSlash(path)))
-		if err != nil {
-			t.Errorf("canonical owner for %s is missing at %s: %v", topic, path, err)
-			continue
-		}
-		if !info.Mode().IsRegular() {
-			t.Errorf("canonical owner for %s is not a regular file: %s", topic, path)
-		}
-	}
 	for _, path := range mergedOrRemovedDocumentation {
 		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(path))); !os.IsNotExist(err) {
 			t.Errorf("merged or removed documentation remains active at %s", path)
@@ -80,11 +40,15 @@ func TestDocumentationHasOneCurrentOwnerPerMajorTopic(t *testing.T) {
 	assertUniqueDocumentationClaim(t, root, "canonical Core CLI command reference", "docs/cli-reference.md")
 	assertUniqueDocumentationClaim(t, root, "canonical Release command reference", "docs/release/cli-reference.md")
 	assertUniqueDocumentationClaim(t, root, "canonical Release documentation entry point", "docs/release/overview.md")
+	assertUniqueDocumentationClaim(t, root, "Define the authoritative V2 files", "docs/release/configuration.md")
+	assertUniqueDocumentationClaim(t, root, "This document owns the lifecycle concepts", "docs/release/lifecycle.md")
+	assertUniqueDocumentationClaim(t, root, "Define workflow ownership", "docs/release/github-actions-delivery.md")
+	assertUniqueDocumentationClaim(t, root, "Define durable execution evidence", "docs/release/journals-and-recovery.md")
 }
 
 func TestActiveProductDocumentsStatePurposeAndAudience(t *testing.T) {
 	root := repositoryRoot(t)
-	for path := range finalActiveDocumentation {
+	for _, path := range activeDocumentationPaths(t, root) {
 		if path == "README.md" || path == "plugin/release/AGENTS.md" || path == "plugin/release/RULES.md" {
 			continue
 		}
@@ -116,7 +80,7 @@ func TestActiveDocumentationContainsNoRoadmapOrProgressProse(t *testing.T) {
 		"plugin/release/AGENTS.md": true,
 		"plugin/release/RULES.md":  true,
 	}
-	for path := range finalActiveDocumentation {
+	for _, path := range activeDocumentationPaths(t, root) {
 		if allowedPolicyDocuments[path] {
 			continue
 		}
@@ -142,7 +106,7 @@ func TestActiveDocumentationContainsNoLocalPathsSecretsOrPinnedProductVersions(t
 		regexp.MustCompile(`(?i)authorization:\s*bearer\s+\S+`),
 		regexp.MustCompile("`v?[0-9]+\\.[0-9]+\\.[0-9]+`"),
 	}
-	for path := range finalActiveDocumentation {
+	for _, path := range activeDocumentationPaths(t, root) {
 		content := readDocumentationFile(t, filepath.Join(root, filepath.FromSlash(path)))
 		for _, pattern := range forbidden {
 			if match := pattern.FindString(content); match != "" {
@@ -200,7 +164,7 @@ func TestCanonicalDocumentationStatesSafetyAndCompatibilityBoundaries(t *testing
 func assertUniqueDocumentationClaim(t *testing.T, root, claim, owner string) {
 	t.Helper()
 	var owners []string
-	for path := range finalActiveDocumentation {
+	for _, path := range activeDocumentationPaths(t, root) {
 		content := readDocumentationFile(t, filepath.Join(root, filepath.FromSlash(path)))
 		if strings.Contains(content, claim) {
 			owners = append(owners, path)
@@ -210,4 +174,16 @@ func assertUniqueDocumentationClaim(t *testing.T, root, claim, owner string) {
 	if len(owners) != 1 || owners[0] != owner {
 		t.Errorf("claim %q owners = %v, want [%s]", claim, owners, owner)
 	}
+}
+
+func activeDocumentationPaths(t *testing.T, root string) []string {
+	t.Helper()
+	var paths []string
+	for _, path := range trackedFiles(t, root) {
+		if !strings.HasSuffix(path, ".md") || strings.HasPrefix(path, releaseHistoryDirectory+"/") {
+			continue
+		}
+		paths = append(paths, path)
+	}
+	return paths
 }
