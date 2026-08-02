@@ -22,6 +22,9 @@ import (
 	initcmd "github.com/nekoman-hq/neko-cli/plugin/release/pkg/init"
 	pluginindexcmd "github.com/nekoman-hq/neko-cli/plugin/release/pkg/pluginindex"
 	releasecmd "github.com/nekoman-hq/neko-cli/plugin/release/pkg/release"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/release/tool/goreleaser"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/release/tool/jreleaser"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/release/tool/releaseit"
 	validatecmd "github.com/nekoman-hq/neko-cli/plugin/release/pkg/validate"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
 	"github.com/spf13/cobra"
@@ -68,11 +71,11 @@ func TestReleaseReadonlyPluginHelperProcess(t *testing.T) {
 	case "pipeline":
 		response, err = releasecmd.HandlePipeline(request)
 	case "patch":
-		response, err = releasecmd.HandleRelease(request, releasecmd.Patch)
+		response, err = releasecmd.HandleReleaseWithV1Executors(request, releasecmd.Patch, releaseReadonlyV1Executors()...)
 	case "minor":
-		response, err = releasecmd.HandleRelease(request, releasecmd.Minor)
+		response, err = releasecmd.HandleReleaseWithV1Executors(request, releasecmd.Minor, releaseReadonlyV1Executors()...)
 	case "major":
-		response, err = releasecmd.HandleRelease(request, releasecmd.Major)
+		response, err = releasecmd.HandleReleaseWithV1Executors(request, releasecmd.Major, releaseReadonlyV1Executors()...)
 	case "resume":
 		response, err = releasecmd.HandleResume(request)
 	case "evidence":
@@ -91,6 +94,14 @@ func TestReleaseReadonlyPluginHelperProcess(t *testing.T) {
 		t.Fatalf("encode %s response: %v", request.Command, err)
 	}
 	os.Exit(0)
+}
+
+func releaseReadonlyV1Executors() []releasecmd.V1Executor {
+	return []releasecmd.V1Executor{
+		goreleaser.NewV1Executor(),
+		jreleaser.NewV1Executor(),
+		releaseit.NewV1Executor(),
+	}
 }
 
 func TestReleaseReadonlyCommandsPreserveDomainJSONAcrossGlobalPresentationModes(t *testing.T) {

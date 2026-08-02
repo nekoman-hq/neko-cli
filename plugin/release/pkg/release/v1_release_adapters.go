@@ -8,20 +8,26 @@ import (
 	pluginerrors "github.com/nekoman-hq/neko-cli/pkg/errors"
 	"github.com/nekoman-hq/neko-cli/pkg/log"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
+	releasegit "github.com/nekoman-hq/neko-cli/plugin/release/pkg/git"
 )
 
 type v1LatestTagReader interface {
-	LatestTag() string
+	LatestTag(string) string
 }
 
 type v1TagRefresher interface {
-	RefreshTags()
+	RefreshTags(string)
 }
 
 type legacyV1VersionEvidence struct{}
 
-func (legacyV1VersionEvidence) LatestTag() string { return latestVersionTag() }
-func (legacyV1VersionEvidence) RefreshTags()      { refreshVersionTags() }
+func (legacyV1VersionEvidence) LatestTag(repositoryRoot string) string {
+	return releasegit.LatestTagAt(repositoryRoot)
+}
+
+func (legacyV1VersionEvidence) RefreshTags(repositoryRoot string) {
+	releasegit.FetchAt(repositoryRoot)
+}
 
 type v1ReleasePlanningOperation struct {
 	planner   v1ReleasePlanner
@@ -30,12 +36,12 @@ type v1ReleasePlanningOperation struct {
 }
 
 func (operation v1ReleasePlanningOperation) BuildPreviewPlan(intent V1ReleaseIntent) (V1ReleasePlan, error) {
-	return operation.planner.Plan(V1ReleasePlanningRequest{Intent: intent, LatestTag: operation.tags.LatestTag()})
+	return operation.planner.Plan(V1ReleasePlanningRequest{Intent: intent, LatestTag: operation.tags.LatestTag(intent.RepositoryRoot)})
 }
 
 func (operation v1ReleasePlanningOperation) BuildExecutionPlan(intent V1ReleaseIntent) (V1ReleasePlan, error) {
-	operation.refresher.RefreshTags()
-	return operation.planner.Plan(V1ReleasePlanningRequest{Intent: intent, LatestTag: operation.tags.LatestTag()})
+	operation.refresher.RefreshTags(intent.RepositoryRoot)
+	return operation.planner.Plan(V1ReleasePlanningRequest{Intent: intent, LatestTag: operation.tags.LatestTag(intent.RepositoryRoot)})
 }
 
 type v1ConfigVersionStore interface {

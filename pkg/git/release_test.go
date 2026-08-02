@@ -165,6 +165,7 @@ func TestLatestReleaseSelectsLatestStableCLITagFromReleaseList(t *testing.T) {
 
 	if release == nil {
 		t.Fatal("expected release")
+		return
 	}
 
 	if release.TagName != "v3.0.10" {

@@ -352,6 +352,23 @@ func TestGitHubWorkflowScaffoldingDocumentationContract(t *testing.T) {
 	}
 }
 
+func TestGitHubActionsGoldenPathDocumentsSafeInstallerBootstrap(t *testing.T) {
+	document := readGoldenPathDocument(t)
+	for _, required := range []string{
+		"## Breaking an installer bootstrap cycle",
+		"installation pin, not a target-release declaration",
+		"Never move or rewrite an existing release tag",
+		"previously reviewed immutable workflow ref",
+		"supplied full SHA agree",
+		"operator-owned publication recovery",
+		"not an automatic\n`neko release resume` path",
+	} {
+		if !strings.Contains(document, required) {
+			t.Errorf("golden path is missing safe installer-bootstrap guidance %q", required)
+		}
+	}
+}
+
 func readGoldenPathDocument(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(repositoryRoot(t), "docs", "release", "github-actions-golden-path.md")

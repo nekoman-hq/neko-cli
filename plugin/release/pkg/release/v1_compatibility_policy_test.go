@@ -64,11 +64,9 @@ func TestRegistryAndVersionGlobalsRemainCompatibilityOnly(t *testing.T) {
 	})
 	assertCompatibilityProductionReferences(t, "refreshVersionTags", []string{
 		"v1_version_guard_compatibility.go",
-		"v1_release_adapters.go",
 	})
 	assertCompatibilityProductionReferences(t, "latestVersionTag", []string{
 		"v1_version_guard_compatibility.go",
-		"v1_release_adapters.go",
 	})
 }
 

@@ -32,6 +32,23 @@ func TestLatestUnitTagIgnoresForeignAndInvalidTags(t *testing.T) {
 	}
 }
 
+func TestLatestTagAtUsesExplicitRepositoryRoot(t *testing.T) {
+	repositoryRoot := t.TempDir()
+	gitCmdAt(t, repositoryRoot, "init")
+	gitCmdAt(t, repositoryRoot, "config", "user.email", "test@example.com")
+	gitCmdAt(t, repositoryRoot, "config", "user.name", "Test User")
+	if err := os.WriteFile(filepath.Join(repositoryRoot, "README.md"), []byte("fixture\n"), 0o644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	gitCmdAt(t, repositoryRoot, "add", "README.md")
+	gitCmdAt(t, repositoryRoot, "commit", "-m", "fixture")
+	gitCmdAt(t, repositoryRoot, "tag", "v1.2.3")
+
+	if got := LatestTagAt(repositoryRoot); got != "v1.2.3" {
+		t.Fatalf("LatestTagAt(%q) = %q, want v1.2.3", repositoryRoot, got)
+	}
+}
+
 func TestUnitTagsInHistoryAndPathCommitCounts(t *testing.T) {
 	withGitRepo(t)
 	commitFile(t, "api/main.go", "api 1")
@@ -114,5 +131,15 @@ func gitCmd(t *testing.T, args ...string) {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %v failed: %s", args, string(out))
+	}
+}
+
+func gitCmdAt(t *testing.T, repositoryRoot string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = repositoryRoot
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v at %s failed: %s", args, repositoryRoot, string(out))
 	}
 }

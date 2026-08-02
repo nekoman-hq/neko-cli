@@ -19,8 +19,14 @@ import (
 */
 
 func LatestTag() string {
+	return LatestTagAt("")
+}
+
+// LatestTagAt returns the closest tag reachable from HEAD at an explicit
+// repository root.
+func LatestTagAt(repositoryRoot string) string {
 	log.PluginV(log.Exec, fmt.Sprintf("%s (Extract last tag)", log.ColorText(log.ColorGreen, "git describe --tags --abbrev=0")))
-	cmd := exec.Command("git", "describe", "--tags", "--abbrev=0")
+	cmd := gitCommandAt(repositoryRoot, "describe", "--tags", "--abbrev=0")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		errors.WriteWarning(

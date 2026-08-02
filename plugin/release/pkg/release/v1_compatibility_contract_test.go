@@ -237,7 +237,7 @@ func TestV1ReleaseCompatibilityUsesLocalPreviewThenRefreshedExecution(t *testing
 
 	tool := &v1ObservingTool{}
 	installV1RegistryTool(t, tool)
-	latestCalls, fetchCalls := installV1VersionEvidence(t, "v1.2.3")
+	versionEvidence := installV1VersionEvidence(t, "v1.2.3")
 	ctx := v1CompatibilityExecutionContext(t, Patch, false)
 
 	outcome, failure := startV1CompatibilityApplication(t, cfg, ReleaseCommandRequest{ReleaseType: ctx.ReleaseKind, DryRun: ctx.DryRun})
@@ -251,8 +251,9 @@ func TestV1ReleaseCompatibilityUsesLocalPreviewThenRefreshedExecution(t *testing
 	if completed.PreviousVersion != "1.2.3" || completed.NextVersion != "1.2.4" {
 		t.Fatalf("unexpected completion versions: %#v", completed)
 	}
-	if *latestCalls != 2 || *fetchCalls != 1 {
-		t.Fatalf("version evidence calls: latest=%d fetch=%d, want latest=2 fetch=1", *latestCalls, *fetchCalls)
+	latestCalls, fetchCalls := readV1VersionEvidenceCalls(t, versionEvidence)
+	if latestCalls != 2 || fetchCalls != 1 {
+		t.Fatalf("version evidence calls: latest=%d fetch=%d, want latest=2 fetch=1", latestCalls, fetchCalls)
 	}
 	if tool.configVersion != "1.2.4" || tool.contextVersion != "1.2.4" {
 		t.Fatalf("executor observed config=%q context=%q, want 1.2.4", tool.configVersion, tool.contextVersion)
@@ -344,22 +345,29 @@ func installV1RegistryTool(t *testing.T, tool Tool) {
 	t.Cleanup(func() { tools = original })
 }
 
-func installV1VersionEvidence(t *testing.T, latest string) (*int, *int) {
+func installV1VersionEvidence(t *testing.T, latest string) string {
 	t.Helper()
-	originalLatest := latestVersionTag
-	originalFetch := refreshVersionTags
-	latestCalls := 0
-	fetchCalls := 0
-	latestVersionTag = func() string {
-		latestCalls++
-		return latest
+	eventsPath := filepath.Join(t.TempDir(), "version-evidence.log")
+	t.Setenv("NEKO_V1_TEST_GIT_EVENTS", eventsPath)
+	t.Setenv("NEKO_V1_TEST_LATEST_TAG", latest)
+	return eventsPath
+}
+
+func readV1VersionEvidenceCalls(t *testing.T, eventsPath string) (latestCalls, fetchCalls int) {
+	t.Helper()
+	data, err := os.ReadFile(eventsPath)
+	if err != nil {
+		t.Fatalf("read V1 version evidence: %v", err)
 	}
-	refreshVersionTags = func() { fetchCalls++ }
-	t.Cleanup(func() {
-		latestVersionTag = originalLatest
-		refreshVersionTags = originalFetch
-	})
-	return &latestCalls, &fetchCalls
+	for _, event := range strings.Fields(string(data)) {
+		switch event {
+		case "latest":
+			latestCalls++
+		case "fetch":
+			fetchCalls++
+		}
+	}
+	return latestCalls, fetchCalls
 }
 
 func startV1CompatibilityApplication(t *testing.T, cfg *config.V1ReleaseConfig, request ReleaseCommandRequest) (ReleaseCommandOutcome, *CommandFailure) {
@@ -398,6 +406,13 @@ func installV1PreflightGit(t *testing.T) {
 	binDir := t.TempDir()
 	script := `#!/bin/sh
 case "$*" in
+	"describe --tags --abbrev=0")
+		if [ -n "${NEKO_V1_TEST_GIT_EVENTS:-}" ]; then printf 'latest\n' >> "$NEKO_V1_TEST_GIT_EVENTS"; fi
+		printf '%s\n' "${NEKO_V1_TEST_LATEST_TAG:-v1.2.3}"
+		;;
+	"fetch")
+		if [ -n "${NEKO_V1_TEST_GIT_EVENTS:-}" ]; then printf 'fetch\n' >> "$NEKO_V1_TEST_GIT_EVENTS"; fi
+		;;
 	"rev-parse --git-common-dir") printf '.git\n' ;;
 	"remote -v")
     printf 'origin\thttps://github.com/acme/example.git (fetch)\norigin\thttps://github.com/acme/example.git (push)\n'

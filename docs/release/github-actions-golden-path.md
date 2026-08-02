@@ -558,6 +558,41 @@ point. The baseline creates no GitHub Release and grants no publication,
 package, deployment, or OIDC permission. Consumers add those only in their
 owned publication policy.
 
+## Breaking an installer bootstrap cycle
+
+A repository variable is an installation pin, not a target-release declaration.
+Set `NEKO_VERSION` and `NEKO_RELEASE_PLUGIN_VERSION` only to versions whose
+expected release and installer asset already exist. A local state version, Git
+tag, or failed release attempt does not make that version installable. Never use
+`latest` or point either variable at the unpublished version being built.
+
+If the normal workflow requires a Release Plugin command that exists only in
+the unpublished target version, it cannot publish that first compatible version
+by installing itself. Treat this as a one-time, manually reviewed bootstrap:
+
+1. Correct the release gates on a new commit and choose a new patch version.
+   Never move or rewrite an existing release tag.
+2. Run the complete offline tests and the focused GoReleaser check, then create
+   one immutable tag for the corrected commit.
+3. Select a previously reviewed immutable workflow ref that does not depend on
+   the missing installer pin. It is suitable only if it checks out the supplied
+   target tag, verifies that tag and the supplied full SHA agree, validates the
+   target version files, tests and builds that checkout, and publishes only the
+   requested unit.
+4. Manually dispatch that exact workflow ref with the new unit, version, tag,
+   and full release SHA. The workflow definition may come from the trusted
+   bootstrap ref, but its checkout and all publication inputs must identify the
+   new immutable target tag and commit.
+5. After the expected release and installer asset are visible, set
+   `NEKO_RELEASE_PLUGIN_VERSION` to that published version. Set `NEKO_VERSION`
+   independently to an already published compatible CLI version, then run
+   `neko release doctor --verify-remote` before using the normal workflow.
+
+This exception is an operator-owned publication recovery, not an automatic
+`neko release resume` path. Preserve the failed run and local Evidence, review
+the historical workflow permissions before dispatch, and do not infer success
+from an accepted dispatch; verify the exact release and assets afterward.
+
 ## Permissions and secrets
 
 ### Before dispatch

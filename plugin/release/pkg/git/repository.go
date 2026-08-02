@@ -24,11 +24,20 @@ type Contributor struct {
 }
 
 func Fetch() {
+	FetchAt("")
+}
+
+// FetchAt refreshes repository information at an explicit repository root.
+func FetchAt(repositoryRoot string) {
 	log.PluginV(log.Guard, fmt.Sprintf("%s (Updating repository information)",
 		log.ColorText(log.ColorGreen, "git fetch"),
 	))
 
-	_ = exec.Command("git", "fetch").Run()
+	cmd := exec.Command("git", "fetch")
+	if strings.TrimSpace(repositoryRoot) != "" {
+		cmd.Dir = repositoryRoot
+	}
+	_ = cmd.Run()
 }
 
 // Current checks if a git repository exists and returns owner and repo name

@@ -601,18 +601,33 @@ func TestIntegrationDoctorReleasePluginInstallationRequiresExactArchiveAndChecks
 }
 
 func TestIntegrationDoctorDefiniteRemoteReleaseAndTagFailuresAreActionable(t *testing.T) {
+	root := repositoryInspectionRoot(t)
+	repository, err := releaseconfig.LoadReleaseRepository(root.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicationTag := ""
+	for _, unit := range repository.Units {
+		if unit.ID == "cli" {
+			publicationTag = unit.TagPrefix + unit.Version
+			break
+		}
+	}
+	if publicationTag == "" {
+		t.Fatal("repository has no cli publication tag")
+	}
+
 	tests := []struct {
 		name     string
 		pathEnds string
 		wantCode string
 	}{
 		{name: "installation release missing", pathEnds: "/releases/tags/v3.0.4", wantCode: "REMOTE_INSTALLATION_RELEASE_MISSING"},
-		{name: "publication release missing", pathEnds: "/releases/tags/v3.0.4", wantCode: "REMOTE_PUBLICATION_RELEASE_MISSING"},
-		{name: "publication tag missing", pathEnds: "/git/ref/tags/v3.0.4", wantCode: "REMOTE_PUBLICATION_TAG_MISSING"},
+		{name: "publication release missing", pathEnds: "/releases/tags/" + publicationTag, wantCode: "REMOTE_PUBLICATION_RELEASE_MISSING"},
+		{name: "publication tag missing", pathEnds: "/git/ref/tags/" + publicationTag, wantCode: "REMOTE_PUBLICATION_TAG_MISSING"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			root := repositoryInspectionRoot(t)
 			server, _ := newSuccessfulIntegrationDoctorGitHubServerWithOverrides(t, root.Path(), false, func(writer http.ResponseWriter, request *http.Request) bool {
 				if strings.HasSuffix(request.URL.Path, test.pathEnds) {
 					writer.WriteHeader(http.StatusNotFound)

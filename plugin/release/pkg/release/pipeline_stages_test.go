@@ -10,6 +10,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/pkg/presentation"
 	"github.com/nekoman-hq/neko-cli/pkg/renderer"
 	"github.com/nekoman-hq/neko-cli/plugin/release/internal/pipelineinspection"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
@@ -102,11 +103,18 @@ func TestPipelinePresentationUsesActualStageCountsGroupsAndResponsiveWidths(t *t
 	}
 	for _, test := range tests {
 		t.Run(test.unit, func(t *testing.T) {
-			response, err := HandlePipelineAt(root, plugin.Request{Command: "pipeline", Flags: map[string]any{"unit": test.unit}})
+			request := plugin.Request{Command: "pipeline", Flags: map[string]any{"unit": test.unit}}
+			verification, err := inspectPipelineVerification(root, request)
 			if err != nil {
 				t.Fatal(err)
 			}
-			stageTable := response.PresentationTable.Following
+			response, err := pipelineinspection.HandlePipelineRuntimeVerificationAt(
+				root, request, configuredReleaseLifecycleStages(), pipelineinspection.RuntimeSnapshot{}, verification,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			stageTable := pipelinePresentationTable(t, response, "Configured Pipeline")
 			if stageTable == nil || stageTable.Title != "Configured Pipeline" || len(stageTable.Rows) != test.stageCount {
 				t.Fatalf("stage presentation = %#v", stageTable)
 			}
@@ -158,6 +166,17 @@ func TestPipelinePresentationUsesActualStageCountsGroupsAndResponsiveWidths(t *t
 			}
 		})
 	}
+}
+
+func pipelinePresentationTable(t *testing.T, response *plugin.Response, title string) *presentation.Table {
+	t.Helper()
+	for table := response.PresentationTable; table != nil; table = table.Following {
+		if table.Title == title {
+			return table
+		}
+	}
+	t.Fatalf("pipeline presentation table %q is missing", title)
+	return nil
 }
 
 type pipelineOutputWidth struct {

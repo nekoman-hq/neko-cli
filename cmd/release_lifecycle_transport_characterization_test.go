@@ -36,8 +36,9 @@ func TestReleaseLifecycleDryRunsUseSharedPresentationAcrossCorePluginTransport(t
 				)
 				if defaultErr != nil || describeErr != nil || verboseErr != nil || combinedErr != nil {
 					t.Fatalf(
-						"lifecycle transport exits: default=%v describe=%v verbose=%v combined=%v",
+						"lifecycle transport exits: default=%v describe=%v verbose=%v combined=%v\ndefault output:\n%s\ndescribe output:\n%s\nverbose output:\n%s\ncombined output:\n%s",
 						defaultErr, describeErr, verboseErr, combinedErr,
+						defaultOutput, describeOutput, verboseOutput, combinedOutput,
 					)
 				}
 
