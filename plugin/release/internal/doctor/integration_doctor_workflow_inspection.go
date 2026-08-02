@@ -99,6 +99,7 @@ func inspectIntegrationDoctorWorkflow(
 	installationFact, installationDiagnostics := inspectIntegrationDoctorInstallation(
 		repositoryRoot,
 		path,
+		units,
 		repositoryUnits,
 		jobs,
 		files,
@@ -234,6 +235,7 @@ func inspectIntegrationDoctorReleaseSteps(
 	checkoutIndex := -1
 	cliInstallIndex := -1
 	pluginInstallIndex := -1
+	sourceToolchainIndex := -1
 	for index, step := range job.steps {
 		switch {
 		case strings.HasPrefix(step.uses, "actions/checkout@") && checkoutIndex < 0:
@@ -242,6 +244,8 @@ func inspectIntegrationDoctorReleaseSteps(
 			cliInstallIndex = index
 		case strings.Contains(step.run, "neko plugin install release") && pluginInstallIndex < 0:
 			pluginInstallIndex = index
+		case step.name == integrationDoctorSourceValidationToolchainStepName && sourceToolchainIndex < 0:
+			sourceToolchainIndex = index
 		}
 	}
 	if checkoutIndex < 0 {
@@ -249,24 +253,47 @@ func inspectIntegrationDoctorReleaseSteps(
 	} else {
 		inspectIntegrationDoctorCheckout(job.steps[checkoutIndex], add)
 	}
-	if cliInstallIndex < 0 {
-		add(integrationDoctorError, "NEKO_INSTALL_MISSING", "The release job does not install the Neko CLI.", "Install a pinned Neko CLI version before context validation.")
-	} else if !strings.Contains(job.steps[cliInstallIndex].run, "NEKO_VERSION") || strings.Contains(strings.ToLower(job.steps[cliInstallIndex].run), "latest") {
-		add(integrationDoctorWarning, "NEKO_VERSION_UNPINNED", "The Neko CLI installation is not visibly version-pinned.", "Pin the Neko CLI with an explicit version or repository variable.")
-	}
-	if pluginInstallIndex < 0 {
-		add(integrationDoctorError, "RELEASE_PLUGIN_INSTALL_MISSING", "The release job does not install the Neko Release plugin.", "Install a pinned Release plugin version before context validation.")
-	} else if !strings.Contains(job.steps[pluginInstallIndex].run, "--version") || strings.Contains(strings.ToLower(job.steps[pluginInstallIndex].run), "latest") {
-		add(integrationDoctorWarning, "RELEASE_PLUGIN_VERSION_UNPINNED", "The Release plugin installation is not visibly version-pinned.", "Install the Release plugin with --version and a fixed value or repository variable.")
+	if sourceToolchainIndex >= 0 {
+		inspectIntegrationDoctorSourceToolchainExclusivity(cliInstallIndex, pluginInstallIndex, add)
+	} else {
+		inspectIntegrationDoctorPublishedValidationToolchain(job, cliInstallIndex, pluginInstallIndex, add)
 	}
 	if validatorIndex < 0 {
 		return
 	}
-	if cliInstallIndex > validatorIndex || pluginInstallIndex > validatorIndex {
+	if cliInstallIndex > validatorIndex || pluginInstallIndex > validatorIndex || sourceToolchainIndex > validatorIndex {
 		add(integrationDoctorError, "INSTALL_ORDER_INVALID", "Required Neko installations occur after context validation.", "Install the Neko CLI and Release plugin before the validator step.")
 	}
 	validator := job.steps[validatorIndex]
 	inspectIntegrationDoctorValidator(validator, job.steps[validatorIndex+1:], add)
+}
+
+func inspectIntegrationDoctorSourceToolchainExclusivity(
+	cliInstallIndex int,
+	pluginInstallIndex int,
+	add func(integrationDoctorSeverity, string, string, string),
+) {
+	if cliInstallIndex >= 0 || pluginInstallIndex >= 0 {
+		add(integrationDoctorError, "VALIDATION_TOOLCHAIN_AMBIGUOUS", "The release job mixes exact-source and published installation validation toolchains.", "Keep exactly one validation toolchain strategy before context validation.")
+	}
+}
+
+func inspectIntegrationDoctorPublishedValidationToolchain(
+	job integrationDoctorWorkflowJob,
+	cliInstallIndex int,
+	pluginInstallIndex int,
+	add func(integrationDoctorSeverity, string, string, string),
+) {
+	if cliInstallIndex < 0 {
+		add(integrationDoctorError, "NEKO_INSTALL_MISSING", "The release job does not install or build the Neko CLI.", "Install a pinned Neko CLI, or use the bounded exact-source toolchain in the Release Plugin self-release workflow.")
+	} else if !strings.Contains(job.steps[cliInstallIndex].run, "NEKO_VERSION") || strings.Contains(strings.ToLower(job.steps[cliInstallIndex].run), "latest") {
+		add(integrationDoctorWarning, "NEKO_VERSION_UNPINNED", "The Neko CLI installation is not visibly version-pinned.", "Pin the Neko CLI with an explicit version or repository variable.")
+	}
+	if pluginInstallIndex < 0 {
+		add(integrationDoctorError, "RELEASE_PLUGIN_INSTALL_MISSING", "The release job does not install or build the Neko Release plugin.", "Install a pinned Release plugin, or use the bounded exact-source toolchain in the Release Plugin self-release workflow.")
+	} else if !strings.Contains(job.steps[pluginInstallIndex].run, "--version") || strings.Contains(strings.ToLower(job.steps[pluginInstallIndex].run), "latest") {
+		add(integrationDoctorWarning, "RELEASE_PLUGIN_VERSION_UNPINNED", "The Release plugin installation is not visibly version-pinned.", "Install the Release plugin with --version and a fixed value or repository variable.")
+	}
 }
 
 func inspectIntegrationDoctorCheckout(

@@ -357,9 +357,12 @@ func TestGitHubActionsGoldenPathDocumentsSafeInstallerBootstrap(t *testing.T) {
 	for _, required := range []string{
 		"## Breaking an installer bootstrap cycle",
 		"installation pin, not a target-release declaration",
-		"Never move or rewrite an existing release tag",
-		"previously reviewed immutable workflow ref",
-		"supplied full SHA agree",
+		"bounded self-release exception",
+		"This shell boundary is part of the reviewed workflow, not candidate code",
+		"runner-temporary directories",
+		"performs no Neko CLI or Release Plugin artifact\ndownload",
+		"plugin-registry lookup, token read, or publication",
+		"do not move the\ntag or run another version bump",
 		"operator-owned publication recovery",
 		"not an automatic\n`neko release resume` path",
 	} {

@@ -40,7 +40,7 @@ func TestIntegrationDoctorDefaultModeDoesNotInvokeRemoteInspectorOrTokenResolver
 	if result.RemoteVerification != (integrationDoctorRemoteSummary{Status: integrationDoctorRemoteNotRequested}) {
 		t.Fatalf("remote summary=%#v", result.RemoteVerification)
 	}
-	if result.Readiness != integrationDoctorReady || result.Summary != (integrationDoctorSummary{NotVerifiable: 21, Verified: 15}) {
+	if result.Readiness != integrationDoctorReady || result.Summary != (integrationDoctorSummary{NotVerifiable: 19, Verified: 15}) {
 		t.Fatalf("readiness=%q summary=%#v", result.Readiness, result.Summary)
 	}
 }
@@ -170,7 +170,7 @@ func TestIntegrationDoctorExplicitRemoteVerificationSupportsEveryUnitScope(t *te
 			)
 			if result.RemoteVerification.Status != integrationDoctorRemoteComplete || result.Readiness != integrationDoctorReady ||
 				len(result.Units) != 1 || result.Units[0].ID != unitID || len(result.Workflows) != 1 {
-				t.Fatalf("remote=%#v readiness=%q units=%#v workflows=%#v", result.RemoteVerification, result.Readiness, result.Units, result.Workflows)
+				t.Fatalf("remote=%#v readiness=%q units=%#v workflows=%#v diagnostics=%#v", result.RemoteVerification, result.Readiness, result.Units, result.Workflows, result.Diagnostics)
 			}
 		})
 	}
@@ -562,7 +562,7 @@ func TestIntegrationDoctorMissingInstallationAssetReplacesAvailabilityLimitation
 	}
 }
 
-func TestIntegrationDoctorReleasePluginInstallationRequiresExactArchiveAndChecksumAssets(t *testing.T) {
+func TestIntegrationDoctorPinnedReleasePluginInstallationRequiresExactArchiveAndChecksumAssets(t *testing.T) {
 	//nolint:govet // Table fields follow the fixture label then its mutation predicate.
 	for _, test := range []struct {
 		name   string
@@ -590,13 +590,33 @@ func TestIntegrationDoctorReleasePluginInstallationRequiresExactArchiveAndChecks
 			defer server.Close()
 			result := runIntegrationDoctorRemoteAgainstServer(
 				t, root.Path(), server.URL,
-				integrationDoctorRecordingTokenResolver{value: "plugin-asset-token"}, "plugin-release",
+				integrationDoctorRecordingTokenResolver{value: "plugin-asset-token"}, "cli",
 			)
 			if result.Readiness != integrationDoctorNotReady ||
 				!integrationDoctorHasCode(result.Diagnostics, "REMOTE_INSTALLATION_ASSET_MISSING") {
 				t.Fatalf("readiness=%q diagnostics=%#v", result.Readiness, result.Diagnostics)
 			}
 		})
+	}
+}
+
+func TestIntegrationDoctorReleasePluginSourceValidationDoesNotRequirePublishedInstallationAssets(t *testing.T) {
+	root := repositoryInspectionRoot(t)
+	server, requests := newSuccessfulIntegrationDoctorGitHubServer(t, root.Path(), false)
+	defer server.Close()
+	result := runIntegrationDoctorRemoteAgainstServer(
+		t, root.Path(), server.URL,
+		integrationDoctorRecordingTokenResolver{value: "plugin-source-token"}, "plugin-release",
+	)
+	if result.Readiness != integrationDoctorReady ||
+		integrationDoctorHasCode(result.Diagnostics, "REMOTE_INSTALLATION_ASSET_MISSING") {
+		t.Fatalf("readiness=%q diagnostics=%#v", result.Readiness, result.Diagnostics)
+	}
+	for _, request := range requests.snapshot() {
+		if strings.Contains(request.uri, "/releases/tags/plugin-release/v4.2.0") ||
+			strings.Contains(request.uri, "/actions/variables/NEKO_RELEASE_PLUGIN_VERSION") {
+			t.Fatalf("source validation made a published-installation request: %s", request.uri)
+		}
 	}
 }
 

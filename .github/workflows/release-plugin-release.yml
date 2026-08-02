@@ -47,32 +47,85 @@ jobs:
           fetch-tags: true
           persist-credentials: false
 
-      - name: Install pinned Neko CLI
+      - name: Validate immutable self-release identity
         shell: bash
         env:
-          NEKO_VERSION: ${{ vars.NEKO_VERSION }}
-          NEKO_INSTALL_DIR: ${{ runner.temp }}/neko/bin
+          RELEASE_UNIT: ${{ inputs.unit }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
         run: |
           set -euo pipefail
-          : "${NEKO_VERSION:?Set repository variable NEKO_VERSION to a supported Neko CLI version}"
-          curl -fsSL https://raw.githubusercontent.com/nekoman-hq/neko-cli/main/install.sh \
-            --output "$RUNNER_TEMP/install-neko.sh"
-          bash "$RUNNER_TEMP/install-neko.sh"
-          echo "$NEKO_INSTALL_DIR" >> "$GITHUB_PATH"
 
-      - name: Install pinned Neko Release Plugin
+          if [[ "$RELEASE_UNIT" != "plugin-release" ]]; then
+            echo "::error::unit must be plugin-release, got '$RELEASE_UNIT'"
+            exit 1
+          fi
+          if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::version must be a semver-like value, got '$RELEASE_VERSION'"
+            exit 1
+          fi
+          if [[ "$RELEASE_TAG" != "plugin-release/v${RELEASE_VERSION}" ]]; then
+            echo "::error::tag must be plugin-release/v${RELEASE_VERSION}, got '$RELEASE_TAG'"
+            exit 1
+          fi
+          if [[ ! "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::release_sha must be a 40-character lowercase Git SHA"
+            exit 1
+          fi
+
+          head_sha="$(git rev-parse HEAD)"
+          tag_sha="$(git rev-list -n 1 "$RELEASE_TAG")"
+          if [[ "$head_sha" != "$RELEASE_SHA" || "$tag_sha" != "$RELEASE_SHA" ]]; then
+            echo "::error::checkout, tag, and release_sha must identify the same commit"
+            exit 1
+          fi
+          if ! jq -e --arg version "$RELEASE_VERSION" \
+            '.units["plugin-release"].version == $version' .neko/release.state.json >/dev/null; then
+            echo "::error::release state does not match version $RELEASE_VERSION"
+            exit 1
+          fi
+          if ! jq -e --arg version "$RELEASE_VERSION" \
+            '.version == $version' plugin/release/manifest.json >/dev/null; then
+            echo "::error::release plugin manifest does not match version $RELEASE_VERSION"
+            exit 1
+          fi
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build exact-commit Neko validation toolchain
         shell: bash
         env:
-          NEKO_RELEASE_PLUGIN_VERSION: ${{ vars.NEKO_RELEASE_PLUGIN_VERSION }}
+          NEKO_BIN_DIR: ${{ runner.temp }}/neko/bin
+          NEKO_PLUGIN_DIR: ${{ runner.temp }}/neko/plugins
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
         run: |
           set -euo pipefail
-          : "${NEKO_RELEASE_PLUGIN_VERSION:?Set repository variable NEKO_RELEASE_PLUGIN_VERSION to a supported Release Plugin version}"
-          neko plugin install release --version "$NEKO_RELEASE_PLUGIN_VERSION"
+
+          cli_version="$(jq -er '.units.cli.version' .neko/release.state.json)"
+          release_plugin_dir="$NEKO_PLUGIN_DIR/release"
+          mkdir -p "$NEKO_BIN_DIR" "$release_plugin_dir"
+
+          go build -trimpath \
+            -ldflags "-X github.com/nekoman-hq/neko-cli/pkg/version.Version=${cli_version} -X github.com/nekoman-hq/neko-cli/pkg/version.Commit=${RELEASE_SHA} -X github.com/nekoman-hq/neko-cli/pkg/version.BuiltBy=github-actions-self-release" \
+            -o "$NEKO_BIN_DIR/neko" .
+          go build -trimpath \
+            -ldflags "-X github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata.Version=${RELEASE_VERSION} -X github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata.GitCommit=${RELEASE_SHA}" \
+            -o "$release_plugin_dir/plugin-release" ./plugin/release
+          cp plugin/release/manifest.json "$release_plugin_dir/manifest.json"
+
+          echo "$NEKO_BIN_DIR" >> "$GITHUB_PATH"
 
       - name: Validate Neko release context
         id: release-context
         shell: bash
         env:
+          NEKO_PLUGIN_DIR: ${{ runner.temp }}/neko/plugins
           RELEASE_UNIT: ${{ inputs.unit }}
           RELEASE_VERSION: ${{ inputs.version }}
           RELEASE_TAG: ${{ inputs.tag }}
@@ -116,12 +169,6 @@ jobs:
             exit 1
           fi
           echo "Plugin manifest validation passed." >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
 
       - name: Run Go tests
         shell: bash

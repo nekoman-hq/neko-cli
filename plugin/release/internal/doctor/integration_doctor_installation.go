@@ -25,12 +25,18 @@ type integrationDoctorPluginManifestIdentity struct {
 func inspectIntegrationDoctorInstallation(
 	repositoryRoot string,
 	workflowPath string,
+	workflowUnits []releaseconfig.ReleaseUnit,
 	repositoryUnits []releaseconfig.ReleaseUnit,
 	jobs []integrationDoctorWorkflowJob,
 	files integrationDoctorRepositoryFileReader,
 	repositoryIdentity integrationDoctorRepositoryIdentity,
 	repositoryIdentityErr error,
 ) (integrationDoctorVerification, []integrationDoctorDiagnostic) {
+	if _, sourceToolchain := integrationDoctorSourceValidationToolchainStep(jobs); sourceToolchain {
+		return inspectIntegrationDoctorSourceValidationToolchain(
+			repositoryRoot, workflowPath, workflowUnits, jobs, files,
+		)
+	}
 	fact := newIntegrationDoctorVerification(
 		"installation_wiring",
 		integrationDoctorVerified,

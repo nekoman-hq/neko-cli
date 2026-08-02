@@ -12,8 +12,8 @@ func TestRepositoryDoctorRepresentsFocusedLocalVerification(t *testing.T) {
 	if result.Summary.Verified != 15 {
 		t.Fatalf("verified facts = %d, want 15", result.Summary.Verified)
 	}
-	if len(result.Verifications) != 24 {
-		t.Fatalf("verifications = %d, want 24: %#v", len(result.Verifications), result.Verifications)
+	if len(result.Verifications) != 23 {
+		t.Fatalf("verifications = %d, want 23: %#v", len(result.Verifications), result.Verifications)
 	}
 
 	byWorkflow := make(map[string][]string)
@@ -52,6 +52,9 @@ func TestRepositoryDoctorRepresentsFocusedLocalVerification(t *testing.T) {
 		gotBoundaries := append([]string(nil), boundariesByWorkflow[behavior.path]...)
 		sort.Strings(gotBoundaries)
 		wantBoundaries := []string{"dispatch_authorization", "remote_workflow_identity", "repository_variable_values"}
+		if behavior.unit == "plugin-release" {
+			wantBoundaries = []string{"dispatch_authorization", "remote_workflow_identity"}
+		}
 		if !reflect.DeepEqual(gotBoundaries, wantBoundaries) {
 			t.Errorf("%s boundary categories = %v, want %v", behavior.path, gotBoundaries, wantBoundaries)
 		}
@@ -60,8 +63,8 @@ func TestRepositoryDoctorRepresentsFocusedLocalVerification(t *testing.T) {
 
 func TestRepositoryDoctorLimitationsDescribeOnlyResidualUncertainty(t *testing.T) {
 	result := integrationDoctorResultFromResponse(t, runIntegrationDoctor(t, repositoryInspectionRoot(t), nil))
-	if result.Summary.NotVerifiable != 21 {
-		t.Fatalf("not-verifiable count = %d, want 21", result.Summary.NotVerifiable)
+	if result.Summary.NotVerifiable != 19 {
+		t.Fatalf("not-verifiable count = %d, want 19", result.Summary.NotVerifiable)
 	}
 	for _, diagnostic := range result.Diagnostics {
 		if diagnostic.Severity != integrationDoctorNotVerifiable || diagnostic.Code != "CONSUMER_BUILD_NOT_VERIFIABLE" {

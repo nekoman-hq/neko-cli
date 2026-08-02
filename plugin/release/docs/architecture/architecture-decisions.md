@@ -33,6 +33,10 @@ is isolated in the [numbered history](../history/README.md).
   retry, or publication state.
 - Accepted dispatch is handoff evidence and cannot be interpreted as workflow
   or publication completion.
+- Exact-source validation tooling is permitted only in the dedicated Release
+  Plugin self-release workflow, after an independent immutable-identity check
+  and with runner-temporary CLI/plugin paths. Other workflows retain pinned
+  published validation tools.
 
 ## Unsupported architecture
 

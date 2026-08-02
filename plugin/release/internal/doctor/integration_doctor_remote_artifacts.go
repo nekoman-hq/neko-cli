@@ -25,6 +25,9 @@ func (inspector integrationDoctorGitHubRemoteInspector) inspectInstallationArtif
 ) {
 	contracts := integrationDoctorInstallationRemoteContracts(request, remote.variableValues)
 	if len(contracts) == 0 {
+		if len(integrationDoctorRecognizedRemoteVariables(request.Workflows)) == 0 {
+			return
+		}
 		inspection.append(integrationDoctorRemoteFact(
 			"installation-artifacts", "installation_wiring", integrationDoctorNotAttempted,
 			"Exact installation release identities were not attempted because recognized pinned versions or local artifact contracts were unavailable.",

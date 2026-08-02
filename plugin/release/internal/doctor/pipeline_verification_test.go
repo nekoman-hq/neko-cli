@@ -15,7 +15,7 @@ func TestInspectLocalVerificationReturnsOnlyImmutableNeutralFacts(t *testing.T) 
 	t.Setenv("GITHUB_TOKEN", "local-verification-must-not-read-this-token")
 
 	first := InspectLocalVerification(context.Background(), root, "")
-	if len(first.Facts) != 24 || first.Remote.Requested || first.Remote.Status != "not_requested" {
+	if len(first.Facts) != 23 || first.Remote.Requested || first.Remote.Status != "not_requested" {
 		t.Fatalf("local snapshot = %#v", first)
 	}
 	for _, fact := range first.Facts {

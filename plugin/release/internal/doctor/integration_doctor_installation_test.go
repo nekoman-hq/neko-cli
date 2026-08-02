@@ -19,12 +19,51 @@ func TestRepositoryDoctorVerifiesInstallationArtifactIdentity(t *testing.T) {
 		if !ok || fact.State != integrationDoctorVerified {
 			t.Errorf("%s installation fact = %#v, present=%t", behavior.path, fact, ok)
 		}
-		for _, reference := range []string{"install.sh", "pkg/plugin/manager.go", "pkg/plugin/registry.go"} {
+		references := []string{"install.sh", "pkg/plugin/manager.go", "pkg/plugin/registry.go"}
+		if behavior.unit == "plugin-release" {
+			references = []string{"go.mod", "plugin/release/main.go", "plugin/release/manifest.json"}
+		}
+		for _, reference := range references {
 			if !slices.Contains(fact.References, reference) {
 				t.Errorf("%s installation references = %v, missing %q", behavior.path, fact.References, reference)
 			}
 		}
 	}
+}
+
+func TestIntegrationDoctorRejectsIncompleteSourceValidationToolchain(t *testing.T) {
+	root := repositoryInspectionRoot(t)
+	content := readIntegrationDoctorRepositoryFile(t, ".github/workflows/release-plugin-release.yml")
+	content = []byte(strings.Replace(
+		string(content),
+		`-o "$release_plugin_dir/plugin-release" ./plugin/release`,
+		`-o "$release_plugin_dir/plugin-release" ./plugin/other`,
+		1,
+	))
+	document := parseIntegrationDoctorWorkflowBytes(t, content)
+	jobs := integrationDoctorWorkflowJobs(document)
+	repository, err := releaseconfig.LoadReleaseRepository(root.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	unit := repository.Units[0]
+	for _, candidate := range repository.Units {
+		if candidate.ID == "plugin-release" {
+			unit = candidate
+			break
+		}
+	}
+	fact, diagnostics := inspectIntegrationDoctorSourceValidationToolchain(
+		root.Path(),
+		".github/workflows/release-plugin-release.yml",
+		[]releaseconfig.ReleaseUnit{unit},
+		jobs,
+		filesystemIntegrationDoctorRepositoryFileReader{},
+	)
+	if fact.State != integrationDoctorMismatch {
+		t.Fatalf("source toolchain fact = %#v", fact)
+	}
+	assertIntegrationDoctorCodes(t, diagnostics, "SOURCE_TOOLCHAIN_CONTRACT_INVALID")
 }
 
 func TestIntegrationDoctorCLIInstallerContractMatrix(t *testing.T) {

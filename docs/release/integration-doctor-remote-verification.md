@@ -103,7 +103,8 @@ An enabled repository Actions policy is understood only for GitHub's focused
 `all`, `local_only`, and `selected` allowed-actions states; an unknown
 state remains unsupported rather than being accepted by guesswork.
 
-Only locally recognized installation pins are queried:
+Only locally recognized installation pins actually referenced by a workflow
+are queried:
 
 - `NEKO_VERSION` for the Neko CLI installer;
 - `NEKO_RELEASE_PLUGIN_VERSION` for the Release Plugin installer.
@@ -111,6 +112,11 @@ Only locally recognized installation pins are queried:
 Values must be pinned semantic versions, not `latest`, a tag namespace, or a
 discovery expression. The canonical version may appear in safe evidence. No
 other `vars.*` reference is queried merely because it exists in YAML.
+
+The dedicated Release Plugin self-release workflow has no installation-pin
+variables. Doctor verifies its exact-source CLI/plugin build and temporary-path
+wiring locally, so remote verification performs no repository-variable or
+installation-release query for that workflow.
 
 Only custom `secrets.*` names already referenced by a local workflow are
 queried. Built-in `GITHUB_TOKEN` causes no secrets API request. The secret
@@ -120,10 +126,11 @@ output.
 
 Installation and publication checks derive exact tags and asset names from the
 locally verified unit, installer, manifest, and focused GoReleaser contracts.
-The checks cover the pinned CLI and Release Plugin installation releases, each
-selected unit's current exact release and tag, and the exact `plugin-registry`
-release/`plugin-index.json` target where plugin publication uses it. Remote
-assets are compared by exact name; no prefix or newest-match fallback exists.
+The checks cover pinned CLI and Release Plugin installation releases where a
+workflow uses them, each selected unit's current exact release and tag, and the
+exact `plugin-registry` release/`plugin-index.json` target where plugin
+publication uses it. Remote assets are compared by exact name; no prefix or
+newest-match fallback exists.
 
 ## Result and failure classification
 

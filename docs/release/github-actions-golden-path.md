@@ -567,31 +567,38 @@ tag, or failed release attempt does not make that version installable. Never use
 `latest` or point either variable at the unpublished version being built.
 
 If the normal workflow requires a Release Plugin command that exists only in
-the unpublished target version, it cannot publish that first compatible version
-by installing itself. Treat this as a one-time, manually reviewed bootstrap:
+the unpublished target version, it cannot publish that version by installing
+itself. The repository's dedicated `plugin-release` workflow therefore uses a
+bounded self-release exception instead of installation pins:
 
-1. Correct the release gates on a new commit and choose a new patch version.
-   Never move or rewrite an existing release tag.
-2. Run the complete offline tests and the focused GoReleaser check, then create
-   one immutable tag for the corrected commit.
-3. Select a previously reviewed immutable workflow ref that does not depend on
-   the missing installer pin. It is suitable only if it checks out the supplied
-   target tag, verifies that tag and the supplied full SHA agree, validates the
-   target version files, tests and builds that checkout, and publishes only the
-   requested unit.
-4. Manually dispatch that exact workflow ref with the new unit, version, tag,
-   and full release SHA. The workflow definition may come from the trusted
-   bootstrap ref, but its checkout and all publication inputs must identify the
-   new immutable target tag and commit.
-5. After the expected release and installer asset are visible, set
-   `NEKO_RELEASE_PLUGIN_VERSION` to that published version. Set `NEKO_VERSION`
-   independently to an already published compatible CLI version, then run
-   `neko release doctor --verify-remote` before using the normal workflow.
+1. Checkout the supplied full release SHA with complete tags and no persisted
+   checkout credential.
+2. Independently validate the fixed `plugin-release` unit, SemVer/tag shape,
+   checked-out `HEAD`, peeled tag target, authoritative state, and manifest.
+   This shell boundary is part of the reviewed workflow, not candidate code.
+3. Build the Neko CLI and candidate Release Plugin from that exact checkout
+   into runner-temporary directories, copy the checked-out manifest, and expose
+   only those temporary paths to subsequent validation.
+4. Run the candidate's canonical `ci-validate-context`, tests, focused
+   GoReleaser checks, snapshot build, and publication in their existing order.
+
+The source-toolchain step performs no Neko CLI or Release Plugin artifact
+download, plugin-registry lookup, token read, or publication. Go may resolve
+the checked-out module's declared dependencies through the ordinary setup/cache
+boundary. The exception is accepted only for the dedicated Release Plugin
+self-release workflow; generated and other consumer workflows continue to use
+already published pinned versions.
+
+If an immutable target tag predates this workflow correction, do not move the
+tag or run another version bump. After the corrected workflow exists on a
+reviewed branch, manually dispatch that workflow ref with the existing target
+unit, version, tag, and full SHA. Its independent checks and checkout must still
+resolve all four values to the same immutable target commit.
 
 This exception is an operator-owned publication recovery, not an automatic
 `neko release resume` path. Preserve the failed run and local Evidence, review
-the historical workflow permissions before dispatch, and do not infer success
-from an accepted dispatch; verify the exact release and assets afterward.
+workflow permissions before dispatch, and do not infer success from an accepted
+dispatch; verify the exact release and assets afterward.
 
 ## Permissions and secrets
 

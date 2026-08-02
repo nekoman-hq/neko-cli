@@ -126,9 +126,10 @@ mutation. Plugin Index raw output and `--check` are read-only; only
 ### Doctor
 
 `internal/doctor` owns workflow parsing, local repository inspection,
-credentials-reference analysis, GoReleaser/installer/publication checks,
-diagnostics, readiness, and presentation. Default Doctor constructs no GitHub
-client, resolves no token, invokes no Git command, and performs no write.
+credentials-reference analysis, pinned-installation or bounded self-release
+source-toolchain checks, GoReleaser/publication checks, diagnostics, readiness,
+and presentation. Default Doctor constructs no GitHub client, resolves no
+token, invokes no Git command, and performs no write.
 
 Explicit `--verify-remote` uses one bounded GitHub GET reader with lazy optional
 read-token resolution. The endpoint set is closed. It never dispatches,
@@ -159,6 +160,18 @@ classification, authorize retry, or prove workflow/publication success.
 release SHA, checked-out `HEAD`, and peeled local tag target. It reads local Git
 without fetch, token, network, or mutation and emits the stable GitHub output
 contract.
+
+The consumer-owned `plugin-release` workflow has one narrow self-release
+exception to published validation-tool installation. Reviewed shell first
+validates the fixed unit, version/tag shape, checked-out `HEAD`, peeled tag,
+state, and manifest. It then builds the CLI and candidate plugin from that exact
+checkout into runner-temporary directories and invokes the canonical context
+validator through the normal plugin protocol. The source build performs no
+Neko/plugin release-artifact download, plugin-registry lookup, credential
+access, or publication; ordinary Go module resolution remains owned by the
+consumer workflow's setup/cache boundary. Other workflows retain pinned
+published CLI/plugin installation, and Workflow Init continues to generate that
+generic pinned contract.
 
 #### GitHub Actions workflow scaffolding
 
