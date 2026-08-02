@@ -1,218 +1,107 @@
 # AI Context for Neko CLI
 
-This document provides context for AI assistants working on the Neko CLI project.
+## Purpose and authority
 
-## Project Overview
+This document is the compact bootstrap for an agent beginning work in this
+repository. It summarizes current product and architecture contracts; it is not
+a command reference, design specification, roadmap, or replacement for code.
+When a statement here conflicts with a current owner, fix this summary rather
+than treating it as a second authority.
 
-Neko CLI is a **plugin-based command-line tool** for managing software releases. The core CLI dispatches commands to plugins, which execute the logic and return structured JSON responses that get rendered in kubectl-style output.
+Use evidence in this order:
 
-## Architecture
+1. command registration, plugin manifests, routing, and flag parsers;
+2. wire types plus current config and state schemas;
+3. current architecture and package-ownership documents;
+4. canonical user-facing references;
+5. compatibility and deprecation policy;
+6. focused contract tests and guards;
+7. numbered history for rationale only.
 
-### Plugin System
+The [repository-wide CLI reference](cli-reference.md) and
+[Release CLI reference](release/cli-reference.md) own public behavior. Current
+architecture documents own internal boundaries. The numbered history records
+completed or superseded work and never overrides either. Do not revive stale
+roadmap text as current implementation guidance.
 
-```
-┌─────────────────┐     JSON stdin      ┌─────────────────┐
-│   Neko CLI      │ ──────────────────► │     Plugin      │
-│   (Dispatcher)  │                     │   (Executable)  │
-│                 │ ◄────────────────── │                 │
-└─────────────────┘     JSON stdout     └─────────────────┘
-                        Logs → stderr
-```
+## Repository and Core CLI
 
-- **Plugins are standalone executables** located in `~/.neko/plugins/{plugin-name}/`
-- Each plugin has a `manifest.json` describing commands, flags, and outputs
-- Communication happens via **JSON over stdin/stdout**
-- **Logs go to stderr** (captured by dispatcher), **JSON response goes to stdout**
+Neko CLI is an extensible Go command-line application. Core owns the root
+process, direct commands such as version, self-update, and plugin management,
+and the plugin command tree. Installed plugin manifests declare their command,
+local-flag, help, and selectable-output surface. Core discovers those manifests
+under the configured plugin directory, constructs the visible routes, and
+starts a plugin executable only when a routed plugin command runs. The full
+Core, Release, and UI inventory is maintained in the
+[CLI reference](cli-reference.md); do not duplicate its command matrix here.
 
-### Key Directories
+For plugin responses Core owns the global `--describe`, `--verbose`, `--output`,
+and `--github-output-file` flags. Describe requests safe additional human
+structure where a command declares it. Verbose transports a diagnostic intent
+and may add chronological logs; it is not structured domain detail. Output
+selects `table`, `wide`, `json`, or `github`. GitHub output requires an explicit
+command-file destination and only commands that declare that output may use it.
 
-```
-neko-cli/
-├── cmd/                    # CLI commands (root, plugin loading)
-├── pkg/                    # Supported importable contracts and APIs
-│   ├── dispatcher/         # Plugin execution & communication
-│   ├── plugin/             # Plugin types (Request, Response, Manifest)
-│   ├── presentation/       # Plugin-to-Core presentation declarations
-│   ├── renderer/           # kubectl-style output rendering
-│   ├── log/                # Logging utilities
-│   └── errors/             # Error handling
-├── internal/               # Private Core implementation packages
-│   └── terminal/           # Focused ANSI styling and terminal capability primitives
-└── plugin/
-    └── release/            # Release management plugin
-        ├── main.go         # Plugin entry point
-        ├── manifest.json   # Plugin metadata & command definitions
-        └── pkg/            # Plugin-specific packages
-            ├── init/       # Init command handler
-            ├── config/     # V2 config/state and legacy V1 compatibility
-            ├── release/    # Release logic & tool registry
-            ├── git/        # Git operations
-            └── history/    # Release history
-```
+Human table and wide presentation is responsive to terminal capabilities and
+width. JSON is the public `plugin.Response` envelope, with presentation-only
+metadata excluded. Plugin Index is a deliberate raw-output exception: its
+schema-v1 JSON can be rendered directly. `--output-file` persists Plugin Index
+schema-v1 bytes. `--output` selects the Core response format; it is not a
+persistence flag.
 
-## Critical Rules
+Production Release routing resolves one repository root and passes that typed
+root to explicit-root handlers; it does not change process cwd. Cwd-based public
+facades remain compatibility surfaces, not the production composition model.
+Core dispatches once, validates and renders one result once, then maps the
+validated result or Core failure to the final process status.
 
-### 1. Plugin Logging
+## Plugin transport and exit ownership
 
-**ALWAYS use `log.PluginPrint()` and `log.PluginV()` in plugin code, NEVER `log.Print()`**
+A plugin is a non-interactive subprocess. Core sends one JSON `plugin.Request`
+on stdin; the plugin returns one JSON `plugin.Response` on stdout. Diagnostic
+logs go to stderr so they cannot corrupt transport. Domain packages declare
+neutral presentation data rather than printing tables or interpreting terminal
+state.
 
-```go
-// ✅ CORRECT - writes to stderr
-log.PluginPrint(log.Init, "Starting initialization")
-log.PluginV(log.Config, "Verbose message: %s", value)
+A valid decoded `plugin.Response` owns the final process exit; explicit exits
+from `0` through `125` propagate exactly. In-repository Release commands assign
+only `0` and `1`; omitted exits are temporary legacy compatibility. Invalid
+requests, failed checks, refusals, and execution failures use `1`. A negative
+domain observation can still be successful when the command completed its
+inspection. Important examples are:
 
-// ❌ WRONG - writes to stdout, corrupts JSON response
-log.Print(log.Init, "This breaks the plugin!")
-```
+- Pipeline blocked → `0`; Pipeline invalid evidence → `1`.
+- Doctor warning → `0`; Doctor not ready → `1`.
+- Resume unsafe dry-run → `0`; Resume no journal → `1`.
 
-### 2. Plugin Response Format
+The boundary is explicit: transport and rendering failures are Core-owned and
+exit `1`, including malformed transport, an invalid response envelope or exit,
+and subprocess startup. A valid response is not discarded merely because the
+subprocess itself returned nonzero. Each normal
+result or error renders exactly once; handlers do not pre-render or call another
+handler to reuse policy.
 
-All plugin handlers must return `*plugin.Response`:
+## Release V1 compatibility
 
-```go
-return &plugin.Response{
-    Status: "success", // or "error"
-    Metadata: plugin.ResponseMetadata{
-        Plugin:    "release",
-        Version:   "1.0.0",
-        Command:   "init",
-        Timestamp: time.Now(),
-    },
-    Data: map[string]any{
-        "items": []map[string]any{...}, // For table rendering
-        // or key-value pairs for text rendering
-    },
-    RendererHint: "table", // "table", "json", or "text"
-}, nil
-```
+V1 is supported compatibility, not the canonical architecture. The root
+`.release.neko.json` is the V1 authority and maps to one virtual default unit.
+Its configured GoReleaser, JReleaser, and release-it behavior remains supported.
+Shared `patch`, `minor`, `major`, `plan`, `history`, `contributors`, `validate`,
+`evidence`, and eligible `evidence-archive` surfaces remain available as the
+[Release CLI reference](release/cli-reference.md) specifies.
 
-### 3. Table Rendering
+V1 is not the preferred setup for a new repository. V2-only setup, integration
+inspection, context validation, workflow scaffolding, recovery, and registry
+commands are unavailable to a pure V1 repository. V1 and V2 cannot remain
+active as competing authorities: a mixed active source is rejected.
+`neko release migrate` is the supported transition. See
+[compatibility](release/compatibility.md) and the
+[migration guide](release/migration-v1-to-v2.md) before changing legacy
+behavior.
 
-For table output, data must have an `items` key with a slice of maps:
-
-```go
-Data: map[string]any{
-    "items": []map[string]any{
-        {"column1": "value1", "column2": "value2"},
-        {"column1": "value3", "column2": "value4"},
-    },
-}
-```
-
-Responsive tables are explicitly opt-in through `plugin.Response.PresentationTable`.
-Its ordered `presentation.Column` declarations carry a data key, human label, essential
-marker, and optional presentation-row `RoleKey`. `presentation.Table` and
-`presentation.Properties` may provide neutral titles; `presentation.Property` may declare a
-closed semantic `presentation.StyleRole`, emphasis, or a record heading. Core owns
-terminal-width detection, ANSI/Unicode display width, optional-column fitting,
-vertical fallback, wrapping, bounded presentation-only truncation, and the semantic
-style mapping. A plugin owns semantic meaning and priority and must retain the
-complete typed result in `Data`. Presentation metadata is transported between
-the plugin and Core but is excluded from public JSON and raw JSON. Do not add
-domain fields, callbacks, layout modes, or policy to Core.
-
-`presentation.Table.Rows` may provide a presentation-only projection when complete machine
-data is not a slice of row maps. `presentation.Table.Details` may reuse one
-`presentation.Properties` declaration after a response-level property summary and the
-table. `presentation.Table.DescribeOnly` keeps a complete structured section out
-of concise human output until global `--describe` is selected. Core then composes
-the existing property/table/property renderers. These
-fields are optional transport metadata; nil values preserve the established
-table path, and neither field enters public JSON or raw JSON. This is a bounded
-master/detail presentation capability, not a generic document or layout model.
-
-Ordered property/value responses are responsive as well. Core recognizes the
-established `items[property,value]` shape or an explicit
-`plugin.Response.PresentationProperties` declaration. With a known writer width it
-bounds the label column, preserves value space, uses ANSI- and Unicode-aware
-visible-cell measurement, wraps at grapheme-safe word boundaries, aligns
-continuation lines below the value column, and bounds the separator. Narrow and
-width-unknown output uses deterministic vertical properties. A plugin owns
-labels, order, grouping, and any presentation-only `presentation.Property.Value`; Core
-must not interpret domain meaning. Presentation metadata remains absent from
-public JSON and raw JSON.
-
-Core applies semantic ANSI styles only to interactive terminal human-readable output.
-A non-empty `NO_COLOR`, a pipe, redirect, or file disables color; public JSON,
-raw JSON, and GitHub output are always ANSI-free. Plugins declare meaning but
-must not inspect terminals or emit ANSI themselves. Styling is presentation
-only and cannot alter typed data or exit behavior.
-
-### 4. Config File Naming
-
-Plugin config files usually follow the pattern: `.{plugin-name}.neko.json`
-
-- Release plugin: `.neko/release.config.json` and `.neko/release.state.json`
-- Future deploy plugin: `.deploy.neko.json`
-
-Release V2 uses `.neko/release.config.json` for static unit architecture and `.neko/release.state.json` for authoritative unit versions. `neko release init` creates the first V2 unit, `neko release unit-add` appends additional normal or plugin units, and `neko release migrate` converts a root legacy `.release.neko.json` repository. Plugin registry discovery uses `plugin-index.json` from the mutable `plugin-registry` GitHub Release, not `/releases/latest`. See [Release V2 Examples](release/examples.md) for copy-ready command flows.
-
-### 5. No Interactive Prompts in Plugins
-
-**Plugins cannot use interactive prompts (survey, stdin reading)** because stdin is used for the JSON request. All user input must come via flags.
-
-```go
-// ❌ WRONG - survey doesn't work in plugins
-survey.AskOne(&survey.Select{...}, &answer)
-
-// ✅ CORRECT - use flags from request
-unitID := getFlagString(req.Flags, "unit")
-```
-
-### 6. Manifest Flags
-
-Define flags in `manifest.json` for automatic CLI flag registration:
-
-```json
-{
-  "name": "init",
-  "flags": [
-    {"name": "executor", "type": "string", "required": true, "description": "..."},
-    {"name": "delivery", "type": "string", "required": true, "description": "..."},
-    {"name": "force", "type": "bool", "required": false, "default": false, "description": "..."}
-  ]
-}
-```
-
-Supported types: `string`, `bool`, `int`
-
-## Common Patterns
-
-### Handler Function Pattern
-
-```go
-func HandleCommand(req plugin.Request) (*plugin.Response, error) {
-    log.PluginPrint(log.Exec, "Starting command")
-    
-    // Extract flags
-    myFlag := getFlagString(req.Flags, "my-flag")
-    
-    // Do work...
-    
-    // Return response
-    return &plugin.Response{
-        Status: "success",
-        Metadata: plugin.ResponseMetadata{...},
-        Data: map[string]any{...},
-    }, nil
-}
-```
-
-### Error Response Pattern
-
-```go
-return &plugin.Response{
-    Status: "error",
-    Metadata: plugin.ResponseMetadata{...},
-    Error: &plugin.ResponseError{
-        Code:    "ERROR_CODE",
-        Message: "Human readable message",
-        Details: map[string]any{"hint": "helpful info"},
-    },
-}, nil
-```
-
-### Release Tool Composition
+Direct Go integrations that retain V1 executor composition use concrete,
+caller-owned executors; the mutable legacy registry is not production
+composition:
 
 ```go
 v1Executors := []release.V1Executor{
@@ -220,60 +109,222 @@ v1Executors := []release.V1Executor{
     jreleaser.NewV1Executor(),
     releaseit.NewV1Executor(),
 }
-
 resp, err := release.HandleReleaseWithV1Executors(req, release.Patch, v1Executors...)
 ```
 
-The legacy `release.Register` / `release.Get` registry remains available only as
-a compatibility surface for old embedders. New code should compose explicit
-`V1Executor` values and pass them to `HandleReleaseWithV1Executors`.
+The executable uses the corresponding explicit-root entry point. Preserve the
+characterized V1 facades until compatibility policy and consumer evidence
+authorize a separate removal.
 
-## Building & Testing
+## Release V2 architecture
 
-```bash
-# Build everything
-make all
+V2 is the canonical architecture for new repositories. At repository root,
+`.neko/release.config.json` owns declared configuration and
+`.neko/release.state.json` owns current unit versions. Each release unit owns an
+ID, paths and working directory, version, tag prefix, executor, delivery mode,
+and optional plugin metadata. Normal units release a product; plugin units also
+declare the manifest identity and artifact naming needed by the registry.
 
-# Test a plugin directly
-echo '{"command":"init-options","args":[],"flags":{},"context":{}}' | ./plugin/release/plugin-release
+Strict loading validates config/state agreement, unit and path safety, tag
+namespace separation, workflow confinement, and plugin metadata. Planning and
+materialization operate only on the selected unit and its declared known
+release files. State is the version authority; tags are derived from the unit's
+prefix and planned version.
 
-# Test via CLI
-./neko release init --executor=goreleaser --delivery=github-actions --workflow=.github/workflows/release-cli.yml
-./neko release init-options
-./neko release history --describe
+Neko owns source and unit resolution, preflight, version planning,
+materialization, state update, targeted release commit, lightweight unit tag,
+commit and tag pushes, execution and dispatch journals, evidence, recovery, and
+workflow dispatch. The configured consumer-owned GitHub Actions workflow owns
+builds, GitHub Release creation, and artifact publication. Therefore dispatch
+is a handoff, not publication completion.
+
+The 21 public Release paths are covered by these capability groups:
+
+| Group | Current paths |
+| --- | --- |
+| Overview and setup | `neko release`, `neko release init`, `neko release unit-add`, `neko release init-options` |
+| Migration | `neko release migrate` |
+| Lifecycle | `neko release patch`, `neko release minor`, `neko release major` |
+| Planning and queries | `neko release plan`, `neko release validate`, `neko release history`, `neko release contributors` |
+| Inspection | `neko release doctor`, `neko release units`, `neko release pipeline`, `neko release evidence` |
+| CI, scaffolding, and recovery | `neko release ci-validate-context`, `neko release github-workflow-init`, `neko release resume`, `neko release evidence-archive` |
+| Registry artifact | `neko release plugin-index` |
+
+Support, flags, output, I/O, and exit detail belongs in the canonical
+[Release CLI reference](release/cli-reference.md), not in this bootstrap.
+
+## Inspection and safety boundaries
+
+Doctor is strictly read-only. It is offline and token-free by default. Remote
+facts are requested only with explicit `--verify-remote`, through bounded
+GET-only verification that cannot dispatch, upload, publish, or mutate. Doctor
+never repairs configuration, files, or workflows. Units is a read-only unit
+inventory and readiness inspection.
+
+Pipeline is a read-only local projection of configured lifecycle steps, exactly
+correlated journals, local Git facts, recovery and retry safety. Optional remote
+verification uses Doctor's bounded read boundary. Pipeline has no transition,
+retry, Resume, or mutation capability; it is not a lifecycle engine or state
+machine. Blocked, uncertain, or rejected states may be successful observations.
+
+Plan is read-only release planning; a blocked plan can still be a successful
+observation. Evidence is read-only inspection across the supported journal and
+recovery families. It may report malformed evidence diagnostically with
+success, while invalid filters fail. Evidence Archive is a separate, explicit
+guarded local mutation for eligible completed evidence only.
+
+Workflow Init is create-only. It can create one missing starter workflow and
+accept byte-identical existing content without rewriting it. It never
+overwrites differing customized content; workflows remain consumer-owned after
+scaffolding. Resume continues one existing unresolved execution under exact
+journal selection and established recovery policy; it does not create a new
+release.
+
+Global presentation flags do not change these boundaries: `--describe` and
+`--verbose` never add network, token, or mutation reachability.
+
+## Release lifecycle and recovery
+
+Keep the conceptual flow readable without inventing a second engine:
+
+```text
+command routing
+→ source and unit resolution
+→ preflight
+→ planning and materialization
+→ local Git mutation
+→ release-tool preparation
+→ push and provider workflow dispatch
+→ consumer build and publication
+→ journals, Evidence, and recovery
 ```
 
-## Output Flags
+Command dispatch, release-tool invocation, Git push, provider workflow
+dispatch, and artifact publication are distinct operations with different
+owners and failure evidence. Dry-run stops before mutation, token lookup,
+network, journals, executor invocation, push, or dispatch. Unsafe or uncertain
+effects fail closed instead of being guessed or destructively rolled back.
 
-- `--output table` (default) - kubectl-style table
-- `--output json` - Raw JSON
-- `--output wide` - All declared summary columns for opted-in responsive tables; legacy behavior otherwise
-- `--describe` - Include structured details and response metadata in human output
-- `-v, --verbose` - Include captured execution and debug logs independently
+`plugin/release/pkg/release` is the authoritative lifecycle owner: release
+planning/orchestration, Git coordination, execution and dispatch journals,
+Resume, compensation, and recovery live there. Pipeline and other projections
+consume typed facts and cannot advance that lifecycle.
 
-## Files to Ignore
+## Architecture constraints
 
-When refactoring old code to plugin style, these patterns indicate deprecated code:
-- Uses `survey.AskOne()` or similar interactive prompts
-- Uses `log.Print()` instead of `log.PluginPrint()` in plugin code
-- Cobra commands in `plugin/*/pkg/cmd/` (old style, should be handlers in `pkg/{command}/`)
+| Area | Stable responsibility |
+| --- | --- |
+| `cmd` | CLI composition, global flags, plugin routing, rendering call, final process status |
+| `pkg/plugin` | neutral request, response, log, and explicit-exit transport contracts |
+| `pkg/dispatcher` | subprocess execution and response decoding |
+| `pkg/presentation` | domain-neutral presentation declarations |
+| `pkg/renderer` | responsive human, JSON, and GitHub rendering |
+| `internal/terminal` | terminal width, TTY, color, and display capabilities |
+| `plugin/release/internal/*` | focused internal capability projections and shared leaf facts |
+| `plugin/release/pkg/*` | command-owned parsing, operations, and presentation mapping |
+| `plugin/release/pkg/release` | authoritative lifecycle, Git, journals, Resume, and recovery |
 
-## Current State
+Release root handlers decode, resolve a root, compose fresh executors, and
+route. Command handlers parse and map; read-only capabilities do not receive
+mutation ports. Presentation mapping does not read Git, files, credentials,
+journals, or provider state. Terminal dependencies stay outside domain and
+application logic.
 
-The repository-wide public inventory is maintained in the
-[CLI command and flag reference](cli-reference.md). The Release Plugin's
-20-command manifest, V1/V2 classifications, 66 local flags, output behavior,
-and exits are maintained in the
-[canonical Release CLI reference](release/cli-reference.md). Core dynamically
-loads plugin commands and local flags from manifests and supports `table`,
-`json`, `wide`, and explicit GitHub command-file rendering for compatible
-structured responses. Do not infer current implementation status from the
-older architecture sketches elsewhere in this context file. Use the
-[Release Plugin current architecture](../plugin/release/docs/architecture/current-state.md)
-for implementation facts and the [Release documentation
-history](../plugin/release/docs/history/README.md) only for completed or
-superseded planning context.
+Do not introduce a generic lifecycle framework, second state machine, stage
+registry, command-handler chaining, provider hierarchy, dependency bag or
+service locator, workflow DSL, second renderer, command-name switches in Core,
+or domain-status interpretation in Core. Existing release-tool support is
+concrete and bounded to the current supported tools, not a speculative generic
+framework. Review package changes against
+[package ownership](../plugin/release/docs/architecture/package-ownership.md)
+and the [maintainability policy](../plugin/release/docs/architecture/maintainability-policy.md).
 
-## Author
+## Self-update and installation
 
-Benjamin Senekowitsch - senekowitsch@nekoman.at
+The ordinary-user installer default is `$HOME/.local/bin`; an explicit
+`NEKO_INSTALL_DIR` wins, and deliberate root execution may default to
+`/usr/local/bin`. The installer never invokes `sudo` automatically, and the
+updater likewise does not; neither changes directory ownership.
+
+`neko update --force` means same-version reinstall only. It does not bypass
+permissions, integrity checks, package-manager ownership, or downgrade
+protection. Positively identified Homebrew-owned installations are refused in
+favor of the package manager. Self-update supports only the documented macOS
+and Linux architectures, which are narrower than the install script matrix.
+
+For every update, checksum verification and archive validation are mandatory.
+After validation,
+replacement uses a unique same-directory sibling followed by atomic rename;
+ordinary mode bits are preserved while special bits are stripped. Dry-run does
+not download the archive or replace the executable. See
+[Installation](installation.md) for platform, ownership, integrity, symlink,
+and failure details.
+
+## Self-release of this repository
+
+This repository dogfoods V2 with independently versioned `cli`,
+`plugin-release`, and `plugin-ui` units. Current versions exist only in
+`.neko/release.state.json`; do not copy them into documentation. Configured tag
+namespaces are `vX.Y.Z`, `plugin-release/vX.Y.Z`, and `plugin-ui/vX.Y.Z`.
+
+The consumer-owned workflows are
+`.github/workflows/release-neko-cli.yml`,
+`.github/workflows/release-plugin-release.yml`, and
+`.github/workflows/release-plugin-ui.yml`. Neko prepares the selected unit's
+state, materialization, commit, tag, pushes, evidence, and validated dispatch.
+The selected workflow builds and publishes. Doctor remains read-only, and
+Workflow Init remains create-only. The concise repository entry point is
+[How Neko CLI releases itself](../README.md#how-neko-cli-releases-itself).
+
+## Documentation navigation
+
+Current product contracts:
+
+- [repository-wide CLI reference](cli-reference.md),
+  [Release CLI reference](release/cli-reference.md), and
+  [Installation](installation.md);
+- [Release overview](release/overview.md),
+  [GitHub Actions Golden Path](release/github-actions-golden-path.md), and
+  [bootstrap product boundary](release/bootstrap-product-boundary.md);
+- [migration](release/migration-v1-to-v2.md),
+  [compatibility](release/compatibility.md),
+  [Release plugin guide](plugins/release.md), and [UI plugin guide](plugins/ui.md).
+
+Current architecture:
+
+- [current state](../plugin/release/docs/architecture/current-state.md),
+  [package ownership](../plugin/release/docs/architecture/package-ownership.md),
+  and [architecture decisions](../plugin/release/docs/architecture/architecture-decisions.md);
+- [maintainability policy](../plugin/release/docs/architecture/maintainability-policy.md),
+  [compatibility notes](../plugin/release/docs/architecture/compatibility-notes.md),
+  and [V1 compatibility policy](../plugin/release/docs/architecture/v1-compatibility-policy.md).
+
+Historical rationale lives only in the
+[numbered history index](../plugin/release/docs/history/README.md). README is an
+entry point, the CLI references own command contracts, architecture documents
+own current internal boundaries, and history is not implementation guidance.
+
+## Active versus completed work
+
+Release V2 product contracts described above are implemented and guarded; the
+completed refactor and finalization sequences belong to numbered history, not
+an active checklist. Current bounded limitations are maintained in
+[current state](../plugin/release/docs/architecture/current-state.md#current-bounded-limitations-prioritized)
+and unresolved boundaries in
+[architecture decisions](../plugin/release/docs/architecture/architecture-decisions.md#pending-architecture-decisions).
+
+Not implemented means exactly that, not an implied roadmap: V2 local execution,
+public standalone dispatch or retry commands, and durable workflow-run or
+publication-completion state are absent. Future changes must begin from current
+code and current owners rather than historical plans.
+
+## Do not assume
+
+- V1 is supported compatibility; it is neither removed nor canonical.
+- Doctor does not repair, and Workflow Init does not update customized workflows.
+- Pipeline does not execute, retry, or resume lifecycle steps.
+- Dispatch is not publication completion.
+- `--describe` adds no I/O; `--verbose` is not structured product detail.
+- `--output` is a response format, not Plugin Index persistence; Plugin Index file persistence uses `--output-file`.
+- Update force is not a permission, integrity, manager-ownership, or downgrade bypass.
+- Historical roadmaps are not current architecture.
