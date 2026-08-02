@@ -1,11 +1,21 @@
 # Release CLI Reference
 
+> **Audience:** Release users, operators, automation authors, and contributors verifying public command behavior.
+>
+> **Purpose:** Provide the canonical Release command reference for commands, flags, sources, I/O, network, tokens, mutation, output, and exits.
+
 ## Canonical ownership
 
-This is the authoritative Release command, flag, output, exit, source, network,
+This is the canonical Release command reference and authoritative command,
+flag, output, exit, source, network,
 token, and mutation contract. There are 20 manifest commands and one
 Core-owned overview path. Other Release pages summarize a specific workflow
 and link here instead of owning another full matrix.
+
+The safety shorthand is exact: Doctor is read-only and never repairs;
+Workflow Init is create-only; Pipeline is read-only and is not a lifecycle
+engine; `--output-file` writes Plugin Index schema-v1 bytes only for the
+`plugin-index` command.
 
 ## Release V1 versus Release V2
 
@@ -336,7 +346,7 @@ neko release evidence --family release-execution --unit api --identity 0123abcd
 neko release evidence-archive --family release-execution --identity <sha256> --digest-sha256 <sha256> --confirm-archive
 neko release plugin-index
 neko release plugin-index --check
-neko release plugin-index --output-file /private/tmp/plugin-index.json
+neko release plugin-index --output-file build/plugin-index.json
 neko release plugin-index --check --output json
 ```
 
@@ -592,9 +602,9 @@ authorization remains mutation-required.
 Credential names are classified and scoped without reading values. Focused
 installation/publication checks read only supported local workflow,
 GoReleaser, installer, manifest, registry, manager, and plugin-index contracts;
-no commands are executed. Remote success still does not prove future runner
-success, runtime installation/loading, credential value validity, future
-publication acceptance, or exact dispatch authorization. See
+no commands are executed. Remote success still does not prove runner success,
+runtime installation/loading, credential value validity, publication
+acceptance, or exact dispatch authorization. See
 [Remote Doctor verification](integration-doctor-remote-verification.md).
 
 Permission diagnostics distinguish workflow defaults from job overrides. An
@@ -614,8 +624,7 @@ ID order. Current versions come only from state. Canonical versions are exposed
 as `version`; a safe raw invalid value remains `configured_version`. Tag facts
 come from canonical `TagSpec`: `tag_shape` is version-independent and
 `configured_tag` uses only the validated current state version. Neither field
-claims that a Git tag exists, and the command never calculates a future
-version.
+claims that a Git tag exists, and the command never calculates a next version.
 
 The unit alignment classification is closed: `aligned` means config and state
 exist and canonical fields validate; `config_only` and `state_only` identify a
@@ -701,7 +710,7 @@ manual-intervention sections plus `verification.summary` and ordered
 `verification.facts`. Local branch and HEAD are inspected; tracking and
 lifecycle remote freshness remain explicitly `remote_not_inspected`. The
 configured tag is derived only from the current state version and tag prefix.
-No future version, next tag, proposed commit, or publication identity is
+No next version, next tag, proposed commit, or publication identity is
 calculated.
 
 Each stage has a stable ID, label, owner, execution location, strongest
@@ -911,10 +920,8 @@ configs and current Go target support is Darwin `amd64`/`arm64`, Linux
 `amd64` to `x86_64` and `386` to `i386`; Windows uses `zip` where configured,
 and the other focused archives use `tar.gz`. Darwin/i386 is not a supported Go
 target and must not be expected by Doctor, publication verification, or the
-installer. The historical `v3.0.4` absence of
-`neko-cli_Darwin_i386.tar.gz` is therefore consistent with the supported build
-matrix; the former local expectation was obsolete rather than evidence of a
-missing published artifact.
+installer. A missing Darwin/i386 archive is therefore consistent with the
+supported build matrix rather than evidence of a missing published artifact.
 
 Unsupported or read-only boundaries:
 

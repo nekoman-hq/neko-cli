@@ -1,58 +1,75 @@
-# Release Plugin Architecture Decisions
+# Release Plugin Architecture Constraints
 
-## Purpose and authority
+> **Audience:** Maintainers evaluating a Release Plugin design or dependency change.
+>
+> **Purpose:** Record adopted architecture constraints and unsupported boundaries without duplicating runtime detail.
 
-This document records current unresolved architecture boundaries and points to
-the current owners of adopted decisions. It is not a roadmap or implementation
-status tracker. Detailed behavior lives in [current-state.md](current-state.md),
-package direction lives in [package-ownership.md](package-ownership.md), and
-the closed evolution sequence is preserved in
-[history entry 003](../history/003-post-refactor-architecture-evolution.md).
+Detailed behavior lives in [Current Architecture](current-state.md), package
+direction in [Package Ownership](package-ownership.md), and compatibility gates
+in [V1 Compatibility Policy](v1-compatibility-policy.md). Completed rationale
+is isolated in the [numbered history](../history/README.md).
 
-Every future implementation remains subject to `plugin/release/RULES.md` and
-[maintainability-policy.md](maintainability-policy.md).
+## Adopted constraints
 
-## Adopted boundaries
-
-The current implementation owns these established decisions:
-
-- V1 compensation and V2 pair/migration recovery use distinct typed evidence
-  and fail closed across uncertain effects.
+- V1 compensation, V2 pair recovery, migration recovery, execution journals,
+  and dispatch journals remain distinct typed evidence families.
 - Evidence inspection is read-only; completed-evidence archival is a separate
-  guarded mutation.
-- Production command composition uses one explicit repository root while cwd
-  facades remain compatibility-only.
-- Active V2 release progress is typed and presentation-neutral below its
-  terminal adapter.
-- V2 local delivery is unsupported; GitHub Actions is the executable V2
-  delivery path.
-- Workflow scaffolding is focused, create-only, and cannot update or merge an
-  existing workflow.
-- Generated-output path policy remains output-family-specific rather than a
+  guarded local mutation.
+- Production command composition uses one explicit repository root. Cwd-based
+  helpers remain compatibility facades only.
+- V2 lifecycle progress is typed and presentation-neutral below its terminal
+  adapter.
+- V2 local delivery is unsupported; GitHub Actions is the executable V2 path.
+- Workflow scaffolding is focused and create-only. It cannot update, merge, or
+  overwrite a consumer-owned workflow.
+- Generated-output path policy stays with each output family; there is no
   universal path manager.
 - Plan, Units, default Doctor, default Pipeline, Validate, History,
-  Contributors, Evidence query, and Context Validation remain local,
-  read-only, offline, and token-free.
-- Explicit Doctor and Pipeline remote verification reuse one bounded GET-only
+  Contributors, Evidence query, and Context Validation are local, read-only,
+  offline, and token-free.
+- Doctor and Pipeline explicit remote verification reuse one bounded GET-only
   observation boundary and cannot mutate lifecycle state.
+- Pipeline projects lifecycle evidence; it does not own transitions, dispatch,
+  retry, or publication state.
+- Accepted dispatch is handoff evidence and cannot be interpreted as workflow
+  or publication completion.
 
-The authoritative details and current limitations for each boundary are in
-[current-state.md](current-state.md). The active compatibility decisions are in
-[v1-compatibility-policy.md](v1-compatibility-policy.md).
+## Unsupported architecture
 
-## Pending architecture decisions
+The following additions conflict with the maintained design unless an explicit
+architecture decision replaces the relevant owner and preserves contracts:
 
-Durable workflow-run and publication-completion state remain separate future
-capabilities. Current Pipeline verification may expose exact Doctor-owned
-workflow, Actions-setting, variable, release, tag, and asset facts, but it must
-not infer runtime progress, remote freshness, safe retry, or publication
-completion from those facts or from accepted dispatch handoff evidence.
+- generic lifecycle framework or second state machine;
+- stage registry or command-handler chaining;
+- provider hierarchy for a single GitHub integration;
+- dependency bag or service locator;
+- workflow DSL or managed workflow updater;
+- second renderer inside the Release Plugin;
+- command-name switches or domain-status interpretation in Core;
+- journal repair or schema migration hidden inside inspection;
+- blind retry for uncertain push or dispatch;
+- remote mutation from Doctor or Pipeline;
+- lifecycle inference from remote verification facts;
+- local V2 executor invocation without a proven non-overlapping publish boundary.
 
-Release V2 bootstrap planning remains product capability planning rather than
-an architecture-refactor continuation. Its current ownership and genuinely
-future capabilities are maintained in the
-[Release V2 Bootstrap Product Boundary](../../../../docs/release/bootstrap-product-boundary.md).
+## Present product gaps
 
-No pending decision authorizes journal repair, schema migration, blind retry,
-remote mutation, V2 local execution, or a generic pipeline/state-machine
-framework.
+- Durable workflow-run and publication-completion state are absent.
+- GitHub Enterprise Server is not a dispatch target.
+- A public standalone dispatch/retry command is absent.
+- Official build-system adapter packages are absent; consumer workflows own
+  build-system mapping.
+
+These gaps describe the product boundary and do not authorize implementation.
+
+## Review rule
+
+Every change remains subject to `plugin/release/RULES.md` and the
+[Maintainability Policy](maintainability-policy.md). A new capability must have
+one owner, explicit I/O and mutation boundaries, consumer-owned ports, focused
+contract tests, and no competing interpretation of authoritative lifecycle
+evidence.
+
+Workflow scaffolding is focused, create-only, and deliberately avoids a
+generic pipeline/state-machine abstraction. Its public ownership is described in
+[GitHub Actions Delivery](../../../../docs/release/github-actions-delivery.md).

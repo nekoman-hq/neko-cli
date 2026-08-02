@@ -37,8 +37,8 @@ boundaries explicit. The second records the architecture audit and subsequent
 code-quality consolidation. The third preserves the follow-on safety and
 recovery hardening, compatibility decisions, explicit-root and output work,
 product inspection capabilities, and the rejection of unsafe V2 local delivery.
-Ongoing product planning and unresolved architecture decisions now live only in
-the current sources.
+Unresolved product and architecture constraints live only in the current
+sources.
 
 ## Inventory decisions
 
@@ -52,12 +52,12 @@ the current sources.
 | `plugin/release/docs/architecture/current-state.md` | Detailed current architecture | Closed-refactor context only | Runtime, data, I/O, lifecycle, and compatibility facts | 2026-07-14 | Current | retain-current |
 | `plugin/release/docs/architecture/maintainability-policy.md` | Active changed-code policy and debt controls | Refactor context only | Cohesion, dependency, wrapper, and test policy | 2026-07-21 | Current | retain-current |
 | `plugin/release/docs/architecture/compatibility-notes.md` | Active compatibility inventory | Retired-path context only | Preserved V1/V2, wire, and isolation contracts | 2026-07-21 | Current | retain-current |
-| `plugin/release/docs/architecture/v1-compatibility-policy.md` | Active support/deprecation register | Completed removal evidence | Retained surfaces and future removal gates | 2026-07-16 | Current | retain-current |
-| `docs/release/bootstrap-product-boundary.md` | Active product boundary | None | Current ownership plus explicitly labeled future capabilities | 2026-07-18 | Current | retain-current |
+| `plugin/release/docs/architecture/v1-compatibility-policy.md` | Active support/deprecation register | Completed removal evidence | Retained surfaces and removal gates | 2026-07-16 | Current | retain-current |
+| `docs/release/github-actions-delivery.md` | Active product boundary | None | Current workflow ownership, dispatch, scaffolding, and Doctor boundaries | 2026-07-18 | Current | retain-current |
 | `docs/release/compatibility.md` | Active user compatibility reference | None | Supported behavior and genuinely unavailable capabilities | 2026-07-07 | Current | retain-current |
-| `docs/release/github-actions-golden-path.md` | Active operational guide | None | Current integration path with separately labeled future capabilities | 2026-07-18 | Current | exclude-nonhistorical |
-| `docs/plugins/plugin-deploy.md` | Deploy-plugin guide | None related to Release history | Deploy planning and optional Kubernetes support | 2026-02-04 | Current | exclude-nonhistorical |
-| `docs/plugins/plugin-monitoring.md` | Monitoring design guide | None related to Release history | Monitoring planes and their own next steps | 2026-02-04 | Current | exclude-nonhistorical |
+| `docs/release/github-actions-golden-path.md` | Active operational guide | None | Current GitHub Actions integration path | 2026-07-18 | Current | exclude-nonhistorical |
+| `docs/plugins/plugin-deploy.md` | Removed speculative guide | None related to Release history | No implemented product content | 2026-02-04 | 2026-08-02 | remove-after-preservation |
+| `docs/plugins/plugin-monitoring.md` | Removed speculative guide | None related to Release history | No implemented product content | 2026-02-04 | 2026-08-02 | remove-after-preservation |
 
 The deleted full plan and roadmap were replaced in Git by their condensed
 successors. Their unique decisions remain represented in entries 001 and 003;

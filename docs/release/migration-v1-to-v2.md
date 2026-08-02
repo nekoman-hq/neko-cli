@@ -1,5 +1,9 @@
 # V1 To V2 Migration
 
+> **Audience:** Owners of a root V1 Release repository moving to V2.
+>
+> **Purpose:** Define the supported migration source, dry-run, written artifacts, conflicts, and verification sequence.
+
 `neko release migrate` converts a classic V1 single-unit repository into the V2 file layout.
 
 ## Supported Source

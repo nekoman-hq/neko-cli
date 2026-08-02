@@ -1,130 +1,108 @@
 # Release Compatibility
 
-## V1 Compatibility
+> **Audience:** Repository owners choosing between Release V1 compatibility and the V2 architecture.
+>
+> **Purpose:** Define source selection, supported behavior, migration, and unsupported combinations without duplicating command details.
 
-`.release.neko.json` remains supported as the legacy compatibility format and keeps its existing fields:
+V1 is supported compatibility, not the canonical architecture for new setup.
+V2 is the canonical architecture for new repositories. Both resolve into shared
+internal release concepts, but their configuration authority and execution
+contracts remain distinct.
+
+## Authority selection
+
+| Repository files | Selected source | Result |
+| --- | --- | --- |
+| Root `.neko/release.config.json` and `.neko/release.state.json` | V2 | Valid after schema and repository checks |
+| Nearest `.release.neko.json` with no root V2 config | V1 | Supported compatibility |
+| Root V1 file together with root V2 config | none | Rejected conflict |
+| V2 config without V2 state, or state without config | none | Rejected incomplete source |
+
+A nested V1 file cannot override V2 at the Git root. Mixed V1 and V2 authority
+is rejected; mixed V1 and V2 authority is rejected before release planning or
+mutation.
+
+## V1 compatibility
+
+V1 uses `.release.neko.json` and is normalized as one virtual unit named
+`default`. It supports the established `goreleaser`, `jreleaser`, and
+`release-it` adapters and their legacy local release behavior.
+
+V1 rules include:
+
+- no `--unit` or `--unit default` selects the virtual unit;
+- another unit ID is rejected;
+- tag prefix is `v`;
+- V1 loader, version, requirement, executor, Git, and rollback contracts remain compatibility-owned;
+- V1 exported symbols remain governed by the [V1 compatibility policy](../../plugin/release/docs/architecture/v1-compatibility-policy.md).
+
+V1 is not extended with V2 multi-unit configuration, V2 central state, or V2
+GitHub Actions journal semantics.
+
+## V2 canonical architecture
+
+V2 uses:
 
 ```text
-project-name
-project-owner
-project-type
-release-system
-version
+.neko/release.config.json
+.neko/release.state.json
 ```
 
-V1 is normalized internally as a virtual single unit:
+It supports one or more release units, unit-specific paths and working
+directories, independent tag prefixes, explicit executors, optional Neko CLI
+plugin metadata, and one consumer workflow per configured delivery target.
 
-```text
-id: default
-paths: ["**"]
-workingDirectory: "."
-tagPrefix: "v"
-delivery: local
-executor.type: value from release-system
-version: value from version
-```
+For executable V2 releases:
 
-This internal model does not change the V1 file on disk.
+- `delivery` is `github-actions`;
+- Neko CLI owns version materialization, state, release commit, unit tag, push order, journals, and dispatch;
+- the consumer workflow owns build and publication;
+- local executor execution is unsupported;
+- an accepted dispatch is handoff evidence, not publication completion.
 
-## V2 Compatibility Boundary
+See [Configuration and State](configuration.md) and
+[Release Lifecycle](lifecycle.md).
 
-When `.neko/release.config.json` exists in the Git root, it is authoritative for that repository. Nested V1 files are ignored for root selection. A V1 file in the Git root next to V2 config is rejected as a conflict so the CLI does not accidentally mix global V1 release behavior with unit-aware V2 data.
+## Shared commands and source-specific behavior
 
-## Validate
+`validate`, `units`, `plan`, release dry-run, `history`, `contributors`, and
+Doctor operate through normalized repository facts while preserving the
+selected source's constraints. V2-only commands reject V1 clearly:
 
-`neko release validate` supports both formats:
+- `unit-add`;
+- `pipeline`;
+- `ci-validate-context`;
+- `github-workflow-init`;
+- `plugin-index`;
+- `resume`;
+- `evidence` and `evidence archive`.
 
-- V1: existing validation and public JSON behavior remains compatible. Human
-  `--show` presents the normalized `default` unit and legacy project details
-  without a V2 state path.
-- V2: config and state are strictly decoded and validated together. Default
-  human output is a concise responsive `PROPERTY` / `VALUE` summary table;
-  `--show` adds a responsive unit table and complete structured unit details
-  with one path per line. Plugin-specific fields appear only for plugin units.
-  `--unit` focuses displayed details while still validating the complete
-  repository.
-
-Both formats use the `Release Configuration Validation` human title. The
-presentation declarations do not alter public `--output json`, its established
-`data.items` ordering, raw JSON behavior, or error codes. Valid results exit
-`0`; invalid V1 and V2 validation results now explicitly exit `1`.
-
-## Plugin Response Exit Compatibility
-
-The plugin transport now distinguishes an explicitly requested exit `0` from
-an omitted exit. New responses use the presence-aware `SetExitCode` API and may
-request exact portable values from `0` through `125`; the Release Plugin uses
-only `0` and `1`. Installed legacy plugins that omit `exit_code` temporarily
-remain implicit successes. That omission is deprecated for plugin authors.
-
-A valid decoded response owns the final Core process status, even when the
-plugin subprocess exits nonzero. The subprocess status is authoritative only
-when no valid response exists. Core validates before rendering, renders one
-valid result or error exactly once, and applies its exit only after rendering
-succeeds. Malformed or missing responses, invalid error envelopes, out-of-range
-exits, renderer failures, and JSON/GitHub writer failures are Core-owned exit
-`1`. `Status`, error-envelope presence, command names, and domain status text do
-not independently determine an exit.
-
-This corrects previously masked failures. The following now exit `1` instead
-of being observed as Core success where their response had omitted an explicit
-failure: invalid Validate results; invalid Init and duplicate Unit Add requests;
-migration refusals and filesystem failures; release lifecycle preflight
-refusals and execution failures; actual Resume refusals and continuation
-failures; CI context mismatches; Workflow Init conflicts; Doctor `not_ready`;
-Units issues; invalid Pipeline evidence; History and Contributors repository
-failures; Evidence filter/identity errors; Evidence Archive guard or filesystem
-failures; Plugin Index check/persistence failures; and fatal plugin preflight
-errors serialized through `WriteError`.
-
-Successful negative observations intentionally remain exit `0`: blocked Plan;
-blocked, uncertain, or rejected Pipeline inspection; warning-only or partially
-unavailable optional Doctor remote inspection; unsafe Resume dry-run
-assessment; malformed Evidence represented as diagnostics; empty Evidence
-inventories; and the retained legacy empty History observation. Public Release,
-Resume, Evidence, Validate, and Plugin Index JSON contracts are unchanged, and
-automation can now rely on normal shell and Make failure propagation without
-parsing JSON.
-
-## V2 Commands
-
-V2 now supports unit-specific read-only commands:
-
-```bash
-neko release history --unit api
-neko release contributors --unit web
-neko release patch --unit api --dry-run
-```
-
-Dry-run planning does not write state, create tags, commit, push, publish, run executors, or fetch remotes.
-
-Dry-run planning now also builds the schema-neutral execution context. That context resolves the absolute repository root, selected unit root, tag spec, executor capabilities, and delivery contract without mutating files.
-
-`github-actions` is a valid V2 delivery mode only when `workflow` uses canonical `.github/workflows/<file>.yml|yaml` form. Real repository validation requires the workflow file to exist and remain inside `.github/workflows/`.
-
-V2 GitHub Actions non-dry-run public release commands are active. They prepare known release files, build a durable release execution journal, coordinate Neko-owned materialization, state update, commit, unit tag, push, build the GitHub Actions dispatch request and journal identity, resolve GitHub.com repository targets, and dispatch the workflow. V2 local delivery is unsupported and rejected by validation.
-
-Execution and dispatch journals never use V1 `project-owner` or `project-name`. Dispatch derives owner and repository only from the selected V2 Git remote and currently supports GitHub.com remotes only.
+The complete availability, flag, output, and exit matrix is in the
+[Release command reference](cli-reference.md).
 
 ## Migration
 
-`neko release migrate` converts only root V1 single-unit repositories to V2. It writes `.neko/release.config.json`, `.neko/release.state.json`, and archives `.release.neko.json` to `.release.neko.json.v1.bak`.
+`neko release migrate` is the supported transition from a root V1 repository.
+It plans or writes one V2 `default` unit and archives the V1 source as
+`.release.neko.json.v1.bak`. It does not migrate nested V1 files or create a
+consumer workflow. See [V1 to V2 Migration](migration-v1-to-v2.md).
 
-`neko release migrate --dry-run` is read-only and shows the planned V2 JSON content.
+## Unsupported combinations
 
-Nested V1 configs are rejected because the CLI cannot safely infer whether they represent the whole repository or one future unit.
+- V1 and V2 cannot remain active at the Git root.
+- V2 configuration without matching V2 state is invalid.
+- V2 `delivery: local` is invalid for executable releases.
+- Public V2 local non-dry-run execution is unavailable.
+- GitHub Enterprise remotes are not dispatch targets.
+- No standalone workflow dispatch or retry command exists.
+- Workflow-run and publication-completion state are not stored as Release state.
 
-## Not Yet Available
+Unsupported behavior fails before the affected mutation boundary. It is not
+silently interpreted as another mode.
 
-The following remain future work:
+## Compatibility maintenance
 
-- Public V2 local executor execution.
-- Public standalone dispatch and retry commands.
-
-## Dry-Run And Rollback Safety
-
-V1 dry-run release commands are read-only and do not fetch remotes, write config, update executor files, run executors, commit, tag, push, publish, or rollback.
-
-Rollback only runs after a mutating release step has been recorded. This prevents planning and guard errors from reaching destructive Git rollback operations.
-
-V2 recovery is more conservative: before commit/tag work starts, materialized files and `.neko/release.state.json` may be restored from snapshots and known release files may be unstaged. After commit/tag/remote work starts, V2 does not call `git reset --hard`, `git clean -fd`, remote tag deletion, or GitHub release deletion.
+V1 public and package contracts are not removed merely because V2 is canonical.
+Changes follow the repository's deprecation, downstream-audit, replacement,
+and removal gates. Implementation placement and package policy are described in
+[Release package compatibility](../../plugin/release/docs/architecture/compatibility-notes.md).

@@ -126,9 +126,9 @@ func TestDetailedSelfReleaseClaimsRemainOwnedByCanonicalDocuments(t *testing.T) 
 			"## Evidence and recovery",
 			"An accepted dispatch is a successful Neko-to-GitHub handoff",
 		},
-		"docs/release/bootstrap-product-boundary.md": {
+		"docs/release/github-actions-delivery.md": {
 			"Neko CLI and the Release Plugin own release policy",
-			"Consumer repositories own product-specific build, test, artifact, publication",
+			"Consumer repositories own",
 		},
 		"docs/installation.md": {
 			"filters for stable CLI tags matching `vX.Y.Z`",

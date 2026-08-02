@@ -328,15 +328,10 @@ func TestGitHubWorkflowScaffoldingDocumentationContract(t *testing.T) {
 			"atomic no-clobber",
 			"Existing manually",
 		},
-		"docs/release/bootstrap-product-boundary.md": {
-			"`github-workflow-init`",
-			"managed workflow updates",
-			"consumer-owned",
-		},
 		"plugin/release/docs/architecture/current-state.md": {
 			"#### GitHub Actions workflow scaffolding",
-			"Plan: `githubWorkflowGenerationPlanner`",
-			"no writer",
+			"`githubWorkflowGenerationPlanner` returns an immutable plan",
+			"receive no writer",
 		},
 		"plugin/release/docs/architecture/architecture-decisions.md": {
 			"Workflow scaffolding is focused",

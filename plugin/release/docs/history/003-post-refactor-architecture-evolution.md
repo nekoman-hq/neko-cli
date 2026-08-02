@@ -7,7 +7,7 @@
 > **Completed or superseded:** 2026-08-01
 > **Predecessor:** [002 — Post-Refactor Architecture Review](002-post-refactor-architecture-review.md)
 > **Successor:** None
-> **Current references:** [Current architecture](../architecture/current-state.md), [current architecture decisions](../architecture/architecture-decisions.md), [Release V2 product boundary](../../../../docs/release/bootstrap-product-boundary.md)
+> **Current references:** [Current architecture](../architecture/current-state.md), [current architecture decisions](../architecture/architecture-decisions.md), [GitHub Actions delivery](../../../../docs/release/github-actions-delivery.md)
 > **Original source:** `plugin/release/docs/architecture/post-refactor-roadmap.md`; later continued as `plugin/release/docs/architecture/architecture-evolution.md`
 
 > This is a historical record, not the current product or architecture source.
@@ -53,7 +53,7 @@ Every future implementation remains subject to `plugin/release/RULES.md`.
 - **Transferred:** the unresolved architecture boundary now lives in
   [architecture-decisions.md](../architecture/architecture-decisions.md), while
   bootstrap product scope remains in the
-  [Release V2 Product Boundary](../../../../docs/release/bootstrap-product-boundary.md).
+  [GitHub Actions Delivery](../../../../docs/release/github-actions-delivery.md).
 
 ## Completed architecture records
 
@@ -501,7 +501,7 @@ Release V2 bootstrap planning is product capability planning, not a reopened
 architecture refactor stage. The current product boundary for GitHub Actions
 bootstrap, CI release-context validation, build-system adapters, and
 consumer-owned publication is maintained in
-[Release V2 Bootstrap Product Boundary](../../../../docs/release/bootstrap-product-boundary.md).
+[GitHub Actions Delivery](../../../../docs/release/github-actions-delivery.md).
 
 ## Preserved invariants
 

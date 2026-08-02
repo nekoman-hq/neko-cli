@@ -1,12 +1,16 @@
 # Release V2 Examples
 
+> **Audience:** Repository owners copying concrete V2 configuration and command patterns.
+>
+> **Purpose:** Provide focused examples while linking each contract back to its canonical reference.
+
 This page contains copy-ready examples for Release V2 repositories and the
 plugin registry. Reference docs stay concise; use this page when bootstrapping a
 new repository or adding units to an existing one.
 
 For the ownership boundary between Neko CLI, GitHub Actions workflows,
 build-system adapters, and consumer-owned publication logic, see
-[Release V2 Bootstrap Product Boundary](bootstrap-product-boundary.md).
+[GitHub Actions Delivery](github-actions-delivery.md).
 For the complete installation, workflow, release, and recovery sequence, use
 the [Release V2 GitHub Actions Golden Path](github-actions-golden-path.md).
 
@@ -242,7 +246,7 @@ neko release patch --unit plugin-foo --dry-run --verbose --describe
 ```bash
 neko release plugin-index --check
 neko release plugin-index --check --output json
-neko release plugin-index --output-file /private/tmp/plugin-index.json
+neko release plugin-index --output-file build/plugin-index.json
 ```
 
 The generated `plugin-index.json` is not committed to the repository and this
@@ -250,7 +254,7 @@ command does not publish it. Plugin release workflows generate and publish the
 index automatically after successful plugin releases by uploading or replacing
 the `plugin-index.json` asset on the mutable `plugin-registry` GitHub Release.
 Relative `--output-file` paths are resolved from the repository root. Absolute
-artifact paths such as `/private/tmp/plugin-index.json` remain supported for CI and
+artifact paths such as `build/plugin-index.json` remain supported for CI and
 temporary files, while repository-contained output is blocked from overwriting
 release state, evidence, Git internals, or plugin manifest inputs.
 
@@ -272,7 +276,7 @@ neko plugin update release
 Temp-safe smoke usage:
 
 ```bash
-NEKO_PLUGIN_DIR=/private/tmp/neko-plugin-smoke neko plugin available
+NEKO_PLUGIN_DIR="$TMPDIR/neko-plugin-smoke" neko plugin available
 ```
 
 Runtime plugin discovery, install, and update read the published

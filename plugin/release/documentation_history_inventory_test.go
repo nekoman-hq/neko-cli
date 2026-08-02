@@ -20,8 +20,8 @@ func TestReleaseDocumentationHistoryInventory(t *testing.T) {
 		{"plugin/release/docs/architecture/current-state.md", "retain-current", "Release Plugin as it exists"},
 		{"plugin/release/docs/architecture/maintainability-policy.md", "retain-current", "applies to new or materially changed Release Plugin production code"},
 		{"plugin/release/docs/architecture/compatibility-notes.md", "retain-current", "Preserved contracts"},
-		{"plugin/release/docs/architecture/v1-compatibility-policy.md", "retain-current", "V1 compatibility policy support decision"},
-		{"docs/release/bootstrap-product-boundary.md", "retain-current", "defines the product boundary"},
+		{"plugin/release/docs/architecture/v1-compatibility-policy.md", "retain-current", "V1 remains supported compatibility"},
+		{"docs/release/github-actions-delivery.md", "retain-current", "Consumer repositories own"},
 		{"docs/release/compatibility.md", "retain-current", "Release Compatibility"},
 		{"docs/release/github-actions-golden-path.md", "exclude-nonhistorical", "canonical, build-system-neutral guide"},
 	}

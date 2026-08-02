@@ -1,5 +1,9 @@
 # Release V2 Integration Doctor remote verification
 
+> **Audience:** Operators who explicitly request GitHub-backed readiness evidence and contributors maintaining the GET-only client.
+>
+> **Purpose:** Define the opt-in remote read boundary, token handling, endpoint allowlist, evidence semantics, and remaining limitations.
+
 ## Command boundary
 
 `neko release doctor` is offline, token-free, deterministic, and mutation-free
@@ -60,10 +64,10 @@ can use an injected test base URL. Every possible HTTP request uses `GET`:
 | One durable exact workflow run, when owned by Doctor | `/repos/{owner}/{repository}/actions/runs/{exact-run-id}` |
 
 There is no list-all-variable, list-all-secret, list-releases, latest-release,
-tag-prefix, newest-run, SHA-only run, or fuzzy asset request. Doctor currently
+tag-prefix, newest-run, SHA-only run, or fuzzy asset request. Doctor
 owns no durable workflow-run ID, so it emits no workflow-run request. The exact
-run operation exists only for a future already-owned durable identity; adding
-journal reads merely to discover one is prohibited.
+run operation requires an already-owned durable identity; adding journal reads
+merely to discover one is prohibited.
 
 Requests use a finite 12-second timeout, reject redirects, cap response bodies
 at 1 MiB, decode one deterministic JSON object, and never retry automatically.
@@ -96,7 +100,7 @@ repository-confined local bytes, including the final newline. The exact
 workflow metadata state must be `active`; `disabled_manually` and
 `disabled_inactivity` are mismatches, while an unknown state is unsupported.
 An enabled repository Actions policy is understood only for GitHub's focused
-`all`, `local_only`, and `selected` allowed-actions states; a future unknown
+`all`, `local_only`, and `selected` allowed-actions states; an unknown
 state remains unsupported rather than being accepted by guesswork.
 
 Only locally recognized installation pins are queried:
@@ -179,12 +183,12 @@ produce a focused error instead of retaining a remote-availability limitation.
 `PUBLICATION_CREDENTIALS_NOT_VERIFIABLE` remains because secret-name existence
 does not prove issuance, value validity, expiry, authorization, or external
 service acceptance. `PUBLICATION_TARGET_NOT_VERIFIABLE` remains narrowed to
-future version acceptance, upload/overwrite authorization, and service
+version acceptance, upload/overwrite authorization, and service
 availability at mutation time. `CONSUMER_BUILD_NOT_VERIFIABLE` remains for
-future runner, test, binary, and artifact behavior.
+runner, test, binary, and artifact behavior.
 
 `REMOTE_DISPATCH_AUTHORIZATION_NOT_VERIFIABLE` always remains
 `mutation_required`: repository metadata and Actions policy cannot prove the
 exact authorization decision for a real dispatch. Doctor never dispatches to
 find out. A historical workflow run, even when an exact durable identity is
-available, cannot prove that a future build or publication will succeed.
+available, cannot prove that another build or publication will succeed.

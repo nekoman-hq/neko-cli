@@ -1,6 +1,10 @@
 # Release Plugin Package Ownership
 
-## Purpose
+> **Audience:** Contributors choosing or reviewing a Release Plugin package boundary.
+>
+> **Purpose:** Provide the concise canonical ownership and dependency-direction map for Release implementation packages.
+
+## Authority
 
 This is the concise current package and dependency view for the Release Plugin.
 [current-state.md](current-state.md) remains authoritative for detailed runtime,
@@ -87,7 +91,7 @@ or duplicate transition policy.
 - Init and Migration reuse the config-owned pair persister. Plugin Index keeps
   query, byte construction, path policy, and persistence separate.
 
-## Current compatibility and debt
+## Compatibility boundaries
 
 The active compatibility inventory remains in
 [compatibility-notes.md](compatibility-notes.md) and the detailed V1 decision
@@ -102,9 +106,3 @@ and migration states, retained cwd and registry compatibility facades, and the
 absence of durable workflow-run and publication-completion inspection. The
 current decision boundary is recorded in
 [architecture-decisions.md](architecture-decisions.md).
-
-## Historical provenance
-
-The completed architecture review, metrics, responsibility-transfer list, and
-code-quality consolidation snapshot are preserved as
-[history entry 002](../history/002-post-refactor-architecture-review.md).

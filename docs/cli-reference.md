@@ -1,8 +1,13 @@
 # Neko CLI Command and Flag Reference
 
+> **Audience:** Users and contributors who need the complete public command, flag, I/O, and exit inventory.
+>
+> **Purpose:** Provide the canonical Core CLI command reference and route Release-specific semantics to their owner.
+
 ## Authority and inventory
 
-This page is the authoritative repository-wide inventory for Core commands and
+This page is the canonical Core CLI command reference and authoritative
+repository-wide inventory for Core commands and
 the first-party plugin manifests shipped in this checkout. The
 [Release CLI Reference](release/cli-reference.md) is authoritative for Release
 V1/V2 behavior and every Release-local flag. [Installation](installation.md)
@@ -38,7 +43,7 @@ repository. A user's installation may contain additional third-party paths.
 | `neko plugin available` | Core and `pkg/plugin` | Core | Read-only local comparison | GitHub GET required; optional `GITHUB_TOKEN` | Reads installed manifests; no write | Direct table text | `0`; lookup failure `1` | Published `plugin-registry` `plugin-index.json` | — |
 | `neko plugin install <plugin-name>` | Core and `pkg/plugin` | Core | Mutation | GitHub GET/download required; optional `GITHUB_TOKEN` | Replaces the selected plugin directory; no Git | Direct text | `0`; validation/download/install failure `1` | Registry entry and compatible archive | — |
 | `neko plugin uninstall <plugin-name>` | Core and `pkg/plugin` | Core | Mutation | Offline; no token | Removes the selected plugin directory; no Git | Direct text | `0`; missing/removal failure `1` | Installed plugin | — |
-| `neko plugin update [plugin-name]` | Core and `pkg/update` | Core | Dry-run capable; plugin replacement | GitHub GET required; archive download unless dry-run/no-op; optional `GITHUB_TOKEN` | Reads manifests and may replace selected plugin directories; no Git | Direct progress text | Selection/listing failure `1`; once selected, summarized per-plugin lookup/install failures currently exit `0` | One plugin or `--all`; published registry index | — |
+| `neko plugin update [plugin-name]` | Core and `pkg/update` | Core | Dry-run capable; plugin replacement | GitHub GET required; archive download unless dry-run/no-op; optional `GITHUB_TOKEN` | Reads manifests and may replace selected plugin directories; no Git | Direct progress text | Selection/listing failure `1`; once selected, summarized per-plugin lookup/install failures exit `0` | One plugin or `--all`; published registry index | — |
 | `neko release` | Core manifest loader | Core overview | Read-only manifest overview | Offline; no token | Reads installed manifest only | Static Core text | `0` | Installed Release manifest | — |
 | `neko release init` | Release Plugin | V2 only | Guarded local pair creation/replacement | Offline; no token | No Git; writes V2 config/state and recovery evidence | Plugin response: table, json, wide | Explicit `0`/`1` | No active source, or replaceable V2 with `--force` | — |
 | `neko release unit-add` | Release Plugin | V2 only | Guarded local pair update | Offline; no token | No Git; appends V2 config/state through pair recovery | Plugin response: table, json, wide | Explicit `0`/`1` | Complete valid V2 pair | — |
@@ -98,7 +103,7 @@ public compatibility aliases, or deprecated Core/UI flags.
 | `neko plugin update` | `--all` | Core plugin update | no | `false` | boolean | Last wins; when true the current implementation ignores positional selection | Select every installed plugin |
 | `neko plugin update` | `--dry-run` | Core plugin update | no | `false` | boolean | Last wins | Query registry versions without installing |
 | `neko plugin update` | `--force` | Core plugin update | no | `false` | boolean | Last wins | Install registry `latest` even when normal comparison would skip; this is not Core self-update force |
-| `neko ui hello` | `--name` | UI manifest | no | `World` | string | Last wins | Manifest greeting name; command currently has no UI route |
+| `neko ui hello` | `--name` | UI manifest | no | `World` | string | Last wins | Manifest greeting name; the UI router has no route for this command |
 | `neko ui init` | `--components-path` | UI manifest | yes | none | non-empty relative path | Last wins | Store the component directory in `.ui.neko.json` |
 | `neko ui init` | `--force` | UI manifest | no | `false` | boolean | Last wins | Overwrite an existing UI config; unrelated to Core update force |
 | `neko ui add` | `--all` | UI manifest | no | `false` | boolean | Mutually exclusive with component argument | Add every discovered component |
@@ -143,7 +148,7 @@ an explicit command-file integration, not ordinary stdout JSON.
 A valid decoded plugin response owns process exit. Explicit `0` through `125`
 propagates exactly. Release commands explicitly use `0` or `1`. A legacy plugin
 response that omits exit intent remains temporary implicit success, which is
-why current routed UI response errors do not yet imply a nonzero process exit.
+why routed UI response errors do not imply a nonzero process exit.
 Malformed/absent responses, subprocess failures without a valid response,
 renderer failures, GitHub command-file failures, and ordinary Cobra errors are
 Core exit `1`. Errors render once.

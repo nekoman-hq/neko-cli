@@ -1,5 +1,9 @@
 # Installation
 
+> **Audience:** Users installing the CLI and operators maintaining an unmanaged CLI installation.
+>
+> **Purpose:** Define installer selection, platform coverage, self-update safety, ownership checks, integrity verification, and replacement behavior.
+
 For the repository-wide command and flag inventory, including direct-text Core
 commands and plugin-response flags, see the [CLI reference](cli-reference.md).
 
@@ -9,7 +13,7 @@ commands and plugin-response flags, see the [CLI reference](cli-reference.md).
 
 By default, the script queries the configured repository's releases, filters for stable CLI tags matching `vX.Y.Z`, ignores plugin releases and the `plugin-registry` release, sorts the CLI tags as semantic versions, and installs the newest one. The Go implementation used by `neko version` and `neko update` follows the same multi-unit rule for CLI release checks.
 
-For an ordinary user, the default destination is `$HOME/.local/bin`. The script creates that directory when necessary and prints PATH guidance when it is not already reachable. When the script is intentionally run as root, the default remains `/usr/local/bin`. `NEKO_INSTALL_DIR` always preserves an explicitly selected destination, including paths containing spaces. The script rejects an empty or non-writable destination before any release request and never invokes `sudo` or changes ownership of a system directory.
+For an ordinary user, the default destination is `$HOME/.local/bin`. The script creates that directory when necessary and prints PATH guidance when it is not already reachable. When the script is intentionally run as root, the default remains `/usr/local/bin`. `NEKO_INSTALL_DIR` always preserves an explicitly selected destination, including paths containing spaces. The script rejects an empty or non-writable destination before any release request, never invokes `sudo` automatically, and never changes ownership of a system directory.
 
 ```bash
 ./install.sh
@@ -33,7 +37,7 @@ Supported environment variables:
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `NEKO_VERSION` | newest stable CLI release | Optional CLI version, either `3.0.4` or `v3.0.4` |
+| `NEKO_VERSION` | newest stable CLI release | Optional CLI version, either `X.Y.Z` or `vX.Y.Z` |
 | `NEKO_INSTALL_DIR` | `$HOME/.local/bin` for ordinary users; `/usr/local/bin` for root | Destination directory for the installed `neko` binary |
 | `NEKO_REPOSITORY` | `nekoman-hq/neko-cli` | GitHub repository to query |
 | `GITHUB_TOKEN` | unset | Optional token for private forks or higher API limits |
@@ -41,7 +45,7 @@ Supported environment variables:
 Examples:
 
 ```bash
-NEKO_VERSION=v3.0.4 ./install.sh
+NEKO_VERSION=vX.Y.Z ./install.sh
 NEKO_INSTALL_DIR="$HOME/.local/bin" ./install.sh
 NEKO_REPOSITORY=owner/repo ./install.sh
 ```
@@ -70,7 +74,7 @@ The updater first selects the newest stable `vX.Y.Z` CLI release and classifies 
 | equal | successful no-op | reinstall the selected version |
 | newer | successful newer-installed no-op | refuse the downgrade |
 
-`--force` is only a same-version reinstall switch. It does not bypass installation permissions, package-manager ownership, platform compatibility, asset selection, checksum verification, archive validation, or atomic replacement.
+`--force` permits only a same-version reinstall. It does not bypass installation permissions, package-manager ownership, platform compatibility, asset selection, checksum verification, archive validation, or atomic replacement.
 
 `--dry-run` performs release selection and static installation inspection, then reports the planned action and any statically detectable capability issue. It does not reserve a sibling file, download an archive, or change the filesystem.
 
@@ -104,7 +108,7 @@ For a supported platform, `neko update` requires exactly one compatible `.tar.gz
 
 The archive validator rejects absolute or traversing paths, symlinks, hardlinks, devices, special entries, malformed tar/gzip data, oversized binaries, and archives with zero or multiple supported binaries. It extracts no arbitrary archive paths.
 
-After verification, the updater writes a unique hidden sibling beside the canonical target, flushes and closes it, preserves the target's ordinary permission bits, strips special mode bits, fsyncs the sibling, atomically renames it over the target, and fsyncs the parent directory where supported. Every pre-commit failure leaves the original target byte-identical. A post-rename directory-sync failure is reported as committed but not durability-confirmed; the updater does not copy back or pretend the old binary was restored.
+After verification, replacement uses a same-directory sibling followed by atomic rename. The updater flushes and closes the sibling, preserves the target's ordinary permission bits, strips special mode bits, fsyncs the sibling, and fsyncs the parent directory where supported. Every pre-commit failure leaves the original target byte-identical. A post-rename directory-sync failure is reported as committed but not durability-confirmed; the updater does not copy back or pretend the old binary was restored.
 
 Replacement naturally gives the new file the updater process identity. Ownership is not preserved through `chown`, and quarantine/provenance attributes, arbitrary ACLs, and custom extended attributes are not copied. Use the package manager for managed installations if those properties are part of its contract.
 
@@ -120,5 +124,5 @@ Plugin discovery, install, and update use the published `plugin-index.json` regi
 For temp-safe plugin smoke checks, override the plugin directory:
 
 ```bash
-NEKO_PLUGIN_DIR=/private/tmp/neko-plugin-smoke neko plugin available
+NEKO_PLUGIN_DIR="$TMPDIR/neko-plugin-smoke" neko plugin available
 ```

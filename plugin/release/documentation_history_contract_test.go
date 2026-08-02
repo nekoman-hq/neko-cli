@@ -86,11 +86,11 @@ func TestReleaseDocumentationHistoryContract(t *testing.T) {
 		"plugin/release/docs/architecture/maintainability-policy.md":  "retain-current",
 		"plugin/release/docs/architecture/compatibility-notes.md":     "retain-current",
 		"plugin/release/docs/architecture/v1-compatibility-policy.md": "retain-current",
-		"docs/release/bootstrap-product-boundary.md":                  "retain-current",
+		"docs/release/github-actions-delivery.md":                     "retain-current",
 		"docs/release/compatibility.md":                               "retain-current",
 		"docs/release/github-actions-golden-path.md":                  "exclude-nonhistorical",
-		"docs/plugins/plugin-deploy.md":                               "exclude-nonhistorical",
-		"docs/plugins/plugin-monitoring.md":                           "exclude-nonhistorical",
+		"docs/plugins/plugin-deploy.md":                               "remove-after-preservation",
+		"docs/plugins/plugin-monitoring.md":                           "remove-after-preservation",
 	} {
 		linePattern := regexp.MustCompile(`(?m)^\| ` + regexp.QuoteMeta("`"+path+"`") + ` \|.*\| ` + regexp.QuoteMeta(classification) + ` \|$`)
 		if !linePattern.MatchString(index) {

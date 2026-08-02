@@ -1,125 +1,138 @@
 # Plugin Development Guide
 
-> ⚠️ **Work in Progress** - This documentation is under active development. Some sections may be incomplete or subject to change.
+> **Audience:** Go developers building a Neko CLI plugin executable and manifest.
+>
+> **Purpose:** Define the supported process protocol, manifest contract, response presentation, exit ownership, testing, packaging, and installation layout.
 
-This guide explains how to create plugins for Neko CLI. Plugins are standalone executables that communicate with the CLI via JSON over stdin/stdout.
+A Neko plugin is a standalone executable. Core discovers commands from an
+installed `manifest.json`, sends one JSON request on standard input, captures
+standard error as logs, decodes one JSON response from standard output, renders
+that response once, and applies its explicit exit request.
 
-## Table of Contents
+For the complete public command surface, see the
+[CLI reference](cli-reference.md). For a compact repository-wide implementation
+map, see [AI context](ai_context.md).
 
-- [Architecture Overview](#architecture-overview)
-- [Plugin Structure](#plugin-structure)
-- [Getting Started](#getting-started)
-- [The Manifest File](#the-manifest-file)
-- [Request & Response Types](#request--response-types)
-- [Exit Status Ownership](#exit-status-ownership)
-- [Logging](#logging)
-- [Error Handling](#error-handling)
-- [Best Practices](#best-practices)
-- [Building & Installing](#building--installing)
-- [Testing Your Plugin](#testing-your-plugin)
-- [Example: Complete Plugin](#example-complete-plugin)
+## Installed layout
 
----
+Core looks for this layout below its plugin directory:
 
-## Architecture Overview
-
-Neko CLI uses a **dispatcher architecture** where the core CLI acts as a router that executes standalone plugin executables and renders their output.
-
-```
-┌─────────────────┐     JSON stdin      ┌─────────────────┐
-│   Neko CLI      │ ──────────────────► │     Plugin      │
-│   (Dispatcher)  │                     │   (Executable)  │
-│                 │ ◄────────────────── │                 │
-└─────────────────┘     JSON stdout     └─────────────────┘
-                        Logs → stderr
+```text
+<plugin-dir>/
+└── example/
+    ├── manifest.json
+    └── plugin-example
 ```
 
-### Communication Flow
+The default plugin directory is `~/.neko/plugins`; `NEKO_PLUGIN_DIR` overrides
+it. The executable name is `plugin-<manifest-name>`. Core skips missing or
+invalid manifests when listing installed plugins and reports a missing
+executable when dispatch is attempted.
 
-1. User runs `neko <plugin> <command> [flags]`
-2. CLI reads the plugin's `manifest.json` to validate flags
-3. CLI sends a `Request` JSON to the plugin via stdin
-4. Plugin executes the command logic
-5. Plugin writes logs to stderr (captured by CLI)
-6. Plugin writes a `Response` JSON to stdout
-7. CLI validates and renders a valid response once in the requested format
-8. The response's explicit exit request becomes the CLI process exit
+## Manifest
 
----
-
-## Plugin Structure
-
-Plugins are installed in `~/.neko/plugins/{plugin-name}/` and must contain:
-
-```
-~/.neko/plugins/my-plugin/
-├── plugin-my-plugin    # Executable (must be named plugin-{name})
-└── manifest.json       # Plugin metadata & command definitions
-```
-
-### Development Structure
-
-When developing a plugin within the neko-cli repository:
-
-```
-plugin/
-└── my-plugin/
-    ├── main.go           # Plugin entry point
-    ├── Makefile          # Build & install scripts
-    ├── manifest.json     # Plugin metadata
-    └── pkg/              # Plugin-specific packages
-        ├── command1/
-        │   └── handler.go
-        └── command2/
-            └── handler.go
-```
-
----
-
-## Getting Started
-
-### 1. Create Your Plugin Directory
-
-```bash
-mkdir -p plugin/my-plugin/pkg
-cd plugin/my-plugin
-```
-
-### 2. Create the Manifest
-
-Create `manifest.json`:
+The manifest owns plugin identity, discoverable commands, flags, and declared
+output modes:
 
 ```json
 {
-  "name": "my-plugin",
-  "version": "1.0.0",
-  "description": "My awesome plugin",
-  "author": "your-name",
+  "name": "example",
+  "version": "0.1.0",
+  "description": "Example Neko plugin",
+  "author": "example-org",
   "commands": [
     {
-      "name": "hello",
-      "description": "Say hello",
-      "outputs": ["text", "json"],
+      "name": "inspect",
+      "description": "Inspect the selected resource",
+      "outputs": ["table", "json"],
       "flags": [
         {
-          "name": "name",
+          "name": "resource",
           "type": "string",
+          "required": true,
+          "description": "Resource identifier"
+        },
+        {
+          "name": "details",
+          "type": "bool",
           "required": false,
-          "default": "World",
-          "description": "Name to greet"
+          "default": false,
+          "description": "Include additional facts"
         }
       ]
     }
   ],
-  "renderer_types": ["table", "json", "text"]
+  "renderer_types": ["table", "json"]
 }
 ```
 
-### 3. Create the Main Entry Point
+Flag types are `string`, `bool`, and `int`. Core registers manifest flags with
+Cobra, applies manifest defaults, validates required flags, and sends the
+resolved values in `Request.Flags`. A command's positional values arrive in
+`Request.Args`.
 
-Create `main.go`:
+Do not declare Core global flags in a plugin manifest. Core owns
+`--describe`, `--verbose`, `--output`, and `--github-output-file` for every
+plugin response.
 
-```sh
+## Request protocol
+
+The public request type is `pkg/plugin.Request`:
+
+```go
+type Request struct {
+    Command string         `json:"command"`
+    Args    []string       `json:"args"`
+    Flags   map[string]any `json:"flags"`
+    Context Context        `json:"context"`
+}
+
+type Context struct {
+    WorkingDir string `json:"working_dir"`
+    User       string `json:"user"`
+    Verbose    bool   `json:"verbose"`
+}
+```
+
+`WorkingDir` is the Core process working directory. Treat it as input and
+resolve repository-owned paths deliberately. `Verbose` carries execution-log
+intent. Presentation choices such as describe/output mode and credentials are
+not transported in the request.
+
+A plugin reads exactly one request from standard input. It should not prompt on
+standard input or write non-JSON content to standard output.
+
+## Response protocol
+
+The public response envelope contains:
+
+| Field | Responsibility |
+| --- | --- |
+| `status` | Domain status such as `success` or `error` |
+| `metadata` | Timestamp, plugin, version, and command identity |
+| `data` | Stable machine-readable command data |
+| `error` | Machine code, message, and optional safe details for error status |
+| `renderer_hint` | Default human rendering hint; `raw-json` is an explicit raw artifact exception |
+| `logs` | Ordered structured log entries |
+| `human_table` | Responsive table declaration on the wire |
+| `human_properties` | Ordered property declaration on the wire |
+| `human_text` | Preformatted text declaration on the wire |
+| `github_output` | Ordered mapping from output names to stable data keys |
+| `exit_code` | Explicit requested Core process exit from 0 through 125 |
+
+Go plugins set the canonical `PresentationTable`, `PresentationProperties`, or
+`PresentationText` fields. Their JSON encoding retains the established
+`human_*` wire names. Deprecated `HumanTable`, `HumanProperties`, and
+`HumanText` Go fields remain source-compatible; do not set conflicting old and
+new fields.
+
+An error response includes both `status: "error"` and a non-nil error envelope.
+Core rejects a nil response, an error status without its envelope, conflicting
+presentation declarations, and an explicit exit outside 0 through 125.
+
+## Minimal Go executable
+
+```go
 package main
 
 import (
@@ -128,760 +141,155 @@ import (
     "os"
     "time"
 
-    "github.com/nekoman-hq/neko-cli/pkg/errors"
-    "github.com/nekoman-hq/neko-cli/pkg/log"
     "github.com/nekoman-hq/neko-cli/pkg/plugin"
-)
-
-const (
-    pluginName    = "my-plugin"
-    pluginVersion = "1.0.0"
+    "github.com/nekoman-hq/neko-cli/pkg/presentation"
 )
 
 func main() {
-    // Set plugin info for error responses
-    errors.PluginName = pluginName
-    errors.PluginVersion = pluginVersion
-
-    // Read request from stdin
-    var req plugin.Request
-    if err := json.NewDecoder(os.Stdin).Decode(&req); err != nil {
-        errors.WriteError("PARSE_ERROR", fmt.Sprintf("failed to parse request: %v", err))
+    var request plugin.Request
+    if err := json.NewDecoder(os.Stdin).Decode(&request); err != nil {
+        writeResponse(errorResponse("PARSE_ERROR", err))
+        return
     }
 
-    // Set verbose mode from request context
-    log.Verbose = req.Context.Verbose
-
-    var resp *plugin.Response
-    var err error
-
-    // Route to command handlers
-    switch req.Command {
-    case "hello":
-        resp, err = handleHello(req)
-    default:
-        resp, err = nil, fmt.Errorf("unknown command: %s", req.Command)
-    }
-
-    if err != nil {
-        errors.WriteError("EXECUTION_ERROR", err.Error())
-    }
-
-    // Write response to stdout
-    if err := json.NewEncoder(os.Stdout).Encode(resp); err != nil {
-        errors.WriteError("RESPONSE_ERROR", fmt.Sprintf("failed to encode response: %v", err))
-    }
+    response := route(request)
+    writeResponse(response)
 }
 
-func handleHello(req plugin.Request) (*plugin.Response, error) {
-    log.PluginPrint(log.Exec, "Starting hello command")
-
-    // Extract flag value
-    name := "World"
-    if n, ok := req.Flags["name"].(string); ok && n != "" {
-        name = n
+func route(request plugin.Request) *plugin.Response {
+    if request.Command != "inspect" {
+        return errorResponse("UNKNOWN_COMMAND", fmt.Errorf("unknown command %q", request.Command))
     }
-
-    log.PluginV(log.Exec, "Greeting: %s", name)
 
     response := &plugin.Response{
         Status: "success",
         Metadata: plugin.ResponseMetadata{
-            Plugin:    pluginName,
-            Version:   pluginVersion,
-            Command:   "hello",
-            Timestamp: time.Now(),
+            Timestamp: time.Now().UTC(),
+            Plugin: "example",
+            Version: "dev",
+            Command: request.Command,
         },
-        Data: map[string]any{
-            "message": fmt.Sprintf("Hello, %s!", name),
+        Data: map[string]any{"resource": request.Flags["resource"]},
+        RendererHint: "table",
+        PresentationProperties: &presentation.Properties{
+            Properties: []presentation.Property{
+                {Label: "Resource", Value: fmt.Sprint(request.Flags["resource"])},
+            },
         },
-        RendererHint: "text",
     }
     response.SetExitCode(0)
-    return response, nil
+    return response
 }
-```
 
----
-
-## Plugin Versioning
-
-When Neko CLI releases itself, it needs to embed the versions of bundled plugins into the binary. The release plugin handles this through automatic environment variable injection.
-
-### How It Works
-
-Nekocli keeps releaseable versions in `.neko/release.state.json`. The release workflows pass the selected unit version to GoReleaser as environment variables so the CLI binary can embed the bundled plugin versions.
-
-**Flow:**
-```
-.neko/release.state.json → release workflow → Environment Variables → GoReleaser → Binary
-```
-
-### V2 State
-
-Plugin units are stored beside the CLI unit:
-
-```json
-{
-  "schemaVersion": 2,
-  "units": {
-    "cli": {
-      "version": "2.2.4"
-    },
-    "plugin-release": {
-      "version": "3.0.0"
-    },
-    "plugin-ui": {
-      "version": "1.0.0"
+func errorResponse(code string, err error) *plugin.Response {
+    response := &plugin.Response{
+        Status: "error",
+        Metadata: plugin.ResponseMetadata{
+            Timestamp: time.Now().UTC(),
+            Plugin: "example",
+            Version: "dev",
+            Command: "unknown",
+        },
+        Error: &plugin.ResponseError{Code: code, Message: err.Error()},
     }
-  }
+    response.SetExitCode(1)
+    return response
+}
+
+func writeResponse(response *plugin.Response) {
+    _ = json.NewEncoder(os.Stdout).Encode(response)
 }
 ```
 
-### Environment Variable Mapping
-
-Each plugin unit can be passed to GoReleaser as an environment variable:
-
-| Unit | Environment Variable |
-|--------------|---------------------|
-| `plugin-release` | `PLUGIN_RELEASE_VERSION=3.0.0` |
-| `plugin-ui` | `PLUGIN_UI_VERSION=1.0.0` |
-
-**Pattern:** `PLUGIN_{UPPERCASE_UNIT_NAME}_VERSION={version}`, with dashes converted to underscores and the `plugin-` prefix omitted.
-
-### Using in GoReleaser
-
-Access these variables in your `.goreleaser.yml`:
-
-```yaml
-builds:
-  - ldflags:
-      - -X main.ReleasePluginVersion={{ .Env.PLUGIN_RELEASE_VERSION }}
-      - -X main.UIPluginVersion={{ .Env.PLUGIN_UI_VERSION }}
-```
-
-### Behavior
-
-- **State update:** Version bumps are committed to `.neko/release.state.json`
-- **Manifest materialization:** Plugin releases update only their own `manifest.json`
-- **Workflow input:** GitHub Actions passes the released version to GoReleaser
-- **Registry index:** `neko release plugin-index` generates the public `plugin-index.json` from V2 plugin units, state, and manifests. Runtime plugin discovery, install, and update use that index as their source of truth. Plugin release workflows publish it as the `plugin-index.json` asset on the mutable `plugin-registry` GitHub Release after successful plugin releases; the index is not committed as source. Release-prefix fallback discovery has been removed, so new plugins become available through the published index rather than registry Go-code mappings.
-
-To make a new plugin eligible for the generated index, create the first V2 plugin unit with `neko release init --kind plugin` or append another plugin unit with `neko release unit-add --kind plugin`. Plugin units require a `plugin-` unit id, `tagPrefix` set to `<unit-id>/v`, `plugin.assetPrefix` matching the unit id, and plugin metadata for `plugin.name`, `plugin.manifest`, `plugin.assetPrefix`, and `plugin.binaryName`. Keep the manifest name/version synchronized with that state. `unit-add` updates only V2 config/state; workflow template generation, plugin manifest generation, source directory generation, and executor scaffolding are not implemented yet. See [Release V2 Examples](release/examples.md) for copy-ready plugin unit and plugin registry examples.
-
-### Self-Bootstrapping
-
-This creates an interesting architectural pattern:
-
-1. Neko CLI uses the **release plugin** to release itself
-2. Bundled plugins need their versions embedded in Neko CLI
-3. V2 release state and workflow-provided environment variables bridge that gap
-
-It's metadata injection that allows plugins to declare their versions in the host binary.
-
----
-
-## The Manifest File
-
-The `manifest.json` file describes your plugin and its commands. The CLI uses this to:
-- Register subcommands automatically
-- Parse and validate flags
-- Render `neko <plugin>`, `neko <plugin> --help`, and `neko <plugin> <command> --help` without starting the plugin binary
-- Determine available output formats
-
-### Manifest Schema
-
-```json
-{
-  "name": "plugin-name",
-  "version": "1.0.0",
-  "description": "What the plugin does",
-  "author": "author-name",
-  "commands": ["..."],
-  "renderer_types": ["table", "json", "text"]
-}
-```
-
-### Command Definition
-
-```json
-{
-  "name": "command-name",
-  "description": "What the command does",
-  "outputs": ["table", "json"],
-  "flags": ["..."]
-}
-```
-
-### Flag Definition
-
-```sh
-{
-  "name": "flag-name",
-  "type": "string",       // "string", "bool", or "int"
-  "required": true,
-  "default": "value",     // Optional default value
-  "description": "What the flag does"
-}
-```
-
-**Supported Flag Types:**
-- `string` - Text values
-- `bool` - Boolean flags (true/false)
-- `int` - Integer values
-
----
-
-## Request & Response Types
-
-### Request
-
-The plugin receives a `Request` via stdin:
-
-```sh
-type Request struct {
-    Command string         `json:"command"`  // Command name to execute
-    Args    []string       `json:"args"`     // Positional arguments
-    Flags   map[string]any `json:"flags"`    // Flag values
-    Context Context        `json:"context"`  // Execution context
-}
-
-type Context struct {
-    WorkingDir string `json:"working_dir"` // Current working directory
-    User       string `json:"user"`        // Current user
-    Verbose    bool   `json:"verbose"`     // Verbose mode enabled
-}
-```
-
-### Response
-
-The plugin returns a `Response` via stdout:
-
-Presentation declarations come from
-`github.com/nekoman-hq/neko-cli/pkg/presentation`.
-
-```sh
-type Response struct {
-    Status                 string                   `json:"status"` // "success" or "error"
-    Metadata               ResponseMetadata         `json:"metadata"`
-    Data                   map[string]any           `json:"data,omitempty"`
-    Error                  *ResponseError           `json:"error,omitempty"`
-    RendererHint           string                   `json:"renderer_hint,omitempty"`
-    Logs                   []LogEntry               `json:"logs,omitempty"`
-    PresentationTable      *presentation.Table      `json:"-"`
-    PresentationProperties *presentation.Properties `json:"-"`
-    PresentationText       *presentation.Text       `json:"-"`
-    ExitCode               int                      `json:"exit_code,omitempty"`
-}
-
-// Package presentation
-type Table struct {
-    Columns []Column         `json:"columns"`
-    Rows    []map[string]any `json:"rows,omitempty"`
-    Details *Properties      `json:"details,omitempty"`
-    Title   string           `json:"title,omitempty"`
-}
-
-type Column struct {
-    Key       string `json:"key"`
-    Label     string `json:"label"`
-    RoleKey   string `json:"role_key,omitempty"`
-    Essential bool   `json:"essential,omitempty"`
-}
-
-type Properties struct {
-    Properties []Property `json:"properties"`
-    Title      string     `json:"title,omitempty"`
-}
-
-type StyleRole string
-
-const (
-    StyleDefault  StyleRole = "default"
-    StyleEmphasis StyleRole = "emphasis"
-    StyleSuccess  StyleRole = "success"
-    StyleWarning  StyleRole = "warning"
-    StyleError    StyleRole = "error"
-    StyleInfo     StyleRole = "info"
-    StyleMuted    StyleRole = "muted"
-)
-
-type Property struct {
-    Key        string    `json:"key,omitempty"`
-    Label      string    `json:"label"`
-    Value      any       `json:"value,omitempty"`
-    Role       StyleRole `json:"role,omitempty"`
-    Emphasized bool      `json:"emphasized,omitempty"`
-    Heading    bool      `json:"heading,omitempty"`
-}
-
-type Text struct {
-    Content string `json:"content"`
-}
-
-type ResponseMetadata struct {
-    Timestamp time.Time `json:"timestamp"`
-    Plugin    string    `json:"plugin"`
-    Version   string    `json:"version"`
-    Command   string    `json:"command"`
-}
-
-type ResponseError struct {
-    Code    string         `json:"code"`
-    Message string         `json:"message"`
-    Details map[string]any `json:"details,omitempty"`
-}
-```
-
-Core serializes `PresentationTable`, `PresentationProperties`, and
-`PresentationText` with the established `human_table`, `human_properties`, and
-`human_text` plugin-protocol tags. Those wire names remain unchanged so already
-installed plugins continue to work. Presentation metadata is excluded from the
-public JSON renderer, raw JSON, and GitHub output.
-
-For Go source compatibility, `pkg/plugin` temporarily retains deprecated type
-aliases `HumanTable`, `HumanColumn`, `HumanProperties`, `HumanProperty`,
-`HumanText`, and `HumanStyleRole`, their `HumanStyle*` constants, and deprecated
-response fields `HumanTable`, `HumanProperties`, and `HumanText`. New code must
-import `pkg/presentation` and populate only the canonical `Presentation*`
-response fields. Supplying conflicting canonical and deprecated response fields
-is rejected.
-
-## Exit Status Ownership
-
-A valid decoded response owns the final Neko CLI process status. Set the intent
-on every new response with `SetExitCode`; do not infer process success or
-failure from `Status`, `Error`, command names, or domain status strings.
-
-```sh
-response.SetExitCode(0) // successful command or successful observation
-response.SetExitCode(1) // invalid request, failed check, refusal, or execution failure
-
-code, present := response.ExplicitExitCode()
-```
-
-The plugin wire protocol accepts exact explicit values from `0` through `125`.
-Calling `SetExitCode(0)` is significant: it serializes `"exit_code":0`, and
-Core preserves its presence after decoding. A nonzero `ExitCode` in an existing
-keyed struct literal also remains explicit for Go source compatibility.
-
-Installed legacy plugins may omit `exit_code`; Core temporarily treats that
-unset value as implicit success. Omission is deprecated for plugin authors, so
-new and updated plugins must make every response explicit. Values below `0` or
-above `125`, a malformed response, and an error status without an error
-envelope are protocol failures owned by Core and exit `1`.
-
-Explicit zero covers completed mutations, successful dry-runs and queries, and
-successful negative observations such as an inspection reporting a blocked or
-uncertain domain state. Explicit failure covers invalid requests, failed
-diagnostics or checks, actionable refusals, and execution failures. The
-subprocess status is only a transport fallback when no valid response exists;
-it does not override a valid decoded response.
-
-Core validates before writing, renders a valid response exactly once, and only
-then applies its explicit exit. Renderer and output-writer failures remain
-Core-owned exit `1`. The transport-only `exit_code` is not included in public
-`--output json`, raw JSON, or GitHub output.
-
-### Renderer Hints
-
-The `RendererHint` tells the CLI how to render the response:
-
-| Hint    | Description         | Data Format                               |
-|---------|---------------------|-------------------------------------------|
-| `table` | kubectl-style table | `{"items": [{"col1": "val1", ...}, ...]}` |
-| `json`  | Raw JSON output     | Any structure                             |
-| `text`  | Key-value text      | `{"key": "value", ...}`                   |
-
-#### Table Rendering
-
-For table output, `Data` must contain an `items` key with a slice of maps:
-
-```sh
-Data: map[string]any{
-    "items": []map[string]any{
-        {"version": "1.0.0", "date": "2026-02-04", "commits": 10},
-        {"version": "0.9.0", "date": "2026-01-15", "commits": 25},
-    },
-}
-```
-
-Commands may opt in to responsive human-readable output by attaching a
-`presentation.Table` to `Response.PresentationTable`. Column order is
-declaration order; non-essential columns use the
-same order as their admission priority. Core measures the actual output
-writer, ANSI-free Unicode display cells, and the declared values. It renders a
-table when all essential columns fit, adds optional columns while they fit,
-and otherwise uses vertical records. An unavailable width, including a pipe or
-redirected file, deterministically uses vertical records. `--output wide`
-permits every declared summary column for opted-in responses, falling back to
-vertical records when the complete declaration does not fit.
-
-This capability is presentation-only. Keep complete command data in `Data`.
-The `human_table` declaration crosses the plugin transport so Core can render
-it, but Core excludes it from public `--output json` and raw JSON. Commands
-without a table presentation retain the legacy inferred table and existing `wide`
-behavior. Plugins own field meaning, labels, order, and essential/optional
-classification; Core owns only layout mechanics.
-
-`Title` adds a neutral emphasized section label. A column may use `RoleKey` to
-read a `presentation.StyleRole` from its presentation row; this styles only that
-column. Properties may carry a semantic `Role`, opt into emphasis, and mark a
-record `Heading`. The closed roles are default foreground, emphasis, success,
-warning, error, info, and muted secondary text. Plugins choose semantic roles;
-Core alone maps them to terminal presentation. The empty role preserves the
-default behavior.
-
-When the table presentation is a compact projection of differently shaped machine
-data, `Rows` can carry presentation-only row maps. If `Rows` is nil, Core keeps
-the established behavior of selecting a list from `Data`. `Details` can append
-one ordered `presentation.Properties` view after a response-level `presentation.Properties`
-summary and the table, producing the generic property/table/property order.
-`DescribeOnly` marks a structured table section for global `--describe`; Core
-skips it in concise human output while retaining it in the same coherent
-plugin response. These fields are optional; their zero values are omitted from
-transport and do not alter existing responses. They must not replace complete
-typed `Data`. Their labels, projections, direct values, and visibility marker
-cross only the plugin transport and remain absent from public JSON and raw
-JSON.
-
-Global `--describe` controls structured human detail and response metadata.
-Global `--verbose` independently controls captured execution/debug logs and is
-the only presentation-related option represented in
-`Request.Context.Verbose`; `--describe`, `--output`, and
-`--github-output-file` are not sent to plugins and cannot enable a plugin
-capability. Describe does not change public JSON. Verbose does not change
-domain `data`, although public JSON logs may grow when a plugin produces
-additional verbose entries. Raw JSON remains the command-owned raw value.
-
-Custom plugin command help reads the actually inherited Core flags and renders
-them after manifest-local command flags under a separate
-`Global plugin-response flags` heading. A manifest-local flag shadows an
-inherited flag with the same name and is shown only in the command section.
-Plugins must avoid such collisions. The Release Plugin uses
-`plugin-index --output-file <path>` for command-owned persistence, leaving
-Core `--output` exclusively responsible for `table`, `json`, `wide`, or
-`github` response rendering. Unsupported Core output values fail before plugin
-dispatch and are never reinterpreted as local paths.
-
-#### Property/value presentation
-
-Core recognizes ordered `items` containing exactly `property` and `value`, and
-plugins can explicitly declare property order with `presentation.Properties`. A
-`presentation.Property` either references one stable `Data` key through `Key` or carries
-one presentation-only `Value`; the two sources are mutually exclusive. Direct
-values support human-readable grouping that differs from the stable machine
-projection, while complete typed command data remains in `Data`.
-
-When the actual output width is known, Core bounds the property-label column,
-reserves readable value space, measures ANSI-free Unicode display cells, and
-wraps labels and values at grapheme-safe word boundaries. Continuation lines
-start under the value column, and the separator never exceeds the writer width.
-Very narrow output uses a vertical property layout. Pipes, redirects, and other
-width-unknown writers use the same deterministic vertical layout without
-assuming a synthetic terminal width. `table`, `wide`, and describe output share
-these property mechanics; unrelated list and responsive-table renderers keep
-their own layouts.
-
-`human_properties` and its direct values are plugin-to-Core presentation
-metadata. Core excludes them from public `--output json` and raw JSON, just as
-it excludes `human_table` and `human_text`. GitHub output is still selected only
-by explicit GitHub output declarations and destination options.
-
-Semantic color is enabled only for interactive human-readable output written to a
-terminal. A non-empty `NO_COLOR` disables it, and pipes, redirects, files,
-public JSON, raw JSON, and GitHub output remain ANSI-free. Core provides this
-policy and style mapping through its renderer; plugins must never emit ANSI
-sequences in response data or presentation declarations, or branch on terminal
-capability. The established plugin stderr logger may color its protocol prefix;
-Core strips ANSI before parsing category, level, and message into
-`Response.Logs`. Styling changes presentation only, never machine data, command
-meaning, or exit behavior.
-
----
+Use command-specific packages behind the router as the plugin grows. Keep
+request parsing and response encoding at the executable boundary; keep domain
+logic independent of terminal width, color, and Core rendering.
+
+## Presentation and output
+
+Core owns the public output mode:
+
+- `table` selects responsive human rendering;
+- `wide` allows additional declared columns;
+- `json` encodes the public response envelope;
+- `github` writes only declared GitHub output fields to the explicitly supplied command file.
+
+`--describe` changes visibility of declared presentation details and metadata;
+it does not alter the plugin request. `--verbose` enables request context and
+Core log rendering. JSON remains machine data and excludes presentation-only
+declarations. A plugin should place stable values in `Data` and declare human
+views from those values rather than formatting terminal tables itself.
+
+Use `renderer_hint: "raw-json"` only when the command deliberately emits an
+artifact as exact JSON bytes. Ordinary `--output json` is not raw command data;
+it is the public response envelope.
+
+GitHub output requires a `GitHubOutput` declaration and Core's explicit
+`--github-output-file`. The plugin names data keys; it does not select the file.
+
+## Exit ownership
+
+Every new response calls `SetExitCode` explicitly. Exit `0` represents a
+successful command or an intentional successful negative observation. Exit
+`1` represents command failure. Values through 125 are available when a plugin
+has a documented portable contract.
+
+Core treats a valid decoded response as authoritative even if the plugin
+process itself exited nonzero. Core then renders once and applies the response
+exit. An omitted exit is legacy implicit-success compatibility, not the
+recommended contract. Transport, decode, response validation, rendering, and
+GitHub command-file failures remain Core-owned failures.
 
 ## Logging
 
-### Critical Rule
+Plugins can return `LogEntry` values and can write logs to standard error.
+Captured standard-error lines are ANSI-stripped, parsed, appended after response
+logs, and deduplicated when the exact same entry appeared in both channels.
+Structured standard-error lines use:
 
-**ALWAYS use `log.PluginPrint()` and `log.PluginV()` in plugin code, NEVER `log.Print()`**
-
-```sh
-// ✅ CORRECT - writes to stderr (captured by dispatcher)
-log.PluginPrint(log.Init, "Starting initialization")
-log.PluginV(log.Config, "Verbose message: %s", value)
-
-// ❌ WRONG - writes to stdout, CORRUPTS JSON response
-log.Print(log.Init, "This breaks the plugin!")
+```text
+15:04:05 [category] message
 ```
 
-Core captures stderr separately from the JSON response, strips ANSI before
-semantic parsing, and preserves line order, category, level, and verbose
-classification. If a response already supplies structured logs, those entries
-come first and captured stderr logs follow. Entries transported identically
-through both channels appear once; there is no fuzzy message deduplication.
-Stored log fields, JSON logs, and redirected human output are ANSI-free.
-Interactive human rendering may add renderer-owned semantic color afterward.
+Core infers `error`, `warn`, `verbose`, or `info` for captured lines. Never put
+tokens, authorization headers, credentials, or sensitive environment values in
+logs or response data.
 
-Log messages can contain command-owned paths. Core does not apply generic path
-redaction; each command remains responsible for deciding whether its own path
-values require normalization. The transport does not add environment
-credentials, tokens, or authorization headers to plugin requests or logs.
+## Testing
 
-### Log Categories
+At minimum, test:
 
-Available log categories with their colors:
+- manifest JSON parsing and command/flag registration;
+- exact manifest/router parity;
+- request decoding and typed flag validation;
+- success and structured error responses;
+- explicit exit presence and range;
+- JSON wire tags and stable machine fields;
+- presentation at narrow and wide output widths;
+- default, describe, verbose, JSON, and GitHub output behavior;
+- no credentials or local absolute paths in response/log output;
+- filesystem and network boundaries with temporary directories and injected clients;
+- unknown command handling.
 
-```sh
-log.Init      // Yellow   - Initialization messages
-log.Config    // Cyan     - Configuration messages
-log.Preflight // Yellow   - Pre-flight check messages
-log.Guard     // Blue     - Guard/validation messages
-log.Exec      // Green    - Execution messages
-```
+Repository tests use self-owned loopback servers for HTTP behavior; they do not
+require real external services or credentials.
 
-### Verbose Logging
+## Packaging and distribution
 
-Use `log.PluginV()` for verbose-only messages. These only appear when the user runs with `-v` or `--verbose`.
-
-```sh
-log.PluginV(log.Exec, "Detailed info: %v", someValue)
-```
-
----
-
-## Error Handling
-
-### Returning Errors in Response
-
-For recoverable errors (validation failures, missing config, etc.), return an error response:
-
-```sh
-response := &plugin.Response{
-    Status: "error",
-    Metadata: plugin.ResponseMetadata{
-        Plugin:    pluginName,
-        Version:   pluginVersion,
-        Command:   "my-command",
-        Timestamp: time.Now(),
-    },
-    Error: &plugin.ResponseError{
-        Code:    "CONFIG_NOT_FOUND",
-        Message: "Configuration file not found",
-        Details: map[string]any{
-            "expected_file": ".my-plugin.neko.json",
-            "hint":          "Run 'neko my-plugin init' first",
-        },
-    },
-}
-response.SetExitCode(1)
-return response, nil
-```
-
-### Fatal Errors
-
-For unrecoverable errors (parse failures, etc.), use the errors helper:
-
-```sh
-import "github.com/nekoman-hq/neko-cli/pkg/errors"
-
-// Simple error
-errors.WriteError("FATAL_ERROR", "Something went terribly wrong")
-
-// Error with details
-errors.WriteErrorWithDetails("PARSE_ERROR", "Invalid input", map[string]any{
-    "input": rawInput,
-    "expected": "valid JSON",
-})
-```
-
-These functions write an error response with explicit exit `1` and then exit
-the plugin process with `1`. Core treats the decoded response as authoritative,
-renders it once, and exits `1`; the subprocess status remains fallback evidence.
-
----
-
-## Best Practices
-
-### 1. No Interactive Prompts
-
-**Plugins cannot use interactive prompts** because stdin is used for the JSON request.
-
-```sh
-// ❌ WRONG - survey/stdin doesn't work in plugins
-survey.AskOne(&survey.Select{...}, &answer)
-
-// ✅ CORRECT - use flags from request
-unitID := req.Flags["unit"].(string)
-```
-
-### 2. Config File Naming
-
-Plugin config files should follow the pattern: `.{plugin-name}.neko.json`
-
-```
-.deploy.neko.json     # Deploy plugin config
-.ui.neko.json         # UI plugin config
-.my-plugin.neko.json  # Your plugin config
-```
-
-The release plugin is the exception: new `neko release init` writes V2 repository files at `.neko/release.config.json` and `.neko/release.state.json`. It can initialize one normal unit or one plugin unit with `--kind plugin` and the plugin metadata flags. `neko release unit-add` appends more units to existing V2 config/state. It no longer creates `.release.neko.json`; existing V1 release projects should use `neko release migrate`.
-
-### 3. Extract Flags Safely
-
-Always handle type assertions safely:
-
-```sh
-func getFlagString(flags map[string]any, name string) string {
-    if v, ok := flags[name].(string); ok {
-        return v
-    }
-    return ""
-}
-
-func getFlagBool(flags map[string]any, name string) bool {
-    if v, ok := flags[name].(bool); ok {
-        return v
-    }
-    return false
-}
-
-func getFlagInt(flags map[string]any, name string) int {
-    if v, ok := flags[name].(float64); ok { // JSON numbers are float64
-        return int(v)
-    }
-    return 0
-}
-```
-
-### 4. Use Metadata Constants
-
-Define plugin metadata in a dedicated package:
-
-```sh
-// pkg/metadata/metadata.go
-package metadata
-
-var (
-    PluginName     = "my-plugin"
-    Version        = "1.0.0"        // Overridden by ldflags
-    GitCommit      = "unknown"      // Overridden by ldflags
-    BuildDate      = "unknown"      // Overridden by ldflags
-    ConfigFileName = ".my-plugin.neko.json"
-)
-```
-
----
-
-## Building & Installing
-
-### Makefile Template
-
-Create a `Makefile` for your plugin:
-
-```makefile
-PLUGIN_NAME := my-plugin
-BINARY := plugin-$(PLUGIN_NAME)
-INSTALL_DIR := $(HOME)/.neko/plugins/$(PLUGIN_NAME)
-
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
-DATE ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
-
-LDFLAGS := -X github.com/nekoman-hq/neko-cli/plugin/$(PLUGIN_NAME)/pkg/metadata.Version=$(VERSION) \
-           -X github.com/nekoman-hq/neko-cli/plugin/$(PLUGIN_NAME)/pkg/metadata.GitCommit=$(COMMIT) \
-           -X github.com/nekoman-hq/neko-cli/plugin/$(PLUGIN_NAME)/pkg/metadata.BuildDate=$(DATE)
-
-.PHONY: build install clean update-manifest
-
-build:
-	go build -ldflags "$(LDFLAGS)" -o $(BINARY) main.go
-
-update-manifest:
-	@jq '.version = "$(VERSION)"' manifest.json > manifest.json.tmp && mv manifest.json.tmp manifest.json
-
-install: update-manifest build
-	mkdir -p $(INSTALL_DIR)
-	cp $(BINARY) $(INSTALL_DIR)/
-	cp manifest.json $(INSTALL_DIR)/
-
-clean:
-	rm -f $(BINARY)
-	rm -rf $(INSTALL_DIR)
-```
-
-### Build Commands
+Build the executable with the installed name and package it with its manifest:
 
 ```bash
-# Build the plugin
-make build
-
-# Install to ~/.neko/plugins/
-make install
-
-# Clean build artifacts
-make clean
+go build -o build/plugin-example ./cmd/plugin-example
+mkdir -p build/example
+cp build/plugin-example build/example/plugin-example
+cp manifest.json build/example/manifest.json
 ```
 
----
+First-party plugin releases are represented as V2 `kind: "plugin"` units.
+Their unit metadata supplies public name, manifest, asset prefix, and binary
+name. The release workflow publishes platform archives and refreshes the
+`plugin-index.json` asset on the `plugin-registry` release. Core discovery,
+installation, and update resolve exact plugin tags and assets from that index.
 
-## Testing Your Plugin
-
-### Direct Testing
-
-Test your plugin directly by piping JSON to it:
-
-```bash
-# Test a command
-echo '{"command":"hello","args":[],"flags":{"name":"Developer"},"context":{"verbose":true}}' | ./plugin-my-plugin
-
-# Pretty print the output
-echo '{"command":"hello","args":[],"flags":{},"context":{}}' | ./plugin-my-plugin | jq .
-```
-
-### Testing via CLI
-
-After installing, test through the CLI:
-
-```bash
-# Run the command
-neko my-plugin hello --name Developer
-
-# With verbose output
-neko my-plugin hello -v --describe
-
-# JSON output
-neko my-plugin hello --output json
-```
-
-### Debug Tips
-
-1. **Check stderr for logs**: Plugin logs go to stderr
-2. **Use verbose mode**: `-v` enables detailed logging
-3. **Test manifest**: Ensure your `manifest.json` is valid JSON
-4. **Check permissions**: The plugin binary must be executable
-
----
-
-## Example: Complete Plugin
-
-See the [release plugin entry point](../plugin/release/main.go) for a complete example:
-
-- [`main.go`](../plugin/release/main.go) - Entry point with command routing
-- [`manifest.json`](../plugin/release/manifest.json) - Full manifest example
-- [`pkg/init/init_handler.go`](../plugin/release/pkg/init/init_handler.go) - Command handler example
-- [`pkg/history/history.go`](../plugin/release/pkg/history/history.go) - Simple table output example
-
----
-
-## Questions?
-
-- Check the [main documentation](../README.md)
-- Look at the [AI Context](ai_context.md) for additional development notes
-- Open an issue on [GitHub](https://github.com/nekoman-hq/neko-cli/issues)
-
----
-
-## License
-
-Neko CLI is licensed under our own License. See [LICENSE](../LICENSE) for details.
+For the first-party implementations, see the [Release Plugin](plugins/release.md)
+and [UI Plugin](plugins/ui.md) guides.

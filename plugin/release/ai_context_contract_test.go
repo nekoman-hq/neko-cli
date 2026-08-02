@@ -27,7 +27,7 @@ func TestAIContextIsCompactCurrentBootstrap(t *testing.T) {
 		"## Self-update and installation",
 		"## Self-release of this repository",
 		"## Documentation navigation",
-		"## Active versus completed work",
+		"## Current limitations and history",
 		"## Do not assume",
 	} {
 		if count := strings.Count(context, heading); count != 1 {
@@ -42,6 +42,10 @@ func TestAIContextLinksCanonicalContractsAndCoversReleasePaths(t *testing.T) {
 		"cli-reference.md",
 		"release/cli-reference.md",
 		"release/compatibility.md",
+		"release/configuration.md",
+		"release/lifecycle.md",
+		"release/github-actions-delivery.md",
+		"release/journals-and-recovery.md",
 		"release/migration-v1-to-v2.md",
 		"installation.md",
 		"../plugin/release/docs/architecture/current-state.md",
@@ -250,7 +254,7 @@ func TestAIContextSeparatesCurrentWorkFromHistory(t *testing.T) {
 		"numbered history for rationale only",
 		"numbered history records completed or superseded work",
 		"history is not implementation guidance",
-		"not an implied roadmap",
+		"does not authorize additional capability",
 		"V2 local execution",
 		"public standalone dispatch or retry commands",
 		"durable workflow-run or publication-completion state are absent",

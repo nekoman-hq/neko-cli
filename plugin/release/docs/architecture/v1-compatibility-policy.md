@@ -1,169 +1,122 @@
 # V1 Compatibility Policy
 
-## Status
+> **Audience:** Maintainers changing exported Release V1 symbols, adapters, facades, or compatibility files.
+>
+> **Purpose:** Define supported, deprecated, and compatibility-only V1 surfaces together with their replacement and removal gates.
 
-This register is the V1 compatibility policy support decision and retired-path cleanup removal record for retained
-Release Plugin V1 compatibility surfaces. It is evidence-based: V1 compatibility policy did not
-remove public symbols, and retired-path cleanup removed only candidates whose repository consumer
-evidence, replacement, and policy gates were satisfied.
+V1 remains supported compatibility. V2 is canonical for new repositories, but
+that status does not by itself authorize removal or behavior change in V1.
+Public Go symbols may have downstream consumers that cannot be discovered from
+this repository.
 
-The July 2026 code-quality refactor did not change these decisions. It moved
-reusable release-tool and legacy-requirements facts behind internal canonical
-owners while preserving every listed facade and executor behavior. See
-[compatibility-notes.md](compatibility-notes.md) for the concise current summary.
+## Classification vocabulary
 
-- Latest cleanup record: **retired-path cleanup - Retire superseded and inactive release paths**
-- Initial decision date: 2026-07-16
-- retired-path cleanup completion date: 2026-07-17
-- Repository evidence: `rg` reference audit, production composition in
-  `plugin/release/main.go`, V1 compatibility extraction compatibility tests, V1 compatibility policy compatibility
-  characterization tests, the retired-path cleanup removal guards, and the inventory in
-  [package-ownership.md](package-ownership.md)
-- Next cleanup gate: none scheduled; later removals need a new cleanup gate and
-  fresh consumer evidence.
+| Classification | Meaning |
+| --- | --- |
+| Supported | Used by production or intentionally maintained as public V1 behavior. |
+| Deprecated | A precise supported replacement exists and the Go declaration carries the matching `Deprecated:` comment. |
+| Compatibility-only | Retained because behavior or downstream use lacks an exact replacement/audit; production must not add dependencies on it. |
 
-Consumer categories used below:
+“No repository consumer” never proves “no external consumer.” Removal requires
+all gates in this policy and separate authorization for the compatibility
+change.
 
-- **Active internal production:** selected by the plugin executable or active
-  command composition.
-- **Internal compatibility bridge:** reached only to preserve old public or
-  transitional shape.
-- **Test-only:** repository tests use the symbol.
-- **Documentation/example:** checked-in docs or examples mention the symbol.
-- **Generated or registration-driven:** package init or generated entry points
-  can reach the symbol without an ordinary call site.
-- **Potential external:** exported Go symbol or import side effect can be used
-  by downstream packages.
-- **Unknown:** no complete downstream index is available.
+## Production composition
 
-Decision meanings are intentionally narrow:
+The plugin executable constructs fresh GoReleaser, JReleaser, and release-it
+`V1Executor` values and calls `HandleReleaseWithV1ExecutorsAt`. Production does
+not use the mutable registry or blank-import registration.
 
-- **Keep:** intentionally supported now.
-- **Deprecate:** stable supported replacement exists and V1 compatibility policy can add a precise Go
-  deprecation comment without changing behavior.
-- **Defer:** no exact replacement exists yet, or a prerequisite/downstream audit
-  is needed before a safe deprecation.
-- **Removal candidate:** not removed yet, but eligible for a later cleanup gate
-  after the listed preconditions.
-- **Removed:** removed by retired-path cleanup after the listed preconditions were satisfied.
+The registry-backed `HandleRelease` path remains supported because its exported
+semantics may be consumed externally. It is confined to compatibility
+composition and must not become the preferred example.
 
-When this document says no active production consumer was found, it means:
-**No active repository-internal production consumer was found. External consumer
-status is unknown.**
+## Supported surfaces
 
-## Decision Register
+| Symbol or family | Reason |
+| --- | --- |
+| `HandleRelease` | Original public registry-backed command entry; external semantics are unknown. |
+| `HandleReleaseWithV1Executors*` | Canonical production V1 entry with caller-owned fixed executors. |
+| `PlanV1Release` | Explicit V1 planning boundary. |
+| `Preflight` | Preserves observable fatal JSON/exit behavior; no identical public non-fatal replacement exists. |
+| `Tool`, `ToolBase` | Legacy init/file/requirement surface is broader than `V1Executor`. |
+| Executor `Init` methods | Legacy tool initialization has no identical public replacement. |
+| Executor `Run` and `Rollback` methods | Required by active fixed `V1Executor` composition. |
+| `config.V1ConfigExistsAt`, `V1LoadConfigAt`, `V1SaveConfigAt` | Explicit-root/path V1 config operations used by compatibility behavior. |
+| `EnsureVersionIsValid` | Pure V1 comparison helper without hidden evidence refresh. |
+| Migration and Plugin Index programmatic APIs | Cohesive APIs, not V1 lifecycle compatibility debt. |
+| Production journal, dispatch, and Git coordinator constructors | Intentional system-default composition seams. |
 
-| Symbol or family | Kind | Owner | Consumers found | Behavior | Replacement | Decision | Rationale | Deprecation message | Removal preconditions | Removal gate |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `release.HandleRelease` | Exported function | Release command compatibility | Test-only; potential external; unknown | Builds the registry-backed V1 catalog and delegates to the canonical release handler/start operation. | `release.HandleReleaseWithV1Executors` when the caller owns explicit `V1Executor` values. | Keep | Original exported command entry; registry semantics may be externally observable. Production is already off this path. | None in V1 compatibility policy. | Downstream audit, deprecation window, and all known callers moved to explicit executor composition. | Later than retired-path cleanup |
-| `release.HandleReleaseWithV1Executors` | Exported function | Release command production composition | Active internal production; tests; potential external | Builds a fixed immutable V1 executor catalog and delegates to the same handler/start operation. | This is the supported replacement for registry-backed command release composition. | Keep | This is the canonical current production path for V1-backed patch/minor/major commands. | None. | None. | None |
-| `release.Service` | Exported type | V1 compatibility | Test-only; potential external; unknown | Preserves the former V1 service shape; `Run` delegates to isolated V1 application and maps fatal failures; `GetNewVersion` delegates to V1 planning. | `HandleReleaseWithV1Executors` for release execution; `PlanV1Release` for version planning. | Deprecate | Stable replacements exist for the two responsibilities, and no active production consumer exists. | `// Deprecated: use HandleReleaseWithV1Executors with explicit V1Executor values for release execution, or PlanV1Release for version planning.` | V1 compatibility policy deprecation shipped, downstream audit, replacement examples, tests moved from `Service` to canonical boundaries. | Later than retired-path cleanup |
-| `release.NewReleaseService` | Exported function | V1 compatibility | Test-only; potential external; unknown | Constructs `Service` without an explicit execution context, falling back to cwd. | Same as `Service`. | Deprecate | Constructor only exists for deprecated `Service`. | `// Deprecated: use HandleReleaseWithV1Executors with explicit V1Executor values for release execution, or PlanV1Release for version planning.` | Same as `Service`. | Later than retired-path cleanup |
-| `release.NewReleaseServiceWithContext` | Exported function | V1 compatibility | Test-only; potential external; unknown | Constructs `Service` with a compatibility execution context. | Same as `Service`. | Deprecate | Constructor only exists for deprecated `Service`. | `// Deprecated: use HandleReleaseWithV1Executors with explicit V1Executor values for release execution, or PlanV1Release for version planning.` | Same as `Service`. | Later than retired-path cleanup |
-| `(*release.Service).Run` | Exported method | V1 compatibility | Test-only; potential external; unknown | Runs the isolated V1 application while preserving old registry/cwd/fatal mapping behavior. | `HandleReleaseWithV1Executors` with explicit executors. | Deprecate | Release execution has a canonical command-compatible facade. | `// Deprecated: use HandleReleaseWithV1Executors with explicit V1Executor values instead.` | Same as `Service`. | Later than retired-path cleanup |
-| `(*release.Service).GetNewVersion` | Exported method | V1 compatibility | Test-only; potential external; unknown | Returns current and next V1 SemVer values through the isolated planner and mutable legacy tag evidence. | `PlanV1Release` with explicit latest-tag evidence. | Deprecate | Planning has a pure exported replacement that does not hide tag evidence. | `// Deprecated: use PlanV1Release with explicit latest-tag evidence instead.` | Same as `Service`, plus version-evidence replacement examples. | Later than retired-path cleanup |
-| `release.Preflight` | Exported function | V1 fatal preflight compatibility | Test-only; potential external; unknown | Runs V1 requirements/preflight and writes the legacy fatal JSON/exit behavior on failure. | None with identical fatal-exit behavior. | Defer | Fatal process behavior is observable, and the non-fatal preflight adapter is not public. A fake replacement would be unsafe. explicit-root composition did not add an identical public preflight replacement. | None in V1 compatibility policy. | Public explicit-root/non-fatal preflight design or a documented decision to stop supporting direct fatal preflight callers. | Later than explicit-root composition |
-| `release.Tool` | Exported interface | V1 registry compatibility | Internal compatibility bridge; test-only; potential external; unknown | Legacy executor interface used by registry-backed compatibility catalogs. | `V1Executor` plus `HandleReleaseWithV1Executors` for release execution. | Defer | `V1Executor` covers release execution, but `Tool` also includes legacy init and file/requirement methods. Deprecating the whole interface without an init replacement would overstate support. | None in V1 compatibility policy. | Registry deprecation window, explicit executor implementation docs, and a decision for legacy `Init` behavior. | Later than retired-path cleanup |
-| `release.ToolBase` and methods | Exported type/methods | V1 tool compatibility | Test-only; concrete legacy methods; potential external; unknown | Shared cwd/system-adapter helpers for legacy tool implementations. | Focused V1 adapters and direct `V1Executor` implementations where applicable. | Defer | Several helpers have no public one-for-one replacement and preserve cwd behavior. explicit-root composition documented explicit-root command APIs but did not replace the legacy tool helper surface. | None in V1 compatibility policy. | Registry/tool-interface decision, explicit-root adapter documentation, and external implementation audit. | Later than explicit-root composition |
-| `release.Register` | Exported function | V1 registry compatibility | Internal compatibility bridge; generated or registration-driven; documentation/example; test-only; potential external; unknown | Mutates the process-global registry; later registration silently overwrites by name. | `HandleReleaseWithV1Executors` with explicit `V1Executor` values. | Deprecate | Production is already fixed-composition; retired-path cleanup retained this because `HandleRelease` and `Service` still intentionally preserve registry-backed compatibility behavior. | `// Deprecated: use HandleReleaseWithV1Executors with explicit V1Executor values instead.` | `HandleRelease`/`Service` registry semantics removed or replaced, docs updated, downstream audit, registry tests moved to canonical composition where possible. | Later than retired-path cleanup |
-| `release.Get` | Exported function | V1 registry compatibility | Internal compatibility bridge; test-only; potential external; unknown | Reads the process-global registry and returns the old `unknown release system` error. | Explicit caller-owned executor selection passed to `HandleReleaseWithV1Executors`. | Deprecate | Registry lookup is not production-canonical, but retired-path cleanup retained it while registry-backed public facades remain. | `// Deprecated: use caller-owned V1Executor selection with HandleReleaseWithV1Executors instead.` | Same as `Register`. | Later than retired-path cleanup |
-| `release.tools` | Package variable | V1 registry compatibility | Internal compatibility bridge; test-only | Mutable package map behind `Register`/`Get`. | None public; callers should own their executor catalog. | Removal candidate | Unexported and process-global; retired-path cleanup retained it because exported registry functions still require the backing map. | Not applicable. | `Register`/`Get` removed or replaced, tests no longer inspect map. | Later than retired-path cleanup |
-| `plugin/release/pkg/release/tool` package init | Package side effect | V1 registry compatibility | Generated or registration-driven; documentation/example; potential external; unknown | Blank import registers GoReleaser, JReleaser, and release-it into the legacy registry. | Import concrete executor packages and pass `NewV1Executor` values to `HandleReleaseWithV1Executors`. | Deprecate | Explicit composition is production-proven; side-effect registration obscures ownership. retired-path cleanup retained it while registry-backed public facades remain supported. | `// Deprecated: import concrete executor packages and pass NewV1Executor values to HandleReleaseWithV1Executors instead.` | Docs updated, downstream blank-import audit, registry deprecation window, and registry public facades removed or replaced. | Later than retired-path cleanup |
-| `(*goreleaser.GoReleaser).Init` | Exported method | GoReleaser V1 compatibility | Potential external; unknown | Legacy GoReleaser init/check command wrapper. | None with identical behavior. | Defer | Init behavior is broader than release execution and has no current public replacement. | None in V1 compatibility policy. | Decide whether legacy init methods remain supported after V2 init. | Later than retired-path cleanup |
-| `(*goreleaser.GoReleaser).Execute` | Exported method | GoReleaser V1 compatibility | Internal compatibility bridge; potential external; unknown | Converts a `ReleaseExecutionContext` into a `V1ExecutorRequest` and delegates to `Run`. | `Run` with `V1ExecutorRequest`. | Deprecate | `Run` is the canonical executor entry for explicit composition. | `// Deprecated: use Run with V1ExecutorRequest instead.` | Downstream audit and V1 compatibility policy deprecation window. | Later than retired-path cleanup |
-| `(*goreleaser.GoReleaser).Release` | Exported method | GoReleaser V1 compatibility | Internal compatibility bridge; potential external; unknown | Uses cwd-style repository root and delegates to executor release logic. | `Run` with `V1ExecutorRequest`. | Deprecate | `Run` makes repository root and plan facts explicit. | `// Deprecated: use Run with V1ExecutorRequest instead.` | Same as `Execute`. | Later than retired-path cleanup |
-| `(*goreleaser.GoReleaser).RevertRelease` | Exported method | GoReleaser V1 compatibility | Internal compatibility bridge; potential external; unknown | Currently owns rollback mapping from captured state to rollback adapter; `Rollback` delegates to it before V1 compatibility deprecation update. | `Rollback`. | Deprecate | The supported `V1Executor` interface uses `Rollback`; V1 compatibility deprecation update makes `Rollback` own the direct behavior first. | `// Deprecated: use Rollback instead.` | V1 compatibility deprecation update delegation inversion complete, downstream audit. | Later than retired-path cleanup |
-| `(*goreleaser.GoReleaser).Rollback` | Exported method | GoReleaser V1 executor | Active internal production through fixed executor; tests; potential external | Implements `V1Executor` rollback. | This is the supported method. | Keep | Required by production `V1Executor`. | None. | None. | None |
-| `(*jreleaser.JReleaser).Init` | Exported method | JReleaser V1 compatibility | Potential external; unknown | Legacy JReleaser config generation/check command wrapper. | None with identical behavior. | Defer | Init behavior has no public replacement. | None in V1 compatibility policy. | Decide legacy init support. | Later than retired-path cleanup |
-| `(*jreleaser.JReleaser).Execute` | Exported method | JReleaser V1 compatibility | Internal compatibility bridge; potential external; unknown | Converts a `ReleaseExecutionContext` into a `V1ExecutorRequest` and delegates to `Run`. | `Run` with `V1ExecutorRequest`. | Deprecate | Same as GoReleaser. | `// Deprecated: use Run with V1ExecutorRequest instead.` | Same as GoReleaser. | Later than retired-path cleanup |
-| `(*jreleaser.JReleaser).Release` | Exported method | JReleaser V1 compatibility | Internal compatibility bridge; potential external; unknown | Uses cwd-style repository root and delegates to executor release logic. | `Run` with `V1ExecutorRequest`. | Deprecate | Same as GoReleaser. | `// Deprecated: use Run with V1ExecutorRequest instead.` | Same as GoReleaser. | Later than retired-path cleanup |
-| `(*jreleaser.JReleaser).RevertRelease` | Exported method | JReleaser V1 compatibility | Internal compatibility bridge; potential external; unknown | Same legacy rollback method shape as GoReleaser. | `Rollback`. | Deprecate | Same as GoReleaser. | `// Deprecated: use Rollback instead.` | V1 compatibility deprecation update delegation inversion complete, downstream audit. | Later than retired-path cleanup |
-| `(*jreleaser.JReleaser).Rollback` | Exported method | JReleaser V1 executor | Active internal production through fixed executor; tests; potential external | Implements `V1Executor` rollback. | This is the supported method. | Keep | Required by production `V1Executor`. | None. | None. | None |
-| `(*releaseit.ReleaseIt).Init` | Exported method | release-it V1 compatibility | Potential external; unknown | Legacy release-it init/check command wrapper with package-manager detection. | None with identical behavior. | Defer | Init behavior has no public replacement. | None in V1 compatibility policy. | Decide legacy init support. | Later than retired-path cleanup |
-| `(*releaseit.ReleaseIt).Execute` | Exported method | release-it V1 compatibility | Internal compatibility bridge; potential external; unknown | Converts a `ReleaseExecutionContext` into a `V1ExecutorRequest` and delegates to `Run`. | `Run` with `V1ExecutorRequest`. | Deprecate | Same as GoReleaser. | `// Deprecated: use Run with V1ExecutorRequest instead.` | Same as GoReleaser. | Later than retired-path cleanup |
-| `(*releaseit.ReleaseIt).Release` | Exported method | release-it V1 compatibility | Internal compatibility bridge; potential external; unknown | Uses cwd-style repository root and delegates to executor release logic. | `Run` with `V1ExecutorRequest`. | Deprecate | Same as GoReleaser. | `// Deprecated: use Run with V1ExecutorRequest instead.` | Same as GoReleaser. | Later than retired-path cleanup |
-| `(*releaseit.ReleaseIt).RevertRelease` | Exported method | release-it V1 compatibility | Internal compatibility bridge; potential external; unknown | Same legacy rollback method shape as GoReleaser. | `Rollback`. | Deprecate | Same as GoReleaser. | `// Deprecated: use Rollback instead.` | V1 compatibility deprecation update delegation inversion complete, downstream audit. | Later than retired-path cleanup |
-| `(*releaseit.ReleaseIt).Rollback` | Exported method | release-it V1 executor | Active internal production through fixed executor; tests; potential external | Implements `V1Executor` rollback. | This is the supported method. | Keep | Required by production `V1Executor`. | None. | None. | None |
-| `release.BuildReleaseExecutionContext` | Exported function | Mixed compatibility builder | Test-only; potential external; unknown | Builds a release context from a normalized V1 or V2 repository and selected unit. | `BuildV2ReleaseExecutionContext` for V2 contexts; `PlanV1Release` for V1 planning. | Deprecate | Active production already selects source first and uses the V2-only builder for V2. | `// Deprecated: use BuildV2ReleaseExecutionContext for V2 release contexts, or PlanV1Release for V1 planning.` | Tests migrated to V2 builder or V1 planner, downstream audit. | Later than retired-path cleanup |
-| `release.startLegacyRelease` | Unexported function | Internal V1 compatibility bridge | No remaining consumers | Reconstructed a V1 repository from context/config and delegated to a V1 command application. | Tests call canonical public handlers or focused V1 planning/execution boundaries. | Removed | Unexported test bridge with no production consumer; retired-path cleanup moved tests first, then removed the symbol. | Not applicable. | Completed: tests moved to canonical boundaries and retired-path cleanup guard added. | retired-path cleanup |
-| `release.newV1ReleaseCommandApplication` | Unexported function | Internal V1 compatibility bridge | No remaining consumers | Composed the registry-backed V1 command application. | `composeV1ReleaseCommandApplication` with explicit catalog in tests, or public command handlers. | Removed | Unexported transition bridge with no active production consumer; retired-path cleanup moved tests first, then removed the symbol. | Not applicable. | Completed: tests moved and retired-path cleanup guard added. | retired-path cleanup |
-| `config.V1Exists` | Exported function | V1 config compatibility | Test-only; potential external; unknown | cwd-based existence facade. | `V1ConfigExistsAt` with explicit repository root. | Deprecate | Direct delegate has a precise explicit-root replacement. | `// Deprecated: use V1ConfigExistsAt with an explicit repository root instead.` | Downstream audit. | Later than retired-path cleanup |
-| `config.V1LoadConfig` | Exported function | V1 config compatibility | Test-only; potential external; unknown | cwd-based V1 load facade. | `V1LoadConfigAt` with explicit path. | Deprecate | Direct delegate has a precise explicit-path replacement. | `// Deprecated: use V1LoadConfigAt with an explicit path instead.` | Downstream audit. | Later than retired-path cleanup |
-| `config.V1SaveConfig` | Exported function | V1 config compatibility | Test-only; potential external; unknown | cwd-based V1 save facade; canonical bytes/mode remain characterized. | `V1SaveConfigAt` with explicit repository root. | Deprecate | Direct delegate has a precise explicit-root replacement. | `// Deprecated: use V1SaveConfigAt with an explicit repository root instead.` | Downstream audit. | Later than retired-path cleanup |
-| `config.V1ConfigExistsAt`, `config.V1LoadConfigAt`, `config.V1SaveConfigAt` | Exported functions | V1 config compatibility | Active internal production; tests; potential external | Explicit-root/path V1 compatibility operations. | These are the supported V1 compatibility operations while V1 loading/writing exists. | Keep | Active code needs canonical V1 read/write compatibility until V1 is explicitly retired. | None in V1 compatibility policy. | V1 retirement decision and migration path. | Later than retired-path cleanup unless V1 removal is separately approved |
-| `release.VersionGuard` | Exported function | V1 version compatibility | Test-only; potential external; unknown | Refreshes global tag evidence, then delegates to SemVer comparison. | `PlanV1Release` with explicit latest-tag evidence and caller-owned refresh. | Deprecate | Hides mutable globals and remote refresh; pure planning replacement exists. | `// Deprecated: use PlanV1Release with explicit latest-tag evidence instead.` | Downstream audit and examples preserving two-pass evidence semantics. | Later than retired-path cleanup |
-| `release.VersionGuardWithOptions` | Exported function | V1 version compatibility | Test-only; potential external; unknown | Optional global tag refresh, then SemVer comparison. | `PlanV1Release` with explicit latest-tag evidence. | Deprecate | Still hides mutable latest-tag global; replacement is explicit. | `// Deprecated: use PlanV1Release with explicit latest-tag evidence instead.` | Same as `VersionGuard`. | Later than retired-path cleanup |
-| `release.EnsureVersionIsValid` | Exported function | V1 pure validation compatibility | Test-only; potential external; unknown | Pure SemVer comparison and legacy warning behavior for invalid latest tag. | None required for V1 compatibility policy; `PlanV1Release` covers release planning. | Keep | It does not use mutable evidence globals and may be useful as a pure compatibility helper. | None in V1 compatibility policy. | Separate pure-validation consumer audit. | Later than retired-path cleanup |
-| `release.V2ExecutionUnavailableResponse` | Exported function | Release response compatibility | No remaining repository consumer; potential external was unknown before removal | Built the historic unavailable response through the canonical mapper with a system timestamp. | `MapCommandFailure` with a command-specific `CommandFailure`. | Removed | V1 compatibility policy deprecated it, repository audit found no internal/docs/generated consumer, and the public replacement is typed and tested. | Former V1 compatibility policy message: `// Deprecated: use MapCommandFailure with a command-specific CommandFailure instead.` | Completed: repository audit clean, no docs/examples, retired-path cleanup guard added. | retired-path cleanup |
-| `release.ReleaseTransaction`, `release.NewReleaseTransaction`, `(*ReleaseTransaction).Execute` | Exported type/function/method | Deprecated V2 local compatibility wrapper | Test-only; potential external; unknown | Constructor retains compatibility data; `Execute` rejects unsupported V2 local delivery. | No executable replacement; public V2 releases use GitHub Actions delivery. | Deprecate | V2 local delivery is unsupported, and the private preparation scaffold was removed after the decision. | `// Deprecated: V2 local delivery is unsupported; public V2 releases use GitHub Actions delivery.` | Downstream audit and public API cleanup decision. | Later cleanup |
-| `(*release.GitReleaseCoordinator).Coordinate` | Exported method | V2 Git convenience compatibility | No remaining repository consumer; potential external was unknown before removal | One-call stage/commit/tag/push sequence, bypassed by active journaled operations. | Focused coordinator methods used through active release operations. | Removed | It could compete with active journal interleaving; retired-path cleanup moved tests to focused methods and found no production call sites. | Not applicable after removal. | Completed: tests moved to focused methods, repository audit clean, retired-path cleanup guard added. | retired-path cleanup |
-| `migrate.Plan`, `migrate.ResolvePlan`, `migrate.Run` | Exported type/functions | Migration programmatic compatibility | Test-only; potential external | Narrow facades over migration planning/use-case behavior. | Current symbols remain cohesive programmatic API. | Keep | They do not violate release direction and are not V1 release execution surfaces. | None. | Only a broader public API policy. | None |
-| `pluginindex.Generate`, `pluginindex.Write`, `pluginindex.WriteWithOptions` | Exported functions | Plugin-index programmatic API | Test-only; potential external | Direct wrappers over canonical query/output builder. | Current symbols remain cohesive programmatic API. | Keep | They are not compatibility debt requiring V1 compatibility policy action. | None. | Only a broader public API policy. | None |
-| `release.NewReleaseExecutionJournalStore`, `release.NewDispatchJournalStore`, `release.NewGitHubActionsDispatcher`, `release.NewGitHubActionsReleaseRunner`, `release.NewGitReleaseCoordinator` | Exported constructors | System-default adapters | Active internal production; tests; potential external | Construct production defaults for otherwise explicit dependencies. | Current constructors are supported. | Keep | Active composition uses them intentionally and they do not hide infrastructure inside application logic. | None. | None. | None |
-| `git.LastCommit`, `git.TotalCommits`, `git.FilesCount`, `git.RepoSize` in `plugin/release/pkg/git` | Exported functions | Legacy raw Git helpers | No remaining repository consumers; potential external was unknown before removal | cwd-based metrics helpers; no active production consumer found. | Command-owned query readers or caller-owned Git code. | Removed | Superseded internally; retired-path cleanup retained active query/preflight helpers and removed only raw unused helpers. | Not applicable after removal. | Completed: repository/generated-entry audit clean and retired-path cleanup guard added. | retired-path cleanup |
-| `git.Head`, `git.CleanUntracked`, `git.DeleteLocalTag`, `git.DeleteRemoteTag`, `git.RevertCommit`, `git.CreateCommit`, `git.HardResetTo`, `git.DeleteGithubRelease` in `plugin/release/pkg/git` | Exported functions | Legacy raw Git/destructive helpers | No remaining repository consumers; potential external was unknown before removal | cwd-based raw or destructive Git/GitHub helpers; active V1 uses root-aware focused adapters instead. | Root-aware focused V1 adapters for active release code, or caller-owned Git code. | Removed | New production code must not bypass evidence/redaction/root boundaries; retired-path cleanup retained active `git.Current`/query helpers and removed only destructive helpers proven unused. | Not applicable after removal. | Completed: repository/generated-entry audit clean, active helpers retained, destructive helpers proven unused, and retired-path cleanup guard added. | retired-path cleanup |
+Supported does not mean preferred for new V2 code. New production dependencies
+must use the narrow canonical owner described in
+[Package Ownership](package-ownership.md).
 
-## V1 compatibility and retired-path Compatibility Guarantees
+## Deprecated surfaces
 
-- V1 compatibility policy does not delete exported symbols.
-- retired-path cleanup deletes only the qualified symbols listed below after repository consumer
-  evidence, replacement, and unsupported-path decisions are recorded.
-- V1 compatibility policy does not change command flags, defaults, response schemas, fatal V1 output,
-  V1 executor behavior, V2 release behavior, migration behavior, or plugin index
-  behavior. retired-path cleanup preserves those guarantees.
-- `HandleReleaseWithV1Executors` remains the production release entry for V1
-  command composition.
-- `HandleRelease`, registry lookup, `Service`, `Preflight`, `Tool`, `ToolBase`,
-  cwd-based V1 config functions, version evidence globals, and concrete legacy
-  executor method shapes remain available for compatibility unless a later
-  removal gate completes the listed preconditions.
-- No active production code may add a new dependency on the mutable registry,
-  version-evidence globals, mixed V1/V2 execution-context builder, or inactive
-  `ReleaseTransaction`.
-- No active production or test code may reintroduce retired entry points:
-  `release.startLegacyRelease`, `release.newV1ReleaseCommandApplication`,
-  `init.buildV2InitConfigFromFlags`, `release.V2ExecutionUnavailableResponse`,
-  `(*release.GitReleaseCoordinator).Coordinate`, or the retired raw
-  `plugin/release/pkg/git` helpers.
-- Direct delegates retained after V1 compatibility policy must stay direct delegates; adding policy,
-  raw flag parsing, response mapping, token resolution, Git/file mutation,
-  rollback decisions, or workflow selection to a wrapper requires a new
-  cleanup gate.
+| Symbol or family | Replacement |
+| --- | --- |
+| `Service`, `NewReleaseService*`, `Service.Run` | `HandleReleaseWithV1Executors` with explicit executors |
+| `Service.GetNewVersion` | `PlanV1Release` with explicit latest-tag evidence |
+| `Register`, `Get`, and `pkg/release/tool` registration import | Caller-owned executor selection and `HandleReleaseWithV1Executors` |
+| Executor `Execute` and `Release` methods | `Run` with `V1ExecutorRequest` |
+| Executor `RevertRelease` methods | `Rollback` |
+| `BuildReleaseExecutionContext` | `BuildV2ReleaseExecutionContext` for V2 or `PlanV1Release` for V1 |
+| `config.V1Exists`, `V1LoadConfig`, `V1SaveConfig` | The matching explicit-root/path V1 config function |
+| `VersionGuard`, `VersionGuardWithOptions` | `PlanV1Release` with caller-owned tag evidence |
+| `ReleaseTransaction`, constructor, and `Execute` | No executable local replacement; V2 uses GitHub Actions delivery |
 
-## Retired Path Cleanup Record
+The source comments are part of the compatibility contract. A deprecated
+wrapper delegates directly to the replacement and contains no new policy,
+parsing, token resolution, Git/filesystem mutation, rollback decision, or
+workflow selection.
 
-### Removed By Retired Path Cleanup
+## Compatibility-only implementation
 
-| Qualified symbol or path | Previous decision | Consumer evidence | Replacement or unsupported decision | Compatibility impact | Tests and guards |
-| --- | --- | --- | --- | --- | --- |
-| `release.startLegacyRelease` | V1 compatibility policy removal candidate | Repository references were compatibility tests only. | Tests use canonical V1 command application composition and public/focused V1 boundaries. | Internal-only removal; no public API impact. | V1 compatibility tests moved first; retired-path cleanup release-path guard rejects reintroduction. |
-| `release.newV1ReleaseCommandApplication` | V1 compatibility policy removal candidate | Repository references were the test bridge and compatibility tests only. | Tests use `composeV1ReleaseCommandApplication` with explicit catalog or public command handlers. | Internal-only removal; no public API impact. | V1 compatibility tests moved first; retired-path cleanup release-path guard rejects reintroduction. |
-| `init.buildV2InitConfigFromFlags` | Review removal candidate | Repository reference was init handler test coverage only. | Tests cover `parseV2UnitRequest` and `constructV2Unit` directly. | Internal-only removal; no command flag or output impact. | Init tests moved first; retired-path cleanup release-path guard rejects reintroduction. |
-| `release.V2ExecutionUnavailableResponse` | V1 compatibility policy deprecated exported helper | No repository/docs/generated consumer found; external consumer status was unknown. | `MapCommandFailure` with a command-specific `CommandFailure`. | Public exported helper removed; active command responses unchanged. | V1 compatibility and retired-path compatibility tests updated; retired-path cleanup release-path guard rejects reintroduction. |
-| `(*release.GitReleaseCoordinator).Coordinate` | V1 compatibility policy removal candidate exported method | Tests only; active release/resume already used focused coordinator methods through named operations. | Focused `Stage`, `Commit`, `CreateTag`, and `Push` methods through active release operations. | Public exported convenience method removed; active V2 Git order unchanged. | Coordinator tests moved to focused methods; retired-path cleanup release-path guard rejects reintroduction. |
-| `git.LastCommit`, `git.TotalCommits`, `git.FilesCount`, `git.RepoSize` | V1 compatibility policy removal candidate raw Git helpers | No repository production/docs/generated consumer found. | Command-owned query readers or caller-owned Git code. | Public exported raw helpers removed; active history/contributor/version queries unchanged. | Raw-helper guard rejects reintroduction. |
-| `git.DeleteGithubRelease`, `git.Head`, `git.CleanUntracked`, `git.DeleteLocalTag`, `git.DeleteRemoteTag`, `git.RevertCommit`, `git.CreateCommit`, `git.HardResetTo` | V1 compatibility policy removal candidate raw destructive helpers | No repository production/docs/generated consumer found; active V1 rollback uses root-aware focused adapters. | Root-aware release adapters for active code, or caller-owned Git code. | Public exported raw helpers removed; active V1 compensation and direct legacy rollback behavior unchanged. | Raw-helper guard rejects reintroduction. |
+The mutable registry map exists solely behind `Register`, `Get`,
+registry-backed `HandleRelease`, and `Service`. Production composition remains
+off that path. Version evidence globals are confined to V1 version-guard and
+registry adapters. Cwd helpers remain direct delegates to explicit-root/path
+functions.
 
-### Retained After Retired Path Cleanup
+`*_compatibility.go` files are quarantine boundaries. Every top-level
+declaration is classified as legacy, deprecated, alias, wrapper, or forwarder;
+methods inherit the classification of their receiver. Those files contain no
+active plan, policy, orchestration, state transition, process adapter, or
+infrastructure owner.
 
-| Candidate | Why retained | Next prerequisite |
-| --- | --- | --- |
-| `release.ReleaseTransaction`, `release.NewReleaseTransaction`, and `(*ReleaseTransaction).Execute` | Exported deprecated compatibility wrapper; `Execute` rejects unsupported V2 local execution. | Downstream audit and public API cleanup decision. |
-| `release.Register`, `release.Get`, package variable `tools`, and `plugin/release/pkg/release/tool` package init | `HandleRelease` and `Service` still intentionally preserve registry-backed compatibility behavior. | Public registry facades removed/replaced, downstream evidence, docs/examples migrated. |
-| `release.Service`, `NewReleaseService*`, `Service.Run`, `Service.GetNewVersion` | Exported compatibility API with V1 compatibility policy deprecation and unknown external consumers. | Downstream audit, replacement examples, and explicit later removal gate. |
-| `release.Preflight`, `release.Tool`, `release.ToolBase`, and executor `Init` methods | No exact public replacement for fatal preflight, legacy init, and every tool-helper behavior. | Public replacement or explicit support-ending decision. |
-| Executor `Execute`, `Release`, and `RevertRelease` methods; `BuildReleaseExecutionContext`; cwd V1 config facades; `VersionGuard*` | Deprecated exported compatibility surfaces with tested replacements but unknown external consumers. | Downstream audit and separately authorized removal family. |
-| `config.V1ConfigExistsAt`, `config.V1LoadConfigAt`, `config.V1SaveConfigAt`, `release.EnsureVersionIsValid`, migration/plugin-index APIs, and production constructors | Intentionally supported APIs, active internals, or cohesive programmatic surfaces. | Only a future broader public API policy or V1 retirement decision. |
+## Behavior that remains stable
 
-## Future Removal Preconditions
+- V1 command names, flags, defaults, and single virtual `default` unit.
+- GoReleaser, JReleaser, and release-it selection and requirement checks.
+- Executor invocation, environment mapping, Git/GitHub effects, and rollback/compensation evidence.
+- Fatal V1 preflight/output behavior.
+- Registry overwrite/error behavior on the compatibility path.
+- Cwd facade delegation and canonical config bytes/modes.
+- Two-pass version evidence behavior and pure comparison behavior.
+- Response schema, item order, errors, logs, renderer declarations, and exits.
 
-Before any later removal touches a family above:
+V1 compatibility does not import V2 central state, V2 workflow dispatch,
+execution journals, or dispatch journals into the legacy lifecycle.
 
-1. Re-run repository and generated-entry reference searches.
-2. Record downstream/import evidence available at that time.
-3. Move repository tests from private bridges to canonical boundaries.
-4. Keep replacements documented and tested.
-5. Confirm no production command imports or calls the deprecated family.
-6. Preserve all characterized V1/V2 response, fatal-exit, cwd, registry
-   overwrite, version-evidence, executor, config-byte/mode, and rollback
-   behavior until the removal commit explicitly changes that contract.
+## Removal gates
+
+Removal of a compatibility family requires all of the following:
+
+1. Search production, tests, docs, examples, generators, registration side effects, and reflection/string references.
+2. Record available downstream/import evidence and explicitly retain unknown external-consumer risk.
+3. Provide and document an exact supported replacement, or approve an explicit support-ending decision.
+4. Move repository consumers and tests to the canonical boundary first.
+5. Complete an appropriate deprecation window for exported surfaces.
+6. Preserve focused characterization of the old behavior through the authorized removal commit.
+7. Confirm production has no dependency on the family.
+8. Add or retain a guard that prevents accidental reintroduction of the superseded implementation.
+
+No scheduled cleanup, V2 feature, file move, or lack of internal references
+waives these gates.
+
+## Related controls
+
+- [Compatibility Notes](compatibility-notes.md)
+- [Current Architecture](current-state.md)
+- [Maintainability Policy](maintainability-policy.md)
+- [Public Release Compatibility](../../../../docs/release/compatibility.md)

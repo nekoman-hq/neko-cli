@@ -1,9 +1,12 @@
 # Release V2 GitHub Actions Golden Path
 
+> **Audience:** Release operators configuring a consumer repository from installation through recovery.
+>
+> **Purpose:** Provide the canonical build-system-neutral task guide for a Release V2 GitHub Actions integration.
+
 This is the canonical, build-system-neutral guide for configuring and running
 a Neko Release V2 release through GitHub Actions. It documents commands and
-contracts that exist in the current Release Plugin. Product capabilities that
-do not exist yet are labeled separately.
+contracts implemented by the Release Plugin.
 
 The short version is:
 
@@ -50,9 +53,9 @@ V2 configuration. V1 local executor compatibility through
 | Mapping a unit and version to modules, tasks, matrices, or targets | Consumer or build-system adapter |
 | Build, artifacts, signing, publication, deployment, and secrets | Consumer repository |
 
-## Current and future capabilities
+## Supported and unsupported boundaries
 
-Implemented today:
+The supported integration includes:
 
 - V2 `init`, `unit-add`, `validate`, and token-free `plan`;
 - read-only `ci-validate-context` for dispatched V2 inputs and local Git facts;
@@ -64,18 +67,18 @@ Implemented today:
   `neko release github-workflow-init`;
 - local, read-only Release V2 integration diagnostics through
   `neko release doctor`;
+- read-only `units` and `pipeline` inspection;
 - execution and dispatch Evidence, `evidence`, guarded completed-Evidence
   archival, `resume`, and `resume --dry-run`;
 - V1-to-V2 migration, plugin index generation, and isolated V1 compatibility.
 
-Future capabilities, not available as commands or generated artifacts today:
+The following behavior is unsupported:
 
 - a reusable Neko-provided workflow package or managed workflow updates;
-- a release-unit overview or pipeline inspection;
-- completed official build-system adapters, including a Gradle adapter;
+- an official build-system adapter package, including a Gradle adapter;
 - V2 local execution and standalone dispatch or retry commands.
 
-Do not put candidate syntax for those future capabilities into a production
+Do not put invented syntax for unsupported behavior into a production
 workflow. Use the stable context command below rather than duplicating release
 policy with shell or JSON parsing.
 
@@ -268,7 +271,7 @@ neko release patch --dry-run
 neko release patch
 ```
 
-The plan shows `0.1.0` as current, `0.1.1` as next, `v0.1.1` as the tag,
+The plan shows the configured current version, calculated next version, derived tag,
 `goreleaser` as executor metadata, and `.github/workflows/release.yml` as the
 dispatch target. The dry-run previews the existing release command contract.
 The real command performs the Neko-owned Git effects and dispatches the
@@ -322,10 +325,10 @@ neko release patch --unit api --dry-run
 neko release patch --unit api
 ```
 
-This changes only `units.api.version`, derives `api/v1.4.3`, and dispatches the
+This changes only `units.api.version`, derives the API unit's next tag, and dispatches the
 central workflow with `unit=api`. The workflow must select only API build and
-publication targets. Releasing `cli` later plans from `0.8.0`, derives
-`cli/v0.8.1`, and leaves the API version unchanged.
+publication targets. Releasing `cli` as a separate operation plans from its own
+state, derives its own tag, and leaves the API version unchanged.
 
 One central workflow can route by the validated unit and map it to
 consumer-owned commands or a matrix. Per-unit workflows are also valid: set
@@ -615,13 +618,13 @@ publication/registry identity. JSON exposes them in deterministic
 `verifications` with repository-relative references. Three additional boundary
 facts retain remote workflow identity, repository-variable values, and exact
 dispatch authorization. Successful local evidence narrows uncertainty without
-claiming future runner or remote success.
+claiming runner or remote success.
 
 Diagnostics use `error`, `warning`, `recommendation`, and `not_verifiable`.
 Any error yields `not_ready` and exit code `1`; warnings without errors yield
 `ready_with_warnings` and exit code `0`; recommendations and not-verifiable
 facts alone yield `ready` and exit code `0`. The seven residual limitations
-cover only future runner/test/binary outcomes, remote installation/runtime,
+cover only runner/test/binary outcomes, remote installation/runtime,
 credential validity, publication acceptance, remote default-branch identity,
 remote variable values, and mutation-required dispatch authorization.
 
@@ -903,7 +906,7 @@ validated unit and version into checked-in tasks:
 `publishSelectedRelease` and those project properties are placeholders owned
 by the consumer; they are not official Neko tasks. Existing consumers use this
 pattern to verify version alignment, discover unit-scoped targets, and publish
-selected packages or images. An official Gradle adapter remains future work
+selected packages or images. An official Gradle adapter is unsupported
 and must not be assumed to exist.
 
 ## Verification CI versus release CI
@@ -960,7 +963,6 @@ copy V1 local executor steps into the V2 workflow.
 - [Release CLI reference](cli-reference.md)
 - [Release configuration](configuration.md)
 - [GitHub Actions delivery](github-actions-delivery.md)
-- [Dispatch contract](dispatch-contract.md)
-- [Execution journal](execution-journal.md)
-- [Recovery model](recovery-model.md)
+- [Release lifecycle](lifecycle.md)
+- [Journals and recovery](journals-and-recovery.md)
 - [Release V2 examples](examples.md)

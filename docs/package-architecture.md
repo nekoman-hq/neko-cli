@@ -1,11 +1,15 @@
 # Go package architecture
 
+> **Audience:** Contributors deciding where Core and plugin code belongs.
+>
+> **Purpose:** Define repository package visibility, dependency direction, and compatibility placement.
+
 The repository uses directory placement as an API boundary:
 
 - `pkg/` contains supported, intentionally importable contracts and reusable
   APIs. An established package with uncertain downstream use remains there as
-  an explicit compatibility surface until a separately planned breaking
-  migration proves it private.
+  an explicit compatibility surface until a downstream audit and approved
+  breaking change prove it private.
 - `internal/` contains private Core implementation. Go's import rule prevents
   consumers outside this module tree from depending on it. The number of
   packages under `internal/` does not affect this boundary.

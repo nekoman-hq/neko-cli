@@ -1,7 +1,11 @@
 # Release Plugin
 
+> **Audience:** Users installing or operating the first-party Release Plugin.
+>
+> **Purpose:** Summarize Release workflows and route exact behavior to the canonical Release references.
+
 The `release` plugin provides Release V1 compatibility and the canonical
-Release V2 lifecycle. Its current manifest version is `v4.1.0`.
+Release V2 lifecycle. The installed manifest owns its version.
 
 The [Release CLI Reference](../release/cli-reference.md) is authoritative for
 every command and flag, V1/V2 support, required source, I/O, network and token
@@ -140,7 +144,7 @@ transport, response-validation, render, and command-file failures as exit `1`.
 ```bash
 neko release plugin-index
 neko release plugin-index --check
-neko release plugin-index --output-file /private/tmp/plugin-index.json
+neko release plugin-index --output-file build/plugin-index.json
 ```
 
 Core `--output` selects response rendering and is never a file path. The old
@@ -163,7 +167,7 @@ archive, GitHub Release, assets, and subsequent registry-index publication.
 - [V1-to-V2 migration](../release/migration-v1-to-v2.md)
 - [Release V2 examples](../release/examples.md)
 - [GitHub Actions golden path](../release/github-actions-golden-path.md)
-- [Bootstrap ownership boundary](../release/bootstrap-product-boundary.md)
+- [GitHub Actions ownership and dispatch](../release/github-actions-delivery.md)
 - [Current Release Plugin architecture](../../plugin/release/docs/architecture/current-state.md)
 - [Historical Release planning and reviews](../../plugin/release/docs/history/README.md)
 - [Plugin development](../plugin-development.md)

@@ -1,14 +1,18 @@
 # UI Plugin
 
+> **Audience:** Users of the first-party UI Plugin and contributors comparing its manifest with its router.
+>
+> **Purpose:** State the UI Plugin's actual command surface, file and network effects, and known manifest/router discrepancy.
+
 The `ui` plugin is released as the independent V2 unit `plugin-ui`.
 
 ## Public CLI surface
 
 The authoritative repository-wide command/flag and I/O matrix is the
-[CLI reference](../cli-reference.md). The UI manifest currently advertises
-`hello`, `init`, `list`, `add [component-name]`, and
+[CLI reference](../cli-reference.md). The UI manifest advertises `hello`,
+`init`, `list`, `add [component-name]`, and
 `remove [component-name]`. `hello --name` is manifest-declared but the current
-UI router has no `hello` handler, so execution fails; it is documented as an
+UI router does not route a `hello` handler, so execution fails; it is documented as an
 existing discrepancy, not as a working command.
 
 `init --components-path` and `init --force` write `.ui.neko.json` and the

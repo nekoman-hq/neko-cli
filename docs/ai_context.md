@@ -1,10 +1,14 @@
 # AI Context for Neko CLI
 
+> **Audience:** Agents and contributors beginning repository work without prior project context.
+>
+> **Purpose:** Provide a compact, source-ranked bootstrap of current product, safety, compatibility, and architecture facts.
+
 ## Purpose and authority
 
 This document is the compact bootstrap for an agent beginning work in this
 repository. It summarizes current product and architecture contracts; it is not
-a command reference, design specification, roadmap, or replacement for code.
+a command reference, design specification, or replacement for code.
 When a statement here conflicts with a current owner, fix this summary rather
 than treating it as a second authority.
 
@@ -21,8 +25,8 @@ Use evidence in this order:
 The [repository-wide CLI reference](cli-reference.md) and
 [Release CLI reference](release/cli-reference.md) own public behavior. Current
 architecture documents own internal boundaries. The numbered history records
-completed or superseded work and never overrides either. Do not revive stale
-roadmap text as current implementation guidance.
+completed or superseded work and never overrides either. Do not use historical
+plans as current implementation guidance.
 
 ## Repository and Core CLI
 
@@ -90,7 +94,7 @@ Shared `patch`, `minor`, `major`, `plan`, `history`, `contributors`, `validate`,
 `evidence`, and eligible `evidence-archive` surfaces remain available as the
 [Release CLI reference](release/cli-reference.md) specifies.
 
-V1 is not the preferred setup for a new repository. V2-only setup, integration
+V1 is not the setup model for a new repository. V2-only setup, integration
 inspection, context validation, workflow scaffolding, recovery, and registry
 commands are unavailable to a pure V1 repository. V1 and V2 cannot remain
 active as competing authorities: a mixed active source is rejected.
@@ -283,9 +287,10 @@ Current product contracts:
 - [repository-wide CLI reference](cli-reference.md),
   [Release CLI reference](release/cli-reference.md), and
   [Installation](installation.md);
-- [Release overview](release/overview.md),
-  [GitHub Actions Golden Path](release/github-actions-golden-path.md), and
-  [bootstrap product boundary](release/bootstrap-product-boundary.md);
+- [Release overview](release/overview.md), [configuration and state](release/configuration.md),
+  [lifecycle](release/lifecycle.md), [GitHub Actions delivery](release/github-actions-delivery.md),
+  and [journals and recovery](release/journals-and-recovery.md);
+- [GitHub Actions Golden Path](release/github-actions-golden-path.md);
 - [migration](release/migration-v1-to-v2.md),
   [compatibility](release/compatibility.md),
   [Release plugin guide](plugins/release.md), and [UI plugin guide](plugins/ui.md).
@@ -304,19 +309,19 @@ Historical rationale lives only in the
 entry point, the CLI references own command contracts, architecture documents
 own current internal boundaries, and history is not implementation guidance.
 
-## Active versus completed work
+## Current limitations and history
 
-Release V2 product contracts described above are implemented and guarded; the
-completed refactor and finalization sequences belong to numbered history, not
-an active checklist. Current bounded limitations are maintained in
-[current state](../plugin/release/docs/architecture/current-state.md#current-bounded-limitations-prioritized)
-and unresolved boundaries in
-[architecture decisions](../plugin/release/docs/architecture/architecture-decisions.md#pending-architecture-decisions).
+Release V2 product contracts described above are implemented and guarded.
+Completed or superseded implementation sequences belong to numbered history,
+not an active checklist. Current bounded limitations are maintained in
+[current state](../plugin/release/docs/architecture/current-state.md#current-bounded-limitations)
+and present product gaps in
+[architecture constraints](../plugin/release/docs/architecture/architecture-decisions.md#present-product-gaps).
 
-Not implemented means exactly that, not an implied roadmap: V2 local execution,
-public standalone dispatch or retry commands, and durable workflow-run or
-publication-completion state are absent. Future changes must begin from current
-code and current owners rather than historical plans.
+Unsupported or absent means exactly that and does not authorize additional
+capability: V2 local execution, public standalone dispatch or retry commands,
+and durable workflow-run or publication-completion state are absent. Changes
+begin from current code and current owners rather than historical plans.
 
 ## Do not assume
 
@@ -327,4 +332,4 @@ code and current owners rather than historical plans.
 - `--describe` adds no I/O; `--verbose` is not structured product detail.
 - `--output` is a response format, not Plugin Index persistence; Plugin Index file persistence uses `--output-file`.
 - Update force is not a permission, integrity, manager-ownership, or downgrade bypass.
-- Historical roadmaps are not current architecture.
+- Historical plans are not current architecture.

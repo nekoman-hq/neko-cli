@@ -1,5 +1,9 @@
 # Release Plugin Compatibility Notes
 
+> **Audience:** Maintainers reviewing whether an implementation move or cleanup changes a supported Release contract.
+>
+> **Purpose:** Inventory the active compatibility surfaces and the boundaries that keep their implementation single-owned.
+
 This is the current compatibility inventory. Completed support decisions and
 cleanup sequences remain available in the
 [Release documentation history](../history/README.md), but the retained
@@ -7,14 +11,14 @@ contracts and removal gates below remain authoritative.
 
 ## Preserved contracts
 
-The code-quality refactor preserves command names, flags, manifest/help
-contracts, supported Go APIs, V1 executor behavior, V2 planning and execution,
+Compatibility covers command names, flags, manifest/help contracts, supported
+Go APIs, V1 executor behavior, V2 planning and execution,
 JSON/raw JSON, diagnostics, journal schemas and transitions, workflow contracts,
 materialized files, tag shapes, commit message/order, push order, handoff,
 resume, retry safety, and presentation behavior.
 
 The three repository release workflows, dedicated GoReleaser configs, and the
-mixed root `.goreleaser.yaml` were not changed.
+mixed root `.goreleaser.yaml` are distinct supported repository contracts.
 
 ## V1 compatibility
 
@@ -23,8 +27,7 @@ release-it. Production constructs fresh executor instances explicitly. Execution
 environment mapping, compensation, Git/GitHub effects, and legacy output remain
 in the existing `pkg/release/tool/*` adapters.
 
-Reusable identity and configuration facts moved inward. The public executor
-configuration helpers now delegate to the canonical internal fact packages;
+Public executor configuration helpers delegate to the canonical internal fact packages;
 their signatures, bytes, errors, and behavior remain characterized.
 
 The mutable registry, `Service`, `Preflight`, `Tool`, `ToolBase`, legacy executor

@@ -1,10 +1,16 @@
 # GitHub Actions Delivery
 
-`github-actions` is a valid V2 delivery mode for repository configuration. Public V2 non-dry-run releases now use execution and dispatch journals and dispatch the configured workflow after pushing the release commit and unit tag.
+> **Audience:** Repository owners integrating Release V2 with GitHub Actions and operators validating that integration.
+>
+> **Purpose:** Define workflow ownership, path validation, create-only scaffolding, dispatch, credentials, and read-only readiness inspection.
 
-## Configuration
+GitHub Actions is the executable V2 delivery contract. Neko CLI and the Release Plugin own release policy, version/state mutation, the release commit and tag,
+push order, journals, and workflow handoff. Consumer repositories own
+product-specific build, test, artifact, and publication behavior.
 
-Each GitHub Actions unit must configure a workflow:
+## Configured workflow
+
+Each V2 unit names a workflow below `.github/workflows/`:
 
 ```json
 {
@@ -13,60 +19,32 @@ Each GitHub Actions unit must configure a workflow:
   "workingDirectory": "api",
   "tagPrefix": "api/v",
   "executor": {
-    "type": "jreleaser",
+    "type": "goreleaser",
     "delivery": "github-actions",
     "workflow": ".github/workflows/release-api.yml"
   }
 }
 ```
 
-The workflow path is repository-root-relative and must use this canonical form:
+The path is repository-relative and has one of these forms:
 
 ```text
 .github/workflows/<workflow-file>.yml
 .github/workflows/<workflow-file>.yaml
 ```
 
-Filename-only values such as `release-api.yml` are invalid. Nested workflow paths and arbitrary repository-relative paths are invalid.
+Validation requires a direct child file, lowercase supported extension, `/`
+separators, and a filename matching
+`[A-Za-z0-9][A-Za-z0-9._-]*.(yml|yaml)`. It rejects absolute paths, traversal,
+nested workflow directories, URLs, refs, fragments, queries, duplicate
+separators, shell expansion, unsupported casing, and symlink escapes.
+Repository-aware validation also requires a regular file inside both the
+repository and `.github/workflows/`.
 
-## Validation
+## Workflow ownership
 
-Structural validation requires:
-
-- `workflow` is mandatory for `delivery: github-actions`.
-- `delivery: local` is rejected for V2 releases before workflow validation can make it executable.
-- The path uses `/`, not `\`.
-- The path begins exactly with `.github/workflows/`.
-- The path points directly to one file below `.github/workflows/`.
-- The filename matches `[A-Za-z0-9][A-Za-z0-9._-]*.(yml|yaml)`.
-- The extension is lowercase `.yml` or `.yaml`.
-- No absolute paths, `..`, `./`, duplicate separators, trailing slash, query strings, fragments, URLs, `@` refs, or shell-like expansion syntax are allowed.
-
-Repository-aware validation additionally confirms that the configured workflow exists, is a regular file, resolves inside the repository root, and resolves inside `.github/workflows/`. Symlinks must not escape either boundary.
-
-Valid examples:
-
-```json
-{"type":"jreleaser","delivery":"github-actions","workflow":".github/workflows/release-api.yml"}
-{"type":"goreleaser","delivery":"github-actions","workflow":".github/workflows/release-web.yaml"}
-{"type":"jreleaser","delivery":"github-actions","workflow":".github/workflows/api-v2-release.yml"}
-```
-
-Invalid examples:
-
-```json
-{"type":"jreleaser","delivery":"github-actions"}
-{"type":"jreleaser","delivery":"github-actions","workflow":"release-api.yml"}
-{"type":"jreleaser","delivery":"github-actions","workflow":".github/workflows/nested/release.yml"}
-{"type":"jreleaser","delivery":"github-actions","workflow":".github/workflows/release.YML"}
-{"type":"goreleaser","delivery":"local","workflow":".github/workflows/release.yml"}
-```
-
-## Dispatch Boundary
-
-V2 dry-run output shows the configured workflow, dispatch ref, canonical input names, and pending journal identity. V2 GitHub Actions non-dry-run writes journals, materializes versions, updates V2 state, commits, tags, pushes commit and tag, and dispatches the workflow. V2 local delivery is unsupported; configs using it are invalid.
-
-The configured workflow must support `workflow_dispatch` and accept only:
+The workflow is a consumer-owned implementation of a small Neko handoff
+contract. It receives exactly four required string inputs:
 
 ```text
 unit
@@ -75,9 +53,13 @@ tag
 release_sha
 ```
 
-The workflow must derive executor and delivery from checked-out repository config rather than trusting dispatch inputs.
+It derives executor, delivery, paths, and publication configuration from the
+checked-out repository. It checks out the exact release commit with complete
+tag history, validates the tag and SHA, builds the selected unit, and publishes
+from that immutable identity. It does not calculate versions, update state,
+commit, tag, or push.
 
-After checkout with complete tag history, validate this contract with:
+The canonical context validator invocation is:
 
 ```bash
 neko release ci-validate-context \
@@ -89,28 +71,16 @@ neko release ci-validate-context \
   --github-output-file "$GITHUB_OUTPUT"
 ```
 
-The command validates the local V2 pair, authoritative unit/version/tag,
-release commit, checked-out HEAD, and peeled tag target. It accepts matching
-detached HEAD, never fetches missing tags, reads no token, contacts no remote,
-and performs no mutation. Its stable outputs are `unit`, `display_name`,
-`version`, `tag_prefix`, `tag`, `release_sha`, `working_directory`, `executor`,
-`delivery`, and `workflow`; downstream publication should consume these
-validated step outputs. See the [golden path](github-actions-golden-path.md) for
-the canonical workflow.
+`ci-validate-context` is local, token-free, network-free, and read-only. It
+validates config/state, unit, version, tag, checked-out `HEAD`, peeled tag
+target, and release SHA. It never fetches a missing tag. Stable outputs are
+`unit`, `display_name`, `version`, `tag_prefix`, `tag`, `release_sha`,
+`working_directory`, `executor`, `delivery`, and `workflow`.
 
-## Workflow scaffolding
+## Create-only scaffolding
 
-`neko release github-workflow-init` is the opt-in Release V2 integration
-scaffolder. It requires an existing structurally valid V2 config/state pair,
-but the selected workflow target itself may be missing. `init` and `unit-add`
-remain config/state commands and do not invoke the scaffolder.
-
-With no selector, one unique configured workflow path is required. Units that
-share it use the same generated workflow. If units configure multiple distinct
-paths, select exactly one with `--unit <unit-id>` or `--path <configured-path>`.
-An explicit path must match at least one configured unit, and when combined
-with `--unit` it must match that unit. The command never guesses or writes
-multiple workflows.
+`neko release github-workflow-init` creates one missing starter workflow for an
+existing valid V2 config/state pair:
 
 ```bash
 neko release github-workflow-init --dry-run
@@ -118,187 +88,138 @@ neko release github-workflow-init --unit api --dry-run
 neko release github-workflow-init --path .github/workflows/release-api.yml
 ```
 
-The generator is create-only. Missing targets are atomically created with mode
-`0644`; byte-identical targets are reported current and are not rewritten;
-different targets fail closed. Preview is read-only and includes the exact
-canonical YAML even for a conflict. There is no force, update, provider, or
+With no selector, the configuration must contain one unique workflow path.
+Units sharing a path share one generated workflow. For multiple distinct paths,
+select exactly one by unit or configured path. Combined selectors must identify
+the same target; the command never guesses or writes multiple workflows.
+
+Workflow Init is create-only. A missing target is created atomically with mode
+`0644`; byte-identical targets are accepted without rewriting; different
+existing content is a conflict and remains untouched. Dry-run renders the exact
+canonical YAML without writing. There is no force, provider, managed-update, or
 consumer-command flag.
 
-Contract version `1` starts with:
+The scaffold uses contract version 1, `workflow_dispatch`, the four inputs,
+`contents: read`, non-cancelling unit/tag concurrency, exact-SHA checkout with
+full tags, pinned CLI and plugin installation, context validation, and a
+deliberately failing consumer-owned extension point. It grants no publication
+permission and creates no GitHub Release. The command requires no token or network access and performs no Git mutation.
+
+Existing manually maintained workflows remain supported. Neko CLI does not
+perform managed workflow updates and never overwrites consumer-owned content.
+Use the [GitHub Actions golden path](github-actions-golden-path.md) for the
+complete scaffold and customization procedure.
+
+## Dispatch contract
+
+Dispatch starts only after the exact release commit and unit tag exist and have
+been pushed. The repository target is derived from the verified selected Git
+remote. Supported targets are GitHub.com HTTPS, `ssh://git@github.com/...`, and
+SCP-style `git@github.com:...` remotes. GitHub Enterprise, other providers,
+local file remotes, credentials in URLs, traversal, extra path segments, and
+ambiguous remote forms are rejected.
+
+The internal client sends one request:
 
 ```text
-# Generated by Neko Release workflow scaffolding.
-# Workflow contract version: 1
-# Create-only scaffold: customize consumer-owned steps after generation.
+POST /repos/{owner}/{repo}/actions/workflows/{workflow_filename}/dispatches
 ```
 
-The generated workflow uses only `workflow_dispatch`, the exact inputs
-`unit`, `version`, `tag`, and `release_sha`, `contents: read`, non-cancelling
-unit-and-tag concurrency, exact-SHA checkout with full history and tags, pinned
-CLI/plugin installation, `ci-validate-context`, and a deliberately failing
-consumer-owned build/publication step. It generates no GitHub Release, build
-system, secrets, publication permissions, repository settings, commit, tag,
-push, or dispatch.
+The body contains `ref` set to the unit tag and the four canonical inputs.
+Executor, delivery, workflow path, repository path, config path, secrets, and
+arbitrary user input are not sent. Redirects are disabled so authorization is
+not forwarded to another host.
 
-Generation is rooted at the resolved repository, allows only a canonical
-`.github/workflows/*.yml|yaml` path already present in V2 config, rejects
-absolute/traversal/protected/nested/unsupported targets and symlink escapes,
-and does not depend on process cwd. It requires no token or network access and
-performs no Git mutation. Manually maintained workflows remain fully supported;
-different content is preserved as a conflict.
+Non-dry-run dispatch resolves `GITHUB_TOKEN` before release mutation and
+requires repository Actions write permission. The value is never persisted,
+logged, rendered, or placed in a journal. Dry-run does not resolve the token.
 
-The dispatch `ref` is the existing unit tag. GitHub also requires the workflow file to exist on the repository default branch. Real internal dispatch uses `GITHUB_TOKEN` with repository Actions write permission and targets GitHub.com remotes only.
+Dispatch results are:
 
-Workflow files are generated only by the explicit create-only scaffolding command; existing release commands never rewrite them. No public standalone dispatch or retry command exists. `neko release resume --unit <unit>` resumes only existing unresolved execution journals. Follow the [Release V2 GitHub Actions Golden Path](github-actions-golden-path.md) for a complete consumer setup. See also [Release V2 bootstrap product boundary](bootstrap-product-boundary.md), [GitHub Actions release flow](github-actions-release-flow.md), [Execution journal](execution-journal.md), [Recovery model](recovery-model.md), [GitHub Actions dispatch](github-actions-dispatch.md), [Dispatch contract](dispatch-contract.md), and [Dispatch journal](dispatch-journal.md).
+- any `2xx`: `accepted`;
+- `400`, `401`, `403`, `404`, `422`, or `429`: `rejected`;
+- timeout, transport interruption, cancellation after request start, redirect, `5xx`, or unexpected status: `unknown`.
 
-## Integration doctor
+`accepted` means handoff succeeded. `rejected` and `unknown` preserve the
+journals and do not roll back Git. An uncertain outcome is never retried
+automatically. No public standalone dispatch or retry command exists. See
+[Journals and Recovery](journals-and-recovery.md).
 
-`neko release doctor [--unit <unit-id>]` is the default offline, token-free,
-read-only readiness check for this delivery contract. Adding
-`--verify-remote` explicitly enables only bounded GitHub `GET` reads. The
-command loads the strict V2 config/state pair,
-deduplicates configured workflow paths, parses workflow YAML structurally, and
-reports ordered unit, workflow, verification, and diagnostic facts. Selecting one unit keeps
-all units sharing its workflow in the workflow scope.
+## Integration Doctor
 
-The workflow checks cover `workflow_dispatch`, the exact four required string
-inputs, competing release-capable triggers, explicit and least-privilege
-permissions, non-cancelling unit/tag concurrency, exact release-SHA checkout,
-full history and tags, disabled persisted checkout credentials, pinned Neko
-CLI and Release plugin installation before validation, every canonical
-validator flag, GitHub output-file wiring, stable validator output identity,
-and replacement of the generated consumer placeholder. Optional additional
-dispatch inputs are allowed; additional required inputs are not, because Neko
-cannot supply them. Unrelated pull-request or branch verification triggers are
-not treated as publication conflicts merely by existing.
+`neko release doctor [--unit <unit-id>]` is a read-only readiness inspection.
+The default is offline, token-free, Git-command-free, and mutation-free. It
+never repairs configuration, workflows, permissions, credentials, or repository
+state.
 
-Permissions are evaluated at their actual workflow/job scope. Omitted job
-declarations inherit workflow permissions; explicit job permissions replace
-that default. A workflow-level write or any `write-all` remains
-`PERMISSIONS_BROAD`.
-Job-scoped `contents: write` is accepted only when that job contains a direct
-GoReleaser publication or `gh release create`/`gh release upload`; job-scoped
-`packages: write` additionally supports an explicit GitHub Container Registry
-push. Unsupported shapes, values, unrelated write scopes, OIDC writes, and
-write grants supported only by names, paths, secrets, or non-mutating commands
-remain warnings. This is local structural evidence, not remote publication
-proof.
+Local Doctor checks include:
 
-For the supported GoReleaser workflows the Doctor proves five local categories:
+- strict V2 config/state and unit/workflow mapping;
+- `workflow_dispatch` and the four required string inputs;
+- competing release-capable triggers;
+- effective workflow/job permissions;
+- non-cancelling unit/tag concurrency;
+- exact-SHA checkout, complete tag history, and disabled persisted credentials;
+- pinned CLI and Release Plugin installation before validation;
+- the canonical validator flags and GitHub output wiring;
+- replacement of the scaffold's failing consumer placeholder;
+- recognized GoReleaser, GitHub Release, artifact, manifest, plugin-index, and credential shapes.
 
-1. consumer validation, tests, build/snapshot, real publication, manifest, and
-   plugin-index structure;
-2. focused GoReleaser build/archive/checksum/release identity;
-3. pinned CLI/Release Plugin installation and expected local artifacts;
-4. built-in/custom credential references, publication-only scope, effective
-   permission compatibility, and absence of visible echo/output exposure;
-5. GitHub/current-repository target, validated tag/SHA flow, archive, checksum,
-   plugin asset, and registry publication identity/order.
+Additional optional dispatch inputs are allowed; additional required inputs are
+not. Publication permissions are accepted only at a job whose recognized
+commands require the matching write scope. Names, paths, secrets, comments, or
+non-mutating commands do not prove publication.
 
-The implementation recognizes only supported GoReleaser action arguments,
-real `gh release create`/upload predicates, canonical installer/registry
-contracts, and the two repository-confined plugin-index scripts. Snapshot or
-skip-publish commands do not prove publication, `/releases/latest` and tag-list
-fallbacks are rejected, and a normal unit cannot enter the plugin index.
-Unsupported dynamic commands remain limited instead of being guessed. No shell
-interpreter, general GoReleaser schema, provider registry, or generic remote
-framework is part of Doctor.
+Readiness is `not_ready` with exit `1` when errors exist,
+`ready_with_warnings` with exit `0` for warnings only, and `ready` with exit `0`
+when only recommendations or explicit local limitations remain. The structured
+contract exposes readiness, summary, units, workflows, verifications, and
+diagnostics.
 
-Readiness is `not_ready` with exit code `1` when any error exists,
-`ready_with_warnings` with exit code `0` when only warnings remain, and `ready`
-with exit code `0` when findings are recommendations or locally not verifiable.
-JSON exposes stable `readiness`, `summary`, `units`, `workflows`, and
-`diagnostics` fields plus additive `verifications` and `summary.verified`.
-Facts contain typed state/evidence/repository-relative references and optional
-`remote`, `runtime`, or `mutation_required` limitation class. Each diagnostic contains severity, scope, optional unit
-and workflow identity, stable code, message, and remediation.
+### Explicit remote verification
 
-Default Doctor is token-free, network-free, Git-command-free, and
-mutation-free. It locally identifies or verifies structure before retaining seven residual
-limitations per supported workflow. They cover only future runner/test/binary
-outcome; remote installer/artifact availability, download, extraction,
-execution, and plugin loading; runtime credential issuance/validity/expiry/
-authorization; remote target state and acceptance; remote default-branch
-workflow identity/enabled state; remote repository-variable existence/value;
-and exact dispatch authorization, which requires a real remote decision. Local
-workflow inspection never claims remote content identity.
+`--verify-remote` opts into bounded GitHub `GET` requests. Remote mode checks
+repository/default-branch identity, exact workflow bytes and active state,
+recognized version-pin variables, referenced custom-secret name metadata,
+Actions policy when authorized, and exact locally derived releases, tags, and
+assets. Public facts are anonymous-first; protected reads resolve one optional
+read token lazily.
 
-Explicit remote mode verifies the GitHub repository/default branch, exact
-default-branch workflow bytes and active state, recognized version-pin
-variables, referenced custom-secret name metadata, Actions policy when
-authorized, and exact locally derived releases/tags/assets. Public facts are
-anonymous-first; protected reads resolve a token once. Built-in `GITHUB_TOKEN`
-is not queried as a repository secret, secret values are never requested, and
-arbitrary variable/secret collections are never listed. There is no automatic
-retry, latest release lookup, fuzzy asset matching, newest-run inference, or
-SHA-only run selection. Remote access failures remain partial not-verifiable
-facts; definite missing/mismatched/disabled configuration is an error. The
-Doctor still never dispatches, publishes, uploads, repairs, or mutates local or
-remote state. See [Remote Doctor verification](integration-doctor-remote-verification.md).
+Doctor never requests secret values, treats built-in `GITHUB_TOKEN` as a
+repository secret, lists arbitrary secret/variable collections, follows latest
+release heuristics, performs fuzzy asset matching, dispatches, uploads,
+publishes, or mutates local or remote state. Remote failures remain explicit
+partial evidence. See
+[Integration Doctor Remote Verification](integration-doctor-remote-verification.md).
 
-`neko release pipeline --unit <unit>` reuses these neutral verification facts
-while keeping lifecycle projection independent. Its default is likewise local,
-offline, and token-free; `--verify-remote` reuses the same bounded GET client
-and optional lazy read-token boundary. Pipeline does not invoke the Doctor
-handler or consume diagnostics/readiness/presentation, and remote facts cannot
-complete a stage, authorize resume/retry, or prove workflow/publication success.
+`pipeline --verify-remote` reuses neutral verification facts but remains a
+read-only local projection. It does not invoke the Doctor handler, consume
+Doctor readiness, complete lifecycle stages, authorize Resume, or prove
+publication.
 
-## Nekocli Production Workflows
+## This repository's workflows
 
-Nekocli dogfoods three independent V2 GitHub Actions units:
+Neko CLI uses three independently configured V2 units:
 
-| Unit | Tag format | Workflow | GoReleaser config | Publishes |
-| --- | --- | --- | --- | --- |
-| `cli` | `vX.Y.Z` | `.github/workflows/release-neko-cli.yml` | `.goreleaser.cli.yaml` | main `neko` CLI assets |
-| `plugin-release` | `plugin-release/vX.Y.Z` | `.github/workflows/release-plugin-release.yml` | `.goreleaser.plugin-release.yaml` | release plugin assets with `plugin/release/manifest.json` |
-| `plugin-ui` | `plugin-ui/vX.Y.Z` | `.github/workflows/release-plugin-ui.yml` | `.goreleaser.plugin-ui.yaml` | UI plugin assets with `plugin/ui/manifest.json` |
+| Unit | Tag namespace | Workflow | GoReleaser configuration |
+| --- | --- | --- | --- |
+| `cli` | `vX.Y.Z` | `.github/workflows/release-neko-cli.yml` | `.goreleaser.cli.yaml` |
+| `plugin-release` | `plugin-release/vX.Y.Z` | `.github/workflows/release-plugin-release.yml` | `.goreleaser.plugin-release.yaml` |
+| `plugin-ui` | `plugin-ui/vX.Y.Z` | `.github/workflows/release-plugin-ui.yml` | `.goreleaser.plugin-ui.yaml` |
 
-Neko CLI creates the state/materialization commit, creates the unit tag, pushes
-commit then tag, and dispatches the workflow with the four required string
-inputs `unit`, `version`, `tag`, and `release_sha`. `workflow_dispatch` is the
-only trigger, and concurrency is
-`release-${{ inputs.unit }}-${{ inputs.tag }}` with cancellation disabled.
+Each workflow validates the immutable release identity in a read-only job.
+Only the publication job grants `contents: write`. The CLI publishes through
+its dedicated GoReleaser config. Plugin workflows package with their dedicated
+configs, create the exact prefixed GitHub Release, then publish or replace
+`plugin-index.json` on the stable `plugin-registry` release.
 
-Each workflow defaults to `contents: read` and has two jobs. The `validate` job
-checks out `${{ inputs.release_sha }}` with complete history and explicit tags,
-does not persist checkout credentials, installs Neko from the canonical
-`install.sh` URL pinned by repository variable `NEKO_VERSION`, and installs the
-Release Plugin pinned by `NEKO_RELEASE_PLUGIN_VERSION`. Its one
-`release-context` step invokes:
+The root mixed-artifact `.goreleaser.yaml` is not used by these production
+workflows. No workflow rewrites version state or manifests.
 
-```text
-neko release ci-validate-context \
-  --unit "$RELEASE_UNIT" \
-  --version "$RELEASE_VERSION" \
-  --tag "$RELEASE_TAG" \
-  --release-sha "$RELEASE_SHA" \
-  --output github \
-  --github-output-file "$GITHUB_OUTPUT"
-```
+## Related documentation
 
-The validated `unit`, `version`, `tag`, and `release_sha` step outputs become
-same-named `validate` job outputs. Read-only tests, dedicated GoReleaser config
-checking, unit-scoped snapshot builds, and plugin-manifest checks consume those
-validated values. The dependent `publish` job checks out the validated job
-output SHA with the same safe checkout settings and uses only
-`needs.validate.outputs.*` release identity.
-
-Only `publish` grants `contents: write`. The CLI GoReleaser publication and the
-plugin `gh release create` plus registry update steps consume
-`secrets.GITHUB_TOKEN`; no validation or build-check step receives the secret.
-GitHub Actions cannot grant token permissions at step scope, so the separate
-publication job is the narrowest boundary that preserves real GitHub Release
-and registry publication. The local Doctor accepts these three scoped
-publication grants: the repository result is `ready` with zero errors,
-warnings, and recommendations. It reports five verified and three explicit
-boundary facts per workflow, plus seven narrowly scoped `not_verifiable`
-diagnostics per workflow (21 total). A unit-scoped result has five verified
-facts, three boundary facts, and seven limitations.
-
-For prefixed plugin tags, the workflow does not run `goreleaser release` as the publisher because the free GoReleaser release command parses the full current tag as SemVer. Instead, GoReleaser packages archives and checksums with the dedicated plugin config, and `gh release create "$RELEASE_TAG"` creates the GitHub Release for the exact `plugin-release/vX.Y.Z` or `plugin-ui/vX.Y.Z` tag.
-
-No workflow calculates versions, commits, tags, pushes, rewrites manifests, or
-uses the global mixed-artifact `.goreleaser.yaml` for publishing. Plugin
-workflows receive `PLUGIN_RELEASE_VERSION` or `PLUGIN_UI_VERSION` from the
-validated version output. The CLI workflow receives `CLI_VERSION` from that
-same output.
+- [Release lifecycle](lifecycle.md)
+- [Configuration and state](configuration.md)
+- [GitHub Actions golden path](github-actions-golden-path.md)
+- [Journals and recovery](journals-and-recovery.md)
+- [Release command reference](cli-reference.md)

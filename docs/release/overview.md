@@ -1,143 +1,101 @@
-# Release System Overview
+# Neko Release
 
-Neko CLI currently supports two release configuration formats.
+> **Audience:** Users evaluating or operating the Neko Release Plugin.
+>
+> **Purpose:** Serve as the canonical Release documentation entry point and route each task to its authoritative document.
 
-This page and the [canonical CLI reference](cli-reference.md) describe the
-current product. Current implementation architecture lives in the
-[Release Plugin current-state reference](../../plugin/release/docs/architecture/current-state.md).
-Completed plans, hardening sequences, and completion reviews are preserved
-separately in the [Release documentation history](../../plugin/release/docs/history/README.md)
-and are not current product authority.
+Neko Release provides version planning, repository validation, release-unit
+state, GitHub Actions handoff, evidence inspection, and guarded recovery. V2 is
+the canonical architecture for new repositories. V1 remains supported
+compatibility for repositories that still use `.release.neko.json`.
 
-## V1
+## Product boundary
 
-V1 is the legacy format stored in `.release.neko.json`. It describes one global release stream:
+Neko CLI owns release policy and local coordination:
 
-```json
-{
-  "project-name": "neko-cli",
-  "project-owner": "nekoman-hq",
-  "project-type": "backend",
-  "release-system": "goreleaser",
-  "version": "2.3.1"
-}
-```
+- configuration and version state;
+- release-unit selection and next-version calculation;
+- required version materialization;
+- the exact release commit and unit tag;
+- push order and workflow dispatch;
+- execution and dispatch journals;
+- read-only inspection and guarded Resume.
 
-V1 remains supported for existing release repositories. Shared `patch`,
-`minor`, `major`, `plan`, `history`, `contributors`, `validate`, `evidence`,
-and eligible `evidence-archive` flows continue to use this source when no V2
-authority exists. New `neko release init` is V2-only; use
-`neko release migrate` to convert a root V1 repository. The exact per-command
-support and evidence-family restrictions live in the
-[canonical CLI reference](cli-reference.md#release-support-status-matrix).
+Consumer repositories own product-specific work in their workflows:
 
-## V2
+- build and test commands;
+- artifact production and signing;
+- GitHub Release creation;
+- asset publication;
+- environment-specific credentials and permissions.
 
-V2 is repository-root scoped and uses two files:
+An accepted workflow dispatch is a completed Neko-to-GitHub handoff. It is not
+evidence that the workflow or publication succeeded.
 
-```text
-.neko/release.config.json
-.neko/release.state.json
-```
+## Start here
 
-`release.config.json` is committed architecture: units, paths, working directories, tag prefixes, executor type, delivery mode, and optional plugin metadata for units with `kind: "plugin"`.
-
-`release.state.json` is the version source of truth for all units. Tags are not stored in state; a tag is derived later from `tagPrefix + version`.
-
-Core V2 terms:
-
-| Term | Meaning |
+| Need | Canonical document |
 | --- | --- |
-| `unit` | Independently releasable object such as `cli`, `api`, or `plugin-release` |
-| `tagPrefix` | Namespace used to derive tags for a unit, such as `v`, `api/v`, or `plugin-release/v` |
-| `executor` | Release tool: `goreleaser`, `jreleaser`, or `release-it` |
-| `delivery` | Release handoff mode; V2 supports `github-actions` |
+| Commands, flags, output, and exits | [Release command reference](cli-reference.md) |
+| V2 config, state, units, and tags | [Configuration and state](configuration.md) |
+| Planning, materialization, Git, push, and delivery | [Release lifecycle](lifecycle.md) |
+| Workflow scaffold, dispatch, credentials, and Doctor | [GitHub Actions delivery](github-actions-delivery.md) |
+| End-to-end repository setup | [GitHub Actions golden path](github-actions-golden-path.md) |
+| Execution/dispatch journals and Resume | [Journals and recovery](journals-and-recovery.md) |
+| V1 and V2 support boundary | [Compatibility](compatibility.md) |
+| Convert V1 to V2 | [V1 to V2 migration](migration-v1-to-v2.md) |
+| Copyable scenarios | [Examples](examples.md) |
+| Explicit remote Doctor verification | [Integration Doctor remote verification](integration-doctor-remote-verification.md) |
 
-V2 can be loaded, strictly parsed, validated, normalized, and used for unit workflows. `history` and `contributors` are unit-aware. `patch`, `minor`, and `major` support V2 dry-run planning with execution context, delivery resolution, version materialization planning, GitHub Actions workflow configuration, and Neko-owned Git release planning.
+## V1 and V2
 
-Nekocli itself now has `cli`, `plugin-release`, and `plugin-ui` V2 units. `.neko/release.state.json` is authoritative for every releaseable version. `.plugin.release.neko.json` has been removed and must not be reintroduced. Each plugin release plan materializes only that unit's `manifest.json`. Plugin units declare `name`, `manifest`, `assetPrefix`, and `binaryName` metadata in V2 config so `neko release plugin-index` can generate the public registry contract without registry Go-code edits. CLI install, version, and update checks use only stable CLI tags matching `vX.Y.Z`; plugin releases and `plugin-registry` are ignored for CLI updates. Runtime plugin discovery, install, and update use `plugin-index.json` as the source of truth from the `plugin-registry` GitHub Release asset; `/releases/latest` and release-prefix fallback discovery are not used for plugin discovery. Plugin release workflows publish or replace that asset after successful plugin releases.
+V1 reads `.release.neko.json`, exposes one virtual `default` unit, and keeps its
+legacy executor adapters. It is supported compatibility, not the model for new
+configuration.
 
-V2 GitHub Actions non-dry-run public release commands are active. Neko CLI owns materialization, state update, targeted staging, release commit, unit tag, commit push, tag push, execution journal, dispatch journal, and workflow dispatch. GitHub Actions owns build, GitHub Release creation, and asset publishing from the pushed tag. V2 local delivery is deliberately unsupported and rejected by validation.
+V2 reads `.neko/release.config.json` and `.neko/release.state.json`, supports
+multiple release units, and uses explicit GitHub Actions delivery. Root V1 and
+V2 files cannot act as competing authorities. Use `neko release migrate` for
+the supported transition.
 
-The stable V2 lifecycle is:
+## Inspection and mutation
 
-```bash
-neko release init ...
-neko release unit-add ...
-neko release validate --show
-neko release pipeline --unit <unit>
-neko release patch --unit <unit>
-neko release history --unit <unit>
-neko release contributors --unit <unit>
-neko release resume --unit <unit> --dry-run
-```
+Inspection commands have deliberately different responsibilities:
 
-Multi-unit repositories require `--unit` for unit-scoped commands. Follow the [Release V2 GitHub Actions Golden Path](github-actions-golden-path.md) for the complete release-ready workflow, or see [Release V2 Examples](examples.md) for additional CLI, service, plugin, registry, and install/update examples. The ownership boundary behind that integration is defined in [Release V2 Bootstrap Product Boundary](bootstrap-product-boundary.md).
+- `units` shows configured units and their declared contracts.
+- `plan` calculates a release without mutation.
+- `pipeline` projects local lifecycle/evidence state; it is not a lifecycle engine.
+- `doctor` performs read-only readiness checks and never repairs files or workflows.
+- `evidence` reads journal evidence.
+- `evidence archive` is a separate guarded local mutation.
 
-## Safety
+Mutation commands are explicit:
 
-Dry-run release planning is read-only. It calculates and displays the next version without writing `.release.neko.json`, updating executor files, starting executors, resolving `GITHUB_TOKEN`, running rollback, fetching remotes, committing, tagging, pushing, dispatching, or publishing.
+- `init`, `unit-add`, and `migrate` write Release configuration/state under their create or migration contracts.
+- `github-workflow-init` is create-only and never overwrites differing content.
+- non-dry-run V2 release commands create the release state/commit/tag, push, and dispatch.
+- `resume` continues one exact unresolved execution; it does not create a new release.
 
-Rollback is bounded to release runs that have recorded a mutating step. Guard and planning failures must not trigger destructive cleanup such as `git reset --hard` or `git clean -fd`.
+## Current limitations
 
-## Current Scope
+- Executable V2 local delivery is unsupported; V2 uses `github-actions`.
+- GitHub Enterprise remotes are rejected by dispatch target validation.
+- No public standalone dispatch or retry command exists.
+- Dispatch acceptance does not track durable workflow-run or publication completion.
+- Unknown push or dispatch outcomes require operator inspection and are not retried automatically.
 
-Implemented now:
+These are present product boundaries, not commitments to additional behavior.
 
-- V1 compatibility.
-- V2 models, strict JSON parsing, validation, and normalization.
-- V2 support in `neko release validate`.
-- Unit selection with `--unit`.
-- Unit-specific V2 history and contributors.
-- Non-mutating V2 dry-run version planning.
-- Safe V1 root single-unit migration with `neko release migrate`.
-- Atomic JSON write helpers for migration and state updates.
-- Schema-neutral `ReleaseExecutionContext`.
-- Delivery resolver with `github-actions` recognized as the supported V2 handoff mode and `local` retained only for legacy compatibility/error reporting.
-- GitHub Actions delivery schema with mandatory canonical `.github/workflows/<file>.yml|yaml` workflow validation.
-- Immutable GitHub Actions dispatch request contract and SHA-256 identity.
-- Durable V2 release execution journal and read-only recovery assessment under the Git common directory.
-- Durable dispatch journal model under the Git common directory.
-- Internal GitHub.com-only Actions workflow-dispatch client with `GITHUB_TOKEN` token resolution, redirect blocking, and accepted/rejected/unknown classification.
-- Public V2 GitHub Actions release execution.
-- Production GitHub Actions publishing workflows for `cli`, `plugin-release`, and `plugin-ui`.
-- Dedicated GoReleaser configs for `cli`, `plugin-release`, and `plugin-ui`.
-- V2-only `neko release init` for one release unit, writing `.neko/release.config.json` and `.neko/release.state.json`.
-- Plugin unit metadata support in `neko release init` with `--kind plugin`.
-- `neko release unit-add` for appending normal and plugin units to existing V2 config/state.
-- V2 plugin unit metadata validation for plugin index generation.
-- Deterministic `plugin-index.json` generation from V2 plugin units, state, and manifests.
-- Runtime plugin registry reads `plugin-index.json` as its source of truth; release-prefix fallback discovery has been removed.
-- Plugin release workflows publish/update the mutable `plugin-registry` release asset after successful plugin releases.
-- Public `neko release resume --unit <unit>` and read-only `--dry-run` recovery assessment.
-- Executor capability contracts for `goreleaser`, `jreleaser`, and `release-it`.
-- Executor requirement checks scoped to unit roots.
-- Version materialization before V2 GitHub Actions release commits.
-- Deprecated V2 local release transaction wrapper that rejects local execution directly.
-- Internal V2 `GitReleaseCoordinator` for targeted staging, deterministic release commits, unit tags, and explicit commit/tag pushes.
-- Non-destructive V2 recovery boundary.
-- Public V2 dry-run Git planning.
-- Stable local/CI release-context validation.
-- Local-by-default Release V2 integration Doctor with explicit bounded remote
-  verification.
-- Opt-in create-only GitHub Actions workflow scaffolding.
-- Strictly read-only `neko release units` inventory with current state versions,
-  tag shapes, unit alignment/issues, responsive human output, stable JSON, and
-  structured exit behavior.
-- Local-only, read-only `neko release pipeline --unit <unit>` inspection of the
-  configured lifecycle plus exactly correlated execution/dispatch journals,
-  local Git evidence, recovery, resume eligibility, retry safety, and manual
-  intervention, with append-only JSON schema version `1` and responsive human
-  output. The canonical schema, status, presentation, exit, fixture, asset, and
-  safety contract is the [Pipeline inspection reference](cli-reference.md#pipeline-inspection).
+## Repository implementation references
 
-Not implemented yet:
+Public behavior is described in this directory. Contributors should use the
+[Release implementation architecture](../../plugin/release/docs/architecture/current-state.md),
+[package ownership](../../plugin/release/docs/architecture/package-ownership.md),
+and [architecture constraints](../../plugin/release/docs/architecture/architecture-decisions.md).
+Completed or superseded rationale is isolated in the
+[Release history](../../plugin/release/docs/history/README.md).
 
-- Automatic multi-unit migration.
-- Workflow template generation from `neko release init`.
-- Executor scaffolding from `neko release init`.
-- Build-system adapters such as Gradle.
-- V2 local executor execution.
-- Automated cross-platform install/update smoke testing against the published plugin registry.
-- V2 local non-dry-run release execution.
-- Public standalone dispatch and retry commands.
+## Canonical guide
+
+For a complete consumer-repository setup and operator sequence, use the
+[GitHub Actions golden path](github-actions-golden-path.md).

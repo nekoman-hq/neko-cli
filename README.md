@@ -53,7 +53,7 @@ The built-in `neko version` and `neko update` commands use the same CLI-aware re
 
 ```bash
 # Install a specific CLI release
-NEKO_VERSION=v3.0.4 ./install.sh
+NEKO_VERSION=vX.Y.Z ./install.sh
 
 # Install to a custom directory
 NEKO_INSTALL_DIR="$HOME/.local/bin" ./install.sh

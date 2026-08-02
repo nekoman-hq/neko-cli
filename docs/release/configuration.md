@@ -1,76 +1,30 @@
-# Release Configuration
+# Release Configuration and State
 
-## Root Resolution
+> **Audience:** Repository owners configuring Release V2 and operators selecting release units.
+>
+> **Purpose:** Define the authoritative V2 files, validation rules, unit selection, tag ownership, and plugin-unit metadata.
 
-Release root detection follows this order:
+Configuration answers what may be released. State answers which version each
+unit has reached. Neither file records tags, workflow runs, or publication
+completion.
 
-1. Find the Git repository root when possible.
-2. If the Git root contains `.neko/release.config.json`, V2 is canonical.
-3. V2 requires both `.neko/release.config.json` and `.neko/release.state.json`.
-4. A nested `.release.neko.json` cannot override V2 in the Git root.
-5. If no V2 config exists in the Git root, V1 root detection falls back to the nearest `.release.neko.json`.
-6. A V1 file and V2 config together in the Git root are a configuration conflict.
+## Authority and root resolution
 
-## V2 Config
+Release source detection uses the Git repository root when Git is available:
 
-`.neko/release.config.json`:
+1. `.neko/release.config.json` at the Git root selects V2.
+2. V2 requires both `.neko/release.config.json` and `.neko/release.state.json`.
+3. A nested `.release.neko.json` cannot override root V2 files.
+4. Without root V2 configuration, the nearest `.release.neko.json` selects V1.
+5. Root V1 and V2 files together are rejected as mixed authority.
 
-```json
-{
-  "schemaVersion": 2,
-  "units": [
-    {
-      "id": "default",
-      "displayName": "My Project",
-      "paths": ["**"],
-      "workingDirectory": ".",
-      "tagPrefix": "v",
-      "executor": {
-        "type": "goreleaser",
-        "delivery": "github-actions",
-        "workflow": ".github/workflows/release-default.yml"
-      }
-    }
-  ]
-}
-```
+Normal loading and validation are read-only. `init`, `unit-add`, `migrate`, and
+an executable release are the commands that write configuration or state under
+their documented contracts.
 
-Rules:
+## V2 configuration
 
-- `schemaVersion` must be exactly `2`.
-- Unknown JSON fields are rejected.
-- `units` must not be empty.
-- Unit IDs must match `[a-z][a-z0-9-]*`.
-- `displayName` is optional.
-- `paths` must not be empty. Patterns must be relative and stay inside the repository.
-- `workingDirectory` defaults internally to `.`. It must be relative, stay inside the repository, and exist when validating against a real root.
-- `tagPrefix` must be non-empty, relative, safe, unique, and not overlap another unit's prefix.
-- Supported executors are `jreleaser`, `release-it`, and `goreleaser`.
-- `delivery` is required and must be `github-actions` for V2.
-- `workflow` is required for V2 `github-actions` delivery and must point to an existing workflow file during repository-aware validation.
-
-Field roles:
-
-| Field | Role |
-| --- | --- |
-| `units[].id` | Stable release unit identifier used by `--unit` |
-| `units[].paths` | Repository path globs owned by the unit |
-| `units[].workingDirectory` | Unit root for executor requirement checks |
-| `units[].tagPrefix` | Prefix used to derive tags from state versions |
-| `units[].executor.type` | Release tool: `goreleaser`, `jreleaser`, or `release-it` |
-| `units[].executor.delivery` | V2 handoff mode: `github-actions` |
-| `units[].kind` | Optional; omit for normal release units, use `plugin` only for Neko CLI plugin registry metadata |
-
-Allowed tag prefix examples:
-
-```text
-v
-api/v
-web/v
-mobile/v
-```
-
-## Multi-Unit Example
+`.neko/release.config.json` uses schema version 2:
 
 ```json
 {
@@ -87,50 +41,143 @@ mobile/v
         "delivery": "github-actions",
         "workflow": ".github/workflows/release-api.yml"
       }
-    },
-    {
-      "id": "web",
-      "displayName": "Web",
-      "paths": ["web/**"],
-      "workingDirectory": "web",
-      "tagPrefix": "web/v",
-      "executor": {
-        "type": "release-it",
-        "delivery": "github-actions",
-        "workflow": ".github/workflows/release-web.yml"
-      }
     }
   ]
 }
 ```
 
-`github-actions` is valid configuration data and is resolved as a remote delivery contract. Public V2 GitHub Actions non-dry-run releases are active and dispatch the configured workflow after Neko CLI has committed, tagged, and pushed the selected unit release. It requires a canonical workflow path:
+Unknown JSON fields are rejected. The configuration rules are:
+
+- `schemaVersion` is exactly `2`.
+- `units` is non-empty.
+- Unit IDs match `[a-z][a-z0-9-]*` and are unique.
+- `displayName` is optional.
+- `paths` is non-empty; every glob is relative and remains inside the repository.
+- `workingDirectory` defaults to `.`; it is relative, remains inside the repository, and exists during repository-aware validation.
+- `tagPrefix` is non-empty, safe, unique, and non-overlapping.
+- `executor.type` is `goreleaser`, `jreleaser`, or `release-it`.
+- V2 `executor.delivery` is `github-actions`.
+- `executor.workflow` is a repository-relative `.yml` or `.yaml` file directly below `.github/workflows/`; repository-aware validation requires it to exist.
+
+`local` is not valid executable V2 delivery. It remains part of the V1
+compatibility behavior described in [Compatibility](compatibility.md).
+
+### Field ownership
+
+| Field | Responsibility |
+| --- | --- |
+| `units[].id` | Stable selection key used by `--unit` |
+| `units[].displayName` | Optional human label |
+| `units[].paths` | Repository path globs owned by the unit |
+| `units[].workingDirectory` | Root for executor requirement checks |
+| `units[].tagPrefix` | Namespace used to derive the unit tag |
+| `units[].executor.type` | Release tool selected by the consumer workflow |
+| `units[].executor.delivery` | Handoff mode; V2 accepts `github-actions` |
+| `units[].executor.workflow` | Consumer-owned workflow dispatched by Neko CLI |
+| `units[].kind` and `units[].plugin` | Optional Neko CLI plugin registry metadata |
+
+## State
+
+`.neko/release.state.json` is the version source of truth:
+
+```json
+{
+  "schemaVersion": 2,
+  "units": {
+    "api": { "version": "1.4.2" }
+  }
+}
+```
+
+State rules are:
+
+- `schemaVersion` is exactly `2`.
+- Unknown JSON fields are rejected.
+- Every configured unit has exactly one state entry.
+- State contains no unknown units.
+- Every version is valid SemVer.
+- Tags are derived from `tagPrefix + version`; tags are not stored in state.
+
+Dry-run release commands, `validate`, `units`, `plan`, `pipeline`, `evidence`,
+and Doctor do not write state. An executable V2 GitHub Actions release writes
+the selected unit's next version atomically, reloads and validates the
+repository, then includes state in the release commit.
+
+Before the commit boundary, state and materialization transactions retain
+byte-for-byte snapshots. A local failure in that interval restores their known
+files. Once commit, tag, or push coordination starts, automatic restoration no
+longer applies; see [Journals and Recovery](journals-and-recovery.md).
+
+## Release units
+
+A release unit is the V2 ownership boundary for paths, working directory, tag
+namespace, executor, workflow, and version. V1 is normalized internally as one
+virtual unit named `default`.
+
+Selection rules:
+
+- V1 accepts no `--unit` or `--unit default`; another ID is rejected.
+- A one-unit V2 repository selects its only unit when `--unit` is omitted.
+- A multi-unit V2 repository requires `--unit` for `patch`, `minor`, `major`, `plan`, `pipeline`, `history`, `contributors`, and `resume`.
+- `ci-validate-context` always requires `--unit`.
+- `github-workflow-init` accepts `--unit`; when multiple workflows are configured, `--path` can identify the workflow target.
+- Doctor may inspect every unit. A unit filter retains shared-workflow checks required by other units.
+- Evidence filters are inspection filters, not lifecycle unit selection.
+- `validate` always validates the complete repository; `--unit` and `--show` only focus its human presentation.
+
+The exact command and flag matrix is owned by the
+[Release command reference](cli-reference.md).
+
+## Normal and plugin units
+
+The default `--kind release` represents services, applications, libraries,
+SDKs, and CLIs. Normal units omit `kind` and plugin metadata in stored JSON.
+
+`--kind plugin` is reserved for Neko CLI plugins and requires:
 
 ```text
-.github/workflows/<workflow-file>.yml
-.github/workflows/<workflow-file>.yaml
+plugin.name
+plugin.manifest
+plugin.assetPrefix
+plugin.binaryName
 ```
 
-The workflow file must exist in a real repository and must resolve inside `.github/workflows/`. `local` delivery is not valid V2 configuration.
+Plugin unit IDs start with `plugin-`, their tag prefix is `<unit-id>/v`, and
+their asset prefix equals the unit ID. The manifest path is repository-relative
+and remains inside the repository.
 
-`neko release init` creates these V2 config/state files for one unit. The CLI default `--kind release` creates a normal non-plugin unit for services, apps, CLIs, SDKs, libraries, or backend modules; V2 JSON omits `kind` for those normal units. `--kind plugin` is only for Neko CLI plugin units and requires `--plugin-name`, `--plugin-manifest`, `--plugin-asset-prefix`, and `--plugin-binary-name`. Plugin flags without `--kind plugin` are invalid. Plugin unit ids must start with `plugin-`, plugin tag prefixes must be `<unit-id>/v`, and plugin asset prefixes must match the unit id. `neko release unit-add` appends one normal or plugin unit to existing V2 config/state, preserves existing units, and validates the complete result before writing. Init and unit-add do not create `.release.neko.json`, generate workflow templates, generate plugin manifests, source directories, or scaffold executor config files. Existing V1 projects should use `neko release migrate`; GitHub Actions units require an existing workflow path below `.github/workflows/`.
+`neko release plugin-index` reads plugin units, state, and manifests to produce
+deterministic Plugin Index schema-v1 bytes. The index is output, not committed
+repository source. Normal units are excluded.
 
-For public V2 GitHub Actions non-dry-run releases, Neko CLI owns version materialization, state, commit, tag, push, journals, and dispatch; the configured GitHub workflow owns build, GitHub Release creation, and asset publishing from the pushed tag. `jreleaser` materializes `jreleaser.yml` before state write and before the Neko-owned release commit boundary. `goreleaser` is tag/context based by default; Nekocli plugin units additionally materialize their selected `manifest.json` from `.neko/release.state.json`. Nekocli uses `.goreleaser.cli.yaml`, `.goreleaser.plugin-release.yaml`, and `.goreleaser.plugin-ui.yaml` so each workflow builds and publishes only its own unit artifacts. V2 local executor execution is not configurable because no supported executor currently exposes a safe publish-only boundary.
+## Tag ownership
 
-Neko CLI plugin release units can declare registry metadata directly in `.neko/release.config.json` with `kind: "plugin"` and a `plugin` object containing `name`, `manifest`, `assetPrefix`, and `binaryName`. Normal release units do not declare this metadata and are not included in `plugin-index.json`. The metadata is validated with the V2 schema and is the release-system source of truth for adding new plugin units. `neko release plugin-index` generates a deterministic public `plugin-index.json` from V2 plugin units, `.neko/release.state.json`, and each plugin manifest. The generated index is not committed as repository source. Plugin release workflows publish or replace it as the `plugin-index.json` asset on the mutable `plugin-registry` GitHub Release after successful plugin releases. Runtime plugin discovery, install, and update use that asset as the source of truth; release-prefix fallback discovery has been removed. See [Normal release units vs Neko CLI plugin units](examples.md#normal-release-units-vs-neko-cli-plugin-units).
+Examples of valid prefixes are `v`, `api/v`, and `web/v`. A unit tag is the
+prefix followed by its SemVer version. Exact parsing requires:
 
-Nekocli no longer has a plugin version map. `.plugin.release.neko.json` was removed; all releaseable versions live in `.neko/release.state.json`.
+- the exact configured prefix;
+- a valid release version after the prefix;
+- no slash or unrelated suffix in the version portion.
 
-See [Release V2 examples](examples.md), [Release V2 bootstrap product boundary](bootstrap-product-boundary.md), [Local delivery](local-delivery.md), [GitHub Actions delivery](github-actions-delivery.md), [Release executors](executors.md), [Version materialization](version-materialization.md), [Local release transaction](local-release-transaction.md), and [Git release coordination](git-coordination.md).
+Overlapping prefixes such as `api/` and `api/v` are rejected. Local tag lookup
+does not fetch. Git globbing is only a prefilter; the selected unit's `TagSpec`
+performs the authoritative parse.
 
-## Migration
+## Creation and migration
 
-Classic V1 repositories with `.release.neko.json` directly in the Git root can be migrated with:
+`neko release init` creates one V2 configuration and state pair.
+`neko release unit-add` appends one validated unit while preserving existing
+units. They do not create V1 configuration, workflows, manifests, source trees,
+or executor configuration.
 
-```bash
-neko release migrate
-```
+`neko release migrate` converts a root V1 configuration into one V2 unit named
+`default`, retains tag prefix `v`, and archives the source as
+`.release.neko.json.v1.bak`. Nested V1 files are not migrated automatically.
+See [V1 to V2 Migration](migration-v1-to-v2.md).
 
-The migration creates a single V2 unit named `default`, keeps the tag prefix as `v`, and archives the original V1 file as `.release.neko.json.v1.bak`. Nested V1 files are not migrated automatically.
+## Related documentation
 
-See [V1 to V2 migration](migration-v1-to-v2.md).
+- [Release lifecycle](lifecycle.md)
+- [GitHub Actions delivery](github-actions-delivery.md)
+- [Release examples](examples.md)
+- [Release compatibility](compatibility.md)
