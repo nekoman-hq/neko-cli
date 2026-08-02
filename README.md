@@ -168,36 +168,22 @@ neko release --help
 neko release patch --help
 ```
 
-### Release V2 Dogfood
+### How Neko CLI releases itself
 
-This repository releases itself with V2 multi-unit release state:
+Neko CLI dogfoods Release V2 through three independently versioned release units. Each is configured with GoReleaser and GitHub Actions delivery. The units are `cli` (tags `vX.Y.Z`, workflow `.github/workflows/release-neko-cli.yml`), `plugin-release` (tags `plugin-release/vX.Y.Z`, workflow `.github/workflows/release-plugin-release.yml`), and `plugin-ui` (tags `plugin-ui/vX.Y.Z`, workflow `.github/workflows/release-plugin-ui.yml`). Their current versions are owned exclusively by `.neko/release.state.json`; `.neko/release.config.json` owns the stable unit structure and delivery configuration.
 
-- `cli` uses global tags like `v3.0.0`.
-- `plugin-release` uses tags like `plugin-release/v4.0.0`.
-- `plugin-ui` uses tags like `plugin-ui/v1.0.0`.
-- All releaseable versions live in `.neko/release.state.json`; the old `.plugin.release.neko.json` map has been removed.
-- `neko release init` creates V2 `.neko/release.config.json` and `.neko/release.state.json` files for one unit. `neko release unit-add` appends one normal or plugin unit to existing V2 config/state. `--kind release` is the default for normal services, apps, CLIs, SDKs, libraries, and backend modules; normal units need no plugin metadata or plugin registry. Use `--kind plugin` and the plugin metadata flags only for Neko CLI plugins distributed through `neko plugin install` or `neko plugin update`. These commands do not generate workflow templates, GoReleaser configs, plugin manifests, or source directories, and `init` no longer creates `.release.neko.json`. Existing V1 projects should use `neko release migrate`.
-- Plugin units declare `kind: "plugin"` metadata in `.neko/release.config.json`, including public Neko CLI plugin name, manifest path, asset prefix, and binary name. That metadata feeds `plugin-index.json`; normal release units are not included in the plugin index. See [Release V2 Examples](docs/release/examples.md#normal-release-units-vs-neko-cli-plugin-units) for the full boundary.
-- Neko CLI owns version/materialization/state, release commit, tag, push, and workflow dispatch.
-- GitHub Actions workflows own build, GitHub Release creation, and asset publishing.
-- Dry-run release planning needs no token and writes nothing.
-- CLI version, update, and install checks use only stable CLI tags matching `vX.Y.Z`; plugin releases and `plugin-registry` are ignored for CLI updates.
-- Runtime plugin discovery, install, and update use `plugin-index.json` as the registry source of truth. The index is published as the `plugin-index.json` asset on the mutable `plugin-registry` GitHub Release after successful plugin releases; `/releases/latest` and release-prefix fallback discovery are not used for plugin discovery.
-- Use global `--describe` for structured inspection details and global `--verbose` for execution/debug logs where the command owns useful phases. Static and complete read-only queries may intentionally treat either flag as a no-op. They are independent and may be combined.
+The release flow is deliberately split across Neko and the repository workflow:
 
-The complete Release V1/V2 command, flag, output, source, I/O, and exit matrix
-lives in the canonical [Release CLI Reference](docs/release/cli-reference.md).
-Existing V1 repositories use the [V1-to-V2 migration
-guide](docs/release/migration-v1-to-v2.md); new V2 integrations should follow
-the [GitHub Actions golden path](docs/release/github-actions-golden-path.md).
-Copy-ready Release V2 and plugin registry examples live in [Release V2
-Examples](docs/release/examples.md). The product boundary for release-ready
-GitHub Actions bootstrap lives in [Release V2 Bootstrap Product
-Boundary](docs/release/bootstrap-product-boundary.md).
-Current implementation architecture lives in the [Release Plugin architecture
-reference](plugin/release/docs/architecture/current-state.md); completed
-roadmaps and reviews are preserved in the [Release documentation
-history](plugin/release/docs/history/README.md).
+1. Release config and state identify the selected unit and authoritative version; its tag is calculated from the configured prefix and next version.
+2. `neko release patch|minor|major` plans and materializes the selected unit, then creates the release commit and lightweight unit tag.
+3. Neko pushes the owned Git state—commit before tag—and dispatches the configured workflow with validated release identity: `unit`, `version`, `tag`, and `release_sha`.
+4. The consumer-owned GitHub Actions workflow builds, creates the GitHub Release, and publishes the unit's artifacts. Dispatch is the handoff to that workflow, not completed publication.
+
+`neko release doctor` is read-only and validates the local V2 integration. It is offline and token-free by default; remote verification performs bounded GitHub GETs only when `--verify-remote` is explicitly requested. Doctor never repairs configuration or files.
+
+`neko release github-workflow-init` is create-only. It creates one missing starter workflow and accepts an identical existing workflow without rewriting it; differing customized content is never overwritten. Repository workflows remain intentionally consumer-owned after scaffolding.
+
+For exact commands, flags, output, Pipeline, Evidence, Resume, and recovery contracts, use the [Release CLI Reference](docs/release/cli-reference.md). See the [V1-to-V2 migration guide](docs/release/migration-v1-to-v2.md), the [GitHub Actions golden path](docs/release/github-actions-golden-path.md), and the [normal/plugin unit and Plugin Index examples](docs/release/examples.md#normal-release-units-vs-neko-cli-plugin-units) for adoption details. The [current architecture and its numbered history](plugin/release/docs/architecture/current-state.md#historical-context) explain the implementation boundaries and their evolution.
 
 ### Global Flags
 
