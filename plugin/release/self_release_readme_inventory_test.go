@@ -166,8 +166,8 @@ func readSelfReleaseRepositoryFacts(t *testing.T, root string) (selfReleaseConfi
 	if err != nil {
 		t.Fatalf("read self-release configuration: %v", err)
 	}
-	if err := json.Unmarshal(configurationBytes, &configuration); err != nil {
-		t.Fatalf("decode self-release configuration: %v", err)
+	if decodeErr := json.Unmarshal(configurationBytes, &configuration); decodeErr != nil {
+		t.Fatalf("decode self-release configuration: %v", decodeErr)
 	}
 
 	var state selfReleaseState
@@ -175,8 +175,8 @@ func readSelfReleaseRepositoryFacts(t *testing.T, root string) (selfReleaseConfi
 	if err != nil {
 		t.Fatalf("read self-release state: %v", err)
 	}
-	if err := json.Unmarshal(stateBytes, &state); err != nil {
-		t.Fatalf("decode self-release state: %v", err)
+	if decodeErr := json.Unmarshal(stateBytes, &state); decodeErr != nil {
+		t.Fatalf("decode self-release state: %v", decodeErr)
 	}
 	return configuration, state
 }
