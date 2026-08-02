@@ -10,11 +10,12 @@ func TestSelfReleaseReadmeIsConciseAndCurrent(t *testing.T) {
 	root := repositoryRoot(t)
 	readme := readDocumentationFile(t, filepath.Join(root, "README.md"))
 	section := selfReleaseReadmeSection(t, readme)
+	normalizedSection := normalizedReadmeText(section)
 
 	if strings.Contains(readme, "### Release V2 Dogfood") {
 		t.Error("README retains the oversized Release V2 dogfood heading")
 	}
-	if count := strings.Count(readme, "### How Neko CLI releases itself"); count != 1 {
+	if count := strings.Count(readme, "## How Neko CLI releases itself"); count != 1 {
 		t.Errorf("current self-release heading occurs %d times, want exactly once", count)
 	}
 	if words := len(strings.Fields(section)); words < 180 || words > 350 {
@@ -31,7 +32,7 @@ func TestSelfReleaseReadmeIsConciseAndCurrent(t *testing.T) {
 		"The consumer-owned GitHub Actions workflow builds, creates the GitHub Release, and publishes the unit's artifacts.",
 		"Dispatch is the handoff to that workflow, not completed publication.",
 	} {
-		if !strings.Contains(section, required) {
+		if !strings.Contains(normalizedSection, required) {
 			t.Errorf("README self-release section is missing release-flow contract %q", required)
 		}
 	}
@@ -46,7 +47,7 @@ func TestSelfReleaseReadmeIsConciseAndCurrent(t *testing.T) {
 
 func TestSelfReleaseReadmeInspectionAndScaffoldingBoundaries(t *testing.T) {
 	root := repositoryRoot(t)
-	section := selfReleaseReadmeSection(t, readDocumentationFile(t, filepath.Join(root, "README.md")))
+	section := normalizedReadmeText(selfReleaseReadmeSection(t, readDocumentationFile(t, filepath.Join(root, "README.md"))))
 
 	for _, exact := range []string{
 		"`neko release doctor` is read-only and validates the local V2 integration.",

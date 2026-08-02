@@ -183,15 +183,12 @@ func readSelfReleaseRepositoryFacts(t *testing.T, root string) (selfReleaseConfi
 
 func selfReleaseReadmeSection(t *testing.T, readme string) string {
 	t.Helper()
-	start := strings.Index(readme, "### Release V2 Dogfood\n")
-	if start < 0 {
-		start = strings.Index(readme, "### How Neko CLI releases itself\n")
-	}
+	start := strings.Index(readme, "## How Neko CLI releases itself\n")
 	if start < 0 {
 		t.Fatal("README self-release section is missing")
 	}
 	remainder := readme[start:]
-	next := strings.Index(remainder[1:], "\n### ")
+	next := strings.Index(remainder[1:], "\n## ")
 	if next < 0 {
 		return remainder
 	}

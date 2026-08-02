@@ -1,330 +1,266 @@
-<div align="center">
-<h1>Neko CLI</h1>
-<img alt="Neko-Cli Logo" height="500" src="neko-cli-logo.png" width="500"/>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/header/graph.svg?title=Neko%20CLI&amp;subtitle=Plugin-based%20commands%2C%20consistent%20output%2C%20and%20release%20automation.&amp;logo=go&amp;align=left&amp;theme=cyan&amp;font=geist-mono&amp;border=true&amp;mode=dark" />
+    <img alt="Neko CLI technical header" src="https://shieldcn.dev/header/graph.svg?title=Neko%20CLI&amp;subtitle=Plugin-based%20commands%2C%20consistent%20output%2C%20and%20release%20automation.&amp;logo=go&amp;align=left&amp;theme=cyan&amp;font=geist-mono&amp;border=true&amp;mode=light" width="100%" />
+  </picture>
+</p>
 
-<br />
-</div>
+<h1 align="center">Neko CLI</h1>
 
-[![GitHub release](https://img.shields.io/github/v/release/nekoman-hq/neko-cli?style=flat-square)](https://github.com/nekoman-hq/neko-cli/releases)
-[![Go Report Card](https://goreportcard.com/badge/github.com/nekoman-hq/neko-cli)](https://goreportcard.com/report/github.com/nekoman-hq/neko-cli)
-[![Contributors](https://img.shields.io/github/contributors/nekoman-hq/neko-cli?style=flat-square)](https://github.com/nekoman-hq/neko-cli/graphs/contributors)
+<p align="center"><strong>A plugin-based command-line framework for consistent command routing, structured responses, and release automation.</strong></p>
 
----
+<!-- hero-badges:start -->
+<p align="center">
+  <a href="https://github.com/nekoman-hq/neko-cli/releases">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/github/dt/nekoman-hq/neko-cli.svg?variant=secondary&amp;font=geist-mono&amp;mode=dark" />
+      <img alt="GitHub release downloads" src="https://shieldcn.dev/github/dt/nekoman-hq/neko-cli.svg?variant=secondary&amp;font=geist-mono&amp;mode=light" />
+    </picture>
+  </a>
+  <a href="https://github.com/nekoman-hq/neko-cli/actions/workflows/go-lint.yml">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/github/ci/nekoman-hq/neko-cli.svg?workflow=go-lint.yml&amp;branch=main&amp;variant=secondary&amp;font=geist-mono&amp;mode=dark" />
+      <img alt="golangci-lint workflow status" src="https://shieldcn.dev/github/ci/nekoman-hq/neko-cli.svg?workflow=go-lint.yml&amp;branch=main&amp;variant=secondary&amp;font=geist-mono&amp;mode=light" />
+    </picture>
+  </a>
+  <a href="https://github.com/nekoman-hq/neko-cli/blob/main/LICENSE">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/badge/License-Personal--noncommercial-64748b.svg?variant=secondary&amp;font=geist-mono&amp;mode=dark" />
+      <img alt="Personal noncommercial license" src="https://shieldcn.dev/badge/License-Personal--noncommercial-64748b.svg?variant=secondary&amp;font=geist-mono&amp;mode=light" />
+    </picture>
+  </a>
+  <a href="https://github.com/nekoman-hq/neko-cli/blob/main/go.mod">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/badge/Go-1.24.4-00ADD8.svg?variant=branded&amp;logo=go&amp;font=geist-mono&amp;mode=dark" />
+      <img alt="Go 1.24.4 requirement" src="https://shieldcn.dev/badge/Go-1.24.4-00ADD8.svg?variant=branded&amp;logo=go&amp;font=geist-mono&amp;mode=light" />
+    </picture>
+  </a>
+</p>
+<!-- hero-badges:end -->
 
-**Neko CLI** is a lightweight, plugin-based command-line framework. It acts as a dispatcher that loads and executes standalone plugin executables, providing a unified interface with consistent output formatting.
+<p align="center">
+  <a href="#quick-start">Quick Start</a> ·
+  <a href="docs/cli-reference.md">CLI Reference</a> ·
+  <a href="docs/plugin-development.md">Build a Plugin</a>
+</p>
 
-## ✨ Features
+Neko CLI turns standalone executables into one discoverable command tree. Core
+loads installed plugin manifests, routes commands over a stable JSON process
+protocol, renders consistent human and machine output, and applies explicit
+plugin exit intent. Plugins stay independent and own their domain behavior.
 
-- 🔌 **Plugin Architecture** - Extensible via standalone plugin executables
-- 📊 **kubectl-Style Output** - Core rendering in table, JSON, wide, and explicit GitHub command-file modes
-- 🔄 **Unified Interface** - One CLI to rule all your plugins
-- 📦 **Simple Plugin Management** - Drop-in plugin installation
-- 🛠️ **Developer Friendly** - Easy to create and distribute custom plugins
+## What Neko CLI provides
 
----
+| Capability | Current contract |
+| --- | --- |
+| Manifest-driven commands | Installed manifests declare plugin commands, local flags, help, and output capabilities. |
+| Standalone plugins | Each plugin is a separate executable with its own implementation and release lifecycle. |
+| Consistent presentation | Core renders responsive tables, wide views, JSON responses, and declared GitHub command-file output. |
+| Plugin management | Core lists installed plugins and discovers, installs, and updates published plugins through the Plugin Index. |
+| Release automation | The first-party Release Plugin provides compatible V1 behavior and the canonical V2 unit-based workflow. |
 
-## 📦 Installation
+The [complete CLI reference](docs/cli-reference.md) owns the public command,
+flag, I/O, network, mutation, and process-exit inventory.
 
-### From Source
+## Quick Start
 
-```bash
-# Clone the repository
-git clone https://github.com/nekoman-hq/neko-cli.git
-cd neko-cli
-
-# Build the CLI
-make build
-
-# Install globally
-make install
-```
-
-### From Release
-
-Download the latest CLI release from the [releases page](https://github.com/nekoman-hq/neko-cli/releases), or use the install script:
+Install the latest stable CLI with the repository installer, then verify the
+installation:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nekoman-hq/neko-cli/main/install.sh | bash
+neko version
 ```
 
-The script installs the main CLI only. It reads GitHub Releases directly, ignores plugin releases such as `plugin-release/vX.Y.Z`, and selects the newest stable CLI tag matching `vX.Y.Z`. For an ordinary user the default destination is `$HOME/.local/bin`; when intentionally run as root it is `/usr/local/bin`. An explicit `NEKO_INSTALL_DIR` always wins, and the script never invokes `sudo`. If the selected directory is not on `PATH`, the script prints the required guidance.
-
-The built-in `neko version` and `neko update` commands use the same CLI-aware release rule. `neko update` verifies the selected archive against the release checksum manifest before validating its contents and atomically replacing an unmanaged, writable installation. It refuses package-manager-owned or privileged installations before downloading the archive. None of these paths read local release config or state files.
-
-```bash
-# Install a specific CLI release
-NEKO_VERSION=vX.Y.Z ./install.sh
-
-# Install to a custom directory
-NEKO_INSTALL_DIR="$HOME/.local/bin" ./install.sh
-
-# Install from a fork or mirror
-NEKO_REPOSITORY=owner/repo ./install.sh
-```
-
-Plugin installation is separate and uses the published `plugin-index.json` registry:
+Discover the published Plugin Index, install the Release Plugin, and inspect
+its manifest-derived command surface:
 
 ```bash
 neko plugin available
 neko plugin install release
-```
-
-See [Installation](docs/installation.md) for install script details and the
-[complete CLI reference](docs/cli-reference.md) for every public command and
-flag.
-
-### Updating the CLI
-
-```bash
-neko update
-neko update --dry-run
-neko update --force
-```
-
-`--force` only reinstalls the selected latest version when it is already installed. It does not permit downgrades and cannot bypass permissions, package-manager ownership, platform support, checksum verification, archive validation, or atomic replacement requirements. A dry-run selects and reports the action without downloading an archive or changing files.
-
-### Requirements
-
-- **Go 1.24+** (for building from source)
-- **Git** (for repository operations)
-- **curl, jq, tar** (for the release install script)
-
----
-
-## 🔌 Plugin System
-
-### How It Works
-
-Neko CLI uses a **plugin-based architecture** where the core CLI acts as a dispatcher that communicates with standalone plugin executables via JSON over stdin/stdout.
-
-```
-┌─────────────────┐     JSON stdin      ┌─────────────────┐
-│   Neko CLI      │ ──────────────────► │     Plugin      │
-│   (Dispatcher)  │                     │   (Executable)  │
-│                 │ ◄────────────────── │                 │
-└─────────────────┘     JSON stdout     └─────────────────┘
-                        Logs → stderr
-```
-
-### Plugin Directory
-
-Plugins are installed in `~/.neko/plugins/{plugin-name}/` and include:
-- The plugin executable (e.g., `plugin-release`)
-- A `manifest.json` describing available commands and flags
-
----
-
-## 📚 Available Plugins
-
-| Plugin | Description | Documentation |
-|--------|-------------|---------------|
-| **release** | Release management with semantic versioning | [📖 Docs](docs/plugins/release.md) |
-| **ui** | UI component helper plugin | [📖 Docs](docs/plugins/ui.md) |
-
-> Each plugin has its own documentation with detailed command references. Use `neko plugin available` to see all plugins.
-
----
-
-## 🛠️ Core Commands
-
-### Managing Plugins
-
-Use the built-in `plugin` command to manage plugins:
-
-```bash
-# List installed plugins
-neko plugin list
-
-# Show available plugins from registry
-neko plugin available
-
-# Install a plugin
-neko plugin install <plugin-name>
-
-# Update installed plugins
-neko plugin update <plugin-name>
-neko plugin update --all
-
-# Uninstall a plugin
-neko plugin uninstall <plugin-name>
-```
-
-Plugin available/install/update discovery uses the published `plugin-index.json` registry as its source of truth, not the repository's latest release. Local installed versions are read from each installed `manifest.json`; remote plugin versions, release tags, and asset names come from the `plugin-registry` release asset.
-
-### Using Plugins
-
-Once installed, plugin commands are available as subcommands:
-
-```bash
-# Format: neko <plugin> <command> [flags]
-neko release patch
-neko release history --output json
-
-# Show installed plugin overview from its manifest
-neko release
 neko release --help
-
-# Show command-specific manifest help, including flags
-neko release patch --help
 ```
 
-### How Neko CLI releases itself
+Inside a repository with Release V2 configuration and state, Doctor provides a
+safe integration check:
 
-Neko CLI dogfoods Release V2 through three independently versioned release units. Each is configured with GoReleaser and GitHub Actions delivery. The units are `cli` (tags `vX.Y.Z`, workflow `.github/workflows/release-neko-cli.yml`), `plugin-release` (tags `plugin-release/vX.Y.Z`, workflow `.github/workflows/release-plugin-release.yml`), and `plugin-ui` (tags `plugin-ui/vX.Y.Z`, workflow `.github/workflows/release-plugin-ui.yml`). Their current versions are owned exclusively by `.neko/release.state.json`; `.neko/release.config.json` owns the stable unit structure and delivery configuration.
+```bash
+neko release doctor
+```
 
-The release flow is deliberately split across Neko and the repository workflow:
+Doctor is read-only and never repairs repository configuration or workflows.
+The [installation and update guide](docs/installation.md) covers custom install
+directories, PATH setup, supported platforms, package-manager ownership,
+self-update, integrity verification, and recovery.
+
+`neko update --force` is a same-version reinstall only. It does not bypass
+permissions, package-manager ownership, integrity checks, platform checks, or
+downgrade protection.
+
+## How plugins work
+
+Core discovers `manifest.json` files below the configured plugin directory and
+adds their declared commands to the CLI. It starts the corresponding plugin
+executable only when one of those commands runs.
+
+```text
+User command
+    │
+    ▼
+Neko Core ── JSON Request on stdin ──▶ Plugin executable
+    ▲                                      │
+    └── JSON Response on stdout ───────────┘
+                 logs on stderr
+    │
+    └── responsive human / JSON / GitHub rendering + final process exit
+```
+
+Core owns discovery, command routing, subprocess transport, response
+validation, terminal-aware rendering, and transport/render failures. Plugins
+own command behavior, domain effects, structured response data, presentation
+declarations, logs, and explicit response exits. A valid response is rendered
+once; normal results and errors are not printed through competing paths.
+
+See [package architecture](docs/package-architecture.md) for repository
+responsibilities and the [plugin development guide](docs/plugin-development.md)
+for the manifest, request, response, presentation, testing, and packaging
+contracts.
+
+## First-party plugins
+
+Use `neko plugin available` to inspect the current published registry.
+
+| Plugin | Purpose | Current status | Documentation |
+| --- | --- | --- | --- |
+| Release | Version planning, release units, local Git preparation, workflow handoff, evidence, and recovery | Available; V1 is supported compatibility and V2 is canonical for new setup | [Release Plugin](docs/plugins/release.md) |
+| UI | Adds and manages Neko UI components in React Native projects | Available; the manifest advertises `hello`, but the current router does not implement that command | [UI Plugin](docs/plugins/ui.md) |
+
+The UI discrepancy is a current product limitation: `hello` appears in
+manifest-derived help, but dispatch fails because no handler is routed.
+
+## Output and automation
+
+Plugin responses use a consistent Core-owned presentation boundary:
+
+* `table` is the default responsive human view;
+* `wide` enables additional declared table columns;
+* `json` emits the public response envelope;
+* `github` writes declared fields to an explicit GitHub Actions command file;
+* `--describe` adds safe structured human detail;
+* `--verbose` requests and renders captured execution logs.
+
+For example, a Release plan can be inspected as machine-readable JSON without
+mutating the repository:
+
+```bash
+neko release plan --change patch --output json
+```
+
+Core `--output` selects a response format; it is not a file destination. Plugin
+Index persistence uses `--output-file`, while its default mode emits the raw
+schema-v1 registry artifact:
+
+```bash
+neko release plugin-index --output-file build/plugin-index.json
+```
+
+A valid structured plugin response owns its explicit process exit from `0`
+through `125`. Core owns malformed transport, invalid response, rendering, and
+GitHub command-file failures. Each result or error is rendered once. Detailed
+output and exit behavior lives in the [CLI reference](docs/cli-reference.md#output-and-process-exit).
+
+## Release Plugin
+
+Release V1 remains a supported compatibility surface backed by the root
+`.release.neko.json`. Release V2 is canonical for new setup: configuration in
+`.neko/release.config.json` declares release units and policy, while
+`.neko/release.state.json` owns mutable unit versions. Mixed active V1 and V2
+authority is rejected.
+
+Useful read-only entry points include:
+
+```bash
+neko release init-options
+neko release units
+neko release pipeline
+neko release plan --change patch
+```
+
+Pipeline is a read-only projection; it does not execute, retry, or resume
+lifecycle stages. Workflow Init is create-only and never overwrites a differing
+customized workflow. Neko owns local planning, selected-unit materialization,
+state, the release commit and tag, pushes, journals, and workflow handoff.
+Consumer-owned workflows own builds, GitHub Release creation, and artifact
+publication.
+
+Start with the [Release overview](docs/release/overview.md), then use the
+[Release command reference](docs/release/cli-reference.md) for exact commands,
+flags, outputs, exits, and safety boundaries.
+
+## How Neko CLI releases itself
+
+Neko CLI dogfoods Release V2 through three independently versioned release units.
+Each is configured with GoReleaser and GitHub Actions delivery. Their current
+versions are owned exclusively by `.neko/release.state.json`;
+`.neko/release.config.json` owns the stable unit structure, tag namespaces, and
+delivery configuration.
+
+| Unit | Tag namespace | Consumer workflow |
+| --- | --- | --- |
+| `cli` | `vX.Y.Z` | `.github/workflows/release-neko-cli.yml` |
+| `plugin-release` | `plugin-release/vX.Y.Z` | `.github/workflows/release-plugin-release.yml` |
+| `plugin-ui` | `plugin-ui/vX.Y.Z` | `.github/workflows/release-plugin-ui.yml` |
 
 1. Release config and state identify the selected unit and authoritative version; its tag is calculated from the configured prefix and next version.
 2. `neko release patch|minor|major` plans and materializes the selected unit, then creates the release commit and lightweight unit tag.
-3. Neko pushes the owned Git state—commit before tag—and dispatches the configured workflow with validated release identity: `unit`, `version`, `tag`, and `release_sha`.
+3. Neko pushes the owned Git state—commit before tag—and dispatches the configured workflow with validated release identity.
 4. The consumer-owned GitHub Actions workflow builds, creates the GitHub Release, and publishes the unit's artifacts. Dispatch is the handoff to that workflow, not completed publication.
 
-`neko release doctor` is read-only and validates the local V2 integration. It is offline and token-free by default; remote verification performs bounded GitHub GETs only when `--verify-remote` is explicitly requested. Doctor never repairs configuration or files.
+`neko release doctor` is read-only and validates the local V2 integration. It
+is offline and token-free by default; remote verification performs bounded
+GitHub GETs only when `--verify-remote` is explicitly requested. Doctor never
+repairs configuration or files.
 
-`neko release github-workflow-init` is create-only. It creates one missing starter workflow and accepts an identical existing workflow without rewriting it; differing customized content is never overwritten. Repository workflows remain intentionally consumer-owned after scaffolding.
+`neko release github-workflow-init` is create-only. It creates one missing
+starter workflow and accepts an identical existing workflow without rewriting
+it; differing customized content is never overwritten. Repository workflows
+remain intentionally consumer-owned after scaffolding.
 
-For exact commands, flags, output, Pipeline, Evidence, Resume, and recovery contracts, use the [Release CLI Reference](docs/release/cli-reference.md). See the [V1-to-V2 migration guide](docs/release/migration-v1-to-v2.md), the [GitHub Actions golden path](docs/release/github-actions-golden-path.md), and the [normal/plugin unit and Plugin Index examples](docs/release/examples.md#normal-release-units-vs-neko-cli-plugin-units) for adoption details. The [current architecture and its numbered history](plugin/release/docs/architecture/current-state.md#historical-context) explain the implementation boundaries and their evolution.
+For exact behavior, use the [Release CLI Reference](docs/release/cli-reference.md),
+[V1-to-V2 migration guide](docs/release/migration-v1-to-v2.md),
+[GitHub Actions golden path](docs/release/github-actions-golden-path.md),
+[release-unit examples](docs/release/examples.md#normal-release-units-vs-neko-cli-plugin-units),
+and [current implementation architecture](plugin/release/docs/architecture/current-state.md#historical-context).
 
-### Global Flags
+## Documentation
 
-Plugin command help separates manifest-owned `Command flags` from inherited
-`Global plugin-response flags`. Core owns the inherited flags and does not add
-them to a plugin command's local flag map:
+| Topic | Authoritative document |
+| --- | --- |
+| Complete CLI reference | [Commands, flags, I/O, and exits](docs/cli-reference.md) |
+| Installation and update | [Installer and self-update](docs/installation.md) |
+| Package architecture | [Repository package boundaries](docs/package-architecture.md) |
+| Plugin development | [Manifest and process protocol](docs/plugin-development.md) |
+| Release overview | [Release concepts and navigation](docs/release/overview.md) |
+| Release command reference | [Release commands and safety contracts](docs/release/cli-reference.md) |
+| Release workflow model | [GitHub Actions golden path](docs/release/github-actions-golden-path.md) |
+| Release architecture | [Current implementation architecture](plugin/release/docs/architecture/current-state.md) |
+| Historical rationale | [Numbered, non-authoritative history](plugin/release/docs/history/README.md) |
 
-| Flag | Shorthand | Description |
-|------|-----------|-------------|
-| `--help` | `-h` | Show help for any command |
-| `--describe` | | Include structured details and response metadata |
-| `--verbose` | `-v` | Include execution and debug logs in plugin output |
-| `--output` | | Output format: `table`, `json`, `wide`, or `github` |
-| `--github-output-file` | | Explicit GitHub Actions command-file destination for `--output github` |
+## Contributing
 
-`--verbose` is the only presentation-related global value sent to a plugin,
-through `Request.Context.Verbose`, because it controls plugin-side log
-production. `--describe`, `--output`, and `--github-output-file` stay in Core.
-The Release Plugin uses the distinct manifest-local
-`plugin-index --output-file <path>` option for file persistence. Core
-`--output` therefore remains the response-format selector for this command as
-well. The former `plugin-index --output <path>` spelling no longer writes a
-file; non-format values are rejected by Core.
+Begin with the [package architecture](docs/package-architecture.md) and the
+tests around the behavior you intend to change. Work under `plugin/release`
+also follows its repository-local [contributor instructions](plugin/release/AGENTS.md)
+and [engineering rules](plugin/release/RULES.md). Use
+[GitHub issues](https://github.com/nekoman-hq/neko-cli/issues) to discuss a
+problem and [pull requests](https://github.com/nekoman-hq/neko-cli/pulls) to
+propose a reviewed change.
 
-### Other Built-in Commands
+## License
 
-```bash
-# Show CLI version
-neko version
+Neko CLI uses the repository's **Internal Use & Personal License**. It permits
+personal or non-commercial use, copying, and sharing; commercial or business
+use is prohibited. Modifications and redistribution must retain the license
+and copyright notice. See [LICENSE](LICENSE) for the complete terms.
 
-# Show help
-neko --help
-neko plugin --help
-neko <plugin>
-neko <plugin> --help
-neko <plugin> <command> --help
-```
-
----
-
-## 📖 Output Formats
-
-Core supports `table`, `json`, `wide`, and explicit `github` response modes.
-Successful GitHub command-file output is response-specific; it is not a
-universal plugin format. See the [complete CLI
-reference](docs/cli-reference.md#output-and-process-exit)
-for the exact boundaries.
-
-### Table (Default)
-```bash
-neko <plugin> <command>
-```
-```
-COLUMN1   COLUMN2   COLUMN3
-value1    value2    value3
-```
-
-### JSON
-```bash
-neko <plugin> <command> --output json
-```
-```json
-{
-  "status": "success",
-  "metadata": {
-    "plugin": "plugin-name",
-    "command": "command-name",
-    "timestamp": "2026-02-04T12:00:00Z"
-  },
-  "data": {
-    "items": ["..."]
-  }
-}
-```
-
-### Structured Details and Logs
-```bash
-neko <plugin> <command> --describe
-neko <plugin> <command> --verbose
-neko <plugin> <command> --describe --verbose
-```
-
-`--describe` changes human presentation only. It does not enable verbose logs,
-remote access, or a different JSON schema. `--verbose` adds captured execution
-logs without revealing describe-only structured sections.
-
----
-
-## 🏗️ Development
-
-
-
-### Project Structure
-
-```
-neko-cli/
-├── cmd/                    # CLI commands (root, plugin loading)
-├── pkg/                    # Shared packages
-│   ├── dispatcher/         # Plugin execution & communication
-│   ├── plugin/             # Plugin types (Request, Response, Manifest)
-│   ├── renderer/           # kubectl-style output rendering
-│   ├── log/                # Logging utilities
-│   └── errors/             # Error handling
-├── plugin/                 # Official plugins
-│   └── release/            # Release management plugin
-└── docs/
-    └── plugins/            # Plugin documentation
-```
-
-### Creating a Plugin
-
-Plugins are standalone executables that:
-1. Read a JSON `Request` from stdin
-2. Execute the command logic
-3. Write a JSON `Response` to stdout
-4. Write logs to stderr
-
-See [Plugin Development Guide](docs/plugin-development.md) for details.
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
----
-
-## 📄 License
-
-This project is licensed under our own License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## 👤 Author
-
-**Benjamin Senekowitsch**
-- Email: senekowitsch@nekoman.at
-- GitHub: [@nekoman-hq](https://github.com/nekoman-hq)
-
----
-
-<div align="center">
-Made by Nekoman
-</div>
+Maintained by [Nekoman](https://github.com/nekoman-hq).
