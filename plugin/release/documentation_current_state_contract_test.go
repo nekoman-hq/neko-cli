@@ -76,23 +76,28 @@ func TestActiveDocumentationContainsNoRoadmapOrProgressProse(t *testing.T) {
 		regexp.MustCompile(`(?i)^#{1,6} .*\b(?:future|roadmap|progress|next steps?)\b`),
 	}
 
-	allowedPolicyDocuments := map[string]bool{
-		"plugin/release/AGENTS.md": true,
-		"plugin/release/RULES.md":  true,
-	}
 	for _, path := range activeDocumentationPaths(t, root) {
-		if allowedPolicyDocuments[path] {
-			continue
-		}
 		content := readDocumentationFile(t, filepath.Join(root, filepath.FromSlash(path)))
 		for lineNumber, line := range strings.Split(content, "\n") {
 			for _, pattern := range patterns {
 				if pattern.MatchString(line) {
+					if allowedRoadmapOrProgressLine(path, line) {
+						continue
+					}
 					t.Errorf("%s:%d contains active roadmap/progress wording %q", path, lineNumber+1, strings.TrimSpace(line))
 				}
 			}
 		}
 	}
+}
+
+func allowedRoadmapOrProgressLine(path, line string) bool {
+	allowed := map[string]map[string]bool{
+		"plugin/release/RULES.md": {
+			"A completed/handoff-ready release must not be redispatched. Starting a later release is a separate intent calculated from current state.": true,
+		},
+	}
+	return allowed[path][strings.TrimSpace(line)]
 }
 
 func TestActiveDocumentationContainsNoLocalPathsSecretsOrPinnedProductVersions(t *testing.T) {
@@ -122,7 +127,6 @@ func TestActiveDocumentationContainsNoLocalPathsSecretsOrPinnedProductVersions(t
 func allowedActiveDocumentationValue(path, value string) bool {
 	allowed := map[string]map[string]bool{
 		"docs/release/cli-reference.md": {"`0.1.0`": true},
-		"plugin/release/RULES.md":       {"/private/tmp/neko-cli-go-build": true},
 	}
 	return allowed[path][value]
 }
