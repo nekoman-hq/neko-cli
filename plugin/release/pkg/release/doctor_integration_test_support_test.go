@@ -45,8 +45,8 @@ type integrationDoctorUnit struct {
 
 type integrationDoctorWorkflow struct {
 	Path           string   `json:"path"`
-	Units          []string `json:"units"`
 	Classification string   `json:"classification"`
+	Units          []string `json:"units"`
 	Exists         bool     `json:"exists"`
 }
 
@@ -55,10 +55,10 @@ type integrationDoctorVerification struct {
 	Category        string                             `json:"category"`
 	State           integrationDoctorVerificationState `json:"state"`
 	Evidence        string                             `json:"evidence"`
-	References      []string                           `json:"references"`
 	Unit            string                             `json:"unit,omitempty"`
 	Workflow        string                             `json:"workflow,omitempty"`
 	LimitationClass integrationDoctorLimitationClass   `json:"limitation_class,omitempty"`
+	References      []string                           `json:"references"`
 }
 
 type integrationDoctorDiagnostic struct {

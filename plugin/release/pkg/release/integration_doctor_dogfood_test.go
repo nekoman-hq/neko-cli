@@ -47,9 +47,9 @@ func TestRepositoryDoctorUnitScopedDogfoodContract(t *testing.T) {
 	}
 	tests := []struct {
 		unit            string
+		codes           []string
 		summary         integrationDoctorSummary
 		facts           int
-		codes           []string
 		hasVariableFact bool
 	}{
 		{unit: "cli", summary: integrationDoctorSummary{NotVerifiable: 7, Verified: 5}, facts: 8, codes: standardCodes, hasVariableFact: true},
