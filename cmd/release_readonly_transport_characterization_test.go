@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -33,6 +34,7 @@ import (
 const (
 	releaseReadonlyHelperEnvironment = "NEKO_RELEASE_READONLY_HELPER"
 	releaseReadonlyRootEnvironment   = "NEKO_RELEASE_READONLY_ROOT"
+	releaseReadonlyResponseCapture   = "NEKO_RELEASE_READONLY_RESPONSE_CAPTURE"
 )
 
 func TestReleaseReadonlyPluginHelperProcess(t *testing.T) {
@@ -89,6 +91,15 @@ func TestReleaseReadonlyPluginHelperProcess(t *testing.T) {
 	}
 	if err != nil {
 		t.Fatalf("execute %s: %v", request.Command, err)
+	}
+	if capturePath := os.Getenv(releaseReadonlyResponseCapture); capturePath != "" {
+		captured, marshalErr := json.Marshal(response)
+		if marshalErr != nil {
+			t.Fatalf("marshal %s response capture: %v", request.Command, marshalErr)
+		}
+		if writeErr := os.WriteFile(capturePath, captured, 0o600); writeErr != nil {
+			t.Fatalf("write %s response capture: %v", request.Command, writeErr)
+		}
 	}
 	if err := json.NewEncoder(os.Stdout).Encode(response); err != nil {
 		t.Fatalf("encode %s response: %v", request.Command, err)
@@ -466,18 +477,24 @@ func TestReleasePipelineReferenceTransportRemainsStable(t *testing.T) {
 	manifest := installReleaseReadonlyHelperPlugin(t)
 	repositoryRoot := releaseReadonlyRepositoryRoot(t)
 
-	defaultOutput, defaultErr := executeReleaseReadonlyCommand(
+	defaultResult := observeReleaseReadonlyCommand(
 		t, manifest, repositoryRoot, "pipeline", []string{"--unit", "cli"}, releaseReadonlyMode{},
 	)
-	describeOutput, describeErr := executeReleaseReadonlyCommand(
+	describeResult := observeReleaseReadonlyCommand(
 		t, manifest, repositoryRoot, "pipeline", []string{"--unit", "cli"}, releaseReadonlyMode{describe: true},
 	)
-	jsonOutput, jsonErr := executeReleaseReadonlyCommand(
+	jsonResult := observeReleaseReadonlyCommand(
 		t, manifest, repositoryRoot, "pipeline", []string{"--unit", "cli"}, releaseReadonlyMode{format: "json"},
 	)
-	if defaultErr != nil || describeErr != nil || jsonErr != nil {
-		t.Fatalf("pipeline transport exits: default=%v describe=%v json=%v", defaultErr, describeErr, jsonErr)
+	if defaultResult.executeErr != nil || describeResult.executeErr != nil || jsonResult.executeErr != nil {
+		t.Fatalf(
+			"pipeline transport facts:\n%s\n%s\n%s",
+			formatPipelineTransportObservation("default", defaultResult),
+			formatPipelineTransportObservation("describe", describeResult),
+			formatPipelineTransportObservation("json", jsonResult),
+		)
 	}
+	defaultOutput, describeOutput, jsonOutput := defaultResult.output, describeResult.output, jsonResult.output
 	for _, value := range []string{"Release Pipeline Inspection", "Summary"} {
 		if !strings.Contains(defaultOutput, value) {
 			t.Fatalf("pipeline default omitted %q:\n%s", value, defaultOutput)
@@ -643,6 +660,15 @@ type releaseReadonlyMode struct {
 	verbose  bool
 }
 
+type releaseReadonlyCommandObservation struct {
+	response          *plugin.Response
+	output            string
+	executeErr        error
+	repositoryRoot    string
+	pluginProcessExit int
+	coreProcessExit   int
+}
+
 func executeReleaseReadonlyCommand(
 	t *testing.T,
 	manifest plugin.Manifest,
@@ -652,12 +678,27 @@ func executeReleaseReadonlyCommand(
 	mode releaseReadonlyMode,
 ) (string, error) {
 	t.Helper()
+	observation := observeReleaseReadonlyCommand(t, manifest, repositoryRoot, command, flags, mode)
+	return observation.output, observation.executeErr
+}
+
+func observeReleaseReadonlyCommand(
+	t *testing.T,
+	manifest plugin.Manifest,
+	repositoryRoot string,
+	command string,
+	flags []string,
+	mode releaseReadonlyMode,
+) releaseReadonlyCommandObservation {
+	t.Helper()
 	oldDescribe, oldVerbose, oldFormat, oldGitHubOutput := describe, verbose, outputFormat, githubOutputFile
 	describe, verbose, outputFormat, githubOutputFile = false, false, "table", ""
 	t.Cleanup(func() {
 		describe, verbose, outputFormat, githubOutputFile = oldDescribe, oldVerbose, oldFormat, oldGitHubOutput
 	})
 	t.Setenv(releaseReadonlyRootEnvironment, repositoryRoot)
+	responseCapture := filepath.Join(t.TempDir(), "response.json")
+	t.Setenv(releaseReadonlyResponseCapture, responseCapture)
 
 	readEnd, writeEnd, err := os.Pipe()
 	if err != nil {
@@ -703,7 +744,49 @@ func executeReleaseReadonlyCommand(
 	if copyErr != nil {
 		t.Fatalf("capture command stdout: %v", copyErr)
 	}
-	return string(data), executeErr
+	observation := releaseReadonlyCommandObservation{
+		output: string(data), executeErr: executeErr, repositoryRoot: repositoryRoot,
+		pluginProcessExit: -1, coreProcessExit: ProcessExitCode(executeErr),
+	}
+	captured, captureErr := os.ReadFile(responseCapture)
+	if captureErr == nil {
+		observation.response = &plugin.Response{}
+		if unmarshalErr := json.Unmarshal(captured, observation.response); unmarshalErr != nil {
+			t.Fatalf("decode captured %s response: %v\n%s", command, unmarshalErr, captured)
+		}
+		observation.pluginProcessExit = 0
+	} else if !os.IsNotExist(captureErr) {
+		t.Fatalf("read captured %s response: %v", command, captureErr)
+	}
+	return observation
+}
+
+func formatPipelineTransportObservation(mode string, observation releaseReadonlyCommandObservation) string {
+	status, errorCode, errorMessage, explicitExit := "<no response>", "", "", "<absent>"
+	facts := map[string]any{}
+	if observation.response != nil {
+		status = observation.response.Status
+		if observation.response.Error != nil {
+			errorCode = observation.response.Error.Code
+			errorMessage = observation.response.Error.Message
+		}
+		if code, present := observation.response.ExplicitExitCode(); present {
+			explicitExit = fmt.Sprint(code)
+		}
+		for _, key := range []string{
+			"status", "unit", "release", "repository", "workflow", "execution", "dispatch",
+			"local_git", "recovery", "manual_intervention", "verification", "limitations",
+		} {
+			facts[key] = observation.response.Data[key]
+		}
+	}
+	encodedFacts, _ := json.MarshalIndent(facts, "", "  ")
+	return fmt.Sprintf(
+		"mode=%s root=%q response_status=%q error_code=%q error_message=%q response_exit=%s plugin_process_exit=%d core_process_exit=%d execute_error=%v\nrendered_output:\n%s\nresponse_facts:\n%s",
+		mode, observation.repositoryRoot, status, errorCode, errorMessage, explicitExit,
+		observation.pluginProcessExit, observation.coreProcessExit, observation.executeErr,
+		observation.output, encodedFacts,
+	)
 }
 
 func installReleaseReadonlyHelperPlugin(t *testing.T) plugin.Manifest {
