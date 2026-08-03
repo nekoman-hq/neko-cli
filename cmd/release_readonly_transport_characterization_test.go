@@ -270,7 +270,7 @@ func TestPluginIndexOutputContractIsUnambiguousAcrossCoreAndLocalFlags(t *testin
 	}
 
 	arbitraryTarget := filepath.Join(repositoryRoot, "arbitrary-plugin-index.json")
-	output, err := executeReleaseReadonlyCommand(
+	observation := observeReleaseReadonlyCommand(
 		t,
 		manifest,
 		repositoryRoot,
@@ -278,8 +278,18 @@ func TestPluginIndexOutputContractIsUnambiguousAcrossCoreAndLocalFlags(t *testin
 		[]string{"--output", arbitraryTarget},
 		releaseReadonlyMode{},
 	)
-	if err == nil || !strings.Contains(err.Error(), "invalid output format") {
-		t.Fatalf("arbitrary global --output = (%q, %v), want invalid-format error", output, err)
+	if observation.executeErr == nil || !strings.Contains(observation.executeErr.Error(), "invalid output format") {
+		t.Fatalf("arbitrary global --output = (%q, %v), want invalid-format error", observation.output, observation.executeErr)
+	}
+	if observation.response != nil || observation.pluginProcessExit != -1 || observation.coreProcessExit != 1 {
+		t.Fatalf(
+			"arbitrary global --output reached plugin or returned wrong exit: response=%#v plugin_exit=%d core_exit=%d",
+			observation.response, observation.pluginProcessExit, observation.coreProcessExit,
+		)
+	}
+	if observation.output != "" || strings.Count(observation.stderr, "invalid output format") != 1 ||
+		!strings.Contains(observation.stderr, "supported formats: table, json, wide, github") {
+		t.Fatalf("captured invalid global --output rendering = stdout %q stderr %q", observation.output, observation.stderr)
 	}
 	if _, statErr := os.Stat(arbitraryTarget); !os.IsNotExist(statErr) {
 		t.Fatalf("arbitrary global --output created a file: %v", statErr)
