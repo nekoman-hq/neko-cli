@@ -816,15 +816,7 @@ func assertPluginIndexFixtureFiles(t *testing.T, root string, want []string) {
 
 func newPluginIndexTransportRepository(t *testing.T) string {
 	t.Helper()
-	root, err := os.MkdirTemp("/private/tmp", "neko-plugin-index-collision-*")
-	if err != nil {
-		t.Fatalf("create plugin-index fixture: %v", err)
-	}
-	t.Cleanup(func() {
-		if removeErr := os.RemoveAll(root); removeErr != nil {
-			t.Errorf("remove plugin-index fixture %s: %v", root, removeErr)
-		}
-	})
+	root := t.TempDir()
 
 	files := map[string]string{
 		".neko/release.config.json": `{

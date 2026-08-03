@@ -282,16 +282,7 @@ func pluginRequest(flags map[string]any) plugin.Request {
 
 func newPluginIndexTempDir(t *testing.T) string {
 	t.Helper()
-	root, err := os.MkdirTemp("/private/tmp", "neko-plugin-index-test-*")
-	if err != nil {
-		t.Fatalf("create plugin-index test directory: %v", err)
-	}
-	t.Cleanup(func() {
-		if removeErr := os.RemoveAll(root); removeErr != nil {
-			t.Errorf("remove plugin-index test directory %s: %v", root, removeErr)
-		}
-	})
-	return root
+	return t.TempDir()
 }
 
 func newIndexTestRepo(t *testing.T) string {

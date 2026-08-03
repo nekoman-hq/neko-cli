@@ -238,16 +238,7 @@ func writeExplicitRootInspectionRepository(t *testing.T, unitID, version string)
 
 func newReleasePluginIndexTempDir(t *testing.T) string {
 	t.Helper()
-	root, err := os.MkdirTemp("/private/tmp", "neko-plugin-index-root-*")
-	if err != nil {
-		t.Fatalf("create plugin-index root fixture: %v", err)
-	}
-	t.Cleanup(func() {
-		if removeErr := os.RemoveAll(root); removeErr != nil {
-			t.Errorf("remove plugin-index root fixture %s: %v", root, removeErr)
-		}
-	})
-	return root
+	return t.TempDir()
 }
 
 func TestReleaseContextValidationCommandUsesNestedExplicitRootsWithoutMutation(t *testing.T) {

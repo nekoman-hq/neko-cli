@@ -229,15 +229,16 @@ func repositoryRootForProcessTest(t *testing.T) string {
 
 func buildCoreProcessTestBinary(t *testing.T, root string) string {
 	t.Helper()
-	directory, err := os.MkdirTemp("/private/tmp", "neko-cli-core-exit-")
-	if err != nil {
-		t.Fatalf("create Core build directory: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(directory) })
+	directory := t.TempDir()
 	binary := filepath.Join(directory, "neko")
 	command := exec.Command("go", "build", "-o", binary, ".")
 	command.Dir = root
-	command.Env = append(processTestEnvironment(""), "GOPROXY=off", "GOSUMDB=off", "GOCACHE=/private/tmp/neko-cli-go-build")
+	command.Env = append(
+		processTestEnvironment(""),
+		"GOPROXY=off",
+		"GOSUMDB=off",
+		"GOCACHE="+filepath.Join(directory, "go-build-cache"),
+	)
 	if output, buildErr := command.CombinedOutput(); buildErr != nil {
 		t.Fatalf("build Core process test binary: %v\n%s", buildErr, output)
 	}
@@ -246,11 +247,7 @@ func buildCoreProcessTestBinary(t *testing.T, root string) string {
 
 func installProcessTestPlugin(t *testing.T, response, stderr string, exitCode int) (string, string) {
 	t.Helper()
-	base, err := os.MkdirTemp("/private/tmp", "neko-cli-plugin-exit-")
-	if err != nil {
-		t.Fatalf("create plugin directory: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(base) })
+	base := t.TempDir()
 	directory := filepath.Join(base, "probe")
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		t.Fatalf("create probe directory: %v", err)

@@ -188,15 +188,7 @@ func TestDispatcherPreservesSubprocessOutcomeContracts(t *testing.T) {
 func installDispatcherTestPlugin(t *testing.T, name, script string) *Dispatcher {
 	t.Helper()
 
-	base, err := os.MkdirTemp("/private/tmp", "neko-cli-dispatcher-test-")
-	if err != nil {
-		t.Fatalf("create private temp directory: %v", err)
-	}
-	t.Cleanup(func() {
-		if removeErr := os.RemoveAll(base); removeErr != nil {
-			t.Errorf("remove private temp directory: %v", removeErr)
-		}
-	})
+	base := t.TempDir()
 	installDir := filepath.Join(base, name)
 	if err := os.MkdirAll(installDir, 0o700); err != nil {
 		t.Fatalf("create plugin directory: %v", err)

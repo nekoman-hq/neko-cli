@@ -2,7 +2,6 @@ package pluginindex
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -63,15 +62,7 @@ func TestPluginIndexCheckPresentationSeparatesSummaryFromCompleteFacts(t *testin
 func TestPluginIndexPersistPresentationUsesSafeTargetAndStableMachineItems(t *testing.T) {
 	root := newIndexTestRepo(t)
 	t.Chdir(root)
-	targetRoot, err := os.MkdirTemp("/private/tmp", "neko-plugin-index-presentation-*")
-	if err != nil {
-		t.Fatalf("create output fixture: %v", err)
-	}
-	t.Cleanup(func() {
-		if removeErr := os.RemoveAll(targetRoot); removeErr != nil {
-			t.Errorf("remove output fixture: %v", removeErr)
-		}
-	})
+	targetRoot := t.TempDir()
 	output := filepath.Join(targetRoot, "nested", "plugin-index.json")
 
 	response, err := HandlePluginIndex(pluginRequest(map[string]any{"output-file": output}))
