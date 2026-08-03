@@ -22,6 +22,15 @@ type integrationDoctorSeverity string
 
 const integrationDoctorNotVerifiable integrationDoctorSeverity = "not_verifiable"
 
+type integrationDoctorVerificationState string
+
+const (
+	integrationDoctorVerified     integrationDoctorVerificationState = "verified"
+	integrationDoctorUnverifiable integrationDoctorVerificationState = "not_verifiable"
+)
+
+type integrationDoctorLimitationClass string
+
 type integrationDoctorSummary struct {
 	Errors          int `json:"errors"`
 	Warnings        int `json:"warnings"`
@@ -35,18 +44,31 @@ type integrationDoctorUnit struct {
 }
 
 type integrationDoctorWorkflow struct {
-	Path           string `json:"path"`
-	Classification string `json:"classification"`
-	Exists         bool   `json:"exists"`
+	Path           string   `json:"path"`
+	Units          []string `json:"units"`
+	Classification string   `json:"classification"`
+	Exists         bool     `json:"exists"`
 }
 
 type integrationDoctorVerification struct {
-	Category string `json:"category"`
+	Subject         string                             `json:"subject"`
+	Category        string                             `json:"category"`
+	State           integrationDoctorVerificationState `json:"state"`
+	Evidence        string                             `json:"evidence"`
+	References      []string                           `json:"references"`
+	Unit            string                             `json:"unit,omitempty"`
+	Workflow        string                             `json:"workflow,omitempty"`
+	LimitationClass integrationDoctorLimitationClass   `json:"limitation_class,omitempty"`
 }
 
 type integrationDoctorDiagnostic struct {
-	Severity integrationDoctorSeverity `json:"severity"`
-	Code     string                    `json:"code"`
+	Severity    integrationDoctorSeverity `json:"severity"`
+	Scope       string                    `json:"scope"`
+	Unit        string                    `json:"unit,omitempty"`
+	Workflow    string                    `json:"workflow,omitempty"`
+	Code        string                    `json:"code"`
+	Message     string                    `json:"message"`
+	Remediation string                    `json:"remediation"`
 }
 
 type integrationDoctorResult struct {
