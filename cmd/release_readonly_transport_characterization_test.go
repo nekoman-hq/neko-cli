@@ -475,7 +475,10 @@ func TestPluginIndexCheckAndPersistPresentationModesRemainStructured(t *testing.
 
 func TestReleasePipelineReferenceTransportRemainsStable(t *testing.T) {
 	manifest := installReleaseReadonlyHelperPlugin(t)
-	repositoryRoot := releaseReadonlyRepositoryRoot(t)
+	repositoryRoot := newReleaseReadonlyPipelineRepository(t)
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("GH_TOKEN", "")
+	before := snapshotReleaseReadonlyPipelineRepository(t, repositoryRoot)
 
 	defaultResult := observeReleaseReadonlyCommand(
 		t, manifest, repositoryRoot, "pipeline", []string{"--unit", "cli"}, releaseReadonlyMode{},
@@ -494,6 +497,35 @@ func TestReleasePipelineReferenceTransportRemainsStable(t *testing.T) {
 			formatPipelineTransportObservation("json", jsonResult),
 		)
 	}
+	for name, observation := range map[string]releaseReadonlyCommandObservation{
+		"default": defaultResult, "describe": describeResult, "json": jsonResult,
+	} {
+		if observation.response == nil || observation.response.Status != "success" ||
+			observation.pluginProcessExit != 0 || observation.coreProcessExit != 0 {
+			t.Fatalf("pipeline %s envelope/process contract:\n%s", name, formatPipelineTransportObservation(name, observation))
+		}
+		code, present := observation.response.ExplicitExitCode()
+		if !present || code != 0 {
+			t.Fatalf("pipeline %s explicit response exit = (%d, %t)", name, code, present)
+		}
+	}
+	defaultFacts := normalizeReleaseReadonlyResponseData(t, defaultResult.response)
+	if !reflect.DeepEqual(defaultFacts, normalizeReleaseReadonlyResponseData(t, describeResult.response)) ||
+		!reflect.DeepEqual(defaultFacts, normalizeReleaseReadonlyResponseData(t, jsonResult.response)) {
+		t.Fatalf("pipeline presentation modes changed domain facts:\ndefault=%#v\ndescribe=%#v\njson=%#v", defaultResult.response.Data, describeResult.response.Data, jsonResult.response.Data)
+	}
+	unit := releaseReadonlyNestedMap(t, defaultFacts, "unit")
+	repository := releaseReadonlyNestedMap(t, defaultFacts, "repository")
+	workflow := releaseReadonlyNestedMap(t, defaultFacts, "workflow")
+	execution := releaseReadonlyNestedMap(t, defaultFacts, "execution")
+	localGit := releaseReadonlyNestedMap(t, defaultFacts, "local_git")
+	manual := releaseReadonlyNestedMap(t, defaultFacts, "manual_intervention")
+	if defaultFacts["status"] != "ready" || unit["id"] != "cli" || repository["source_generation"] != "v2" ||
+		workflow["path"] != ".github/workflows/release-neko-cli.yml" || execution["journal_count"] != float64(0) ||
+		localGit["branch"] != "main" || localGit["index_state"] != "clean" || localGit["worktree_state"] != "clean" ||
+		manual["required"] != false {
+		t.Fatalf("pipeline isolated ready facts are not authoritative: %#v", defaultFacts)
+	}
 	defaultOutput, describeOutput, jsonOutput := defaultResult.output, describeResult.output, jsonResult.output
 	for _, value := range []string{"Release Pipeline Inspection", "Summary"} {
 		if !strings.Contains(defaultOutput, value) {
@@ -508,6 +540,10 @@ func TestReleasePipelineReferenceTransportRemainsStable(t *testing.T) {
 	response := decodeReleaseReadonlyPublicResponse(t, jsonOutput)
 	if response.Data["schema_version"] != float64(1) {
 		t.Fatalf("pipeline schema version = %#v, want 1", response.Data["schema_version"])
+	}
+	after := snapshotReleaseReadonlyPipelineRepository(t, repositoryRoot)
+	if !reflect.DeepEqual(before, after) {
+		t.Fatalf("read-only pipeline transport mutated fixture:\nbefore=%#v\nafter=%#v", before, after)
 	}
 }
 
@@ -663,6 +699,7 @@ type releaseReadonlyMode struct {
 type releaseReadonlyCommandObservation struct {
 	response          *plugin.Response
 	output            string
+	stderr            string
 	executeErr        error
 	repositoryRoot    string
 	pluginProcessExit int
@@ -715,6 +752,8 @@ func observeReleaseReadonlyCommand(
 	}()
 
 	root := &cobra.Command{Use: "neko", SilenceUsage: true}
+	var stderr bytes.Buffer
+	root.SetErr(&stderr)
 	root.PersistentFlags().BoolVar(&describe, "describe", false, "structured details")
 	root.PersistentFlags().BoolVar(&verbose, "verbose", false, "execution logs")
 	root.PersistentFlags().StringVar(&outputFormat, "output", "table", "output format")
@@ -745,7 +784,7 @@ func observeReleaseReadonlyCommand(
 		t.Fatalf("capture command stdout: %v", copyErr)
 	}
 	observation := releaseReadonlyCommandObservation{
-		output: string(data), executeErr: executeErr, repositoryRoot: repositoryRoot,
+		output: string(data), stderr: stderr.String(), executeErr: executeErr, repositoryRoot: repositoryRoot,
 		pluginProcessExit: -1, coreProcessExit: ProcessExitCode(executeErr),
 	}
 	captured, captureErr := os.ReadFile(responseCapture)
@@ -782,10 +821,10 @@ func formatPipelineTransportObservation(mode string, observation releaseReadonly
 	}
 	encodedFacts, _ := json.MarshalIndent(facts, "", "  ")
 	return fmt.Sprintf(
-		"mode=%s root=%q response_status=%q error_code=%q error_message=%q response_exit=%s plugin_process_exit=%d core_process_exit=%d execute_error=%v\nrendered_output:\n%s\nresponse_facts:\n%s",
+		"mode=%s root=%q response_status=%q error_code=%q error_message=%q response_exit=%s plugin_process_exit=%d core_process_exit=%d execute_error=%v\nrendered_output:\n%s\nrendered_stderr:\n%s\nresponse_facts:\n%s",
 		mode, observation.repositoryRoot, status, errorCode, errorMessage, explicitExit,
 		observation.pluginProcessExit, observation.coreProcessExit, observation.executeErr,
-		observation.output, encodedFacts,
+		observation.output, observation.stderr, encodedFacts,
 	)
 }
 
@@ -822,6 +861,118 @@ func releaseReadonlyRepositoryRoot(t *testing.T) string {
 		t.Fatalf("validate repository root: %v", err)
 	}
 	return root
+}
+
+func newReleaseReadonlyPipelineRepository(t *testing.T) string {
+	t.Helper()
+	sourceRoot := releaseReadonlyRepositoryRoot(t)
+	root := t.TempDir()
+	copyReleaseReadonlyTrackedFiles(t, sourceRoot, root)
+	runReleaseReadonlyGit(t, root, "init", "-b", "main")
+	runReleaseReadonlyGit(t, root, "config", "user.email", "pipeline@example.invalid")
+	runReleaseReadonlyGit(t, root, "config", "user.name", "Pipeline Transport Contract")
+	runReleaseReadonlyGit(t, root, "add", "--all")
+	runReleaseReadonlyGit(t, root, "commit", "-m", "pipeline transport fixture")
+	runReleaseReadonlyGit(t, root, "remote", "add", "origin", "https://github.com/nekoman-hq/neko-cli.git")
+	runReleaseReadonlyGit(t, root, "config", "branch.main.remote", "origin")
+	runReleaseReadonlyGit(t, root, "config", "branch.main.merge", "refs/heads/main")
+	return root
+}
+
+func copyReleaseReadonlyTrackedFiles(t *testing.T, sourceRoot, targetRoot string) {
+	t.Helper()
+	command := exec.Command("git", "-C", sourceRoot, "ls-files", "-z")
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("list tracked pipeline fixture files: %v", err)
+	}
+	for _, relative := range strings.Split(strings.TrimSuffix(string(output), "\x00"), "\x00") {
+		if relative == "" {
+			continue
+		}
+		source := filepath.Join(sourceRoot, filepath.FromSlash(relative))
+		target := filepath.Join(targetRoot, filepath.FromSlash(relative))
+		info, statErr := os.Lstat(source)
+		if statErr != nil {
+			t.Fatalf("stat pipeline fixture file %s: %v", relative, statErr)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			linkTarget, linkErr := os.Readlink(source)
+			if linkErr != nil {
+				t.Fatalf("read pipeline fixture symlink %s: %v", relative, linkErr)
+			}
+			if mkdirErr := os.MkdirAll(filepath.Dir(target), 0o755); mkdirErr != nil {
+				t.Fatalf("create pipeline fixture directory for %s: %v", relative, mkdirErr)
+			}
+			if linkErr := os.Symlink(linkTarget, target); linkErr != nil {
+				t.Fatalf("write pipeline fixture symlink %s: %v", relative, linkErr)
+			}
+			continue
+		}
+		contents, readErr := os.ReadFile(source)
+		if readErr != nil {
+			t.Fatalf("read pipeline fixture file %s: %v", relative, readErr)
+		}
+		if mkdirErr := os.MkdirAll(filepath.Dir(target), 0o755); mkdirErr != nil {
+			t.Fatalf("create pipeline fixture directory for %s: %v", relative, mkdirErr)
+		}
+		mode := info.Mode().Perm()
+		if mode&0o111 == 0 {
+			mode = 0o644
+		}
+		if writeErr := os.WriteFile(target, contents, mode); writeErr != nil {
+			t.Fatalf("write pipeline fixture file %s: %v", relative, writeErr)
+		}
+	}
+}
+
+type releaseReadonlyPipelineRepositorySnapshot struct {
+	head            string
+	refs            string
+	status          string
+	workflow        string
+	journalTreeSeen bool
+}
+
+func snapshotReleaseReadonlyPipelineRepository(t *testing.T, root string) releaseReadonlyPipelineRepositorySnapshot {
+	t.Helper()
+	workflow, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "release-neko-cli.yml"))
+	if err != nil {
+		t.Fatalf("read pipeline fixture workflow: %v", err)
+	}
+	_, journalErr := os.Stat(filepath.Join(root, ".git", "neko", "release"))
+	if journalErr != nil && !os.IsNotExist(journalErr) {
+		t.Fatalf("inspect pipeline fixture journal tree: %v", journalErr)
+	}
+	return releaseReadonlyPipelineRepositorySnapshot{
+		head:            runReleaseReadonlyGit(t, root, "rev-parse", "HEAD"),
+		refs:            runReleaseReadonlyGit(t, root, "show-ref"),
+		status:          runReleaseReadonlyGit(t, root, "status", "--short"),
+		workflow:        string(workflow),
+		journalTreeSeen: journalErr == nil,
+	}
+}
+
+func normalizeReleaseReadonlyResponseData(t *testing.T, response *plugin.Response) map[string]any {
+	t.Helper()
+	encoded, err := json.Marshal(response.Data)
+	if err != nil {
+		t.Fatalf("encode release response data: %v", err)
+	}
+	data := map[string]any{}
+	if err := json.Unmarshal(encoded, &data); err != nil {
+		t.Fatalf("normalize release response data: %v", err)
+	}
+	return data
+}
+
+func releaseReadonlyNestedMap(t *testing.T, data map[string]any, key string) map[string]any {
+	t.Helper()
+	value, ok := data[key].(map[string]any)
+	if !ok {
+		t.Fatalf("release response field %q = %#v", key, data[key])
+	}
+	return value
 }
 
 type releaseReadonlyPublicResponse struct {
