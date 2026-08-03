@@ -30,15 +30,48 @@ func TestCoreUpdateFailureRendersOnceAndUsesOrdinaryExit(t *testing.T) {
 	root.SetErr(&stderr)
 	root.SetOut(io.Discard)
 	root.SetArgs([]string{"update"})
-	err := root.Execute()
+	var err error
+	stdout := captureUpdateStdout(t, func() { err = root.Execute() })
 	if err == nil || ProcessExitCode(err) != 1 {
 		t.Fatalf("error=%v exit=%d", err, ProcessExitCode(err))
+	}
+	if strings.Count(stdout, "Checking for neko-cli updates...") != 1 {
+		t.Fatalf("update progress output=%q", stdout)
 	}
 	if got := strings.Count(stderr.String(), "frozen update failure"); got != 1 {
 		t.Fatalf("error occurrences=%d output=%q", got, stderr.String())
 	}
 	if strings.Contains(stderr.String(), "Usage:") || strings.Contains(stderr.String(), "goroutine") {
 		t.Fatalf("failure output contains usage or stack: %q", stderr.String())
+	}
+}
+
+func TestNonUpdateCommandDoesNotInvokeCoreUpdateLookup(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	previousExecute := executeCoreUpdate
+	lookupCalls := 0
+	executeCoreUpdate = func(context.Context, update.CoreOptions) (update.CoreResult, error) {
+		lookupCalls++
+		return update.CoreResult{}, errors.New("unexpected update lookup")
+	}
+	t.Cleanup(func() { executeCoreUpdate = previousExecute })
+
+	root := &cobra.Command{Use: "neko"}
+	root.AddCommand(newCoreUpdateCommand())
+	root.AddCommand(&cobra.Command{Use: "inspect", RunE: func(*cobra.Command, []string) error { return nil }})
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"inspect"})
+	stdout := captureUpdateStdout(t, func() {
+		if err := root.Execute(); err != nil {
+			t.Fatalf("execute non-update command: %v", err)
+		}
+	})
+	if lookupCalls != 0 {
+		t.Fatalf("non-update command invoked update lookup %d time(s)", lookupCalls)
+	}
+	if strings.Contains(stdout, "Checking for neko-cli updates...") {
+		t.Fatalf("non-update command emitted update progress: %q", stdout)
 	}
 }
 
