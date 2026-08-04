@@ -1,4 +1,8 @@
-# CLI release selection contract fixtures
+# CLI Release Contract Fixtures
+
+> **Purpose:** Provide shared offline GitHub release fixtures that verify the Bash installer and Go CLI release resolver follow the same stable CLI release-selection contract.
+>
+> **Audience:** Maintainers working on Neko CLI installation, version discovery, self-update behavior, and related regression tests.
 
 These fixtures are the single source of truth for stable CLI release selection.
 `contract.json` lists each release-list fixture together with the tag that both
