@@ -566,28 +566,48 @@ expected release and installer asset already exist. A local state version, Git
 tag, or failed release attempt does not make that version installable. Never use
 `latest` or point either variable at the unpublished version being built.
 
-If the normal workflow requires a Release Plugin command that exists only in
-the unpublished target version, it cannot publish that version by installing
-itself. The repository's dedicated `plugin-release` workflow therefore uses a
-bounded self-release exception instead of installation pins:
+The CLI and Release Plugin cannot reliably validate their own unpublished
+versions by downloading those same versions first. Every first-party
+self-release workflow in this repository — `cli`, `plugin-release`, and
+`plugin-ui` — therefore uses a bounded self-release exception instead of
+installation pins:
 
 1. Checkout the supplied full release SHA with complete tags and no persisted
    checkout credential.
-2. Independently validate the fixed `plugin-release` unit, SemVer/tag shape,
-   checked-out `HEAD`, peeled tag target, authoritative state, and manifest.
-   This shell boundary is part of the reviewed workflow, not candidate code.
-3. Build the Neko CLI and candidate Release Plugin from that exact checkout
+2. Independently validate the fixed self-release unit, SemVer/tag shape,
+   checked-out `HEAD`, peeled tag target, and authoritative state. A plugin unit
+   also validates its materialized manifest. This inline shell guard is part of
+   the reviewed workflow and never moves into a shared action, because it must
+   run before candidate code builds anything.
+3. Build the Neko CLI and Release Plugin from that exact checkout
    into runner-temporary directories, copy the checked-out manifest, and expose
-   only those temporary paths to subsequent validation.
+   only those temporary paths to subsequent validation. The three workflows
+   share this step through the repository-local composite action
+   `./.github/actions/setup-source-neko-toolchain`, and share canonical context
+   validation through `./.github/actions/validate-neko-release-context`.
 4. Run the candidate's canonical `ci-validate-context`, tests, focused
    GoReleaser checks, snapshot build, and publication in their existing order.
 
 The source-toolchain step performs no Neko CLI or Release Plugin artifact
 download, plugin-registry lookup, token read, or publication. Go may resolve
 the checked-out module's declared dependencies through the ordinary setup/cache
-boundary. The exception is accepted only for the dedicated Release Plugin
-self-release workflow; generated and other consumer workflows continue to use
-already published pinned versions.
+boundary.
+
+First-party repository workflows:
+
+- `cli`: exact-source self-release validation;
+- `plugin-release`: exact-source self-release validation;
+- `plugin-ui`: exact-source self-release validation.
+
+Generated and external consumer workflows:
+
+- pinned published Neko CLI;
+- pinned published Release Plugin.
+
+The public golden path above stays build-system neutral and keeps the pinned
+published contract. `NEKO_VERSION` and `NEKO_RELEASE_PLUGIN_VERSION` are
+consumer installation pins; the first-party self-release workflows do not read
+them.
 
 If an immutable target tag predates this workflow correction, do not move the
 tag or run another version bump. After the corrected workflow exists on a

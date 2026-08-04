@@ -48,17 +48,15 @@ jobs: {}
 
 func TestRepositoryDoctorRetainsEveryResidualUncertaintyWithoutBroadMessages(t *testing.T) {
 	result := integrationDoctorResultFromResponse(t, runIntegrationDoctor(t, repositoryInspectionRoot(t), nil))
-	if result.Summary.NotVerifiable != 19 {
-		t.Fatalf("not-verifiable = %d, want 19", result.Summary.NotVerifiable)
+	if result.Summary.NotVerifiable != 15 {
+		t.Fatalf("not-verifiable = %d, want 15", result.Summary.NotVerifiable)
 	}
 	wantCodes := map[string]int{
 		"CONSUMER_BUILD_NOT_VERIFIABLE":                3,
-		"INSTALLATION_ARTIFACTS_NOT_VERIFIABLE":        2,
 		"PUBLICATION_CREDENTIALS_NOT_VERIFIABLE":       3,
 		"PUBLICATION_TARGET_NOT_VERIFIABLE":            3,
 		"REMOTE_DISPATCH_AUTHORIZATION_NOT_VERIFIABLE": 3,
 		"REMOTE_WORKFLOW_NOT_VERIFIABLE":               3,
-		"REPOSITORY_VARIABLES_NOT_VERIFIABLE":          2,
 	}
 	for _, diagnostic := range result.Diagnostics {
 		if diagnostic.Severity != integrationDoctorNotVerifiable {

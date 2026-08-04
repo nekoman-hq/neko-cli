@@ -113,10 +113,10 @@ Values must be pinned semantic versions, not `latest`, a tag namespace, or a
 discovery expression. The canonical version may appear in safe evidence. No
 other `vars.*` reference is queried merely because it exists in YAML.
 
-The dedicated Release Plugin self-release workflow has no installation-pin
-variables. Doctor verifies its exact-source CLI/plugin build and temporary-path
-wiring locally, so remote verification performs no repository-variable or
-installation-release query for that workflow.
+An exact-source self-release workflow has no installation-pin variables.
+Doctor verifies its CLI/plugin builds and temporary-path wiring locally, so
+remote verification performs no repository-variable or installation-release
+query for it. All three first-party repository workflows use that shape.
 
 Only custom `secrets.*` names already referenced by a local workflow are
 queried. Built-in `GITHUB_TOKEN` causes no secrets API request. The secret

@@ -25,7 +25,7 @@ func (inspector integrationDoctorGitHubRemoteInspector) inspectInstallationArtif
 ) {
 	contracts := integrationDoctorInstallationRemoteContracts(request, remote.variableValues)
 	if len(contracts) == 0 {
-		if len(integrationDoctorRecognizedRemoteVariables(request.Workflows)) == 0 {
+		if len(integrationDoctorRecognizedRemoteVariables(request.RepositoryRoot, request.Workflows)) == 0 {
 			return
 		}
 		inspection.append(integrationDoctorRemoteFact(

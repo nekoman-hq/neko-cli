@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/localaction"
 	goreleaserfacts "github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool/goreleaser"
 	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releaseworkflow"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
@@ -39,7 +40,7 @@ func inspectIntegrationDoctorGoReleaser(
 	files integrationDoctorRepositoryFileReader,
 ) integrationDoctorGoReleaserInspection {
 	inspection := integrationDoctorGoReleaserInspection{
-		Invocations: integrationDoctorGoReleaserInvocations(root, jobs),
+		Invocations: integrationDoctorGoReleaserInvocations(repositoryRoot, root),
 	}
 	if len(inspection.Invocations) == 0 {
 		return inspection
@@ -113,10 +114,12 @@ func integrationDoctorRepositoryEvidencePathValid(relativePath string) bool {
 }
 
 func integrationDoctorGoReleaserInvocations(
+	repositoryRoot string,
 	root *yaml.Node,
-	_ []integrationDoctorWorkflowJob,
 ) []integrationDoctorGoReleaserInvocation {
-	facts, err := releaseworkflow.InspectConsumerWorkflowDocument(root, false)
+	facts, err := releaseworkflow.InspectConsumerWorkflowDocument(
+		root, false, localaction.NewRepositoryActions(repositoryRoot),
+	)
 	if err != nil {
 		return nil
 	}

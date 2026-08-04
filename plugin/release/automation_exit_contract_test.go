@@ -10,11 +10,11 @@ func TestRepositoryAutomationReliesOnProcessExitWithoutJSONParsing(t *testing.T)
 	t.Parallel()
 
 	for _, path := range []string{
-		"../../.github/workflows/release-neko-cli.yml",
-		"../../.github/workflows/release-plugin-release.yml",
-		"../../.github/workflows/release-plugin-ui.yml",
+		".github/workflows/release-neko-cli.yml",
+		".github/workflows/release-plugin-release.yml",
+		".github/workflows/release-plugin-ui.yml",
 	} {
-		content := readAutomationExitContractFile(t, path)
+		content := repositoryEffectiveWorkflowSource(t, path)
 		validation := strings.Index(content, "neko release ci-validate-context")
 		tests := strings.Index(content, "go test ./...")
 		if !strings.Contains(content, "set -euo pipefail") || validation < 0 || tests <= validation {

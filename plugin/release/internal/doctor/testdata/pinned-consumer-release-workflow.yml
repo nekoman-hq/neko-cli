@@ -35,10 +35,9 @@ jobs:
       unit: ${{ steps.release-context.outputs.unit }}
       version: ${{ steps.release-context.outputs.version }}
       tag: ${{ steps.release-context.outputs.tag }}
-      release_sha: ${{ steps.release-context.outputs['release-sha'] }}
+      release_sha: ${{ steps.release-context.outputs.release_sha }}
     env:
       GORELEASER_CONFIG: .goreleaser.cli.yaml
-
     steps:
       - name: Checkout the exact release commit with tags
         uses: actions/checkout@v4
@@ -48,9 +47,30 @@ jobs:
           fetch-tags: true
           persist-credentials: false
 
-      # This guard intentionally remains inline. It validates the immutable
-      # release identity before candidate code builds its own validation tools.
-      - name: Validate immutable self-release identity
+      - name: Install pinned Neko CLI
+        shell: bash
+        env:
+          NEKO_VERSION: ${{ vars.NEKO_VERSION }}
+          NEKO_INSTALL_DIR: ${{ runner.temp }}/neko/bin
+        run: |
+          set -euo pipefail
+          : "${NEKO_VERSION:?Set repository variable NEKO_VERSION to a supported Neko CLI version}"
+          curl -fsSL https://raw.githubusercontent.com/nekoman-hq/neko-cli/main/install.sh \
+            --output "$RUNNER_TEMP/install-neko.sh"
+          bash "$RUNNER_TEMP/install-neko.sh"
+          echo "$NEKO_INSTALL_DIR" >> "$GITHUB_PATH"
+
+      - name: Install pinned Neko Release Plugin
+        shell: bash
+        env:
+          NEKO_RELEASE_PLUGIN_VERSION: ${{ vars.NEKO_RELEASE_PLUGIN_VERSION }}
+        run: |
+          set -euo pipefail
+          : "${NEKO_RELEASE_PLUGIN_VERSION:?Set repository variable NEKO_RELEASE_PLUGIN_VERSION to a supported Release Plugin version}"
+          neko plugin install release --version "$NEKO_RELEASE_PLUGIN_VERSION"
+
+      - name: Validate Neko release context
+        id: release-context
         shell: bash
         env:
           RELEASE_UNIT: ${{ inputs.unit }}
@@ -59,63 +79,13 @@ jobs:
           RELEASE_SHA: ${{ inputs.release_sha }}
         run: |
           set -euo pipefail
-
-          if [[ "$RELEASE_UNIT" != "cli" ]]; then
-            echo "::error::unit must be cli, got '$RELEASE_UNIT'"
-            exit 1
-          fi
-
-          if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
-            echo "::error::version must be a semver-like value, got '$RELEASE_VERSION'"
-            exit 1
-          fi
-
-          if [[ "$RELEASE_TAG" != "v${RELEASE_VERSION}" ]]; then
-            echo "::error::tag must be v${RELEASE_VERSION}, got '$RELEASE_TAG'"
-            exit 1
-          fi
-
-          if [[ ! "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::release_sha must be a 40-character lowercase Git SHA"
-            exit 1
-          fi
-
-          head_sha="$(git rev-parse HEAD)"
-          tag_sha="$(git rev-list -n 1 "$RELEASE_TAG")"
-
-          if [[ "$head_sha" != "$RELEASE_SHA" || "$tag_sha" != "$RELEASE_SHA" ]]; then
-            echo "::error::checkout, tag, and release_sha must identify the same commit"
-            exit 1
-          fi
-
-          if ! jq -e --arg version "$RELEASE_VERSION" \
-            '.units["cli"].version == $version' \
-            .neko/release.state.json >/dev/null; then
-            echo "::error::release state does not match version $RELEASE_VERSION"
-            exit 1
-          fi
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Set up exact-source Neko validation toolchain
-        id: source-toolchain
-        uses: ./.github/actions/setup-source-neko-toolchain
-        with:
-          release-sha: ${{ inputs.release_sha }}
-
-      - name: Validate Neko release context
-        id: release-context
-        uses: ./.github/actions/validate-neko-release-context
-        with:
-          unit: ${{ inputs.unit }}
-          version: ${{ inputs.version }}
-          tag: ${{ inputs.tag }}
-          release-sha: ${{ inputs.release_sha }}
-          neko-plugin-dir: ${{ steps.source-toolchain.outputs.neko-plugin-dir }}
+          neko release ci-validate-context \
+            --unit "$RELEASE_UNIT" \
+            --version "$RELEASE_VERSION" \
+            --tag "$RELEASE_TAG" \
+            --release-sha "$RELEASE_SHA" \
+            --output github \
+            --github-output-file "$GITHUB_OUTPUT"
 
       - name: Record validated release context
         shell: bash
@@ -123,10 +93,9 @@ jobs:
           RELEASE_UNIT: ${{ steps.release-context.outputs.unit }}
           RELEASE_VERSION: ${{ steps.release-context.outputs.version }}
           RELEASE_TAG: ${{ steps.release-context.outputs.tag }}
-          RELEASE_SHA: ${{ steps.release-context.outputs['release-sha'] }}
+          RELEASE_SHA: ${{ steps.release-context.outputs.release_sha }}
         run: |
           set -euo pipefail
-
           {
             echo "## Validated cli release"
             echo ""
@@ -135,6 +104,12 @@ jobs:
             echo "- tag: \`$RELEASE_TAG\`"
             echo "- release_sha: \`$RELEASE_SHA\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
 
       - name: Run Go tests
         shell: bash
@@ -172,7 +147,6 @@ jobs:
       contents: write
     env:
       GORELEASER_CONFIG: .goreleaser.cli.yaml
-
     steps:
       - name: Checkout the validated release commit with tags
         uses: actions/checkout@v4
@@ -207,7 +181,6 @@ jobs:
           RELEASE_SHA: ${{ needs.validate.outputs.release_sha }}
         run: |
           set -euo pipefail
-
           {
             echo "## cli release"
             echo ""

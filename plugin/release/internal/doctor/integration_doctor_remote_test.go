@@ -40,13 +40,13 @@ func TestIntegrationDoctorDefaultModeDoesNotInvokeRemoteInspectorOrTokenResolver
 	if result.RemoteVerification != (integrationDoctorRemoteSummary{Status: integrationDoctorRemoteNotRequested}) {
 		t.Fatalf("remote summary=%#v", result.RemoteVerification)
 	}
-	if result.Readiness != integrationDoctorReady || result.Summary != (integrationDoctorSummary{NotVerifiable: 19, Verified: 15}) {
+	if result.Readiness != integrationDoctorReady || result.Summary != (integrationDoctorSummary{NotVerifiable: 15, Verified: 15}) {
 		t.Fatalf("readiness=%q summary=%#v", result.Readiness, result.Summary)
 	}
 }
 
 func TestIntegrationDoctorExplicitRemoteVerificationResolvesSupportedFactsWithGETOnlyRequests(t *testing.T) {
-	root := repositoryInspectionRoot(t)
+	root := newIntegrationDoctorPinnedInstallationRepository(t)
 	server, requests := newSuccessfulIntegrationDoctorGitHubServer(t, root.Path(), false)
 	defer server.Close()
 	tokenCalls := 0
@@ -177,7 +177,7 @@ func TestIntegrationDoctorExplicitRemoteVerificationSupportsEveryUnitScope(t *te
 }
 
 func TestIntegrationDoctorRemoteAccessFailuresRemainPartialAndPreserveVerifiedFacts(t *testing.T) {
-	root := repositoryInspectionRoot(t)
+	root := newIntegrationDoctorPinnedInstallationRepository(t)
 	server, _ := newSuccessfulIntegrationDoctorGitHubServerWithOverrides(t, root.Path(), false, func(writer http.ResponseWriter, request *http.Request) bool {
 		if strings.HasSuffix(request.URL.Path, "/actions/permissions") {
 			writer.WriteHeader(http.StatusForbidden)
@@ -418,7 +418,9 @@ jobs:
 				protected:      &integrationDoctorRemoteTokenAccess{resolver: integrationDoctorRecordingTokenResolver{value: "variables-token"}},
 				variableValues: make(map[string]string),
 			}
-			inspector.inspectVariables(context.Background(), remote, []integrationDoctorRemoteWorkflow{workflow}, &inspection)
+			inspector.inspectVariables(context.Background(), remote, integrationDoctorRemoteRequest{
+				Workflows: []integrationDoctorRemoteWorkflow{workflow},
+			}, &inspection)
 			var fact *integrationDoctorVerification
 			for index := range inspection.Verifications {
 				if inspection.Verifications[index].Subject == test.variable {
@@ -480,7 +482,9 @@ jobs:
 				identity:  integrationDoctorRepositoryIdentity{Owner: "acme", Repository: "example"},
 				protected: &integrationDoctorRemoteTokenAccess{resolver: integrationDoctorRecordingTokenResolver{value: "secret-metadata-token"}},
 			}
-			inspector.inspectSecrets(context.Background(), remote, []integrationDoctorRemoteWorkflow{workflow}, &inspection)
+			inspector.inspectSecrets(context.Background(), remote, integrationDoctorRemoteRequest{
+				Workflows: []integrationDoctorRemoteWorkflow{workflow},
+			}, &inspection)
 			if len(inspection.Verifications) != 1 || inspection.Verifications[0].Subject != "SIGNING_TOKEN" ||
 				inspection.Verifications[0].State != test.wantState {
 				t.Fatalf("verifications=%#v", inspection.Verifications)
@@ -541,7 +545,7 @@ func TestIntegrationDoctorActionsPolicyUnsupportedRemainsUnresolved(t *testing.T
 }
 
 func TestIntegrationDoctorMissingInstallationAssetReplacesAvailabilityLimitationWithError(t *testing.T) {
-	root := repositoryInspectionRoot(t)
+	root := newIntegrationDoctorPinnedInstallationRepository(t)
 	server, _ := newSuccessfulIntegrationDoctorGitHubServerWithOverrides(t, root.Path(), false, func(writer http.ResponseWriter, request *http.Request) bool {
 		if strings.HasSuffix(request.URL.Path, "/releases/tags/v3.0.4") {
 			writeIntegrationDoctorReleaseFixture(writer, "v3.0.4", []string{"neko-cli_Darwin_arm64.tar.gz"})
@@ -572,7 +576,7 @@ func TestIntegrationDoctorPinnedReleasePluginInstallationRequiresExactArchiveAnd
 		{name: "plugin checksum missing", remove: func(asset string) bool { return strings.HasSuffix(asset, "_checksums.txt") }},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			root := repositoryInspectionRoot(t)
+			root := newIntegrationDoctorPinnedInstallationRepository(t)
 			fixtures := integrationDoctorRemoteReleaseFixtures(t, root.Path())
 			assets := make([]string, 0, len(fixtures["plugin-release/v4.2.0"]))
 			for _, asset := range fixtures["plugin-release/v4.2.0"] {
@@ -621,7 +625,7 @@ func TestIntegrationDoctorReleasePluginSourceValidationDoesNotRequirePublishedIn
 }
 
 func TestIntegrationDoctorDefiniteRemoteReleaseAndTagFailuresAreActionable(t *testing.T) {
-	root := repositoryInspectionRoot(t)
+	root := newIntegrationDoctorPinnedInstallationRepository(t)
 	repository, err := releaseconfig.LoadReleaseRepository(root.Path())
 	if err != nil {
 		t.Fatal(err)

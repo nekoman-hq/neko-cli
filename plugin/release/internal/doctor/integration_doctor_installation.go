@@ -8,6 +8,7 @@ import (
 
 	goreleaserfacts "github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool/goreleaser"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
+	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata"
 	"gopkg.in/yaml.v3"
 )
 
@@ -32,9 +33,9 @@ func inspectIntegrationDoctorInstallation(
 	repositoryIdentity integrationDoctorRepositoryIdentity,
 	repositoryIdentityErr error,
 ) (integrationDoctorVerification, []integrationDoctorDiagnostic) {
-	if _, sourceToolchain := integrationDoctorSourceValidationToolchainStep(jobs); sourceToolchain {
+	if _, _, sourceToolchain := integrationDoctorSourceToolchainBuildStep(jobs); sourceToolchain {
 		return inspectIntegrationDoctorSourceValidationToolchain(
-			repositoryRoot, workflowPath, workflowUnits, jobs, files,
+			repositoryRoot, workflowPath, workflowUnits, repositoryUnits, jobs, files,
 		)
 	}
 	fact := newIntegrationDoctorVerification(
@@ -271,7 +272,7 @@ func integrationDoctorLoadUnitGoReleaserConfig(
 		return goreleaserfacts.Config{}, "", false
 	}
 	root := workflowDocumentRoot(&document)
-	invocations := integrationDoctorGoReleaserInvocations(root, integrationDoctorWorkflowJobs(root))
+	invocations := integrationDoctorGoReleaserInvocations(repositoryRoot, root)
 	for _, invocation := range invocations {
 		if !integrationDoctorRepositoryEvidencePathValid(invocation.ConfigPath) {
 			continue
@@ -290,7 +291,7 @@ func integrationDoctorLoadUnitGoReleaserConfig(
 
 func integrationDoctorReleasePluginUnit(units []releaseconfig.ReleaseUnit) (releaseconfig.ReleaseUnit, bool) {
 	for _, unit := range units {
-		if unit.IsPlugin && unit.PluginName == "release" {
+		if unit.IsPlugin && unit.PluginName == metadata.PluginName {
 			return unit, true
 		}
 	}

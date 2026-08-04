@@ -62,6 +62,7 @@ dispatch client, retry, or presentation policy.
 | `internal/releaseworkflow` | Workflow identity, dispatch inputs, repository target, consumer-operation facts |
 | `internal/githubdispatch` | One bounded workflow-dispatch POST transport and sanitized result |
 | `internal/releasesource` | Tolerant read-only V1/V2 source classification |
+| `internal/localaction` | Read-only repository-local composite action resolution into effective workflow steps |
 | `internal/doctor` | Local inspection, opt-in bounded GET verification, diagnostics, presentation |
 | `internal/unitoverview` | Read-only V2 unit inventory and presentation |
 | `internal/pipelineinspection` | Immutable lifecycle/evidence/verification projection |
@@ -125,7 +126,8 @@ mutation. Plugin Index raw output and `--check` are read-only; only
 
 ### Doctor
 
-`internal/doctor` owns workflow parsing, local repository inspection,
+`internal/doctor` owns workflow parsing, repository-local composite action
+expansion through `internal/localaction`, local repository inspection,
 credentials-reference analysis, pinned-installation or bounded self-release
 source-toolchain checks, GoReleaser/publication checks, diagnostics, readiness,
 and presentation. Default Doctor constructs no GitHub client, resolves no
@@ -161,12 +163,14 @@ release SHA, checked-out `HEAD`, and peeled local tag target. It reads local Git
 without fetch, token, network, or mutation and emits the stable GitHub output
 contract.
 
-The consumer-owned `plugin-release` workflow has one narrow self-release
-exception to published validation-tool installation. Reviewed shell first
-validates the fixed unit, version/tag shape, checked-out `HEAD`, peeled tag,
-state, and manifest. It then builds the CLI and candidate plugin from that exact
-checkout into runner-temporary directories and invokes the canonical context
-validator through the normal plugin protocol. The source build performs no
+A single-unit self-release workflow may take one narrow exception to published
+validation-tool installation. An inline reviewed shell guard first validates the
+fixed unit, version/tag shape, checked-out `HEAD`, peeled tag, state, and — for a
+plugin unit — its materialized manifest. A shared repository-local composite
+action then builds the CLI and candidate plugin from that exact checkout into
+runner-temporary directories, and a second local action invokes the canonical
+context validator through the normal plugin protocol. This repository's `cli`,
+`plugin-release`, and `plugin-ui` workflows all use that shape. The source build performs no
 Neko/plugin release-artifact download, plugin-registry lookup, credential
 access, or publication; ordinary Go module resolution remains owned by the
 consumer workflow's setup/cache boundary. Other workflows retain pinned

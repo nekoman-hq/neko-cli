@@ -160,9 +160,11 @@ Local Doctor checks include:
 - effective workflow/job permissions;
 - non-cancelling unit/tag concurrency;
 - exact-SHA checkout, complete tag history, and disabled persisted credentials;
-- pinned CLI and Release Plugin installation before validation, except for the
-  dedicated Release Plugin self-release workflow's bounded exact-source
-  validation toolchain;
+- pinned CLI and Release Plugin installation before validation, except for a
+  bounded exact-source self-release validation toolchain;
+- repository-local composite actions a workflow invokes, resolved read-only
+  from `action.yml`/`action.yaml` so the steps a run really performs are
+  inspected;
 - the canonical validator flags and GitHub output wiring;
 - replacement of the scaffold's failing consumer placeholder;
 - recognized GoReleaser, GitHub Release, artifact, manifest, plugin-index, and credential shapes.

@@ -52,13 +52,14 @@ func TestRepositoryDogfoodWorkflowsRetainConsumerBehavior(t *testing.T) {
 			}
 
 			if behavior.pluginRegistry {
-				assertRepositoryWorkflowOrder(t, workflowText,
+				effective := repositoryEffectiveWorkflowText(t, root)
+				assertRepositoryWorkflowOrder(t, effective,
 					behavior.publishCommand,
 					".github/scripts/generate-plugin-index.sh",
 					".github/scripts/publish-plugin-index.sh",
 				)
 				for _, required := range []string{"plugin-index.json", "plugin-registry", "PLUGIN_REGISTRY_TARGET_SHA"} {
-					if !strings.Contains(workflowText, required) {
+					if !strings.Contains(effective, required) {
 						t.Errorf("%s lost plugin registry behavior %q", behavior.path, required)
 					}
 				}
@@ -140,6 +141,67 @@ func readRepositoryWorkflow(t *testing.T, relativePath string) ([]byte, *yaml.No
 		t.Fatalf("%s root is not a YAML mapping", relativePath)
 	}
 	return content, root
+}
+
+// TestRepositoryDogfoodWorkflowsDelegateSharedStepsToLocalActions keeps the
+// shared release steps in exactly one place. The workflows invoke the
+// repository-local composite actions; the action files own the implementation.
+func TestRepositoryDogfoodWorkflowsDelegateSharedStepsToLocalActions(t *testing.T) {
+	sharedInvocations := []string{
+		"uses: ./.github/actions/setup-source-neko-toolchain",
+		"uses: ./.github/actions/validate-neko-release-context",
+	}
+	duplicatedImplementations := []string{
+		"neko release ci-validate-context",
+		"go build",
+		".github/scripts/generate-plugin-index.sh",
+		".github/scripts/publish-plugin-index.sh",
+	}
+	for _, behavior := range repositoryWorkflowBehaviors() {
+		t.Run(behavior.unit, func(t *testing.T) {
+			content, _ := readRepositoryWorkflow(t, behavior.path)
+			workflow := string(content)
+			invocations := sharedInvocations
+			if behavior.pluginRegistry {
+				invocations = append(append([]string(nil), sharedInvocations...), "uses: ./.github/actions/publish-plugin-index")
+			}
+			for _, invocation := range invocations {
+				if strings.Count(workflow, invocation) != 1 {
+					t.Errorf("%s must invoke %q exactly once", behavior.path, invocation)
+				}
+			}
+			for _, implementation := range duplicatedImplementations {
+				if strings.Contains(workflow, implementation) {
+					t.Errorf("%s duplicates local action implementation %q", behavior.path, implementation)
+				}
+			}
+		})
+	}
+	for path, implementation := range map[string]string{
+		".github/actions/setup-source-neko-toolchain/action.yml":   "go build",
+		".github/actions/validate-neko-release-context/action.yml": "neko release ci-validate-context",
+		".github/actions/publish-plugin-index/action.yml":          ".github/scripts/publish-plugin-index.sh",
+	} {
+		content, err := os.ReadFile(filepath.Join(repositoryRootForSelfMigrationTest(), filepath.FromSlash(path)))
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		if !strings.Contains(string(content), implementation) {
+			t.Errorf("%s no longer owns %q", path, implementation)
+		}
+	}
+}
+
+// repositoryEffectiveWorkflowText renders every effective step of one workflow
+// in execution order, including the steps its repository-local actions run.
+func repositoryEffectiveWorkflowText(t *testing.T, root *yaml.Node) string {
+	t.Helper()
+	jobs := integrationDoctorWorkflowJobs(root)
+	effective := make([]string, 0, len(jobs))
+	for _, job := range jobs {
+		effective = append(effective, integrationDoctorEffectiveJobText(job))
+	}
+	return strings.Join(effective, "")
 }
 
 func assertRepositoryWorkflowOrder(t *testing.T, content string, fragments ...string) {

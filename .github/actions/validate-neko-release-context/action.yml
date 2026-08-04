@@ -1,0 +1,98 @@
+name: Validate Neko release context
+description: Validate dispatched Release V2 identity and expose canonical outputs.
+
+inputs:
+  unit:
+    description: Dispatched Release V2 unit id.
+    required: true
+
+  version:
+    description: Neko-authoritative release version.
+    required: true
+
+  tag:
+    description: Neko-created release tag.
+    required: true
+
+  release-sha:
+    description: Neko-created release commit SHA.
+    required: true
+
+  neko-plugin-dir:
+    description: Plugin directory containing the Release Plugin.
+    required: true
+
+outputs:
+  unit:
+    description: Validated release unit.
+    value: ${{ steps.validate.outputs.unit }}
+
+  display-name:
+    description: Validated release unit display name.
+    value: ${{ steps.validate.outputs.display_name }}
+
+  version:
+    description: Validated release version.
+    value: ${{ steps.validate.outputs.version }}
+
+  tag-prefix:
+    description: Validated release unit tag prefix.
+    value: ${{ steps.validate.outputs.tag_prefix }}
+
+  tag:
+    description: Validated release tag.
+    value: ${{ steps.validate.outputs.tag }}
+
+  release-sha:
+    description: Validated release commit SHA.
+    value: ${{ steps.validate.outputs.release_sha }}
+
+  working-directory:
+    description: Validated release unit working directory.
+    value: ${{ steps.validate.outputs.working_directory }}
+
+  executor:
+    description: Validated release executor.
+    value: ${{ steps.validate.outputs.executor }}
+
+  delivery:
+    description: Validated release delivery mode.
+    value: ${{ steps.validate.outputs.delivery }}
+
+  workflow:
+    description: Validated configured workflow path.
+    value: ${{ steps.validate.outputs.workflow }}
+
+runs:
+  using: composite
+
+  steps:
+    - name: Validate dispatched Neko release context
+      id: validate
+      shell: bash
+      env:
+        NEKO_PLUGIN_DIR: ${{ inputs.neko-plugin-dir }}
+        RELEASE_UNIT: ${{ inputs.unit }}
+        RELEASE_VERSION: ${{ inputs.version }}
+        RELEASE_TAG: ${{ inputs.tag }}
+        RELEASE_SHA: ${{ inputs.release-sha }}
+      run: |
+        set -euo pipefail
+
+        if [[ -z "$NEKO_PLUGIN_DIR" ]]; then
+          echo "::error title=Release context validation failed::neko-plugin-dir is required" >&2
+          exit 1
+        fi
+
+        if ! command -v neko >/dev/null 2>&1; then
+          echo "::error title=Release context validation failed::neko is not available on PATH" >&2
+          exit 1
+        fi
+
+        neko release ci-validate-context \
+          --unit "$RELEASE_UNIT" \
+          --version "$RELEASE_VERSION" \
+          --tag "$RELEASE_TAG" \
+          --release-sha "$RELEASE_SHA" \
+          --output github \
+          --github-output-file "$GITHUB_OUTPUT"

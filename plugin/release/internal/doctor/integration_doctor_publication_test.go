@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/localaction"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
@@ -33,7 +34,7 @@ jobs:
 	`
 	valid = strings.TrimSpace(valid) + "\n"
 	validRoot := parseIntegrationDoctorWorkflowBytes(t, []byte(valid))
-	step := integrationDoctorWorkflowJobs(validRoot)[0].steps[0]
+	step := integrationDoctorWorkflowJobs(validRoot, localaction.DeclaredSteps{})[0].steps[0]
 	if !integrationDoctorGHReleaseUsesValidatedIdentity(step) {
 		t.Fatal("valid gh release identity was rejected")
 	}
@@ -46,7 +47,7 @@ jobs:
 		t.Run(name, func(t *testing.T) {
 			content := strings.Replace(valid, replacements[0], replacements[1], 1)
 			mutatedRoot := parseIntegrationDoctorWorkflowBytes(t, []byte(content))
-			mutated := integrationDoctorWorkflowJobs(mutatedRoot)[0].steps[0]
+			mutated := integrationDoctorWorkflowJobs(mutatedRoot, localaction.DeclaredSteps{})[0].steps[0]
 			if integrationDoctorGHReleaseUsesValidatedIdentity(mutated) {
 				t.Fatal("mismatched gh release identity was accepted")
 			}
@@ -104,7 +105,7 @@ jobs:
 `))
 	fact, diagnostics := inspectIntegrationDoctorPublication(
 		repositoryInspectionRoot(t).Path(), ".github/workflows/release.yml",
-		[]releaseconfig.ReleaseUnit{{ID: "cli"}}, root, integrationDoctorWorkflowJobs(root),
+		[]releaseconfig.ReleaseUnit{{ID: "cli"}}, root, integrationDoctorWorkflowJobs(root, localaction.DeclaredSteps{}),
 		filesystemIntegrationDoctorRepositoryFileReader{},
 		integrationDoctorRepositoryIdentity{Owner: "example", Repository: "tools"}, nil,
 	)

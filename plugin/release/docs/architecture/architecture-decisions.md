@@ -33,10 +33,16 @@ is isolated in the [numbered history](../history/README.md).
   retry, or publication state.
 - Accepted dispatch is handoff evidence and cannot be interpreted as workflow
   or publication completion.
-- Exact-source validation tooling is permitted only in the dedicated Release
-  Plugin self-release workflow, after an independent immutable-identity check
-  and with runner-temporary CLI/plugin paths. Other workflows retain pinned
-  published validation tools.
+- Exact-source validation tooling is permitted only in a workflow that
+  releases exactly one configured unit, after an inline immutable-identity
+  check and with runner-temporary CLI/plugin paths whose Go packages and
+  Release Plugin metadata belong to the checkout. Other workflows retain
+  pinned published validation tools.
+- Workflow inspection resolves repository-local composite actions before its
+  semantic evaluation. Resolution is read-only, repository-confined, bounded in
+  depth, cycle-safe, and executes nothing. Operations are recognized from
+  effective `run`, `uses`, `env`, and `with` values, never from a workflow
+  filename, local action directory, or unit id.
 
 ## Unsupported architecture
 

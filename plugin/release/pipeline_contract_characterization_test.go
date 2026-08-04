@@ -85,7 +85,8 @@ func TestPipelineInspectionRootLifecycleOrderCharacterization(t *testing.T) {
 }
 
 func TestPipelineInspectionConsumerWorkflowOrderCharacterization(t *testing.T) {
-	assertOrderedSourceFragments(t, "../../.github/workflows/release-neko-cli.yml",
+	assertOrderedFragments(t, ".github/workflows/release-neko-cli.yml",
+		repositoryEffectiveWorkflowSource(t, ".github/workflows/release-neko-cli.yml"),
 		"neko release ci-validate-context",
 		"go test ./...",
 		"args: check --config",
@@ -93,12 +94,12 @@ func TestPipelineInspectionConsumerWorkflowOrderCharacterization(t *testing.T) {
 		"args: release --config",
 	)
 	for _, path := range []string{
-		"../../.github/workflows/release-plugin-release.yml",
-		"../../.github/workflows/release-plugin-ui.yml",
+		".github/workflows/release-plugin-release.yml",
+		".github/workflows/release-plugin-ui.yml",
 	} {
-		assertOrderedSourceFragments(t, path,
+		assertOrderedFragments(t, path, repositoryEffectiveWorkflowSource(t, path),
+			".version == $version",
 			"neko release ci-validate-context",
-			"Validate materialized plugin manifest",
 			"go test ./...",
 			"args: check --config",
 			"args: build --config",
@@ -116,12 +117,9 @@ func TestPipelineInspectionPluginRegistryConditionCharacterization(t *testing.T)
 		t.Fatalf("load repository release source: %v", err)
 	}
 	for _, unit := range repository.Units {
-		content, err := os.ReadFile(filepath.Join("../..", filepath.FromSlash(unit.Workflow)))
-		if err != nil {
-			t.Fatalf("read %s: %v", unit.Workflow, err)
-		}
-		hasRegistry := strings.Contains(string(content), ".github/scripts/generate-plugin-index.sh") &&
-			strings.Contains(string(content), ".github/scripts/publish-plugin-index.sh")
+		effective := repositoryEffectiveWorkflowSource(t, unit.Workflow)
+		hasRegistry := strings.Contains(effective, ".github/scripts/generate-plugin-index.sh") &&
+			strings.Contains(effective, ".github/scripts/publish-plugin-index.sh")
 		if hasRegistry != unit.IsPlugin {
 			t.Errorf("unit %s plugin=%t registry=%t", unit.ID, unit.IsPlugin, hasRegistry)
 		}
@@ -168,14 +166,19 @@ func assertOrderedSourceFragments(t *testing.T, path string, fragments ...string
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)
 	}
+	assertOrderedFragments(t, path, string(content), fragments...)
+}
+
+func assertOrderedFragments(t *testing.T, subject, content string, fragments ...string) {
+	t.Helper()
 	previous := -1
 	for _, fragment := range fragments {
-		index := strings.Index(string(content), fragment)
+		index := strings.Index(content, fragment)
 		if index < 0 {
-			t.Fatalf("%s is missing %q", path, fragment)
+			t.Fatalf("%s is missing %q", subject, fragment)
 		}
 		if index <= previous {
-			t.Fatalf("%s fragment %q is out of order", path, fragment)
+			t.Fatalf("%s fragment %q is out of order", subject, fragment)
 		}
 		previous = index
 	}

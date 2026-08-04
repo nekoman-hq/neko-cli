@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/localaction"
 	goreleaserfacts "github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool/goreleaser"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 	"gopkg.in/yaml.v3"
@@ -217,7 +218,7 @@ func inspectRepositoryConsumerFixture(
 		behavior.path,
 		[]releaseconfig.ReleaseUnit{unit},
 		root,
-		integrationDoctorWorkflowJobs(root),
+		integrationDoctorWorkflowJobs(root, localaction.NewRepositoryActions(repositoryRoot)),
 		filesystemIntegrationDoctorRepositoryFileReader{},
 	)
 }

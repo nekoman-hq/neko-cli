@@ -1,12 +1,16 @@
 package releaseworkflow
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
+
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/localaction"
 )
 
 func TestConsumerWorkflowFactsPreserveConfiguredOperationOrder(t *testing.T) {
-	facts, err := InspectConsumerWorkflow([]byte(pluginConsumerWorkflowFixture), true)
+	facts, err := InspectConsumerWorkflow([]byte(pluginConsumerWorkflowFixture), true, localaction.DeclaredSteps{})
 	if err != nil {
 		t.Fatalf("InspectConsumerWorkflow: %v", err)
 	}
@@ -33,11 +37,11 @@ func TestConsumerWorkflowFactsPreserveConfiguredOperationOrder(t *testing.T) {
 }
 
 func TestConsumerWorkflowFactsApplyPluginPredicatesWithoutUnitNames(t *testing.T) {
-	pluginFacts, err := InspectConsumerWorkflow([]byte(pluginConsumerWorkflowFixture), true)
+	pluginFacts, err := InspectConsumerWorkflow([]byte(pluginConsumerWorkflowFixture), true, localaction.DeclaredSteps{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	normalFacts, err := InspectConsumerWorkflow([]byte(pluginConsumerWorkflowFixture), false)
+	normalFacts, err := InspectConsumerWorkflow([]byte(pluginConsumerWorkflowFixture), false, localaction.DeclaredSteps{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +73,7 @@ func TestConsumerWorkflowFactsClassifyRealToolPublication(t *testing.T) {
         with:
           args: release --config ${{ env.TOOL_CONFIG }} --clean
 `)
-	facts, err := InspectConsumerWorkflow(content, false)
+	facts, err := InspectConsumerWorkflow(content, false, localaction.DeclaredSteps{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,3 +130,69 @@ const pluginConsumerWorkflowFixture = `jobs:
       - name: Publish registry
         run: .github/scripts/publish-plugin-index.sh
 `
+
+// TestConsumerOperationsResolveRenamedLocalActionsByContent proves stage
+// projection classifies operations from expanded action contents, not from
+// workflow filenames or local action directory names.
+func TestConsumerOperationsResolveRenamedLocalActionsByContent(t *testing.T) {
+	root := t.TempDir()
+	writeRenamedActionFixture(t, root, "arbitrary-name/action.yml", `name: Context
+description: Validate the dispatched context.
+runs:
+  using: composite
+  steps:
+    - name: Validate
+      shell: bash
+      run: neko release ci-validate-context --unit "$RELEASE_UNIT"
+`)
+	writeRenamedActionFixture(t, root, "another-name/action.yml", `name: Registry
+description: Publish the plugin index.
+runs:
+  using: composite
+  steps:
+    - name: Generate
+      shell: bash
+      run: .github/scripts/generate-plugin-index.sh
+    - name: Publish
+      shell: bash
+      run: .github/scripts/publish-plugin-index.sh
+`)
+	workflow := []byte(`jobs:
+  ship:
+    steps:
+      - name: Guard
+        run: |
+          jq -e --arg version "$RELEASE_VERSION" \
+            '.version == $version' \
+            plugin/renamed/manifest.json >/dev/null
+      - uses: ./.github/actions/arbitrary-name
+      - name: Test
+        run: go test ./...
+      - uses: ./.github/actions/another-name
+`)
+	facts, err := InspectConsumerWorkflow(workflow, true, localaction.NewRepositoryActions(root))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []ConsumerOperationID{
+		ConsumerPluginManifestValidation,
+		ConsumerContextValidation,
+		ConsumerTests,
+		ConsumerPluginIndexGeneration,
+		ConsumerPluginIndexPublication,
+	}
+	if got := consumerOperationIDs(facts); !reflect.DeepEqual(got, want) {
+		t.Fatalf("operations = %v, want %v", got, want)
+	}
+}
+
+func writeRenamedActionFixture(t *testing.T, root, relativePath, content string) {
+	t.Helper()
+	target := filepath.Join(root, ".github", "actions", filepath.FromSlash(relativePath))
+	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+		t.Fatalf("create %s parent: %v", relativePath, err)
+	}
+	if err := os.WriteFile(target, []byte(content), 0644); err != nil {
+		t.Fatalf("write %s: %v", relativePath, err)
+	}
+}

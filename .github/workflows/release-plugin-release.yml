@@ -35,9 +35,10 @@ jobs:
       unit: ${{ steps.release-context.outputs.unit }}
       version: ${{ steps.release-context.outputs.version }}
       tag: ${{ steps.release-context.outputs.tag }}
-      release_sha: ${{ steps.release-context.outputs.release_sha }}
+      release_sha: ${{ steps.release-context.outputs['release-sha'] }}
     env:
       GORELEASER_CONFIG: .goreleaser.plugin-release.yaml
+
     steps:
       - name: Checkout the exact release commit with tags
         uses: actions/checkout@v4
@@ -47,6 +48,8 @@ jobs:
           fetch-tags: true
           persist-credentials: false
 
+      # This guard intentionally remains inline. It validates the immutable
+      # release identity before candidate code builds its own validation tools.
       - name: Validate immutable self-release identity
         shell: bash
         env:
@@ -61,14 +64,17 @@ jobs:
             echo "::error::unit must be plugin-release, got '$RELEASE_UNIT'"
             exit 1
           fi
+
           if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
             echo "::error::version must be a semver-like value, got '$RELEASE_VERSION'"
             exit 1
           fi
+
           if [[ "$RELEASE_TAG" != "plugin-release/v${RELEASE_VERSION}" ]]; then
             echo "::error::tag must be plugin-release/v${RELEASE_VERSION}, got '$RELEASE_TAG'"
             exit 1
           fi
+
           if [[ ! "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
             echo "::error::release_sha must be a 40-character lowercase Git SHA"
             exit 1
@@ -76,17 +82,22 @@ jobs:
 
           head_sha="$(git rev-parse HEAD)"
           tag_sha="$(git rev-list -n 1 "$RELEASE_TAG")"
+
           if [[ "$head_sha" != "$RELEASE_SHA" || "$tag_sha" != "$RELEASE_SHA" ]]; then
             echo "::error::checkout, tag, and release_sha must identify the same commit"
             exit 1
           fi
+
           if ! jq -e --arg version "$RELEASE_VERSION" \
-            '.units["plugin-release"].version == $version' .neko/release.state.json >/dev/null; then
+            '.units["plugin-release"].version == $version' \
+            .neko/release.state.json >/dev/null; then
             echo "::error::release state does not match version $RELEASE_VERSION"
             exit 1
           fi
+
           if ! jq -e --arg version "$RELEASE_VERSION" \
-            '.version == $version' plugin/release/manifest.json >/dev/null; then
+            '.version == $version' \
+            plugin/release/manifest.json >/dev/null; then
             echo "::error::release plugin manifest does not match version $RELEASE_VERSION"
             exit 1
           fi
@@ -97,48 +108,21 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Build exact-commit Neko validation toolchain
-        shell: bash
-        env:
-          NEKO_BIN_DIR: ${{ runner.temp }}/neko/bin
-          NEKO_PLUGIN_DIR: ${{ runner.temp }}/neko/plugins
-          RELEASE_VERSION: ${{ inputs.version }}
-          RELEASE_SHA: ${{ inputs.release_sha }}
-        run: |
-          set -euo pipefail
-
-          cli_version="$(jq -er '.units.cli.version' .neko/release.state.json)"
-          release_plugin_dir="$NEKO_PLUGIN_DIR/release"
-          mkdir -p "$NEKO_BIN_DIR" "$release_plugin_dir"
-
-          go build -trimpath \
-            -ldflags "-X github.com/nekoman-hq/neko-cli/pkg/version.Version=${cli_version} -X github.com/nekoman-hq/neko-cli/pkg/version.Commit=${RELEASE_SHA} -X github.com/nekoman-hq/neko-cli/pkg/version.BuiltBy=github-actions-self-release" \
-            -o "$NEKO_BIN_DIR/neko" .
-          go build -trimpath \
-            -ldflags "-X github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata.Version=${RELEASE_VERSION} -X github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata.GitCommit=${RELEASE_SHA}" \
-            -o "$release_plugin_dir/plugin-release" ./plugin/release
-          cp plugin/release/manifest.json "$release_plugin_dir/manifest.json"
-
-          echo "$NEKO_BIN_DIR" >> "$GITHUB_PATH"
+      - name: Set up exact-source Neko validation toolchain
+        id: source-toolchain
+        uses: ./.github/actions/setup-source-neko-toolchain
+        with:
+          release-sha: ${{ inputs.release_sha }}
 
       - name: Validate Neko release context
         id: release-context
-        shell: bash
-        env:
-          NEKO_PLUGIN_DIR: ${{ runner.temp }}/neko/plugins
-          RELEASE_UNIT: ${{ inputs.unit }}
-          RELEASE_VERSION: ${{ inputs.version }}
-          RELEASE_TAG: ${{ inputs.tag }}
-          RELEASE_SHA: ${{ inputs.release_sha }}
-        run: |
-          set -euo pipefail
-          neko release ci-validate-context \
-            --unit "$RELEASE_UNIT" \
-            --version "$RELEASE_VERSION" \
-            --tag "$RELEASE_TAG" \
-            --release-sha "$RELEASE_SHA" \
-            --output github \
-            --github-output-file "$GITHUB_OUTPUT"
+        uses: ./.github/actions/validate-neko-release-context
+        with:
+          unit: ${{ inputs.unit }}
+          version: ${{ inputs.version }}
+          tag: ${{ inputs.tag }}
+          release-sha: ${{ inputs.release_sha }}
+          neko-plugin-dir: ${{ steps.source-toolchain.outputs.neko-plugin-dir }}
 
       - name: Record validated release context
         shell: bash
@@ -146,9 +130,10 @@ jobs:
           RELEASE_UNIT: ${{ steps.release-context.outputs.unit }}
           RELEASE_VERSION: ${{ steps.release-context.outputs.version }}
           RELEASE_TAG: ${{ steps.release-context.outputs.tag }}
-          RELEASE_SHA: ${{ steps.release-context.outputs.release_sha }}
+          RELEASE_SHA: ${{ steps.release-context.outputs['release-sha'] }}
         run: |
           set -euo pipefail
+
           {
             echo "## Validated plugin-release dispatch"
             echo ""
@@ -157,18 +142,6 @@ jobs:
             echo "- tag: \`$RELEASE_TAG\`"
             echo "- release_sha: \`$RELEASE_SHA\`"
           } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Validate materialized plugin manifest
-        shell: bash
-        env:
-          RELEASE_VERSION: ${{ steps.release-context.outputs.version }}
-        run: |
-          set -euo pipefail
-          if ! jq -e --arg version "$RELEASE_VERSION" '.version == $version' plugin/release/manifest.json > /dev/null; then
-            echo "::error::plugin/release/manifest.json must contain version == $RELEASE_VERSION"
-            exit 1
-          fi
-          echo "Plugin manifest validation passed." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run Go tests
         shell: bash
@@ -197,7 +170,9 @@ jobs:
         run: |
           set -euo pipefail
           git diff --exit-code
-          echo "Build validation completed without tracked file changes." >> "$GITHUB_STEP_SUMMARY"
+
+          echo "Build validation completed without tracked file changes." \
+            >> "$GITHUB_STEP_SUMMARY"
 
   publish:
     name: Publish plugin-release
@@ -207,6 +182,7 @@ jobs:
       contents: write
     env:
       GORELEASER_CONFIG: .goreleaser.plugin-release.yaml
+
     steps:
       - name: Checkout the validated release commit with tags
         uses: actions/checkout@v4
@@ -250,24 +226,17 @@ jobs:
             --notes "Release plugin-release $RELEASE_VERSION" \
             --verify-tag
 
-      - name: Generate plugin registry index
-        shell: bash
-        env:
-          INDEX_OUTPUT: ${{ runner.temp }}/plugin-index.json
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          RELEASE_UNIT: ${{ needs.validate.outputs.unit }}
-          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
-          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
-        run: .github/scripts/generate-plugin-index.sh
-
-      - name: Publish plugin registry index
-        shell: bash
+      - name: Publish Plugin Index
+        id: plugin-index
+        uses: ./.github/actions/publish-plugin-index
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          INDEX_PATH: ${{ runner.temp }}/plugin-index.json
-          PLUGIN_REGISTRY_TARGET_SHA: ${{ needs.validate.outputs.release_sha }}
-        run: .github/scripts/publish-plugin-index.sh
+        with:
+          repository: ${{ github.repository }}
+          unit: ${{ needs.validate.outputs.unit }}
+          version: ${{ needs.validate.outputs.version }}
+          tag: ${{ needs.validate.outputs.tag }}
+          release-sha: ${{ needs.validate.outputs.release_sha }}
 
       - name: Publish summary
         shell: bash
@@ -275,6 +244,7 @@ jobs:
           RELEASE_TAG: ${{ needs.validate.outputs.tag }}
         run: |
           set -euo pipefail
+
           {
             echo ""
             echo "## Publish status"

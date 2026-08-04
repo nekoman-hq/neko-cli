@@ -37,7 +37,7 @@ func TestRepositoryDogfoodDoctorAcceptance(t *testing.T) {
 	if first.Readiness != integrationDoctorReady {
 		t.Fatalf("readiness = %q, want ready", first.Readiness)
 	}
-	if first.Summary.Errors != 0 || first.Summary.Warnings != 0 || first.Summary.Recommendations != 0 || first.Summary.NotVerifiable != 19 {
+	if first.Summary.Errors != 0 || first.Summary.Warnings != 0 || first.Summary.Recommendations != 0 || first.Summary.NotVerifiable != 15 {
 		t.Fatalf("Doctor summary = %#v, diagnostics=%#v", first.Summary, first.Diagnostics)
 	}
 	if !reflect.DeepEqual(first.Diagnostics, second.Diagnostics) {
@@ -53,12 +53,10 @@ func TestRepositoryDogfoodDoctorAcceptance(t *testing.T) {
 	}
 	for _, retained := range []string{
 		"CONSUMER_BUILD_NOT_VERIFIABLE",
-		"INSTALLATION_ARTIFACTS_NOT_VERIFIABLE",
 		"PUBLICATION_CREDENTIALS_NOT_VERIFIABLE",
 		"PUBLICATION_TARGET_NOT_VERIFIABLE",
 		"REMOTE_DISPATCH_AUTHORIZATION_NOT_VERIFIABLE",
 		"REMOTE_WORKFLOW_NOT_VERIFIABLE",
-		"REPOSITORY_VARIABLES_NOT_VERIFIABLE",
 	} {
 		assertIntegrationDoctorCodes(t, first.Diagnostics, retained)
 	}
@@ -77,13 +75,9 @@ func TestRepositoryDogfoodDoctorUnitScopesHaveNoErrors(t *testing.T) {
 		t.Run(behavior.unit, func(t *testing.T) {
 			response := runIntegrationDoctor(t, root, map[string]any{"unit": behavior.unit})
 			result := integrationDoctorResultFromResponse(t, response)
-			wantNotVerifiable := 7
-			if behavior.unit == "plugin-release" {
-				wantNotVerifiable = 5
-			}
 			if result.Readiness != integrationDoctorReady || response.ExitCode != 0 ||
 				result.Summary.Errors != 0 || result.Summary.Warnings != 0 ||
-				result.Summary.Recommendations != 0 || result.Summary.NotVerifiable != wantNotVerifiable {
+				result.Summary.Recommendations != 0 || result.Summary.NotVerifiable != 5 {
 				t.Fatalf("unit Doctor result = %#v", result)
 			}
 			if len(result.Units) != 1 || result.Units[0].ID != behavior.unit {
@@ -208,42 +202,17 @@ func assertRepositoryWorkflowValidation(t *testing.T, root *yaml.Node, unit stri
 	validatorCount := 0
 	for _, job := range jobs {
 		for index, step := range job.steps {
-			if step.name == "Install pinned Neko CLI" {
-				text := strings.ToLower(workflowNodeText(step.node))
-				if !strings.Contains(text, "vars.neko_version") || !strings.Contains(step.run, "install.sh") || strings.Contains(text, "version: latest") {
-					t.Error("Neko CLI installation is missing its repository-variable pin")
-				}
-			}
-			if step.name == "Install pinned Neko Release Plugin" {
-				text := strings.ToLower(workflowNodeText(step.node))
-				if !strings.Contains(text, "vars.neko_release_plugin_version") || !strings.Contains(step.run, "--version") || strings.Contains(text, "version: latest") {
-					t.Error("Release Plugin installation is missing its repository-variable pin")
-				}
-			}
 			if !strings.Contains(step.run, "neko release ci-validate-context") {
 				continue
 			}
 			validatorCount++
-			if job.id != "validate" || step.id != "release-context" {
-				t.Errorf("validator location/id = %q/%q", job.id, step.id)
+			if job.id != "validate" || step.action.CallerID != "release-context" {
+				t.Errorf("validator location/invocation = %q/%q", job.id, step.action.CallerID)
 			}
-			before := workflowNodeText(job.node)
-			validator := strings.Index(before, "Validate Neko release context")
-			if unit == "plugin-release" {
-				identity := strings.Index(before, "Validate immutable self-release identity")
-				setupGo := strings.Index(before, "Set up Go")
-				toolchain := strings.Index(before, "Build exact-commit Neko validation toolchain")
-				if identity < 0 || setupGo <= identity || toolchain <= setupGo || validator <= toolchain {
-					t.Errorf("job %q self-release identity/toolchain/validator order is invalid", job.id)
-				}
-				assertRepositorySelfReleaseValidationToolchain(t, before)
-			} else {
-				installCLI := strings.Index(before, "Install pinned Neko CLI")
-				installPlugin := strings.Index(before, "Install pinned Neko Release Plugin")
-				if installCLI < 0 || installPlugin <= installCLI || validator <= installPlugin {
-					t.Errorf("job %q installation/validator order is invalid", job.id)
-				}
+			if step.action.ActionPath != ".github/actions/validate-neko-release-context/action.yml" {
+				t.Errorf("validator is not owned by the canonical local action: %q", step.action.ActionPath)
 			}
+			assertRepositorySelfReleaseValidationToolchain(t, job, unit)
 			for _, fragment := range []string{
 				"--unit \"$RELEASE_UNIT\"",
 				"--version \"$RELEASE_VERSION\"",
@@ -254,6 +223,17 @@ func assertRepositoryWorkflowValidation(t *testing.T, root *yaml.Node, unit stri
 			} {
 				if !strings.Contains(step.run, fragment) {
 					t.Errorf("validator is missing %q", fragment)
+				}
+			}
+			for name, input := range map[string]string{
+				"RELEASE_UNIT":    "inputs.unit",
+				"RELEASE_VERSION": "inputs.version",
+				"RELEASE_TAG":     "inputs.tag",
+				"RELEASE_SHA":     "inputs.release_sha",
+			} {
+				value := workflowScalar(workflowMappingValue(workflowMappingValue(step.node, "env"), name))
+				if !strings.Contains(value, input) {
+					t.Errorf("validator %s = %q, want the dispatched %s", name, value, input)
 				}
 			}
 			if index+1 >= len(job.steps) || !strings.Contains(workflowNodeText(job.steps[index+1].node), "steps.release-context.outputs.") {
@@ -267,10 +247,12 @@ func assertRepositoryWorkflowValidation(t *testing.T, root *yaml.Node, unit stri
 
 	validate := workflowMappingValue(workflowMappingValue(root, "jobs"), "validate")
 	outputs := workflowMappingValue(validate, "outputs")
-	for _, name := range []string{"unit", "version", "tag", "release_sha"} {
-		want := "${{ steps.release-context.outputs." + name + " }}"
-		if got := workflowScalar(workflowMappingValue(outputs, name)); got != want {
-			t.Errorf("validate output %s = %q, want %q", name, got, want)
+	for output, name := range map[string]string{
+		"unit": "unit", "version": "version", "tag": "tag", "release_sha": "release-sha",
+	} {
+		got := workflowScalar(workflowMappingValue(outputs, output))
+		if !strings.Contains(got, "steps.release-context.outputs") || !strings.Contains(got, name) {
+			t.Errorf("validate output %s = %q, want the validated %q output", output, got, name)
 		}
 	}
 	publish := workflowMappingValue(workflowMappingValue(root, "jobs"), "publish")
@@ -285,34 +267,105 @@ func assertRepositoryWorkflowValidation(t *testing.T, root *yaml.Node, unit stri
 	}
 }
 
-func assertRepositorySelfReleaseValidationToolchain(t *testing.T, workflow string) {
+// assertRepositorySelfReleaseValidationToolchain verifies that the inline guard
+// rejects a mismatched release identity before any candidate code runs and that
+// the exact-source toolchain the shared local action builds is wired into
+// context validation.
+func assertRepositorySelfReleaseValidationToolchain(t *testing.T, job integrationDoctorWorkflowJob, unit string) {
 	t.Helper()
+	identity := repositoryWorkflowStepIndex(job, func(step integrationDoctorWorkflowStep) bool {
+		return step.name == "Validate immutable self-release identity"
+	})
+	setupGo := repositoryWorkflowStepIndex(job, func(step integrationDoctorWorkflowStep) bool {
+		return strings.HasPrefix(step.uses, "actions/setup-go@")
+	})
+	toolchain := repositoryWorkflowStepIndex(job, func(step integrationDoctorWorkflowStep) bool {
+		return step.name == "Build exact-source Neko validation toolchain"
+	})
+	validator := repositoryWorkflowStepIndex(job, func(step integrationDoctorWorkflowStep) bool {
+		return strings.Contains(step.run, "neko release ci-validate-context")
+	})
+	if identity < 0 || setupGo <= identity || toolchain <= setupGo || validator <= toolchain {
+		t.Fatalf("job %q identity/setup/toolchain/validator order is invalid", job.id)
+	}
+	if job.steps[identity].action.ActionPath != "" {
+		t.Error("the immutable identity guard must stay inline in the workflow")
+	}
+	if job.steps[toolchain].action.ActionPath != ".github/actions/setup-source-neko-toolchain/action.yml" {
+		t.Errorf("toolchain step source = %q", job.steps[toolchain].action.ActionPath)
+	}
+
+	tagPrefix := map[string]string{"cli": "v", "plugin-release": "plugin-release/v", "plugin-ui": "plugin-ui/v"}[unit]
+	guard := repositoryWorkflowShellCommand(job.steps[identity].run)
 	for _, required := range []string{
-		`if [[ "$RELEASE_UNIT" != "plugin-release" ]]`,
+		`if [[ "$RELEASE_UNIT" != "` + unit + `" ]]`,
+		`if [[ "$RELEASE_TAG" != "` + tagPrefix + `${RELEASE_VERSION}" ]]`,
 		`head_sha="$(git rev-parse HEAD)"`,
 		`tag_sha="$(git rev-list -n 1 "$RELEASE_TAG")"`,
-		`'.units["plugin-release"].version == $version'`,
-		`go build -trimpath`,
-		`-o "$NEKO_BIN_DIR/neko" .`,
+		`'.units["` + unit + `"].version == $version'`,
+	} {
+		if !strings.Contains(guard, required) {
+			t.Errorf("self-release identity guard is missing %q", required)
+		}
+	}
+	if manifest := map[string]string{
+		"plugin-release": "plugin/release/manifest.json", "plugin-ui": "plugin/ui/manifest.json",
+	}[unit]; manifest != "" && !strings.Contains(guard, `'.version == $version' `+manifest) {
+		t.Errorf("%s self-release identity omits %s version validation", unit, manifest)
+	}
+
+	build := repositoryWorkflowShellCommand(job.steps[toolchain].run)
+	for _, required := range []string{
+		`jq -er '.units.cli.version'`,
+		`jq -er '.units["plugin-release"].version'`,
+		"go build",
+		"-trimpath",
+		`-o "$NEKO_BIN_DIR/neko"`,
 		`-o "$release_plugin_dir/plugin-release" ./plugin/release`,
 		`cp plugin/release/manifest.json "$release_plugin_dir/manifest.json"`,
-		`NEKO_PLUGIN_DIR: ${{ runner.temp }}/neko/plugins`,
 		`echo "$NEKO_BIN_DIR" >> "$GITHUB_PATH"`,
 	} {
-		if !strings.Contains(workflow, required) {
+		if !strings.Contains(build, required) {
 			t.Errorf("self-release validation toolchain is missing %q", required)
 		}
 	}
+	if got := workflowScalar(workflowMappingValue(workflowMappingValue(job.steps[toolchain].node, "env"), "NEKO_PLUGIN_DIR")); got != "${{ runner.temp }}/neko/plugins" {
+		t.Errorf("exact-source plugin directory = %q", got)
+	}
+	consumed := workflowScalar(workflowMappingValue(workflowMappingValue(job.steps[validator].node, "env"), "NEKO_PLUGIN_DIR"))
+	if !strings.Contains(consumed, "steps."+job.steps[toolchain].action.CallerID+".outputs.neko-plugin-dir") {
+		t.Errorf("context validation plugin directory = %q, want the exact-source toolchain output", consumed)
+	}
+
+	effective := integrationDoctorEffectiveJobText(job)
 	for _, forbidden := range []string{
 		"vars.NEKO_VERSION",
 		"vars.NEKO_RELEASE_PLUGIN_VERSION",
 		"install.sh",
 		"neko plugin install release",
 	} {
-		if strings.Contains(workflow, forbidden) {
+		if strings.Contains(effective, forbidden) {
 			t.Errorf("self-release validation toolchain retains bootstrap dependency %q", forbidden)
 		}
 	}
+}
+
+func repositoryWorkflowStepIndex(
+	job integrationDoctorWorkflowJob,
+	matches func(integrationDoctorWorkflowStep) bool,
+) int {
+	for index, step := range job.steps {
+		if matches(step) {
+			return index
+		}
+	}
+	return -1
+}
+
+// repositoryWorkflowShellCommand joins line continuations and collapses
+// whitespace so contract fragments do not depend on shell formatting.
+func repositoryWorkflowShellCommand(run string) string {
+	return strings.Join(strings.Fields(strings.ReplaceAll(run, "\\\n", " ")), " ")
 }
 
 func repositoryInspectionRoot(t *testing.T) workspace.RepositoryRoot {

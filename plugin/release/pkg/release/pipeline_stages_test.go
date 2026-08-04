@@ -37,10 +37,13 @@ func TestPipelineStagesReflectConfiguredRepositoryConsumers(t *testing.T) {
 			},
 			wantRegistry: "not_applicable",
 		},
+		// The plugin workflows validate the materialized manifest inside the
+		// inline identity guard, which must run before any candidate code
+		// builds the toolchain that performs canonical context validation.
 		{
 			unit: "plugin-release", wantMaterialized: 1, wantRegistry: "configured",
 			wantConsumer: []string{
-				"canonical-context-validation", "plugin-manifest-validation", "consumer-tests",
+				"plugin-manifest-validation", "canonical-context-validation", "consumer-tests",
 				"release-tool-configuration-validation", "snapshot-build",
 				"consumer-worktree-validation", "release-artifact-packaging", "release-publication",
 				"plugin-index-generation", "plugin-index-publication",
@@ -49,7 +52,7 @@ func TestPipelineStagesReflectConfiguredRepositoryConsumers(t *testing.T) {
 		{
 			unit: "plugin-ui", wantMaterialized: 1, wantRegistry: "configured",
 			wantConsumer: []string{
-				"canonical-context-validation", "plugin-manifest-validation", "consumer-tests",
+				"plugin-manifest-validation", "canonical-context-validation", "consumer-tests",
 				"release-tool-configuration-validation", "snapshot-build",
 				"consumer-worktree-validation", "release-artifact-packaging", "release-publication",
 				"plugin-index-generation", "plugin-index-publication",

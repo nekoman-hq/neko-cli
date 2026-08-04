@@ -133,6 +133,43 @@ func TestPublishPluginIndexScriptCreatesRegistryReleaseWhenMissing(t *testing.T)
 
 func TestPluginReleaseWorkflowsPublishPluginIndexAfterPluginRelease(t *testing.T) {
 	root := repositoryRoot(t)
+
+	action := readFile(
+		t,
+		filepath.Join(root, ".github/actions/publish-plugin-index/action.yml"),
+	)
+
+	for _, want := range []string{
+		"name: Publish Plugin Index",
+		"runs:\n  using: composite",
+		"- name: Generate Plugin Index",
+		"- name: Publish Plugin Index",
+		`"$GITHUB_WORKSPACE/.github/scripts/generate-plugin-index.sh"`,
+		`"$GITHUB_WORKSPACE/.github/scripts/publish-plugin-index.sh"`,
+		"INDEX_OUTPUT:",
+		"GITHUB_REPOSITORY:",
+		"RELEASE_UNIT:",
+		"RELEASE_VERSION:",
+		"RELEASE_TAG:",
+		"PLUGIN_REGISTRY_TARGET_SHA:",
+		`if [[ -z "${GH_TOKEN:-}" && -z "${GITHUB_TOKEN:-}" ]]; then`,
+	} {
+		assertContains(t, action, want)
+	}
+
+	assertNotContains(t, action, "github-token:")
+
+	generateIndex := strings.Index(action, "- name: Generate Plugin Index")
+	publishIndex := strings.Index(action, "- name: Publish Plugin Index")
+
+	if generateIndex < 0 || publishIndex < 0 {
+		t.Fatalf("plugin-index action is missing generation or publication steps")
+	}
+
+	if generateIndex >= publishIndex {
+		t.Fatalf("plugin-index action must generate the index before publishing it")
+	}
+
 	tests := []struct {
 		path        string
 		publishStep string
@@ -150,33 +187,43 @@ func TestPluginReleaseWorkflowsPublishPluginIndexAfterPluginRelease(t *testing.T
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
 			workflow := readFile(t, filepath.Join(root, tt.path))
+
 			for _, want := range []string{
 				"permissions:\n  contents: read",
 				"  publish:\n",
 				"    permissions:\n      contents: write",
-				"Generate plugin registry index",
-				"Publish plugin registry index",
+				tt.publishStep,
+				"- name: Publish Plugin Index",
+				"uses: ./.github/actions/publish-plugin-index",
+				"GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}",
+				"repository: ${{ github.repository }}",
+				"unit: ${{ needs.validate.outputs.unit }}",
+				"version: ${{ needs.validate.outputs.version }}",
+				"tag: ${{ needs.validate.outputs.tag }}",
+				"release-sha: ${{ needs.validate.outputs.release_sha }}",
 				"plugin-index.json",
 				"plugin-registry",
-				".github/scripts/generate-plugin-index.sh",
-				".github/scripts/publish-plugin-index.sh",
-				"RELEASE_UNIT:",
-				"RELEASE_VERSION:",
-				"RELEASE_TAG:",
-				"PLUGIN_REGISTRY_TARGET_SHA:",
 			} {
 				assertContains(t, workflow, want)
 			}
-			assertNotContains(t, workflow, "releases/latest")
 
-			publishIndex := strings.Index(workflow, tt.publishStep)
-			generateIndex := strings.Index(workflow, "Generate plugin registry index")
-			uploadIndex := strings.Index(workflow, "Publish plugin registry index")
-			if publishIndex < 0 || generateIndex < 0 || uploadIndex < 0 {
-				t.Fatalf("workflow missing expected steps")
+			assertNotContains(t, workflow, "releases/latest")
+			assertNotContains(t, workflow, ".github/scripts/generate-plugin-index.sh")
+			assertNotContains(t, workflow, ".github/scripts/publish-plugin-index.sh")
+			assertNotContains(t, workflow, "github-token:")
+
+			releaseIndex := strings.Index(workflow, tt.publishStep)
+			actionIndex := strings.Index(
+				workflow,
+				"uses: ./.github/actions/publish-plugin-index",
+			)
+
+			if releaseIndex < 0 || actionIndex < 0 {
+				t.Fatalf("workflow is missing release publication or plugin-index action")
 			}
-			if publishIndex >= generateIndex || generateIndex >= uploadIndex {
-				t.Fatalf("plugin-index steps must run after plugin release publish and before index publish")
+
+			if releaseIndex >= actionIndex {
+				t.Fatalf("plugin-index action must run after plugin release publication")
 			}
 		})
 	}

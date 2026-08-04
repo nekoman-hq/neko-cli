@@ -40,6 +40,7 @@ import the root Release lifecycle package.
 | `internal/releaseworkflow` | Canonical workflow identity, dispatch inputs, repository target, and local consumer-operation facts |
 | `internal/githubdispatch` | One bounded workflow-dispatch POST transport with response sanitization |
 | `internal/releasesource` | Tolerant local read-only V1/V2 source classification |
+| `internal/localaction` | Read-only repository-local composite action resolution into effective workflow steps |
 | `internal/doctor` | Local inspection, optional bounded GET verification, diagnostics, and presentation |
 | `internal/unitoverview` | Local read-only V2 unit inventory and presentation |
 | `internal/pipelineinspection` | Immutable configured, runtime, and verification projection; no lifecycle implementation |

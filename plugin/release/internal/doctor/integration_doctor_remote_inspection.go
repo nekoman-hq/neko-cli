@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/localaction"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 )
 
@@ -151,8 +152,8 @@ func (inspector integrationDoctorGitHubRemoteInspector) Inspect(
 	for _, workflow := range request.Workflows {
 		inspector.inspectWorkflow(ctx, remoteContext, workflow, &inspection)
 	}
-	inspector.inspectVariables(ctx, remoteContext, request.Workflows, &inspection)
-	inspector.inspectSecrets(ctx, remoteContext, request.Workflows, &inspection)
+	inspector.inspectVariables(ctx, remoteContext, request, &inspection)
+	inspector.inspectSecrets(ctx, remoteContext, request, &inspection)
 	inspector.inspectInstallationArtifacts(ctx, remoteContext, request, &inspection)
 	inspector.inspectPublicationTargets(ctx, remoteContext, request, &inspection)
 	inspection.finalize()
@@ -318,10 +319,10 @@ func (inspector integrationDoctorGitHubRemoteInspector) inspectWorkflow(
 func (inspector integrationDoctorGitHubRemoteInspector) inspectVariables(
 	ctx context.Context,
 	remote *integrationDoctorRemoteContext,
-	workflows []integrationDoctorRemoteWorkflow,
+	request integrationDoctorRemoteRequest,
 	inspection *integrationDoctorRemoteInspection,
 ) {
-	references := integrationDoctorRecognizedRemoteVariables(workflows)
+	references := integrationDoctorRecognizedRemoteVariables(request.RepositoryRoot, request.Workflows)
 	for _, reference := range references {
 		token, available := remote.protected.Resolve(ctx)
 		if !available {
@@ -372,10 +373,10 @@ func (inspector integrationDoctorGitHubRemoteInspector) inspectVariables(
 func (inspector integrationDoctorGitHubRemoteInspector) inspectSecrets(
 	ctx context.Context,
 	remote *integrationDoctorRemoteContext,
-	workflows []integrationDoctorRemoteWorkflow,
+	request integrationDoctorRemoteRequest,
 	inspection *integrationDoctorRemoteInspection,
 ) {
-	for _, reference := range integrationDoctorReferencedCustomSecrets(workflows) {
+	for _, reference := range integrationDoctorReferencedCustomSecrets(request.RepositoryRoot, request.Workflows) {
 		token, available := remote.protected.Resolve(ctx)
 		if !available {
 			inspection.append(
@@ -416,12 +417,14 @@ type integrationDoctorNamedRemoteReference struct {
 }
 
 func integrationDoctorRecognizedRemoteVariables(
+	repositoryRoot string,
 	workflows []integrationDoctorRemoteWorkflow,
 ) []integrationDoctorNamedRemoteReference {
 	seen := make(map[string]integrationDoctorNamedRemoteReference)
+	expander := localaction.NewRepositoryActions(repositoryRoot)
 	for _, workflow := range workflows {
 		root := workflowDocumentRoot(workflow.Snapshot.Document)
-		jobs := integrationDoctorWorkflowJobs(root)
+		jobs := integrationDoctorWorkflowJobs(root, expander)
 		//nolint:govet // Testable recognition policy reads name before its predicate.
 		for _, requirement := range []struct {
 			name    string
@@ -445,12 +448,14 @@ func integrationDoctorRecognizedRemoteVariables(
 }
 
 func integrationDoctorReferencedCustomSecrets(
+	repositoryRoot string,
 	workflows []integrationDoctorRemoteWorkflow,
 ) []integrationDoctorNamedRemoteReference {
 	seen := make(map[string]integrationDoctorNamedRemoteReference)
+	expander := localaction.NewRepositoryActions(repositoryRoot)
 	for _, workflow := range workflows {
 		root := workflowDocumentRoot(workflow.Snapshot.Document)
-		for _, reference := range integrationDoctorCredentialReferences(root, integrationDoctorWorkflowJobs(root)) {
+		for _, reference := range integrationDoctorCredentialReferences(root, integrationDoctorWorkflowJobs(root, expander)) {
 			if reference.Kind != integrationDoctorCustomCredential || reference.Name == "GITHUB_TOKEN" {
 				continue
 			}

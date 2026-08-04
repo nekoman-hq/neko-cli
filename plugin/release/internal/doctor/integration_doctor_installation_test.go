@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/localaction"
 	goreleaserfacts "github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool/goreleaser"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 	"gopkg.in/yaml.v3"
@@ -19,11 +20,7 @@ func TestRepositoryDoctorVerifiesInstallationArtifactIdentity(t *testing.T) {
 		if !ok || fact.State != integrationDoctorVerified {
 			t.Errorf("%s installation fact = %#v, present=%t", behavior.path, fact, ok)
 		}
-		references := []string{"install.sh", "pkg/plugin/manager.go", "pkg/plugin/registry.go"}
-		if behavior.unit == "plugin-release" {
-			references = []string{"go.mod", "plugin/release/main.go", "plugin/release/manifest.json"}
-		}
-		for _, reference := range references {
+		for _, reference := range []string{"go.mod", "plugin/release/main.go", "plugin/release/manifest.json"} {
 			if !slices.Contains(fact.References, reference) {
 				t.Errorf("%s installation references = %v, missing %q", behavior.path, fact.References, reference)
 			}
@@ -33,15 +30,13 @@ func TestRepositoryDoctorVerifiesInstallationArtifactIdentity(t *testing.T) {
 
 func TestIntegrationDoctorRejectsIncompleteSourceValidationToolchain(t *testing.T) {
 	root := repositoryInspectionRoot(t)
-	content := readIntegrationDoctorRepositoryFile(t, ".github/workflows/release-plugin-release.yml")
-	content = []byte(strings.Replace(
-		string(content),
-		`-o "$release_plugin_dir/plugin-release" ./plugin/release`,
-		`-o "$release_plugin_dir/plugin-release" ./plugin/other`,
-		1,
-	))
-	document := parseIntegrationDoctorWorkflowBytes(t, content)
-	jobs := integrationDoctorWorkflowJobs(document)
+	document := parseIntegrationDoctorWorkflowBytes(
+		t, readIntegrationDoctorRepositoryFile(t, ".github/workflows/release-plugin-release.yml"),
+	)
+	overlay := newIntegrationDoctorLocalActionOverlay(t, ".github/actions/setup-source-neko-toolchain", func(action string) string {
+		return strings.Replace(action, `"$release_plugin_dir/plugin-release" \`, `"$release_plugin_dir/plugin-other" \`, 1)
+	})
+	jobs := integrationDoctorWorkflowJobs(document, localaction.NewRepositoryActions(overlay))
 	repository, err := releaseconfig.LoadReleaseRepository(root.Path())
 	if err != nil {
 		t.Fatal(err)
@@ -57,6 +52,7 @@ func TestIntegrationDoctorRejectsIncompleteSourceValidationToolchain(t *testing.
 		root.Path(),
 		".github/workflows/release-plugin-release.yml",
 		[]releaseconfig.ReleaseUnit{unit},
+		repository.Units,
 		jobs,
 		filesystemIntegrationDoctorRepositoryFileReader{},
 	)
@@ -145,7 +141,7 @@ func TestIntegrationDoctorInstallationRejectsUnpinnedAndLateInstallations(t *tes
 	content := string(customIntegrationDoctorWorkflow(t))
 	unpinned := strings.Replace(content, "${{ vars.NEKO_VERSION }}", "latest", 1)
 	unpinnedRoot := parseIntegrationDoctorWorkflowBytes(t, []byte(unpinned))
-	jobs := integrationDoctorWorkflowJobs(unpinnedRoot)
+	jobs := integrationDoctorWorkflowJobs(unpinnedRoot, localaction.DeclaredSteps{})
 	cliStep, ok := integrationDoctorInstallationStep(jobs, func(step integrationDoctorWorkflowStep) bool { return strings.Contains(step.run, "install.sh") })
 	if !ok || integrationDoctorPinnedRepositoryVariable(cliStep, "NEKO_VERSION") {
 		t.Fatal("unpinned CLI installation was accepted")

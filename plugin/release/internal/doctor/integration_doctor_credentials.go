@@ -77,8 +77,7 @@ func inspectIntegrationDoctorCredentialWiring(
 		if !integrationDoctorContentsWriteEffective(root, job) {
 			add("CREDENTIAL_PERMISSION_MISMATCH", fmt.Sprintf("Publication credential %q in job %q lacks an effective contents: write permission.", reference.Name, reference.JobID), "Grant contents: write only to the GitHub Release publication job.")
 		}
-		step, ok := integrationDoctorWorkflowStepByName(job, reference.StepName)
-		if ok && integrationDoctorCredentialExposed(step, reference) {
+		if integrationDoctorCredentialExposedInJob(job, reference) {
 			add("CREDENTIAL_EXPOSURE_RISK", fmt.Sprintf("Credential reference %q in step %q can enter command output or a workflow output.", reference.Name, reference.StepName), "Do not echo credentials or write them to GITHUB_OUTPUT, summaries, diagnostics, or generated artifacts.")
 		}
 	}
@@ -114,15 +113,7 @@ func integrationDoctorCredentialReferences(
 			reference.Publication = jobPublication && integrationDoctorEveryJobStepPublishes(job)
 			integrationDoctorAppendCredentialReference(&references, seen, reference)
 		}
-		for _, step := range job.steps {
-			publication := integrationDoctorStepPublishes(step)
-			for _, reference := range integrationDoctorCredentialReferencesInNode(step.node) {
-				reference.JobID = job.id
-				reference.StepName = step.name
-				reference.Publication = publication
-				integrationDoctorAppendCredentialReference(&references, seen, reference)
-			}
-		}
+		integrationDoctorAppendJobCredentialReferences(&references, seen, job)
 	}
 	for _, reference := range integrationDoctorCredentialReferencesInNode(workflowMappingValue(root, "env")) {
 		integrationDoctorAppendCredentialReference(&references, seen, reference)
@@ -133,6 +124,53 @@ func integrationDoctorCredentialReferences(
 		return leftKey < rightKey
 	})
 	return references
+}
+
+// integrationDoctorAppendJobCredentialReferences classifies the credentials a
+// job declares. A credential written on a repository-local action invocation
+// belongs to that invocation, not to each expanded inner step, and is
+// publication-scoped when the invoked action performs the publication.
+func integrationDoctorAppendJobCredentialReferences(
+	references *[]integrationDoctorCredentialReference,
+	seen map[string]struct{},
+	job integrationDoctorWorkflowJob,
+) {
+	inspected := make(map[*yaml.Node]struct{})
+	for _, step := range job.steps {
+		if invocation := step.action.CallerNode; invocation != nil {
+			if _, done := inspected[invocation]; !done {
+				inspected[invocation] = struct{}{}
+				publication := integrationDoctorLocalActionPublishes(job, invocation)
+				for _, reference := range integrationDoctorCredentialReferencesInNode(invocation) {
+					reference.JobID = job.id
+					reference.StepName = step.action.CallerName
+					reference.Publication = publication
+					integrationDoctorAppendCredentialReference(references, seen, reference)
+				}
+			}
+		}
+		publication := integrationDoctorStepPublishes(step)
+		for _, reference := range integrationDoctorCredentialReferencesInNode(step.declared) {
+			reference.JobID = job.id
+			reference.StepName = step.name
+			reference.Publication = publication
+			integrationDoctorAppendCredentialReference(references, seen, reference)
+		}
+	}
+}
+
+// integrationDoctorLocalActionPublishes reports whether the effective steps of
+// one repository-local action invocation perform publication work.
+func integrationDoctorLocalActionPublishes(
+	job integrationDoctorWorkflowJob,
+	invocation *yaml.Node,
+) bool {
+	for _, step := range job.steps {
+		if step.action.CallerNode == invocation && integrationDoctorStepPublishes(step) {
+			return true
+		}
+	}
+	return false
 }
 
 func integrationDoctorCredentialReferencesInNode(node *yaml.Node) []integrationDoctorCredentialReference {
@@ -221,16 +259,23 @@ func integrationDoctorContentsWriteEffective(root *yaml.Node, job integrationDoc
 	return permissions.understood && (permissions.writeAll || permissions.scopes["contents"] == "write")
 }
 
-func integrationDoctorWorkflowStepByName(
+// integrationDoctorCredentialExposedInJob reports whether any effective step
+// that the credential reference reaches can print it or write it to a workflow
+// output. A credential declared on a local action invocation reaches every
+// step that action expands to.
+func integrationDoctorCredentialExposedInJob(
 	job integrationDoctorWorkflowJob,
-	name string,
-) (integrationDoctorWorkflowStep, bool) {
+	reference integrationDoctorCredentialReference,
+) bool {
 	for _, step := range job.steps {
-		if step.name == name {
-			return step, true
+		if step.name != reference.StepName && step.action.CallerName != reference.StepName {
+			continue
+		}
+		if integrationDoctorCredentialExposed(step, reference) {
+			return true
 		}
 	}
-	return integrationDoctorWorkflowStep{}, false
+	return false
 }
 
 func integrationDoctorCredentialExposed(

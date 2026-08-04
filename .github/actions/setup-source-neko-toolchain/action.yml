@@ -1,0 +1,134 @@
+name: Set up exact-source Neko toolchain
+description: Build Neko CLI and the Release Plugin from the checked-out release commit.
+
+inputs:
+  release-sha:
+    description: Validated Neko release commit SHA.
+    required: true
+
+  state-file:
+    description: Repository-relative Release V2 state file.
+    required: false
+    default: .neko/release.state.json
+
+outputs:
+  cli-version:
+    description: CLI version read from Release V2 state.
+    value: ${{ steps.build.outputs.cli-version }}
+
+  release-plugin-version:
+    description: Release Plugin version read from Release V2 state.
+    value: ${{ steps.build.outputs.release-plugin-version }}
+
+  neko-bin-dir:
+    description: Directory containing the exact-source Neko CLI executable.
+    value: ${{ steps.build.outputs.neko-bin-dir }}
+
+  neko-plugin-dir:
+    description: Isolated plugin directory containing the exact-source Release Plugin.
+    value: ${{ steps.build.outputs.neko-plugin-dir }}
+
+runs:
+  using: composite
+
+  steps:
+    - name: Build exact-source Neko validation toolchain
+      id: build
+      shell: bash
+      env:
+        RELEASE_SHA: ${{ inputs.release-sha }}
+        STATE_FILE: ${{ inputs.state-file }}
+        NEKO_BIN_DIR: ${{ runner.temp }}/neko/bin
+        NEKO_PLUGIN_DIR: ${{ runner.temp }}/neko/plugins
+      run: |
+        set -euo pipefail
+
+        fail() {
+          echo "::error title=Source toolchain setup failed::$1" >&2
+          exit 1
+        }
+
+        if ! command -v git >/dev/null 2>&1; then
+          fail "git is required"
+        fi
+
+        if ! command -v go >/dev/null 2>&1; then
+          fail "go is required"
+        fi
+
+        if ! command -v jq >/dev/null 2>&1; then
+          fail "jq is required"
+        fi
+
+        if [[ ! "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+          fail "release-sha must be a 40-character lowercase Git object id"
+        fi
+
+        if [[ ! -f "$STATE_FILE" ]]; then
+          fail "Release V2 state file does not exist: $STATE_FILE"
+        fi
+
+        head_sha="$(git rev-parse HEAD)"
+        if [[ "$head_sha" != "$RELEASE_SHA" ]]; then
+          fail "checked-out HEAD '$head_sha' does not match release SHA '$RELEASE_SHA'"
+        fi
+
+        cli_version="$(
+          jq -er '.units.cli.version' "$STATE_FILE"
+        )"
+
+        release_plugin_version="$(
+          jq -er '.units["plugin-release"].version' "$STATE_FILE"
+        )"
+
+        release_plugin_dir="$NEKO_PLUGIN_DIR/release"
+
+        rm -rf "$NEKO_BIN_DIR" "$NEKO_PLUGIN_DIR"
+        mkdir -p "$NEKO_BIN_DIR" "$release_plugin_dir"
+
+        go build \
+          -trimpath \
+          -ldflags "\
+        -X github.com/nekoman-hq/neko-cli/pkg/version.Version=${cli_version} \
+        -X github.com/nekoman-hq/neko-cli/pkg/version.Commit=${RELEASE_SHA} \
+        -X github.com/nekoman-hq/neko-cli/pkg/version.BuiltBy=github-actions-self-release" \
+          -o "$NEKO_BIN_DIR/neko" \
+          .
+
+        go build \
+          -trimpath \
+          -ldflags "\
+        -X github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata.Version=${release_plugin_version} \
+        -X github.com/nekoman-hq/neko-cli/plugin/release/pkg/metadata.GitCommit=${RELEASE_SHA}" \
+          -o "$release_plugin_dir/plugin-release" \
+          ./plugin/release
+
+        cp \
+          plugin/release/manifest.json \
+          "$release_plugin_dir/manifest.json"
+
+        if [[ ! -x "$NEKO_BIN_DIR/neko" ]]; then
+          fail "Neko CLI executable was not created"
+        fi
+
+        if [[ ! -x "$release_plugin_dir/plugin-release" ]]; then
+          fail "Release Plugin executable was not created"
+        fi
+
+        if [[ ! -s "$release_plugin_dir/manifest.json" ]]; then
+          fail "Release Plugin manifest was not copied"
+        fi
+
+        echo "$NEKO_BIN_DIR" >> "$GITHUB_PATH"
+
+        {
+          echo "NEKO_BIN_DIR=$NEKO_BIN_DIR"
+          echo "NEKO_PLUGIN_DIR=$NEKO_PLUGIN_DIR"
+        } >> "$GITHUB_ENV"
+
+        {
+          echo "cli-version=$cli_version"
+          echo "release-plugin-version=$release_plugin_version"
+          echo "neko-bin-dir=$NEKO_BIN_DIR"
+          echo "neko-plugin-dir=$NEKO_PLUGIN_DIR"
+        } >> "$GITHUB_OUTPUT"

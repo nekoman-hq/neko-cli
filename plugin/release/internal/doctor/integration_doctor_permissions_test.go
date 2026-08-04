@@ -4,6 +4,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/localaction"
 	"gopkg.in/yaml.v3"
 )
 
@@ -27,7 +28,7 @@ jobs:
 		t.Fatalf("workflow contents permission = %q, want read", got)
 	}
 
-	jobs := integrationDoctorWorkflowJobs(root)
+	jobs := integrationDoctorWorkflowJobs(root, localaction.DeclaredSteps{})
 	if len(jobs) != 2 || jobs[0].id != "validate" || jobs[1].id != "publish" {
 		t.Fatalf("parsed jobs = %#v", jobs)
 	}
@@ -461,7 +462,7 @@ func integrationDoctorPermissionDiagnosticCodes(t *testing.T, content string) []
 	t.Helper()
 	root := integrationDoctorPermissionWorkflowRoot(t, content)
 	codes := make([]string, 0)
-	inspectIntegrationDoctorPermissions(root, func(_ integrationDoctorSeverity, code, _, _ string) {
+	inspectIntegrationDoctorPermissions("", root, func(_ integrationDoctorSeverity, code, _, _ string) {
 		codes = append(codes, code)
 	})
 	return codes

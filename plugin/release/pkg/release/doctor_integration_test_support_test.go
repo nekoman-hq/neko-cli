@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/nekoman-hq/neko-cli/pkg/plugin"
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/localaction"
 	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/workspace"
 	"gopkg.in/yaml.v3"
 )
@@ -157,11 +159,12 @@ func writeIntegrationDoctorWorkflow(t *testing.T, root workspace.RepositoryRoot,
 }
 
 type integrationDoctorWorkflowStep struct {
-	node *yaml.Node
-	name string
-	id   string
-	uses string
-	run  string
+	node   *yaml.Node
+	name   string
+	id     string
+	uses   string
+	run    string
+	action localaction.Origin
 }
 
 type integrationDoctorWorkflowJob struct {
@@ -171,12 +174,15 @@ type integrationDoctorWorkflowJob struct {
 	steps       []integrationDoctorWorkflowStep
 }
 
+// integrationDoctorWorkflowJobs reads the effective steps of one repository
+// workflow, expanding the repository-local composite actions it invokes.
 func integrationDoctorWorkflowJobs(root *yaml.Node) []integrationDoctorWorkflowJob {
 	jobsNode := workflowMappingValue(root, "jobs")
 	jobs := make([]integrationDoctorWorkflowJob, 0)
 	if jobsNode == nil || jobsNode.Kind != yaml.MappingNode {
 		return jobs
 	}
+	expander := localaction.NewRepositoryActions(repositoryRootForSelfMigrationTest())
 	for index := 0; index+1 < len(jobsNode.Content); index += 2 {
 		jobNode := jobsNode.Content[index+1]
 		stepsNode := workflowMappingValue(jobNode, "steps")
@@ -185,19 +191,30 @@ func integrationDoctorWorkflowJobs(root *yaml.Node) []integrationDoctorWorkflowJ
 			permissions: workflowMappingValue(jobNode, "permissions"),
 		}
 		if stepsNode != nil && stepsNode.Kind == yaml.SequenceNode {
-			for _, stepNode := range stepsNode.Content {
+			for _, effective := range expander.Expand(stepsNode.Content) {
 				job.steps = append(job.steps, integrationDoctorWorkflowStep{
-					node: stepNode,
-					name: workflowScalar(workflowMappingValue(stepNode, "name")),
-					id:   workflowScalar(workflowMappingValue(stepNode, "id")),
-					uses: workflowScalar(workflowMappingValue(stepNode, "uses")),
-					run:  workflowScalar(workflowMappingValue(stepNode, "run")),
+					node:   effective.Node,
+					name:   workflowScalar(workflowMappingValue(effective.Node, "name")),
+					id:     workflowScalar(workflowMappingValue(effective.Node, "id")),
+					uses:   workflowScalar(workflowMappingValue(effective.Node, "uses")),
+					run:    workflowScalar(workflowMappingValue(effective.Node, "run")),
+					action: effective.Origin,
 				})
 			}
 		}
 		jobs = append(jobs, job)
 	}
 	return jobs
+}
+
+// integrationDoctorEffectiveJobText renders every effective step of one job in
+// execution order.
+func integrationDoctorEffectiveJobText(job integrationDoctorWorkflowJob) string {
+	text := make([]string, 0, len(job.steps))
+	for _, step := range job.steps {
+		text = append(text, workflowNodeText(step.node))
+	}
+	return strings.Join(text, "")
 }
 
 func workflowDocumentRoot(document *yaml.Node) *yaml.Node {

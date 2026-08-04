@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/localaction"
 	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releaseworkflow"
 	"gopkg.in/yaml.v3"
 )
@@ -42,7 +43,7 @@ func TestIntegrationDoctorReusesCanonicalDispatchAndWorkflowContracts(t *testing
 	if !ok || cancel {
 		t.Fatal("canonical release workflow must preserve in-flight releases")
 	}
-	jobs := integrationDoctorWorkflowJobs(root)
+	jobs := integrationDoctorWorkflowJobs(root, localaction.DeclaredSteps{})
 	if len(jobs) != 1 {
 		t.Fatalf("canonical workflow jobs = %d, want 1", len(jobs))
 	}

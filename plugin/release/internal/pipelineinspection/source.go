@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/localaction"
 	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releasesource"
 	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool"
 	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releaseworkflow"
@@ -122,7 +123,9 @@ func inspectPipelineConsumerWorkflow(repositoryRoot string, unit releaseconfig.R
 			Code: "PIPELINE_WORKFLOW_INVALID", Message: "The configured consumer workflow could not be read safely.",
 		}
 	}
-	facts, err := releaseworkflow.InspectConsumerWorkflow(content, unit.IsPlugin)
+	facts, err := releaseworkflow.InspectConsumerWorkflow(
+		content, unit.IsPlugin, localaction.NewRepositoryActions(repositoryRoot),
+	)
 	if err != nil {
 		return releaseworkflow.ConsumerWorkflowFacts{}, &commandFailure{
 			Code: "PIPELINE_WORKFLOW_INVALID", Message: "The configured consumer workflow is not supported YAML.",

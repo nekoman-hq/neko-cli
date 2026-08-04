@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/localaction"
 	"github.com/nekoman-hq/neko-cli/plugin/release/internal/releaseworkflow"
 	releaseconfig "github.com/nekoman-hq/neko-cli/plugin/release/pkg/config"
 	"gopkg.in/yaml.v3"
@@ -12,12 +13,26 @@ import (
 
 const generatedConsumerPlaceholder = "Replace this generated step with consumer-owned build and publication commands."
 
+//nolint:govet // Logical step order keeps effective YAML and action origin together.
 type integrationDoctorWorkflowStep struct {
-	node *yaml.Node
-	name string
-	id   string
-	uses string
-	run  string
+	node     *yaml.Node
+	declared *yaml.Node
+	name     string
+	id       string
+	uses     string
+	run      string
+	action   localaction.Origin
+	failure  string
+}
+
+// referenceID reports the step id later workflow steps can address. A step
+// expanded from a repository-local action is addressable only through the
+// workflow step that invoked it.
+func (step integrationDoctorWorkflowStep) referenceID() string {
+	if step.action.Expanded() {
+		return step.action.CallerID
+	}
+	return step.id
 }
 
 //nolint:govet // Logical job order keeps YAML ownership readable.
@@ -80,9 +95,10 @@ func inspectIntegrationDoctorWorkflow(
 	}
 
 	inspectIntegrationDoctorDispatch(root, add)
-	inspectIntegrationDoctorPermissions(root, add)
+	inspectIntegrationDoctorPermissions(repositoryRoot, root, add)
 	inspectIntegrationDoctorConcurrency(root, add)
-	jobs := integrationDoctorWorkflowJobs(root)
+	jobs := integrationDoctorWorkflowJobs(root, localaction.NewRepositoryActions(repositoryRoot))
+	inspectIntegrationDoctorLocalActions(jobs, add)
 	inspectIntegrationDoctorJob(jobs, add)
 	if !integrationDoctorDiagnosticsContainErrors(diagnostics) {
 		localFacts, localDiagnostics := inspectIntegrationDoctorConsumerReleaseStructure(
@@ -179,6 +195,20 @@ func inspectIntegrationDoctorDispatch(
 	}
 }
 
+func inspectIntegrationDoctorLocalActions(
+	jobs []integrationDoctorWorkflowJob,
+	add func(integrationDoctorSeverity, string, string, string),
+) {
+	for _, step := range integrationDoctorUnresolvedLocalActions(jobs) {
+		add(
+			integrationDoctorError,
+			"LOCAL_ACTION_UNRESOLVED",
+			fmt.Sprintf("Step %q invokes repository-local action %q, which could not be resolved safely (%s).", step.name, step.uses, step.failure),
+			"Reference an existing repository-confined action directory containing a valid action.yml or action.yaml without parent traversal, absolute paths, symlink escape, or recursion.",
+		)
+	}
+}
+
 func inspectIntegrationDoctorConcurrency(
 	root *yaml.Node,
 	add func(integrationDoctorSeverity, string, string, string),
@@ -210,7 +240,7 @@ func inspectIntegrationDoctorJob(
 	validatorSteps := make([]int, 0)
 	for jobIndex, job := range jobs {
 		for stepIndex, step := range job.steps {
-			if strings.Contains(step.run, "neko release ci-validate-context") {
+			if strings.Contains(step.run, integrationDoctorContextValidatorCommand) {
 				validatorJobs = append(validatorJobs, jobIndex)
 				validatorSteps = append(validatorSteps, stepIndex)
 			}
@@ -244,7 +274,7 @@ func inspectIntegrationDoctorReleaseSteps(
 			cliInstallIndex = index
 		case strings.Contains(step.run, "neko plugin install release") && pluginInstallIndex < 0:
 			pluginInstallIndex = index
-		case step.name == integrationDoctorSourceValidationToolchainStepName && sourceToolchainIndex < 0:
+		case integrationDoctorStepBuildsToolchainFromSource(step) && sourceToolchainIndex < 0:
 			sourceToolchainIndex = index
 		}
 	}
@@ -285,12 +315,12 @@ func inspectIntegrationDoctorPublishedValidationToolchain(
 	add func(integrationDoctorSeverity, string, string, string),
 ) {
 	if cliInstallIndex < 0 {
-		add(integrationDoctorError, "NEKO_INSTALL_MISSING", "The release job does not install or build the Neko CLI.", "Install a pinned Neko CLI, or use the bounded exact-source toolchain in the Release Plugin self-release workflow.")
+		add(integrationDoctorError, "NEKO_INSTALL_MISSING", "The release job does not install or build the Neko CLI.", "Install a pinned Neko CLI, or use the bounded exact-source toolchain in a supported self-release workflow.")
 	} else if !strings.Contains(job.steps[cliInstallIndex].run, "NEKO_VERSION") || strings.Contains(strings.ToLower(job.steps[cliInstallIndex].run), "latest") {
 		add(integrationDoctorWarning, "NEKO_VERSION_UNPINNED", "The Neko CLI installation is not visibly version-pinned.", "Pin the Neko CLI with an explicit version or repository variable.")
 	}
 	if pluginInstallIndex < 0 {
-		add(integrationDoctorError, "RELEASE_PLUGIN_INSTALL_MISSING", "The release job does not install or build the Neko Release plugin.", "Install a pinned Release plugin, or use the bounded exact-source toolchain in the Release Plugin self-release workflow.")
+		add(integrationDoctorError, "RELEASE_PLUGIN_INSTALL_MISSING", "The release job does not install or build the Neko Release plugin.", "Install a pinned Release plugin, or use the bounded exact-source toolchain in a supported self-release workflow.")
 	} else if !strings.Contains(job.steps[pluginInstallIndex].run, "--version") || strings.Contains(strings.ToLower(job.steps[pluginInstallIndex].run), "latest") {
 		add(integrationDoctorWarning, "RELEASE_PLUGIN_VERSION_UNPINNED", "The Release plugin installation is not visibly version-pinned.", "Install the Release plugin with --version and a fixed value or repository variable.")
 	}
@@ -347,7 +377,7 @@ func inspectIntegrationDoctorValidator(
 			consumesOutputs = true
 		}
 	}
-	if consumesOutputs && strings.TrimSpace(validator.id) == "" {
+	if consumesOutputs && strings.TrimSpace(validator.referenceID()) == "" {
 		add(integrationDoctorError, "CONTEXT_STEP_ID_MISSING", "Later steps consume validator outputs, but the validator has no stable step id.", "Assign a stable id to the validator and reference that id from consumer steps.")
 	}
 	if len(later) == 0 {
@@ -385,7 +415,10 @@ func integrationDoctorCommandFlagMatches(command, flag, environment, input strin
 	return false
 }
 
-func integrationDoctorWorkflowJobs(root *yaml.Node) []integrationDoctorWorkflowJob {
+func integrationDoctorWorkflowJobs(
+	root *yaml.Node,
+	expander localaction.StepExpander,
+) []integrationDoctorWorkflowJob {
 	jobsNode := workflowMappingValue(root, "jobs")
 	jobs := make([]integrationDoctorWorkflowJob, 0)
 	if jobsNode == nil || jobsNode.Kind != yaml.MappingNode {
@@ -402,18 +435,35 @@ func integrationDoctorWorkflowJobs(root *yaml.Node) []integrationDoctorWorkflowJ
 			permissions: workflowMappingValue(jobNode, "permissions"),
 			env:         workflowMappingValue(jobNode, "env"),
 		}
-		for _, stepNode := range stepsNode.Content {
+		for _, effective := range expander.Expand(stepsNode.Content) {
 			job.steps = append(job.steps, integrationDoctorWorkflowStep{
-				node: stepNode,
-				name: workflowScalar(workflowMappingValue(stepNode, "name")),
-				id:   workflowScalar(workflowMappingValue(stepNode, "id")),
-				uses: workflowScalar(workflowMappingValue(stepNode, "uses")),
-				run:  workflowScalar(workflowMappingValue(stepNode, "run")),
+				node:     effective.Node,
+				declared: effective.Declared,
+				name:     workflowScalar(workflowMappingValue(effective.Node, "name")),
+				id:       workflowScalar(workflowMappingValue(effective.Node, "id")),
+				uses:     workflowScalar(workflowMappingValue(effective.Node, "uses")),
+				run:      workflowScalar(workflowMappingValue(effective.Node, "run")),
+				action:   effective.Origin,
+				failure:  effective.Failure,
 			})
 		}
 		jobs = append(jobs, job)
 	}
 	return jobs
+}
+
+func integrationDoctorUnresolvedLocalActions(
+	jobs []integrationDoctorWorkflowJob,
+) []integrationDoctorWorkflowStep {
+	unresolved := make([]integrationDoctorWorkflowStep, 0)
+	for _, job := range jobs {
+		for _, step := range job.steps {
+			if step.failure != "" {
+				unresolved = append(unresolved, step)
+			}
+		}
+	}
+	return unresolved
 }
 
 func integrationDoctorWorkflowClassification(canonical bool, diagnostics []integrationDoctorDiagnostic) string {

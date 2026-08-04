@@ -51,20 +51,31 @@ type ConsumerWorkflowFacts struct {
 	Operations []ConsumerOperation
 }
 
+// StepExpander supplies the effective steps one workflow job runs. Its
+// implementation resolves repository-local composite actions; this package
+// stays a filesystem-free static classifier.
+type StepExpander interface {
+	EffectiveSteps(steps []*yaml.Node) []*yaml.Node
+}
+
 // InspectConsumerWorkflow parses one local workflow into ordered neutral
 // consumer-operation facts.
-func InspectConsumerWorkflow(content []byte, pluginUnit bool) (ConsumerWorkflowFacts, error) {
+func InspectConsumerWorkflow(content []byte, pluginUnit bool, expander StepExpander) (ConsumerWorkflowFacts, error) {
 	var document yaml.Node
 	if err := yaml.Unmarshal(content, &document); err != nil {
 		return ConsumerWorkflowFacts{}, fmt.Errorf("parse consumer workflow YAML: %w", err)
 	}
-	return InspectConsumerWorkflowDocument(&document, pluginUnit)
+	return InspectConsumerWorkflowDocument(&document, pluginUnit, expander)
 }
 
 // InspectConsumerWorkflowDocument derives ordered operation facts from an
 // already parsed workflow document. Doctor and read-only inspection commands
 // share this classifier instead of maintaining separate tool parsers.
-func InspectConsumerWorkflowDocument(document *yaml.Node, pluginUnit bool) (ConsumerWorkflowFacts, error) {
+func InspectConsumerWorkflowDocument(
+	document *yaml.Node,
+	pluginUnit bool,
+	expander StepExpander,
+) (ConsumerWorkflowFacts, error) {
 	root := workflowRoot(document)
 	if root == nil || root.Kind != yaml.MappingNode {
 		return ConsumerWorkflowFacts{}, fmt.Errorf("consumer workflow root must be a mapping")
@@ -81,7 +92,7 @@ func InspectConsumerWorkflowDocument(document *yaml.Node, pluginUnit bool) (Cons
 		if steps == nil || steps.Kind != yaml.SequenceNode {
 			continue
 		}
-		for _, step := range steps.Content {
+		for _, step := range expander.EffectiveSteps(steps.Content) {
 			facts.Operations = append(facts.Operations, classifyConsumerStep(root, jobID, job, step, pluginUnit)...)
 		}
 	}
@@ -112,7 +123,7 @@ func classifyConsumerStep(root *yaml.Node, jobID string, job, step *yaml.Node, p
 	switch {
 	case strings.Contains(run, "neko release ci-validate-context"):
 		appendOperation(consumerOperation(ConsumerContextValidation, "Validate canonical release context", "Neko CLI", "GitHub Actions runner", "none"))
-	case pluginUnit && strings.Contains(strings.ToLower(name), "validate materialized plugin manifest") && strings.Contains(run, "jq"):
+	case pluginUnit && validatesMaterializedPluginManifest(name, run):
 		operation := consumerOperation(ConsumerPluginManifestValidation, "Validate materialized plugin manifest", "consumer workflow", "GitHub Actions runner", "none")
 		operation.PluginOnly = true
 		appendOperation(operation)
@@ -163,6 +174,20 @@ func classifyConsumerStep(root *yaml.Node, jobID string, job, step *yaml.Node, p
 		appendOperation(operation)
 	}
 	return operations
+}
+
+// validatesMaterializedPluginManifest recognizes a step that asserts the
+// materialized plugin manifest version, either through the canonical scaffold
+// step name or through the manifest version assertion a repository guard runs
+// inline before any candidate tooling exists.
+func validatesMaterializedPluginManifest(name, run string) bool {
+	if !strings.Contains(run, "jq") {
+		return false
+	}
+	if strings.Contains(strings.ToLower(name), "validate materialized plugin manifest") {
+		return true
+	}
+	return strings.Contains(run, "manifest.json") && strings.Contains(run, ".version == $version")
 }
 
 func consumerOperation(id ConsumerOperationID, label, owner, location, mutation string) ConsumerOperation {

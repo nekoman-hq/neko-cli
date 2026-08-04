@@ -18,10 +18,10 @@ func TestRepositoryDoctorDogfoodContract(t *testing.T) {
 	if result.Readiness != integrationDoctorReady || response.ExitCode != 0 {
 		t.Fatalf("readiness=%q exit=%d", result.Readiness, response.ExitCode)
 	}
-	if result.Summary != (integrationDoctorSummary{NotVerifiable: 19, Verified: 15}) {
+	if result.Summary != (integrationDoctorSummary{NotVerifiable: 15, Verified: 15}) {
 		t.Fatalf("summary = %#v", result.Summary)
 	}
-	if len(result.Units) != 3 || len(result.Workflows) != 3 || len(result.Verifications) != 23 || len(result.Diagnostics) != 19 {
+	if len(result.Units) != 3 || len(result.Workflows) != 3 || len(result.Verifications) != 21 || len(result.Diagnostics) != 15 {
 		t.Fatalf("units=%d workflows=%d facts=%d diagnostics=%d", len(result.Units), len(result.Workflows), len(result.Verifications), len(result.Diagnostics))
 	}
 	for _, workflow := range result.Workflows {
@@ -29,64 +29,43 @@ func TestRepositoryDoctorDogfoodContract(t *testing.T) {
 			t.Errorf("workflow = %#v", workflow)
 		}
 	}
-	assertRepositoryDoctorSemantics(t, result, "cli", true)
-	assertRepositoryDoctorSemantics(t, result, "plugin-ui", true)
-	assertRepositoryDoctorSemantics(t, result, "plugin-release", false)
-	assertRepositoryDoctorSourceToolchain(t, result)
+	for _, unit := range []string{"cli", "plugin-release", "plugin-ui"} {
+		assertRepositoryDoctorSemantics(t, result, unit)
+		assertRepositoryDoctorSourceToolchain(t, result, unit)
+	}
 }
 
 func TestRepositoryDoctorUnitScopedDogfoodContract(t *testing.T) {
-	standardCodes := []string{
+	wantCodes := []string{
 		"CONSUMER_BUILD_NOT_VERIFIABLE",
-		"INSTALLATION_ARTIFACTS_NOT_VERIFIABLE",
 		"PUBLICATION_CREDENTIALS_NOT_VERIFIABLE",
 		"PUBLICATION_TARGET_NOT_VERIFIABLE",
 		"REMOTE_DISPATCH_AUTHORIZATION_NOT_VERIFIABLE",
 		"REMOTE_WORKFLOW_NOT_VERIFIABLE",
-		"REPOSITORY_VARIABLES_NOT_VERIFIABLE",
 	}
-	tests := []struct {
-		unit            string
-		codes           []string
-		summary         integrationDoctorSummary
-		facts           int
-		hasVariableFact bool
-	}{
-		{unit: "cli", summary: integrationDoctorSummary{NotVerifiable: 7, Verified: 5}, facts: 8, codes: standardCodes, hasVariableFact: true},
-		{unit: "plugin-release", summary: integrationDoctorSummary{NotVerifiable: 5, Verified: 5}, facts: 7, codes: []string{
-			"CONSUMER_BUILD_NOT_VERIFIABLE",
-			"PUBLICATION_CREDENTIALS_NOT_VERIFIABLE",
-			"PUBLICATION_TARGET_NOT_VERIFIABLE",
-			"REMOTE_DISPATCH_AUTHORIZATION_NOT_VERIFIABLE",
-			"REMOTE_WORKFLOW_NOT_VERIFIABLE",
-		}, hasVariableFact: false},
-		{unit: "plugin-ui", summary: integrationDoctorSummary{NotVerifiable: 7, Verified: 5}, facts: 8, codes: standardCodes, hasVariableFact: true},
-	}
-	for _, test := range tests {
-		t.Run(test.unit, func(t *testing.T) {
-			response := runIntegrationDoctor(t, repositoryInspectionRoot(t), map[string]any{"unit": test.unit})
+	for _, unit := range []string{"cli", "plugin-release", "plugin-ui"} {
+		t.Run(unit, func(t *testing.T) {
+			response := runIntegrationDoctor(t, repositoryInspectionRoot(t), map[string]any{"unit": unit})
 			result := integrationDoctorResultFromResponse(t, response)
 			if result.Readiness != integrationDoctorReady || response.ExitCode != 0 ||
-				result.Summary != test.summary {
+				result.Summary != (integrationDoctorSummary{NotVerifiable: 5, Verified: 5}) {
 				t.Fatalf("readiness=%q exit=%d summary=%#v", result.Readiness, response.ExitCode, result.Summary)
 			}
-			if len(result.Units) != 1 || result.Units[0].ID != test.unit || len(result.Workflows) != 1 ||
-				len(result.Verifications) != test.facts || len(result.Diagnostics) != len(test.codes) {
+			if len(result.Units) != 1 || result.Units[0].ID != unit || len(result.Workflows) != 1 ||
+				len(result.Verifications) != 7 || len(result.Diagnostics) != len(wantCodes) {
 				t.Fatalf("unit=%#v workflows=%#v facts=%d diagnostics=%#v", result.Units, result.Workflows, len(result.Verifications), result.Diagnostics)
 			}
 			gotCodes := make([]string, 0, len(result.Diagnostics))
 			for _, diagnostic := range result.Diagnostics {
 				gotCodes = append(gotCodes, diagnostic.Code)
 			}
-			if !reflect.DeepEqual(gotCodes, test.codes) {
-				t.Fatalf("codes=%v want=%v", gotCodes, test.codes)
+			if !reflect.DeepEqual(gotCodes, wantCodes) {
+				t.Fatalf("codes=%v want=%v", gotCodes, wantCodes)
 			}
-			assertRepositoryDoctorSemantics(t, result, test.unit, test.hasVariableFact)
-			if test.unit == "plugin-release" {
-				assertRepositoryDoctorSourceToolchain(t, result)
-				assertIntegrationDoctorCodeAbsent(t, result.Diagnostics, "INSTALLATION_ARTIFACTS_NOT_VERIFIABLE")
-				assertIntegrationDoctorCodeAbsent(t, result.Diagnostics, "REPOSITORY_VARIABLES_NOT_VERIFIABLE")
-			}
+			assertRepositoryDoctorSemantics(t, result, unit)
+			assertRepositoryDoctorSourceToolchain(t, result, unit)
+			assertIntegrationDoctorCodeAbsent(t, result.Diagnostics, "INSTALLATION_ARTIFACTS_NOT_VERIFIABLE")
+			assertIntegrationDoctorCodeAbsent(t, result.Diagnostics, "REPOSITORY_VARIABLES_NOT_VERIFIABLE")
 		})
 	}
 }
@@ -95,7 +74,6 @@ func assertRepositoryDoctorSemantics(
 	t *testing.T,
 	result integrationDoctorResult,
 	unit string,
-	hasVariableFact bool,
 ) {
 	t.Helper()
 	workflow := ""
@@ -142,9 +120,8 @@ func assertRepositoryDoctorSemantics(
 			t.Fatalf("Doctor limitation %q missing for %s: %#v", category, unit, limitations)
 		}
 	}
-	_, variableFact := limitations["repository_variable_values"]
-	if variableFact != hasVariableFact {
-		t.Fatalf("repository-variable limitation for %s present=%t, want %t: %#v", unit, variableFact, hasVariableFact, limitations)
+	if _, variableFact := limitations["repository_variable_values"]; variableFact {
+		t.Fatalf("exact-source workflow for %s kept a repository-variable limitation: %#v", unit, limitations)
 	}
 	for _, diagnostic := range result.Diagnostics {
 		if diagnostic.Workflow != workflow {
@@ -157,22 +134,22 @@ func assertRepositoryDoctorSemantics(
 	}
 }
 
-func assertRepositoryDoctorSourceToolchain(t *testing.T, result integrationDoctorResult) {
+func assertRepositoryDoctorSourceToolchain(t *testing.T, result integrationDoctorResult, unit string) {
 	t.Helper()
 	for _, fact := range result.Verifications {
-		if fact.Unit != "plugin-release" || fact.Category != "installation_wiring" {
+		if fact.Unit != unit || fact.Category != "installation_wiring" {
 			continue
 		}
 		if fact.State != integrationDoctorVerified ||
-			!strings.Contains(fact.Evidence, "builds and wires the CLI and candidate plugin from the exact checked-out commit") ||
+			!strings.Contains(fact.Evidence, "builds and wires the CLI and Release Plugin from the exact checked-out commit") ||
 			!reflect.DeepEqual(fact.References, []string{
-				".github/workflows/release-plugin-release.yml", "go.mod", "plugin/release/main.go", "plugin/release/manifest.json",
+				fact.Workflow, "go.mod", "plugin/release/main.go", "plugin/release/manifest.json",
 			}) {
-			t.Fatalf("Release Plugin exact-source validation fact = %#v", fact)
+			t.Fatalf("%s exact-source validation fact = %#v", unit, fact)
 		}
 		return
 	}
-	t.Fatal("Release Plugin exact-source installation_wiring fact is missing")
+	t.Fatalf("%s exact-source installation_wiring fact is missing", unit)
 }
 
 func TestRepositoryDoctorMachineOutputsContainTypedLocalEvidenceOnly(t *testing.T) {
@@ -219,7 +196,7 @@ func TestRepositoryDoctorHumanOutputJustifiesNarrowedLimitations(t *testing.T) {
 	}
 	output := ansi.Strip(rendered.String())
 	for _, required := range []string{
-		"Readiness", "ready", "Locally verified", "15", "Not verifiable", "19",
+		"Readiness", "ready", "Locally verified", "15", "Not verifiable", "15",
 		"Remote workflow not verifiable",
 		"The local workflow was inspected",
 		"Remote dispatch authorization not verifiable",

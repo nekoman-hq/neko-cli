@@ -137,7 +137,7 @@ func integrationDoctorValidatorLocation(
 ) (integrationDoctorWorkflowJob, int, bool) {
 	for _, job := range jobs {
 		for index, step := range job.steps {
-			if strings.Contains(step.run, "neko release ci-validate-context") {
+			if strings.Contains(step.run, integrationDoctorContextValidatorCommand) {
 				return job, index, true
 			}
 		}

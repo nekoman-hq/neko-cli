@@ -1,0 +1,81 @@
+name: Publish Plugin Index
+description: Generate and publish the validated schema-v1 Plugin Index.
+
+inputs:
+  repository:
+    description: GitHub repository in owner/name form.
+    required: true
+
+  unit:
+    description: Released plugin unit id.
+    required: true
+
+  version:
+    description: Released plugin version.
+    required: true
+
+  tag:
+    description: Released plugin tag.
+    required: true
+
+  release-sha:
+    description: Released commit SHA used as the registry release target.
+    required: true
+
+  output-file:
+    description: Temporary Plugin Index output path.
+    required: false
+    default: ""
+
+outputs:
+  index-path:
+    description: Generated Plugin Index path.
+    value: ${{ steps.paths.outputs.index-path }}
+
+runs:
+  using: composite
+
+  steps:
+    - name: Resolve Plugin Index path
+      id: paths
+      shell: bash
+      env:
+        REQUESTED_OUTPUT: ${{ inputs.output-file }}
+        DEFAULT_OUTPUT: ${{ runner.temp }}/plugin-index.json
+      run: |
+        set -euo pipefail
+
+        index_path="$REQUESTED_OUTPUT"
+        if [[ -z "$index_path" ]]; then
+          index_path="$DEFAULT_OUTPUT"
+        fi
+
+        echo "index-path=$index_path" >> "$GITHUB_OUTPUT"
+
+    - name: Generate Plugin Index
+      shell: bash
+      env:
+        INDEX_OUTPUT: ${{ steps.paths.outputs.index-path }}
+        GITHUB_REPOSITORY: ${{ inputs.repository }}
+        RELEASE_UNIT: ${{ inputs.unit }}
+        RELEASE_VERSION: ${{ inputs.version }}
+        RELEASE_TAG: ${{ inputs.tag }}
+      run: |
+        set -euo pipefail
+        "$GITHUB_WORKSPACE/.github/scripts/generate-plugin-index.sh"
+
+    - name: Publish Plugin Index
+      shell: bash
+      env:
+        GITHUB_REPOSITORY: ${{ inputs.repository }}
+        INDEX_PATH: ${{ steps.paths.outputs.index-path }}
+        PLUGIN_REGISTRY_TARGET_SHA: ${{ inputs.release-sha }}
+      run: |
+        set -euo pipefail
+
+        if [[ -z "${GH_TOKEN:-}" && -z "${GITHUB_TOKEN:-}" ]]; then
+          echo "::error title=Plugin Index publication failed::GH_TOKEN or GITHUB_TOKEN is required" >&2
+          exit 1
+        fi
+
+        "$GITHUB_WORKSPACE/.github/scripts/publish-plugin-index.sh"

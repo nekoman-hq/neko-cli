@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/localaction"
 	"gopkg.in/yaml.v3"
 )
 
@@ -154,5 +155,5 @@ func integrationDoctorCredentialWorkflowWithPermission(
 	t.Helper()
 	content := "name: credential-test\npermissions:\n  contents: read\njobs:\n  publish:\n    permissions:\n      contents: " + permission + "\n    steps:\n      - name: publish\n" + step
 	root := parseIntegrationDoctorWorkflowBytes(t, []byte(content))
-	return root, integrationDoctorWorkflowJobs(root)
+	return root, integrationDoctorWorkflowJobs(root, localaction.DeclaredSteps{})
 }

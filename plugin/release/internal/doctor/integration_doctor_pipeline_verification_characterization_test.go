@@ -52,14 +52,10 @@ func TestIntegrationDoctorCharacterizesNeutralPipelineVerificationFacts(t *testi
 		{Category: "installation_wiring", State: integrationDoctorVerified},
 		{Category: "publication_identity", State: integrationDoctorVerified},
 		{Category: "remote_workflow_identity", State: integrationDoctorUnverifiable, Limitation: integrationDoctorRemoteLimitation},
-		{Category: "repository_variable_values", State: integrationDoctorUnverifiable, Limitation: integrationDoctorRemoteLimitation},
 	}
-	want := make([]factSignature, 0, len(wantPerWorkflow)*len(repositoryWorkflowBehaviors())-1)
-	for _, behavior := range repositoryWorkflowBehaviors() {
+	want := make([]factSignature, 0, len(wantPerWorkflow)*len(repositoryWorkflowBehaviors()))
+	for range repositoryWorkflowBehaviors() {
 		want = append(want, wantPerWorkflow...)
-		if behavior.unit == "plugin-release" {
-			want = want[:len(want)-1]
-		}
 	}
 	sort.Slice(want, func(left, right int) bool {
 		if want[left].Category != want[right].Category {

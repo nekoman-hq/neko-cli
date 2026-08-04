@@ -3,6 +3,7 @@ package doctor
 import (
 	"strings"
 
+	"github.com/nekoman-hq/neko-cli/plugin/release/internal/localaction"
 	goreleaserfacts "github.com/nekoman-hq/neko-cli/plugin/release/internal/releasetool/goreleaser"
 	"gopkg.in/yaml.v3"
 )
@@ -15,11 +16,12 @@ type integrationDoctorPermissions struct {
 }
 
 func inspectIntegrationDoctorPermissions(
+	repositoryRoot string,
 	root *yaml.Node,
 	add func(integrationDoctorSeverity, string, string, string),
 ) {
 	workflowNode := workflowMappingValue(root, "permissions")
-	jobs := integrationDoctorPermissionJobs(root)
+	jobs := integrationDoctorPermissionJobs(repositoryRoot, root)
 	if integrationDoctorPermissionsAreImplicit(workflowNode, jobs) {
 		add(integrationDoctorWarning, "PERMISSIONS_IMPLICIT", "Workflow and jobs rely on implicit GitHub token permissions.", "Declare least-privilege permissions explicitly at workflow or job scope.")
 	}
@@ -35,8 +37,8 @@ func inspectIntegrationDoctorPermissions(
 	}
 }
 
-func integrationDoctorPermissionJobs(root *yaml.Node) []integrationDoctorWorkflowJob {
-	jobsWithSteps := integrationDoctorWorkflowJobs(root)
+func integrationDoctorPermissionJobs(repositoryRoot string, root *yaml.Node) []integrationDoctorWorkflowJob {
+	jobsWithSteps := integrationDoctorWorkflowJobs(root, localaction.NewRepositoryActions(repositoryRoot))
 	jobsByID := make(map[string]integrationDoctorWorkflowJob, len(jobsWithSteps))
 	for _, job := range jobsWithSteps {
 		jobsByID[job.id] = job
