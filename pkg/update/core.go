@@ -35,14 +35,18 @@ type CoreResult struct {
 	DestinationChanged bool
 }
 
+// releaseClient is the shared CLI release resolver contract. `neko update` and
+// `neko version` both resolve through github.ResolveLatestCLIRelease, so there
+// is exactly one stable-CLI filtering implementation in Go.
 type releaseClient interface {
-	LatestRelease(context.Context, *github.RepoInfo) (*github.Release, error)
+	ResolveLatestCLIRelease(context.Context, *github.RepoInfo) (*github.SelectedCLIRelease, error)
 	Download(context.Context, string, int64) ([]byte, error)
 }
 
 type coreDependencies struct {
 	installedVersion string
 	releases         releaseClient
+	repository       *github.RepoInfo
 	inspector        installationInspector
 	replacement      replacementCapability
 	platform         platform
@@ -54,6 +58,7 @@ func ExecuteCore(ctx context.Context, opts CoreOptions) (CoreResult, error) {
 	return executeCore(ctx, opts, coreDependencies{
 		installedVersion: version.Version,
 		releases:         github.NewClient(httpClient),
+		repository:       github.CLIRepository(),
 		inspector:        newOSInstallationInspector(),
 		replacement:      newOSReplacementCapability(),
 		platform:         platform{OS: runtime.GOOS, Arch: runtime.GOARCH},
@@ -76,15 +81,23 @@ func executeCore(ctx context.Context, opts CoreOptions, deps coreDependencies) (
 		return result, nil
 	}
 
-	release, err := deps.releases.LatestRelease(ctx, &github.RepoInfo{Owner: "nekoman-hq", Repo: "neko-cli"})
+	repository := deps.repository
+	if repository == nil {
+		repository = github.CLIRepository()
+	}
+
+	// A discovery failure is always reported. The installed version is never
+	// substituted for a failed lookup, so a failure can never be rendered as
+	// "You are already running the latest version".
+	release, err := deps.releases.ResolveLatestCLIRelease(ctx, repository)
 	if err != nil {
 		return result, newUpdateError(errorReleaseLookup, "failed to check for neko-cli updates; no archive was downloaded and the installed executable is unchanged", err)
 	}
 	if release == nil {
 		return result, newUpdateError(errorReleaseLookup, "no stable neko-cli release was selected; no archive was downloaded and the installed executable is unchanged", nil)
 	}
-	result.SelectedVersion = strings.TrimPrefix(release.TagName, "v")
-	action, actionErr := classifyUpdateAction(deps.installedVersion, release.TagName, opts.Force)
+	result.SelectedVersion = strings.TrimPrefix(release.Version, "v")
+	action, actionErr := classifyUpdateAction(deps.installedVersion, release.Version, opts.Force)
 	result.Action = action
 	if actionErr != nil {
 		if action != ActionDowngradeRefused {

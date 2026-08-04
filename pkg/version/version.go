@@ -8,8 +8,9 @@ package version
 */
 
 import (
-	stderrors "errors"
+	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	clierrors "github.com/nekoman-hq/neko-cli/pkg/errors"
@@ -25,20 +26,20 @@ var (
 	BuiltBy = "unknown"
 )
 
-func Latest(repoInfo *github.RepoInfo) error {
+// Latest prints local build facts and the newest stable CLI release for the
+// configured CLI repository. Discovery uses github.ResolveLatestCLIRelease, the
+// same resolver `neko update` uses, so both commands report the same release.
+// A discovery failure is reported verbatim; the installed version is never
+// presented as the latest release.
+func Latest(ctx context.Context, repoInfo *github.RepoInfo) error {
 	displayCLIVersion()
 
 	if repoInfo == nil {
-		return nil
+		repoInfo = github.CLIRepository()
 	}
 
-	release, err := github.LatestRelease(repoInfo)
+	release, err := github.ResolveLatestCLIRelease(ctx, repoInfo)
 	if err != nil {
-		if stderrors.Is(err, github.ErrNoReleases) {
-			clierrors.Warning("No Releases Found", fmt.Sprintf("Repository %s/%s has no releases yet.\n", repoInfo.Owner, repoInfo.Repo))
-			return nil
-		}
-
 		clierrors.Warning("Latest CLI Release Unavailable", err.Error())
 		return nil
 	}
@@ -74,7 +75,7 @@ func displayCLIVersion() {
 	fmt.Println()
 }
 
-func displayRelease(repoInfo *github.RepoInfo, release *github.Release) {
+func displayRelease(repoInfo *github.RepoInfo, release *github.SelectedCLIRelease) {
 	// Parse and format the date
 	publishedTime, err := time.Parse(time.RFC3339, release.PublishedAt)
 	var formattedDate string
@@ -94,26 +95,21 @@ func displayRelease(repoInfo *github.RepoInfo, release *github.Release) {
 		log.ColorText(log.ColorPurple, "\uF09B Repository:"),
 		log.ColorText(log.ColorYellow, fmt.Sprintf("%s/%s", repoInfo.Owner, repoInfo.Repo)))
 
-	versionStr := release.Name
-	if release.TagName != "" && release.TagName != release.Name {
-		versionStr = fmt.Sprintf("%s (%s)", release.Name, release.TagName)
+	// A release title and GitHub's "Latest" label never identify a CLI release.
+	// Only the resolved stable vX.Y.Z tag does.
+	versionStr := strings.TrimPrefix(release.Version, "v")
+	if release.TagName != "" {
+		versionStr = fmt.Sprintf("%s (%s)", versionStr, release.TagName)
 	}
 	fmt.Printf("%s %s %s\n",
 		log.ColorText(log.ColorPurple, "├─"),
 		log.ColorText(log.ColorPurple, "\uF02B Version:   "),
 		log.ColorText(log.ColorGreen, versionStr))
 
-	if release.PreRelease {
-		fmt.Printf("%s %s %s\n",
-			log.ColorText(log.ColorPurple, "├─"),
-			log.ColorText(log.ColorPurple, "\uF12A Type:      "),
-			log.ColorText(log.ColorYellow, "Pre-release"))
-	}
-
 	publishedStr := formattedDate
-	if release.Author.Login != "" {
+	if release.Author != "" {
 		publishedStr = fmt.Sprintf("%s by %s", formattedDate,
-			log.ColorText(log.ColorCyan, release.Author.Login))
+			log.ColorText(log.ColorCyan, release.Author))
 	}
 	fmt.Printf("%s %s %s\n",
 		log.ColorText(log.ColorPurple, "├─"),

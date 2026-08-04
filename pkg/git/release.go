@@ -14,18 +14,15 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"regexp"
 	"time"
 
 	"github.com/nekoman-hq/neko-cli/pkg/log"
-	"golang.org/x/mod/semver"
 )
 
 var (
 	ErrNoReleases    = stderrors.New("repository has no releases")
 	githubAPIBase    = "https://api.github.com"
 	githubHTTPClient = &http.Client{Timeout: 30 * time.Second}
-	stableCLITagRE   = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+$`)
 )
 
 const maxReleaseMetadataBytes int64 = 8 << 20
@@ -40,95 +37,52 @@ func NewClient(httpClient *http.Client) *Client {
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 30 * time.Second}
 	}
-	return &Client{HTTPClient: httpClient, APIBase: githubAPIBase}
+	return &Client{HTTPClient: httpClient, APIBase: APIBaseURL()}
 }
 
-func LatestRelease(repoInfo *RepoInfo) (*Release, error) {
-	return latestRelease(context.Background(), repoInfo, githubAPIBase, githubHTTPClient)
-}
-
-func (client *Client) LatestRelease(ctx context.Context, repoInfo *RepoInfo) (*Release, error) {
-	if client == nil {
-		client = NewClient(nil)
-	}
-	httpClient := client.HTTPClient
-	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 30 * time.Second}
-	}
-	apiBase := client.APIBase
-	if apiBase == "" {
-		apiBase = githubAPIBase
-	}
-	return latestRelease(ctx, repoInfo, apiBase, httpClient)
-}
-
-func latestRelease(ctx context.Context, repoInfo *RepoInfo, apiBase string, httpClient *http.Client) (*Release, error) {
-	releases, err := listReleases(ctx, repoInfo, apiBase, httpClient)
-	if err != nil {
-		return nil, err
-	}
-
-	release, err := LatestStableCLIRelease(releases)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"%w: repository %s/%s has no stable CLI releases matching vX.Y.Z",
-			ErrNoReleases,
-			repoInfo.Owner,
-			repoInfo.Repo,
-		)
-	}
-
-	log.PluginV(log.Exec, "\uF00C Successfully resolved latest stable CLI release!")
-	return release, nil
-}
-
-func LatestStableCLIRelease(releases []Release) (*Release, error) {
-	var latest *Release
-
-	for i := range releases {
-		release := &releases[i]
-		if release.Draft || release.PreRelease || !isStableCLITag(release.TagName) {
-			continue
-		}
-		if latest == nil || semver.Compare(release.TagName, latest.TagName) > 0 {
-			latest = release
-		}
-	}
-
-	if latest == nil {
-		return nil, ErrNoReleases
-	}
-
-	return latest, nil
-}
-
+// listReleases reads every published release page for a repository. GitHub
+// paginates the release list, and the repository publishes CLI and plugin units
+// into the same list, so a stable CLI tag can appear beyond the first page.
 func listReleases(ctx context.Context, repoInfo *RepoInfo, apiBase string, httpClient *http.Client) ([]Release, error) {
-	url := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=100", apiBase, repoInfo.Owner, repoInfo.Repo)
-
-	log.PluginV(log.Exec, fmt.Sprintf("Fetching release list from remote: %s",
-		log.ColorText(log.ColorGreen, url),
-	))
-
-	body, statusCode, err := doGitHubRequest(ctx, httpClient, url)
-	if err != nil {
-		if statusCode == http.StatusNotFound {
-			return nil, repositoryAccessError(repoInfo)
-		}
-		return nil, err
-	}
-
 	var releases []Release
-	if err := json.Unmarshal(body, &releases); err != nil {
-		return nil, fmt.Errorf(
-			"JSON Parse Failed: %w", err,
-		)
+
+	for page := 1; page <= maxReleasePages; page++ {
+		url := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=%d&page=%d", apiBase, repoInfo.Owner, repoInfo.Repo, releasesPerPage, page)
+
+		log.PluginV(log.Exec, fmt.Sprintf("Fetching release list from remote: %s",
+			log.ColorText(log.ColorGreen, url),
+		))
+
+		body, statusCode, err := doGitHubRequest(ctx, httpClient, url)
+		if err != nil {
+			if statusCode == http.StatusNotFound {
+				return nil, repositoryAccessError(repoInfo)
+			}
+			return nil, err
+		}
+
+		var pageReleases []Release
+		if err := json.Unmarshal(body, &pageReleases); err != nil {
+			return nil, fmt.Errorf(
+				"JSON Parse Failed: %w", err,
+			)
+		}
+
+		releases = append(releases, pageReleases...)
+		if len(pageReleases) < releasesPerPage {
+			return releases, nil
+		}
 	}
 
-	return releases, nil
-}
-
-func isStableCLITag(tag string) bool {
-	return stableCLITagRE.MatchString(tag) && semver.IsValid(tag)
+	// The final page was full, so the release list was truncated. The greatest
+	// tag seen so far is not provably the greatest tag published, so discovery
+	// fails instead of selecting a possibly non-maximum CLI release.
+	return nil, fmt.Errorf(
+		"%w: %d release pages (%d releases) were read and more remain; pin a version instead of resolving the newest release",
+		ErrReleaseListTruncated,
+		maxReleasePages,
+		maxReleasePages*releasesPerPage,
+	)
 }
 
 func doGitHubRequest(ctx context.Context, httpClient *http.Client, url string) ([]byte, int, error) {

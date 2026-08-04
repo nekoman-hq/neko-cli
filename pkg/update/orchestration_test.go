@@ -72,7 +72,7 @@ func TestExecuteCoreDevelopmentBuildPrecedesNetwork(t *testing.T) {
 }
 
 func TestExecuteCoreRejectsUnclassifiableVersionBeforeInspectionOrDownload(t *testing.T) {
-	client := &fakeReleaseClient{release: &github.Release{TagName: "v1.2.3"}}
+	client := &fakeReleaseClient{release: &github.SelectedCLIRelease{Version: "v1.2.3", TagName: "v1.2.3"}}
 	counter := &countingInspector{}
 	result, err := executeCore(context.Background(), CoreOptions{}, coreDependencies{
 		installedVersion: "unknown",
@@ -397,7 +397,8 @@ func coreFixture(t *testing.T, installed, available string) (coreDependencies, *
 	archive := archiveFixture(t, tarFixture{name: "neko-cli", body: []byte("new executable"), typeFlag: 0})
 	digest := sha256.Sum256(archive)
 	client := &fakeReleaseClient{
-		release: &github.Release{
+		release: &github.SelectedCLIRelease{
+			Version: normalizeVersion(available),
 			TagName: normalizeVersion(available),
 			Assets: []github.Asset{
 				{Name: "neko-cli_Darwin_arm64.tar.gz", BrowserDownloadURL: "archive"},
@@ -430,17 +431,22 @@ func coreFixture(t *testing.T, installed, available string) (coreDependencies, *
 }
 
 type fakeReleaseClient struct {
-	release        *github.Release
+	release        *github.SelectedCLIRelease
 	metadataErr    error
 	bodies         map[string][]byte
 	downloadErrors map[string]error
 	downloads      []string
+	repositories   []*github.RepoInfo
 	metadataCalls  int
 }
 
-func (client *fakeReleaseClient) LatestRelease(context.Context, *github.RepoInfo) (*github.Release, error) {
+func (client *fakeReleaseClient) ResolveLatestCLIRelease(_ context.Context, repoInfo *github.RepoInfo) (*github.SelectedCLIRelease, error) {
 	client.metadataCalls++
-	return client.release, client.metadataErr
+	client.repositories = append(client.repositories, repoInfo)
+	if client.metadataErr != nil {
+		return nil, client.metadataErr
+	}
+	return client.release, nil
 }
 
 func (client *fakeReleaseClient) Download(_ context.Context, url string, _ int64) ([]byte, error) {

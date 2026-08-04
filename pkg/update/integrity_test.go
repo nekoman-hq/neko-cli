@@ -13,7 +13,8 @@ import (
 )
 
 func TestSelectReleaseAssetsRequiresOneArchiveAndChecksum(t *testing.T) {
-	release := &github.Release{
+	release := &github.SelectedCLIRelease{
+		Version: "v1.2.3",
 		TagName: "v1.2.3",
 		Assets: []github.Asset{
 			{Name: "neko-cli_Darwin_arm64.tar.gz", BrowserDownloadURL: "https://example.invalid/archive"},
@@ -30,12 +31,12 @@ func TestSelectReleaseAssetsRequiresOneArchiveAndChecksum(t *testing.T) {
 
 	for _, test := range []struct {
 		name      string
-		mutate    func(*github.Release)
+		mutate    func(*github.SelectedCLIRelease)
 		wantError string
 	}{
-		{name: "missing archive", mutate: func(release *github.Release) { release.Assets = release.Assets[1:] }, wantError: "no compatible archive"},
-		{name: "missing checksum", mutate: func(release *github.Release) { release.Assets = release.Assets[:1] }, wantError: "no authoritative checksum"},
-		{name: "ambiguous archive", mutate: func(release *github.Release) {
+		{name: "missing archive", mutate: func(release *github.SelectedCLIRelease) { release.Assets = release.Assets[1:] }, wantError: "no compatible archive"},
+		{name: "missing checksum", mutate: func(release *github.SelectedCLIRelease) { release.Assets = release.Assets[:1] }, wantError: "no authoritative checksum"},
+		{name: "ambiguous archive", mutate: func(release *github.SelectedCLIRelease) {
 			release.Assets = append(release.Assets, github.Asset{Name: "neko-cli_1.2.3_Darwin_arm64.tar.gz"})
 		}, wantError: "multiple compatible archives"},
 	} {
@@ -53,7 +54,7 @@ func TestSelectReleaseAssetsRequiresOneArchiveAndChecksum(t *testing.T) {
 
 func TestSelectReleaseAssetsRejectsUnsupportedPlatforms(t *testing.T) {
 	for _, target := range []platform{{OS: "windows", Arch: "amd64"}, {OS: "darwin", Arch: "386"}, {OS: "plan9", Arch: "arm64"}} {
-		_, err := selectReleaseAssets(&github.Release{TagName: "v1.2.3"}, target)
+		_, err := selectReleaseAssets(&github.SelectedCLIRelease{Version: "v1.2.3", TagName: "v1.2.3"}, target)
 		if err == nil || !strings.Contains(err.Error(), "unsupported") {
 			t.Fatalf("platform %#v error = %v", target, err)
 		}

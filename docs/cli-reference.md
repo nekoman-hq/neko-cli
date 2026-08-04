@@ -36,7 +36,7 @@ repository. A user's installation may contain additional third-party paths.
 | `neko completion fish` | Cobra | Core | Read-only generation | Offline; no token | None | Fish script on stdout | `0`; writer failure `1` | No files are written by the command | — |
 | `neko completion powershell` | Cobra | Core | Read-only generation | Offline; no token | None | PowerShell script on stdout | `0`; writer failure `1` | No files are written by the command | — |
 | `neko completion zsh` | Cobra | Core | Read-only generation | Offline; no token | None | Zsh script on stdout | `0`; writer failure `1` | No files are written by the command | — |
-| `neko version` | Core and `pkg/version` | Core | Inspects build and local Git facts | GitHub GET is attempted only when a GitHub repository identity is resolved; optional `GITHUB_TOKEN` | Local Git inspect; no write | Direct styled text; plugin-response flags are no-ops | `0`, including remote warning outcomes | No Release V1/V2 source files | — |
+| `neko version` | Core and `pkg/version` | Core | Inspects the local build and the configured CLI repository | GitHub GET for the configured CLI repository release list; optional `GITHUB_TOKEN` | No write | Direct styled text; plugin-response flags are no-ops | `0`, including remote warning outcomes | No Release V1/V2 source files | — |
 | `neko update` | Core and `pkg/update` | Core | Dry-run capable; executable replacement | Stable release metadata is required for release builds; optional `GITHUB_TOKEN`; archive/checksum downloads only when applying | No Git; inspects installation and atomically replaces the canonical unmanaged target | Direct progress text; plugin-response flags are no-ops | No-op/success `0`; refusal/failure `1` | Release build; supported self-update platform and installation ownership | Reinstall via installer or package manager when refused |
 | `neko plugin` | Core | Core | Read-only help | Offline; no token | Reads no plugin binary | Cobra text | `0` | Plugin manager overview | — |
 | `neko plugin list` | Core and `pkg/plugin` | Core | Read-only | Offline; no token | Reads installed manifests | Direct table text | `0`; unreadable directory `1` | `NEKO_PLUGIN_DIR` | — |
@@ -157,10 +157,11 @@ Core exit `1`. Errors render once.
 
 - Help, completion, plugin list/uninstall, UI init/remove, default Release
   inspection, Evidence, and Plugin Index are offline.
-- `neko version` may read GitHub release metadata when the current repository
-  identifies a GitHub remote. `neko update`, plugin registry commands, and UI
-  list/add require GitHub reads. `GITHUB_TOKEN` is optional for those public
-  read/download paths.
+- `neko version` and `neko update` read GitHub release metadata for the
+  configured CLI repository through one shared CLI release resolver, which
+  selects only stable `vX.Y.Z` tags and never uses `/releases/latest`. Plugin
+  registry commands and UI list/add require GitHub reads. `GITHUB_TOKEN` is
+  optional for those public read/download paths.
 - Release Doctor and Pipeline contact GitHub only with command-local
   `--verify-remote`. Describe and verbose never enable remote access.
 - Actual Release V1/V2 execution and Resume may commit, tag, push, or dispatch

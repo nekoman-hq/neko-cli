@@ -125,7 +125,7 @@ func TestNewGitHubRequestAddsOptionalToken(t *testing.T) {
 	}
 }
 
-func TestLatestReleaseSelectsLatestStableCLITagFromReleaseList(t *testing.T) {
+func TestResolveLatestCLIReleaseSelectsStableCLITagFromMixedReleaseList(t *testing.T) {
 	t.Setenv("GITHUB_TOKEN", "secret-token")
 
 	withGitHubTestClient(t, roundTripFunc(func(req *http.Request) (*http.Response, error) {
@@ -135,8 +135,8 @@ func TestLatestReleaseSelectsLatestStableCLITagFromReleaseList(t *testing.T) {
 
 		switch req.URL.Path {
 		case "/repos/nekoman-hq/neko-web/releases":
-			if req.URL.RawQuery != "per_page=100" {
-				t.Fatalf("expected per_page=100 query, got %q", req.URL.RawQuery)
+			if req.URL.RawQuery != "per_page=100&page=1" {
+				t.Fatalf("expected first paginated page query, got %q", req.URL.RawQuery)
 			}
 			releases := []Release{
 				{Name: "draft", TagName: "draft", Draft: true},
@@ -155,12 +155,12 @@ func TestLatestReleaseSelectsLatestStableCLITagFromReleaseList(t *testing.T) {
 		}
 	}))
 
-	release, err := LatestRelease(&RepoInfo{
+	release, err := ResolveLatestCLIRelease(context.Background(), &RepoInfo{
 		Owner: "nekoman-hq",
 		Repo:  "neko-web",
 	})
 	if err != nil {
-		t.Fatalf("LatestRelease: %v", err)
+		t.Fatalf("ResolveLatestCLIRelease: %v", err)
 	}
 
 	if release == nil {
@@ -173,7 +173,7 @@ func TestLatestReleaseSelectsLatestStableCLITagFromReleaseList(t *testing.T) {
 	}
 }
 
-func TestLatestReleaseReturnsNoReleasesWhenReleaseListIsEmpty(t *testing.T) {
+func TestResolveLatestCLIReleaseReturnsNoReleasesWhenReleaseListIsEmpty(t *testing.T) {
 	withGitHubTestClient(t, roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		switch req.URL.Path {
 		case "/repos/nekoman-hq/empty/releases":
@@ -184,7 +184,7 @@ func TestLatestReleaseReturnsNoReleasesWhenReleaseListIsEmpty(t *testing.T) {
 		}
 	}))
 
-	_, err := LatestRelease(&RepoInfo{
+	_, err := ResolveLatestCLIRelease(context.Background(), &RepoInfo{
 		Owner: "nekoman-hq",
 		Repo:  "empty",
 	})
@@ -196,17 +196,17 @@ func TestLatestReleaseReturnsNoReleasesWhenReleaseListIsEmpty(t *testing.T) {
 		t.Fatalf("expected ErrNoReleases, got %v", err)
 	}
 
-	if !strings.Contains(err.Error(), "has no stable CLI releases matching vX.Y.Z") {
+	if !strings.Contains(err.Error(), "publishes no stable CLI release matching vX.Y.Z") {
 		t.Fatalf("expected no releases message, got %q", err.Error())
 	}
 }
 
-func TestLatestReleaseReturnsRepositoryAccessHintForPrivateReposWithoutToken(t *testing.T) {
+func TestResolveLatestCLIReleaseReturnsRepositoryAccessHintForPrivateReposWithoutToken(t *testing.T) {
 	withGitHubTestClient(t, roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		return jsonResponse(t, http.StatusNotFound, map[string]string{"message": "Not Found"}), nil
 	}))
 
-	_, err := LatestRelease(&RepoInfo{
+	_, err := ResolveLatestCLIRelease(context.Background(), &RepoInfo{
 		Owner: "nekoman-hq",
 		Repo:  "private-repo",
 	})
@@ -216,39 +216,6 @@ func TestLatestReleaseReturnsRepositoryAccessHintForPrivateReposWithoutToken(t *
 
 	if !strings.Contains(err.Error(), "set GITHUB_TOKEN") {
 		t.Fatalf("expected GITHUB_TOKEN hint, got %q", err.Error())
-	}
-}
-
-func TestLatestStableCLIReleaseIgnoresNonCLITags(t *testing.T) {
-	release, err := LatestStableCLIRelease([]Release{
-		{Name: "plugin release", TagName: "plugin-release/v4.0.4"},
-		{Name: "plugin ui", TagName: "plugin-ui/v1.0.1"},
-		{Name: "registry", TagName: "plugin-registry"},
-		{Name: "invalid", TagName: "v3.0"},
-		{Name: "draft cli", TagName: "v3.0.12", Draft: true},
-		{Name: "prerelease cli", TagName: "v3.0.11", PreRelease: true},
-		{Name: "older cli", TagName: "v3.0.4"},
-		{Name: "newer cli", TagName: "v3.0.10"},
-	})
-	if err != nil {
-		t.Fatalf("LatestStableCLIRelease returned error: %v", err)
-	}
-	if release.TagName != "v3.0.10" {
-		t.Fatalf("LatestStableCLIRelease selected %q, want v3.0.10", release.TagName)
-	}
-}
-
-func TestLatestStableCLIReleaseErrorsWhenNoCLITagExists(t *testing.T) {
-	_, err := LatestStableCLIRelease([]Release{
-		{Name: "plugin release", TagName: "plugin-release/v4.0.4"},
-		{Name: "plugin ui", TagName: "plugin-ui/v1.0.1"},
-		{Name: "registry", TagName: "plugin-registry"},
-	})
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	if !stderrors.Is(err, ErrNoReleases) {
-		t.Fatalf("expected ErrNoReleases, got %v", err)
 	}
 }
 

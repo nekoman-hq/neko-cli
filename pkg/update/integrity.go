@@ -26,12 +26,15 @@ type releaseAssets struct {
 	checksum github.Asset
 }
 
-func selectReleaseAssets(release *github.Release, target platform) (releaseAssets, error) {
+// selectReleaseAssets resolves the archive and checksum assets for the current
+// platform from the already-selected CLI release. The resolver keeps release
+// metadata and assets together, so no second release lookup happens here.
+func selectReleaseAssets(release *github.SelectedCLIRelease, target platform) (releaseAssets, error) {
 	osName, archName, err := supportedReleasePlatform(target)
 	if err != nil {
 		return releaseAssets{}, err
 	}
-	version := strings.TrimPrefix(release.TagName, "v")
+	version := strings.TrimPrefix(release.Version, "v")
 	archiveNames := map[string]bool{
 		fmt.Sprintf("neko-cli_%s_%s.tar.gz", osName, archName):             true,
 		fmt.Sprintf("neko-cli_%s_%s_%s.tar.gz", version, osName, archName): true,

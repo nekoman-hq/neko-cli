@@ -7,21 +7,19 @@ package cmd
 */
 
 import (
+	github "github.com/nekoman-hq/neko-cli/pkg/git"
 	"github.com/nekoman-hq/neko-cli/pkg/version"
-	"github.com/nekoman-hq/neko-cli/plugin/release/pkg/git"
 	"github.com/spf13/cobra"
 )
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
-	Short: "Show current version of the cli and the repository",
+	Short: "Show the installed CLI build and the newest stable CLI release",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		repoInfo, _ := git.Current()
-		err := version.Latest(repoInfo)
-		if err != nil {
-			return err
-		}
-		return nil
+		// The configured CLI repository, not the current working repository, owns
+		// CLI release discovery. `neko update` resolves the same repository through
+		// the same resolver, so both commands report the same CLI release.
+		return version.Latest(cmd.Context(), github.CLIRepository())
 	},
 }
 

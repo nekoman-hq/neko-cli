@@ -11,13 +11,31 @@ commands and plugin-response flags, see the [CLI reference](cli-reference.md).
 
 `install.sh` installs the main `neko` CLI from GitHub Releases. It does not install plugins and does not read repository-local release files such as legacy V1 config or V2 state/config.
 
-By default, the script queries the configured repository's releases, filters for stable CLI tags matching `vX.Y.Z`, ignores plugin releases and the `plugin-registry` release, sorts the CLI tags as semantic versions, and installs the newest one. The Go implementation used by `neko version` and `neko update` follows the same multi-unit rule for CLI release checks.
+The script is standalone and runs the same main flow from a file or from stdin. All four documented forms are supported:
 
-For an ordinary user, the default destination is `$HOME/.local/bin`. The script creates that directory when necessary and prints PATH guidance when it is not already reachable. When the script is intentionally run as root, the default remains `/usr/local/bin`. `NEKO_INSTALL_DIR` always preserves an explicitly selected destination, including paths containing spaces. The script rejects an empty or non-writable destination before any release request, never invokes `sudo` automatically, and never changes ownership of a system directory.
+```bash
+curl -fsSL https://raw.githubusercontent.com/nekoman-hq/neko-cli/main/install.sh | bash
+```
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nekoman-hq/neko-cli/main/install.sh | NEKO_VERSION=v3.1.2 bash
+```
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nekoman-hq/neko-cli/main/install.sh | NEKO_INSTALL_DIR="$HOME/.local/bin" bash
+```
 
 ```bash
 ./install.sh
 ```
+
+Stdin execution needs no filesystem path for the running script, sources no repository-relative helper file, and depends on nothing a piped shell leaves unset.
+
+By default, the script pages through the configured repository's releases, filters for stable CLI tags matching `vX.Y.Z` exactly, ignores drafts, prereleases, plugin releases, the `plugin-registry` release, and malformed tags, compares the remaining tags numerically, and installs the greatest one. It never uses `/releases/latest`, a release title, or GitHub's "Latest" label. The Go resolver used by `neko version` and `neko update` follows the same contract; a checked-in fixture contract in `testdata/cli-release-contract` requires both resolvers to select the same tag.
+
+Pagination reads up to twenty pages of one hundred releases. If the twentieth page is still full the list did not end, so an unread page may hold a greater stable CLI tag. Both resolvers then refuse with an actionable truncation error instead of selecting a possibly non-maximum release; pin the wanted release with `NEKO_VERSION` in that case.
+
+For an ordinary user, the default destination is `$HOME/.local/bin`. The script creates that directory when necessary and prints PATH guidance when it is not already reachable. When the script is intentionally run as root, the default remains `/usr/local/bin`. `NEKO_INSTALL_DIR` always preserves an explicitly selected destination, including paths containing spaces. The script rejects an empty or non-writable destination before any release request, never invokes `sudo` automatically, and never changes ownership of a system directory.
 
 The script selects CLI archive assets by platform from GoReleaser names such as:
 
@@ -40,7 +58,10 @@ Supported environment variables:
 | `NEKO_VERSION` | newest stable CLI release | Optional CLI version, either `X.Y.Z` or `vX.Y.Z` |
 | `NEKO_INSTALL_DIR` | `$HOME/.local/bin` for ordinary users; `/usr/local/bin` for root | Destination directory for the installed `neko` binary |
 | `NEKO_REPOSITORY` | `nekoman-hq/neko-cli` | GitHub repository to query |
+| `NEKO_GITHUB_API_BASE` | `https://api.github.com` | GitHub API base for release discovery |
 | `GITHUB_TOKEN` | unset | Optional token for private forks or higher API limits |
+
+`NEKO_REPOSITORY` and `NEKO_GITHUB_API_BASE` are honored by the installer and by the Go CLI release resolver behind `neko version` and `neko update`, so all three can be pointed at one repository or one controlled endpoint together.
 
 Examples:
 
@@ -66,7 +87,9 @@ neko update --dry-run
 neko update --force
 ```
 
-The updater first selects the newest stable `vX.Y.Z` CLI release and classifies the running installation. The action rules are:
+The updater first selects the newest stable `vX.Y.Z` CLI release through the shared Go resolver and classifies the running installation. When release discovery fails for any reason — HTTP failure, malformed JSON, or a repository with no stable CLI release — the updater reports an actionable error such as `unable to determine the latest CLI release for nekoman-hq/neko-cli: ...`. It never substitutes the installed version for a failed lookup and therefore never reports an out-of-date build as already current.
+
+The action rules are:
 
 | Installed versus selected | Without `--force` | With `--force` |
 | --- | --- | --- |

@@ -1,0 +1,47 @@
+[
+  {
+    "name": "Nekocli 3.1.9",
+    "tag_name": "v3.1.9",
+    "draft": false,
+    "prerelease": false,
+    "published_at": "2026-08-04T09:00:00Z",
+    "html_url": "https://github.com/nekoman-hq/neko-cli/releases/tag/v3.1.9",
+    "author": { "login": "release-bot" },
+    "assets": []
+  },
+  {
+    "name": "plugin-release 4.4.5",
+    "tag_name": "plugin-release/v4.4.5",
+    "draft": false,
+    "prerelease": false,
+    "published_at": "2026-08-04T10:00:00Z",
+    "html_url": "https://github.com/nekoman-hq/neko-cli/releases/tag/plugin-release%2Fv4.4.5",
+    "author": { "login": "release-bot" },
+    "assets": []
+  },
+  {
+    "name": "Nekocli 3.1.10",
+    "tag_name": "v3.1.10",
+    "draft": false,
+    "prerelease": false,
+    "published_at": "2026-08-03T09:00:00Z",
+    "html_url": "https://github.com/nekoman-hq/neko-cli/releases/tag/v3.1.10",
+    "author": { "login": "release-bot" },
+    "assets": [
+      {
+        "name": "neko-cli_Darwin_arm64.tar.gz",
+        "browser_download_url": "https://download.example/neko-cli_Darwin_arm64.tar.gz"
+      }
+    ]
+  },
+  {
+    "name": "Nekocli 3.1.2",
+    "tag_name": "v3.1.2",
+    "draft": false,
+    "prerelease": false,
+    "published_at": "2026-08-01T18:30:00Z",
+    "html_url": "https://github.com/nekoman-hq/neko-cli/releases/tag/v3.1.2",
+    "author": { "login": "release-bot" },
+    "assets": []
+  }
+]

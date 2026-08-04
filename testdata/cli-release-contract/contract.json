@@ -1,0 +1,14 @@
+[
+  {
+    "name": "mixed multi-unit release list",
+    "releases": "mixed-releases.json",
+    "expected_tag": "v3.1.2",
+    "expected_version": "3.1.2"
+  },
+  {
+    "name": "numeric patch ordering",
+    "releases": "numeric-ordering-releases.json",
+    "expected_tag": "v3.1.10",
+    "expected_version": "3.1.10"
+  }
+]

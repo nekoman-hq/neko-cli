@@ -89,9 +89,72 @@ neko release doctor
 ```
 
 Doctor is read-only and never repairs repository configuration or workflows.
-The [installation and update guide](docs/installation.md) covers custom install
-directories, PATH setup, supported platforms, package-manager ownership,
-self-update, integrity verification, and recovery.
+
+## Installation
+
+### From Release
+
+Install the newest stable CLI release:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nekoman-hq/neko-cli/main/install.sh | bash
+```
+
+Install a specific CLI version, using any published stable CLI tag in place of
+`vX.Y.Z`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nekoman-hq/neko-cli/main/install.sh | NEKO_VERSION=vX.Y.Z bash
+```
+
+Install into a user-local directory:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nekoman-hq/neko-cli/main/install.sh | NEKO_INSTALL_DIR="$HOME/.local/bin" bash
+```
+
+Prefer to read the script before running it? Download, inspect, run, and remove
+it:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nekoman-hq/neko-cli/main/install.sh -o /tmp/neko-install.sh
+```
+
+```bash
+bash /tmp/neko-install.sh
+```
+
+```bash
+rm /tmp/neko-install.sh
+```
+
+Then verify the installation:
+
+```bash
+neko version
+```
+
+What the installer does and does not do:
+
+- It installs only the main `neko` CLI. It never installs a plugin.
+- CLI install, `neko version`, and `neko update` consider only stable CLI
+  releases whose tag matches exactly `vX.Y.Z`. Versions are compared
+  numerically, not lexicographically, so a patch of ten is newer than a patch
+  of nine.
+- Plugin releases such as `plugin-release/vX.Y.Z` and `plugin-ui/vX.Y.Z`, the
+  mutable `plugin-registry` release, drafts, prereleases, and malformed tags are
+  ignored. A repository-wide "Latest" label never identifies a CLI release.
+- Plugins are installed separately with `neko plugin install <name>`, which
+  resolves the published Plugin Index.
+- The install directory must be present in `PATH`. The installer prints the
+  exact line to add when it is not.
+- `/usr/local/bin` may require `sudo`, while `$HOME/.local/bin` normally does
+  not. The installer never invokes `sudo` for you; choose a user-owned directory
+  with `NEKO_INSTALL_DIR` instead.
+
+The [installation and update guide](docs/installation.md) covers supported
+platforms, package-manager ownership, self-update, integrity verification, and
+recovery.
 
 `neko update --force` is a same-version reinstall only. It does not bypass
 permissions, package-manager ownership, integrity checks, platform checks, or

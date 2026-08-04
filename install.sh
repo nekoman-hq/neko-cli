@@ -7,6 +7,12 @@ OS_OVERRIDE="${NEKO_OS:-}"
 ARCH_OVERRIDE="${NEKO_ARCH:-}"
 INSTALL_DIR=""
 
+# Release listing is paginated; the repository publishes CLI and plugin units to
+# the same release list, so a single page is not a safe assumption.
+RELEASES_PER_PAGE=100
+MAX_RELEASE_PAGES=20
+STABLE_CLI_TAG_PATTERN='^v[0-9]+\.[0-9]+\.[0-9]+$'
+
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
     echo "Error: required command '$1' not found" >&2
@@ -66,34 +72,84 @@ github_get() {
   curl -fsSL "${curl_headers[@]}" "$1"
 }
 
-resolve_latest_cli_version() {
-  local releases_json
-  local version
+# stable_cli_tags reads a GitHub releases page on stdin and prints the tags of
+# every published stable CLI release. Drafts, prereleases, plugin unit tags, the
+# plugin-registry tag, and malformed tags are ignored. Release titles and the
+# GitHub "Latest" label are never consulted.
+stable_cli_tags() {
+  jq -r --arg pattern "$STABLE_CLI_TAG_PATTERN" '
+    if type != "array" then error("release response is not a JSON array") else . end
+    | .[]
+    | select(type == "object")
+    | select(((.draft // false) | not) and ((.prerelease // false) | not))
+    | .tag_name // empty
+    | select(type == "string")
+    | select(test($pattern))
+  '
+}
 
-  if ! releases_json=$(github_get "${API_BASE}/repos/${REPO}/releases?per_page=100"); then
-    echo "Error: failed to fetch releases for ${REPO}" >&2
+# greatest_cli_tag reads candidate tags on stdin and prints the greatest one by
+# numeric major/minor/patch order, so v3.1.10 sorts after v3.1.9.
+greatest_cli_tag() {
+  jq -Rrn '
+    [inputs | select(length > 0)]
+    | sort_by(
+        capture("^v(?<major>[0-9]+)\\.(?<minor>[0-9]+)\\.(?<patch>[0-9]+)$")
+        | [.major, .minor, .patch]
+        | map(tonumber)
+      )
+    | last // empty
+  '
+}
+
+resolve_latest_cli_version() {
+  local page=1
+  local page_json
+  local page_length
+  local page_tags
+  local tags=""
+  local version
+  local reached_last_page=0
+
+  while [ "$page" -le "$MAX_RELEASE_PAGES" ]; do
+    if ! page_json=$(github_get "${API_BASE}/repos/${REPO}/releases?per_page=${RELEASES_PER_PAGE}&page=${page}"); then
+      echo "Error: unable to determine the latest CLI release: failed to fetch releases for ${REPO}" >&2
+      exit 1
+    fi
+
+    if ! page_length=$(jq -r 'if type == "array" then length else error("release response is not a JSON array") end' <<<"$page_json" 2>/dev/null); then
+      echo "Error: unable to determine the latest CLI release: malformed release response for ${REPO}" >&2
+      exit 1
+    fi
+
+    if ! page_tags=$(stable_cli_tags <<<"$page_json" 2>/dev/null); then
+      echo "Error: unable to determine the latest CLI release: malformed release response for ${REPO}" >&2
+      exit 1
+    fi
+
+    if [ -n "$page_tags" ]; then
+      tags="${tags}${page_tags}"$'\n'
+    fi
+
+    if [ "$page_length" -lt "$RELEASES_PER_PAGE" ]; then
+      reached_last_page=1
+      break
+    fi
+    page=$((page + 1))
+  done
+
+  # A full final page means the release list was truncated, so the greatest tag
+  # seen so far is not provably the greatest tag published. Refuse rather than
+  # install a non-maximum CLI release.
+  if [ "$reached_last_page" -ne 1 ]; then
+    echo "Error: unable to determine the latest CLI release: ${REPO} has more than ${MAX_RELEASE_PAGES} release pages ($((MAX_RELEASE_PAGES * RELEASES_PER_PAGE)) releases) and the list was truncated; pin a version with NEKO_VERSION" >&2
     exit 1
   fi
 
-  version=$(
-    jq -r '
-      [
-        .[]
-        | select(((.draft // false) | not) and ((.prerelease // false) | not))
-        | .tag_name
-        | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))
-      ]
-      | sort_by(
-          capture("^v(?<major>[0-9]+)\\.(?<minor>[0-9]+)\\.(?<patch>[0-9]+)$")
-          | [.major, .minor, .patch]
-          | map(tonumber)
-        )
-      | last // empty
-    ' <<<"$releases_json"
-  )
+  version=$(greatest_cli_tag <<<"$tags")
 
   if [ -z "$version" ]; then
-    echo "Error: no stable CLI release found for ${REPO}" >&2
+    echo "Error: unable to determine the latest CLI release: ${REPO} publishes no stable CLI release matching vX.Y.Z" >&2
     exit 1
   fi
 
@@ -280,6 +336,10 @@ main() {
   path_guidance
 }
 
-if [ "${BASH_SOURCE[0]}" = "$0" ]; then
-  main "$@"
-fi
+# The installer is a standalone script with a single entry point. It runs the
+# same main flow whether it is executed from a file (./install.sh, bash
+# install.sh) or from stdin (curl ... | bash). No script path is consulted, and
+# no repository-relative helper file is sourced, so stdin execution needs nothing
+# that a piped shell leaves unset. Bash expands "$@" to nothing when there are no
+# positional parameters, so this stays safe under `set -u`.
+main "$@"
