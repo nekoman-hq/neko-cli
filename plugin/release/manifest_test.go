@@ -267,9 +267,9 @@ func TestValidateManifestClarifiesRepositoryWideValidation(t *testing.T) {
 	if !present {
 		t.Fatal("validate command is missing")
 	}
-	if command.Description != "Validate the complete release configuration; global --describe adds safe validation facts and global --verbose is a no-op" {
-		t.Fatalf("validate description = %q", command.Description)
-	}
+	assertCommandPurposeDescription(t, "validate", command.Description, "Validate", "release configuration")
+	// Repository-wide scope is documented by the flag that narrows the display,
+	// not by the command description.
 	want := map[string]string{
 		"show": "Display structured release configuration details and unit summaries",
 		"unit": "Focus displayed V2 unit details; the complete repository is still validated.",
@@ -309,9 +309,11 @@ func TestPipelineManifestContract(t *testing.T) {
 		command.Flags[1].Name != "verify-remote" || command.Flags[1].Type != "bool" || command.Flags[1].Required {
 		t.Fatalf("pipeline flags = %#v", command.Flags)
 	}
-	for _, fragment := range []string{"default output is concise", "global --describe", "safe structured facts", "global --verbose is a no-op", "--verify-remote", "GET-only"} {
-		if !strings.Contains(command.Description, fragment) {
-			t.Fatalf("pipeline description omitted %q: %q", fragment, command.Description)
+	assertCommandPurposeDescription(t, "pipeline", command.Description, "Inspect", "pipeline")
+	// Opt-in remote verification stays documented on the flag that enables it.
+	for _, fragment := range []string{"GET-only", "default remains local"} {
+		if !strings.Contains(flagDescriptions(command)["verify-remote"], fragment) {
+			t.Fatalf("pipeline verify-remote flag omitted %q: %q", fragment, flagDescriptions(command)["verify-remote"])
 		}
 	}
 	for _, forbidden := range []string{"all", "journal", "resume", "output", "describe", "verbose"} {
@@ -391,6 +393,69 @@ func TestReleaseDocsMentionManifestCommandsAndNoUnsupportedCommands(t *testing.T
 	}
 }
 
+// globalOutputWording is behavior every command shares. It belongs in global
+// help and documentation, not in a per-command description.
+var globalOutputWording = []string{
+	"--describe",
+	"--verbose",
+	"dry-run",
+	"default output",
+	"no-op",
+	"command-owned detail",
+}
+
+// assertCommandPurposeDescription requires a description to state only the
+// command's primary purpose: one short clause, no global output behavior.
+func assertCommandPurposeDescription(t *testing.T, commandName, description string, fragments ...string) {
+	t.Helper()
+
+	if strings.TrimSpace(description) == "" {
+		t.Fatalf("%s has an empty description", commandName)
+	}
+	for _, fragment := range fragments {
+		if !strings.Contains(description, fragment) {
+			t.Fatalf("%s description %q does not state %q", commandName, description, fragment)
+		}
+	}
+	for _, forbidden := range globalOutputWording {
+		if strings.Contains(strings.ToLower(description), forbidden) {
+			t.Fatalf("%s description %q repeats global output behavior %q", commandName, description, forbidden)
+		}
+	}
+	if strings.ContainsAny(description, ";") {
+		t.Fatalf("%s description %q should be a single purpose clause", commandName, description)
+	}
+	if words := len(strings.Fields(description)); words > 10 {
+		t.Fatalf("%s description has %d words, want a short purpose clause: %q", commandName, words, description)
+	}
+}
+
+// TestManifestCommandDescriptionsStateOnlyTheirPurpose keeps every command
+// description short and free of the global output behavior that global help and
+// the CLI reference own.
+func TestManifestCommandDescriptionsStateOnlyTheirPurpose(t *testing.T) {
+	for name, command := range loadManifestCommands(t) {
+		assertCommandPurposeDescription(t, name, command.Description)
+	}
+}
+
+func TestManifestPluginDescriptionStatesWhatThePluginManages(t *testing.T) {
+	description := loadManifestPluginDescription(t)
+	if strings.TrimSpace(description) == "" {
+		t.Fatal("plugin description is empty")
+	}
+	for _, fragment := range []string{"releases", "workflows"} {
+		if !strings.Contains(strings.ToLower(description), fragment) {
+			t.Fatalf("plugin description %q does not state %q", description, fragment)
+		}
+	}
+	for _, forbidden := range globalOutputWording {
+		if strings.Contains(strings.ToLower(description), forbidden) {
+			t.Fatalf("plugin description %q repeats global output behavior %q", description, forbidden)
+		}
+	}
+}
+
 func flagDescriptions(command manifestCommand) map[string]string {
 	descriptions := map[string]string{}
 	for _, flag := range command.Flags {
@@ -409,6 +474,21 @@ func assertManifestDescriptionContains(t *testing.T, commandName, flagName, desc
 			t.Fatalf("%s flag %s description %q does not contain %q", commandName, flagName, description, fragment)
 		}
 	}
+}
+
+func loadManifestPluginDescription(t *testing.T) string {
+	t.Helper()
+	data, err := os.ReadFile("manifest.json")
+	if err != nil {
+		t.Fatalf("read manifest: %v", err)
+	}
+	var manifest struct {
+		Description string `json:"description"`
+	}
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		t.Fatalf("decode manifest: %v", err)
+	}
+	return manifest.Description
 }
 
 func loadManifestCommands(t *testing.T) map[string]manifestCommand {

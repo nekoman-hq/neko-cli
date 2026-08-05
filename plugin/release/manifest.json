@@ -1,12 +1,12 @@
 {
   "name": "release",
   "version": "4.4.5",
-  "description": "Release management plugin",
+  "description": "Manage versioned releases and release workflows",
   "author": "nekoman-hq",
   "commands": [
     {
       "name": "init",
-      "description": "Initialize Release V2 configuration and state; default output is concise, global --describe adds resolved configuration and artifact facts, and global --verbose adds safe execution phases",
+      "description": "Initialize Release V2 configuration and state",
       "outputs": [
         "table",
         "json"
@@ -113,7 +113,7 @@
     },
     {
       "name": "unit-add",
-      "description": "Add a unit to existing Release V2 configuration and state; default output is concise, global --describe adds resolved unit and write facts, and global --verbose adds safe execution phases",
+      "description": "Add a unit to an existing Release V2 setup",
       "outputs": [
         "table",
         "json"
@@ -212,7 +212,7 @@
     },
     {
       "name": "init-options",
-      "description": "List every supported Release V2 initialization choice; global --describe and --verbose add no command-owned detail",
+      "description": "List available Release V2 initialization options",
       "outputs": [
         "table",
         "json"
@@ -220,7 +220,7 @@
     },
     {
       "name": "migrate",
-      "description": "Safely migrate a root V1 release configuration to V2; default output summarizes the result, global --describe adds the ordered plan and artifact facts, and global --verbose adds safe planning and write phases",
+      "description": "Migrate a V1 release configuration to Release V2",
       "outputs": [
         "table",
         "json"
@@ -237,7 +237,7 @@
     },
     {
       "name": "patch",
-      "description": "Create a patch release (x.y.Z); dry-run keeps the release preview, global --describe adds complete safe lifecycle facts, and global --verbose adds chronological execution phases",
+      "description": "Create a patch release",
       "outputs": [
         "table",
         "json"
@@ -260,7 +260,7 @@
     },
     {
       "name": "minor",
-      "description": "Create a minor release (x.Y.0); dry-run keeps the release preview, global --describe adds complete safe lifecycle facts, and global --verbose adds chronological execution phases",
+      "description": "Create a minor release",
       "outputs": [
         "table",
         "json"
@@ -283,7 +283,7 @@
     },
     {
       "name": "major",
-      "description": "Create a major release (X.0.0); dry-run keeps the release preview, global --describe adds complete safe lifecycle facts, and global --verbose adds chronological execution phases",
+      "description": "Create a major release",
       "outputs": [
         "table",
         "json"
@@ -306,7 +306,7 @@
     },
     {
       "name": "plan",
-      "description": "Inspect the local release plan without tokens, journals, remotes, or execution; global --describe adds complete safe plan facts and global --verbose is a no-op",
+      "description": "Preview the next release without making changes",
       "outputs": [
         "table",
         "json"
@@ -328,7 +328,7 @@
     },
     {
       "name": "doctor",
-      "description": "Diagnose Release V2 GitHub Actions readiness; global --describe adds complete safe diagnostics, global --verbose is a no-op, and --verify-remote explicitly enables bounded GET-only reads",
+      "description": "Check Release V2 and GitHub Actions readiness",
       "outputs": [
         "table",
         "json"
@@ -350,7 +350,7 @@
     },
     {
       "name": "units",
-      "description": "List the complete deterministic Release V2 unit inventory; global --describe adds complete safe unit facts and global --verbose is a no-op",
+      "description": "List configured release units",
       "outputs": [
         "table",
         "json"
@@ -359,7 +359,7 @@
     },
     {
       "name": "pipeline",
-      "description": "Inspect one Release V2 pipeline; default output is concise, global --describe adds all safe structured facts, global --verbose is a no-op, and --verify-remote explicitly enables bounded GET-only reads",
+      "description": "Inspect a release unit's configured pipeline",
       "outputs": [
         "table",
         "json"
@@ -381,7 +381,7 @@
     },
     {
       "name": "ci-validate-context",
-      "description": "Validate dispatched Release V2 context against local config, state, HEAD, and tags; global --describe adds complete checks and global --verbose is a no-op",
+      "description": "Validate a dispatched release against the repository state",
       "outputs": [
         "table",
         "json",
@@ -416,7 +416,7 @@
     },
     {
       "name": "github-workflow-init",
-      "description": "Create or preview the configured canonical GitHub Actions release workflow without overwriting different content; global --describe adds comparison and write-plan facts, and global --verbose adds safe execution phases",
+      "description": "Create or preview the configured GitHub Actions workflow",
       "outputs": [
         "table",
         "json"
@@ -445,7 +445,7 @@
     },
     {
       "name": "resume",
-      "description": "Resumes a previously journaled V2 GitHub Actions release; default output preserves the recovery decision, global --describe adds safe journal/Git/recovery facts, and global --verbose adds chronological continuation phases. It never calculates a new version or automatically retries uncertain push or dispatch outcomes.",
+      "description": "Resume an interrupted release from its journal",
       "outputs": [
         "table",
         "json"
@@ -468,7 +468,7 @@
     },
     {
       "name": "history",
-      "description": "Show the complete deterministic release history; global --describe and --verbose add no command-owned detail or logs",
+      "description": "Show release history",
       "outputs": [
         "table",
         "json"
@@ -484,7 +484,7 @@
     },
     {
       "name": "contributors",
-      "description": "Show the complete deterministic contributor list; global --describe and --verbose add no command-owned detail or logs",
+      "description": "Show release contributors",
       "outputs": [
         "table",
         "json"
@@ -500,7 +500,7 @@
     },
     {
       "name": "validate",
-      "description": "Validate the complete release configuration; global --describe adds safe validation facts and global --verbose is a no-op",
+      "description": "Validate the release configuration",
       "outputs": [
         "table",
         "json"
@@ -523,7 +523,7 @@
     },
     {
       "name": "evidence",
-      "description": "Inspect concise release evidence classifications without mutation; global --describe adds complete safe evidence facts and global --verbose is a no-op",
+      "description": "Inspect release evidence",
       "outputs": [
         "table",
         "json"
@@ -551,7 +551,7 @@
     },
     {
       "name": "evidence-archive",
-      "description": "Archive one exact completed evidence file through explicit guards; global --describe adds the existing safe write facts and global --verbose adds guarded phases",
+      "description": "Archive completed release evidence",
       "outputs": [
         "table",
         "json"
@@ -586,7 +586,7 @@
     },
     {
       "name": "plugin-index",
-      "description": "Generate, check, or explicitly persist the schema-v1 plugin registry index; raw mode ignores --describe/--verbose while check and persist use both",
+      "description": "Generate, validate, or write the plugin registry index",
       "outputs": [
         "json",
         "table"
