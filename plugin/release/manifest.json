@@ -1,6 +1,6 @@
 {
   "name": "release",
-  "version": "4.4.5",
+  "version": "4.4.6",
   "description": "Manage versioned releases and release workflows",
   "author": "nekoman-hq",
   "commands": [
